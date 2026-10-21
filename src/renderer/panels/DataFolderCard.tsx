@@ -83,6 +83,11 @@ export function DataFolderCard({ state }: { state: DataFolderState }): JSX.Eleme
           {WORDS.failed(state.failed.to, state.failed.problem)}
         </p>
       )}
+      {state.kept.map((dir) => (
+        <p key={dir} data-data-folder-kept className="mt-2 text-ink-3">
+          {WORDS.kept(dir)}
+        </p>
+      ))}
       {error && (
         <p role="alert" className="mt-2 text-orange">
           {error}

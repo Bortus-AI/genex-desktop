@@ -200,7 +200,7 @@ import { createDataFolderChoices, type DataFolderChoices } from "./data-folder-c
 import { type DataFolderIpcDeps, registerDataFolderIpc } from "./ipc/data-folder.ts";
 import { freeBytes, measureData } from "../substrate/data-move.ts";
 import { lockDownFolder, windowsDriveFacts } from "../substrate/windows-drive.ts";
-import { type DataMoveOutcome, removeLeftover, runDataMove } from "./data-move-launch.ts";
+import { type DataMoveOutcome, finishMove, removeLeftover, runDataMove } from "./data-move-launch.ts";
 import { DataFolderProblem } from "../shared/data-folder.ts";
 import { migrateLegacyUserData, userDataMigrationLine } from "./user-data-migration.ts";
 import { confirmPluginInstall, reacquirePlugin } from "./plugin-install-dialog.ts";
@@ -1680,7 +1680,7 @@ function dataFolderIpc(studio: StudioCore): DataFolderIpcDeps {
 function fixtureDataFolder(): DataFolderChoices {
   const { current, to, bytes, done } = FIXTURE_DATA_FOLDER;
   return {
-    state: () => ({ dir: current, movable: true, failed: null }),
+    state: () => ({ dir: current, movable: true, failed: null, kept: [] }),
     choose: async () => ({ ok: true, to, bytes }),
     move: async () => {
       bootGate.moving({ to, done, total: bytes });
@@ -1703,7 +1703,8 @@ function dataFolderChoices(studio: StudioCore) {
       ...(await studio.games.list()).map((game) => game.dir),
       installRoot(process.execPath),
     ],
-    busy: () => keepAwake.held || studio.budget.userInFlight > 0,
+    // What a quit would ask about (a run, a paused build's planned resume), or a reply under way.
+    busy: () => quitPrompt(true) !== null || studio.budget.userInFlight > 0,
     drive: windows ? windowsDriveFacts : async () => null,
     lockDown: windows ? lockDownFolder : async () => {},
     measure: () => measureData(userDataRoot, samePath(userDataRoot, defaultData) ? [DATA_FOLDER_FILE] : []),
@@ -1914,9 +1915,21 @@ async function settleDataFolder(): Promise<boolean> {
     await waitForDataFolder(dataLaunch.dir);
     return true;
   }
-  if (dataLaunch.kind === DataLaunchKind.Moved)
-    void removeLeftover(defaultData, dataLaunch.dir, (line) => studioLog.write("main", line));
+  if (dataLaunch.kind === DataLaunchKind.Moved || dataLaunch.kind === DataLaunchKind.Default) {
+    const log = (line: string) => studioLog.write("main", line);
+    // A move Genex closed after recording repairs its links before anything reads them, and only
+    // then may what it left in the old folder go.
+    await finishMove(defaultData, dataLaunch.dir, { log, ...hostGitForMoves() }).catch((error: unknown) =>
+      log(`data folder: finishing the move failed: ${errorMessage(error)}`),
+    );
+    void removeLeftover(defaultData, dataLaunch.dir, log);
+  }
   return false;
+}
+
+/** The host's own Git for repairing build copies after a move (Windows); elsewhere the PATH's. */
+function hostGitForMoves(): { hostGit?: () => Promise<boolean> } {
+  return process.platform === StudioPlatform.Windows ? { hostGit: () => ensureHostGit() } : {};
 }
 
 /** Move the data with the start window showing how far, then start Genex again; quitting waits for it. */
@@ -1939,15 +1952,19 @@ async function moveDataAndRestart(from: string, to: string): Promise<void> {
     defaultDir: defaultData,
     progress: (progress) => bootGate.moving(progress),
     log,
-    ...(process.platform === StudioPlatform.Windows ? { hostGit: () => ensureHostGit() } : {}),
+    ...hostGitForMoves(),
   }).catch((error: unknown): DataMoveOutcome => {
     log(`data folder: the move stopped: ${errorMessage(error)}`);
     return { moved: false, problem: DataFolderProblem.Failed, stranded: [] };
   });
   moving = false;
-  // The lines go in the log of the folder Genex now starts from, where a report reads them.
-  const kept = openStudioLog(path.join(outcome.moved ? to : from, "logs"), { home: app.getPath("home") });
-  for (const line of lines) kept.write("main", line);
+  // The lines go in the log of the folder Genex now starts from, where a report reads them. A move
+  // that stopped part-way writes nothing in either folder: the next start carries it on.
+  const logDir = moveLogDir(outcome, from, to);
+  if (logDir) {
+    const kept = openStudioLog(path.join(logDir, "logs"), { home: app.getPath("home") });
+    for (const line of lines) kept.write("main", line);
+  }
   const restart = async () => {
     app.relaunch();
     app.exit(0);
@@ -1956,6 +1973,12 @@ async function moveDataAndRestart(from: string, to: string): Promise<void> {
   // its own (that could repeat for ever); the window offers Try again, which carries it on, and Quit.
   if (!outcome.moved && outcome.stranded) bootGate.moveStopped(to, MESSAGE.moveStopped, restart);
   else await restart();
+}
+
+/** The data folder a moving launch's log lines go to: the one Genex starts from, or none while the move is unfinished. */
+function moveLogDir(outcome: DataMoveOutcome, from: string, to: string): string | null {
+  if (outcome.moved) return to;
+  return outcome.stranded ? null : from;
 }
 
 /** Name the missing data folder with Try again (Genex starts again once it is there) and Quit. */

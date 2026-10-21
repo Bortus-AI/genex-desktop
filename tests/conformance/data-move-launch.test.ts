@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import { mkdir, readdir, readFile, readlink, realpath, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { DATA_FOLDER_FILE, readDataFolderRecord, writeDataFolderRecord } from "../../src/main/data-folder.ts";
-import { removeLeftover, runDataMove } from "../../src/main/data-move-launch.ts";
+import { finishMove, removeLeftover, runDataMove } from "../../src/main/data-move-launch.ts";
 import { DataFolderProblem, type DataMoveProgress } from "../../src/shared/data-folder.ts";
 import { DataMoveError, moveData } from "../../src/substrate/data-move.ts";
 import { claudeProjectDirName } from "../../src/substrate/engines/claude-permissions.ts";
@@ -326,4 +326,66 @@ test("Claude Code's sessions of the moved folders follow them; a neighbour with 
   const moved = path.join(m.to, "engine-homes", "claude-code", "projects");
   const names = (await readdir(moved)).sort();
   assert.deepEqual(names, [claudeProjectDirName(path.join(m.to, "scratch", "autopilot", "run-1")), neighbour].sort());
+});
+
+test("a move Genex closed after recording, before repairing, is repaired at the next start", async (t) => {
+  const m = await machine(t);
+  // The move renamed everything and wrote its record; Genex closed before any repair.
+  const { rename } = await import("node:fs/promises");
+  for (const name of ["opened-copies", "projects.json", "scratch", "workspaces"])
+    await rename(path.join(m.from, name), path.join(m.to, name));
+  await writeDataFolderRecord(m.from, { dir: m.to, relinkFrom: m.from });
+  await finishMove(m.from, m.to, { log: () => {} });
+  assert.deepEqual(readDataFolderRecord(m.from), { dir: m.to }, "repaired once, then cleared");
+  const runCopy = path.join(m.to, "scratch", "autopilot", "run-1");
+  assert.equal(await git(runCopy, "status", "--porcelain"), "");
+  assert.ok(await listsWorktree(m.game, runCopy));
+  const index = JSON.parse(await readFile(path.join(m.to, "projects.json"), "utf8"));
+  assert.equal(index.aliases.Puzzle, path.join(m.to, "opened-copies", "Puzzle"));
+});
+
+test("with no Git to repair build copies, the other repairs still run", async (t) => {
+  const m = await machine(t);
+  const projects = path.join(m.from, "engine-homes", "claude-code", "projects");
+  const runCopy = path.join(m.from, "scratch", "autopilot", "run-1");
+  await mkdir(path.join(projects, claudeProjectDirName(runCopy)), { recursive: true });
+  const run = deps(m, ACROSS_VOLUMES);
+  await runDataMove({ ...run.deps, hostGit: async () => false });
+  assert.ok(run.log.some((line) => line.includes("no Git to repair")));
+  const moved = await readdir(path.join(m.to, "engine-homes", "claude-code", "projects"));
+  assert.deepEqual(moved, [claudeProjectDirName(path.join(m.to, "scratch", "autopilot", "run-1"))]);
+  const index = JSON.parse(await readFile(path.join(m.to, "projects.json"), "utf8"));
+  assert.equal(index.aliases.Puzzle, path.join(m.to, "opened-copies", "Puzzle"));
+});
+
+test("a left entry that holds the folder in use is never removed", async (t) => {
+  const m = await machine(t);
+  const holder = path.join(m.root, "D");
+  await writeDataFolderRecord(m.from, {
+    dir: m.to,
+    leftover: [{ dir: m.root, entries: ["D"], since: Date.now() + MINUTE }],
+  });
+  await removeLeftover(m.from, m.to, () => {});
+  assert.ok((await readdir(holder)).includes("Genex"), "the data folder is still there");
+});
+
+test("a moving launch records each entry as it moves, so carrying on knows which side is the data", async (t) => {
+  const m = await machine(t);
+  const seen: Array<Record<string, string> | undefined> = [];
+  const watching: typeof moveData = (plan, options) =>
+    moveData(plan, {
+      ...options,
+      onEntryMoved: async (name, how) => {
+        await options?.onEntryMoved?.(name, how);
+        seen.push(readDataFolderRecord(m.from).done);
+      },
+    });
+  await runDataMove(deps(m, watching).deps);
+  assert.deepEqual(seen.at(-1), {
+    "opened-copies": "renamed",
+    "projects.json": "renamed",
+    scratch: "renamed",
+    workspaces: "renamed",
+  });
+  assert.deepEqual(readDataFolderRecord(m.from), { dir: m.to }, "the journal goes once the move is recorded");
 });

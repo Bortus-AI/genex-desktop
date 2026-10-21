@@ -3064,6 +3064,8 @@ export const DATA_FOLDER_WORDS = {
   moveBody:
     "Genex closes, moves its files and opens again; on another drive this takes a few minutes. Close other apps using its build copies first.",
   failed: (to: string, problem: DataFolderProblem) => `Couldn’t move to ${to}. ${DATA_FOLDER_PROBLEM_WORDS[problem]}`,
+  /** Old copies someone changed after the move: they stay where they were. */
+  kept: (dir: string) => `Files changed after the move stay in ${dir}.`,
 } as const;
 
 /** Why a picked folder can't hold Genex's files, or why a move didn't happen, by `DataFolderProblem`. */

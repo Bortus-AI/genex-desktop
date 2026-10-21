@@ -164,11 +164,30 @@ async function electronHost(t: { after(fn: () => Promise<void>): void }, argvNor
   await mkdir(path.join(appData, "Genex"), { recursive: true });
   await mkdir(temp);
   const set: Record<string, string> = {};
+  const calls: string[] = [];
+  let locks = true;
   return {
     root,
     defaultDir: path.join(appData, "Genex"),
-    host: { appData, appName: "Genex", temp, argvNormal, setPath: (name: string, dir: string) => (set[name] = dir) },
+    host: {
+      appData,
+      appName: "Genex",
+      temp,
+      argvNormal,
+      setPath: (name: string, dir: string) => {
+        set[name] = dir;
+        calls.push(`${name}=${dir}`);
+      },
+      lock: () => {
+        calls.push(`lock in ${set.userData ?? "default"}`);
+        return locks;
+      },
+    },
     set,
+    calls,
+    refuseLock: () => {
+      locks = false;
+    },
   };
 }
 
@@ -222,4 +241,23 @@ test("on Windows a move to the folder already in use, spelled in another case, i
     { defaultDir: "C:\\Users\\Ann\\AppData\\Roaming\\Genex", normal: true, exists: () => true },
   );
   assert.deepEqual(launch, { kind: DataLaunchKind.Moved, dir: "D:\\Genex" });
+});
+
+test("a move takes Genex's one-instance lock in the folder it moves out of, before anything else", async (t) => {
+  const { root, defaultDir, host, calls } = await electronHost(t);
+  const chosen = path.join(root, "D", "Genex");
+  await mkdir(chosen, { recursive: true });
+  await writeDataFolderRecord(defaultDir, { dir: chosen, moveTo: path.join(root, "E", "Genex") });
+  assert.equal(pointElectronAtData(host).kind, DataLaunchKind.Move);
+  const session = path.join(host.temp, DATA_MOVE_SESSION);
+  assert.deepEqual(calls, [`userData=${chosen}`, `lock in ${chosen}`, `userData=${session}`, `sessionData=${session}`]);
+});
+
+test("a move while another Genex runs on the data only wakes that one: nothing moves", async (t) => {
+  const { root, defaultDir, host, set, refuseLock } = await electronHost(t);
+  await writeDataFolderRecord(defaultDir, { moveTo: path.join(root, "D", "Genex") });
+  refuseLock();
+  assert.deepEqual(pointElectronAtData(host), { kind: DataLaunchKind.Taken, dir: defaultDir });
+  assert.equal(set.userData, path.join(host.temp, DATA_MOVE_SESSION), "Electron's own files stay out of both folders");
+  assert.deepEqual(readDataFolderRecord(defaultDir), { moveTo: path.join(root, "D", "Genex") }, "the move waits");
 });

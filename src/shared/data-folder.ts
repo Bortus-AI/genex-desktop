@@ -53,6 +53,8 @@ export interface DataFolderState {
   movable: boolean;
   /** The last move that did not happen, until the next one is asked for. */
   failed: DataMoveFailed | null;
+  /** Old folders holding files changed after a move (someone's edits there), which stay. */
+  kept: string[];
 }
 
 /** A folder picked in Settings: where the files would go and how much would move, or why not. */

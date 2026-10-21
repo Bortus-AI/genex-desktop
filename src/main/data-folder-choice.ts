@@ -109,17 +109,20 @@ export function createDataFolderChoices(deps: DataFolderChoiceDeps): DataFolderC
     if (overlaps(to, deps.dataDir)) return DataFolderProblem.Overlaps;
     if (!samePath(to, deps.defaultDir) && overlaps(to, deps.defaultDir)) return DataFolderProblem.Overlaps;
     if ((await deps.occupied()).some((dir) => overlaps(to, dir))) return DataFolderProblem.Overlaps;
+    // What a move left behind is removed later, whole: a folder in it would go with it.
+    if (leftoverEntries(deps.defaultDir).some((entry) => isInside(entry, to))) return DataFolderProblem.Overlaps;
     if (isSharePath(to)) return DataFolderProblem.Network;
     return driveProblem(await deps.drive(to));
   };
 
   return {
     // Another launch reads nothing of the normal profile's record.
-    state: () => ({
-      dir: deps.dataDir,
-      movable,
-      failed: movable ? (readDataFolderRecord(deps.defaultDir).failed ?? null) : null,
-    }),
+    state: () => {
+      if (!movable) return { dir: deps.dataDir, movable, failed: null, kept: [] };
+      const record = readDataFolderRecord(deps.defaultDir);
+      const kept = (record.leftover ?? []).filter((item) => item.changed).map((item) => item.dir);
+      return { dir: deps.dataDir, movable, failed: record.failed ?? null, kept: [...new Set(kept)] };
+    },
 
     async choose(dir) {
       picked = null;
@@ -158,6 +161,13 @@ export function createDataFolderChoices(deps: DataFolderChoiceDeps): DataFolderC
       return { ok: true, to: chosen.to, bytes: chosen.bytes };
     },
   };
+}
+
+/** The paths of every entry a move left to remove later. */
+function leftoverEntries(defaultDir: string): string[] {
+  return (readDataFolderRecord(defaultDir).leftover ?? []).flatMap((item) =>
+    item.entries.map((name) => path.join(item.dir, name)),
+  );
 }
 
 /** Whether `to` has room for `bytes`: always on the data's own volume, where the move only renames. */

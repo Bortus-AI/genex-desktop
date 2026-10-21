@@ -14,6 +14,7 @@
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { DATA_FOLDER_PROBLEMS, type DataFolderProblem, type DataMoveFailed } from "../shared/data-folder.ts";
+import { ENTRY_MOVES, type EntryMove } from "../substrate/data-move.ts";
 import { atomicWriteJson } from "../substrate/fsx.ts";
 import { samePath } from "../substrate/paths.ts";
 
@@ -30,6 +31,10 @@ export interface DataFolderRecord {
   moveTo?: string;
   /** The entries a move set out to move, recorded before it changed anything, so a closed Genex carries on. */
   moving?: string[];
+  /** How the move moved each entry it finished, so carrying on knows which side of an entry is the data. */
+  done?: Record<string, EntryMove>;
+  /** A move whose links and copies are still to repair: its old folder (cleared once repaired). */
+  relinkFrom?: string;
   /** The last move that did not happen. */
   failed?: DataMoveFailed;
   /** What moves copied but could not remove yet: each folder and those entries' names. */
@@ -42,6 +47,8 @@ export interface DataLeftover {
   entries: string[];
   /** When the copies were made, in ms since the epoch: a file changed after it is someone's edit, and stays. */
   since: number;
+  /** Some of these files changed after the move, so they stay (Storage says where). */
+  changed?: true;
 }
 
 /** What this launch does about its data. */
@@ -54,6 +61,11 @@ export const DataLaunchKind = {
   Move: "move",
   /** The chosen folder is not there (an unplugged drive): wait for it. */
   Missing: "missing",
+  /**
+   * A move is due but another Genex has the data open (a move asked for while a build kept it
+   * running): this launch only wakes that one and quits, and the move waits for a start after it.
+   */
+  Taken: "taken",
 } as const;
 export type DataLaunchKind = (typeof DataLaunchKind)[keyof typeof DataLaunchKind];
 
@@ -61,7 +73,8 @@ export type DataLaunch =
   | { kind: typeof DataLaunchKind.Default; dir: string }
   | { kind: typeof DataLaunchKind.Moved; dir: string }
   | { kind: typeof DataLaunchKind.Move; from: string; to: string }
-  | { kind: typeof DataLaunchKind.Missing; dir: string };
+  | { kind: typeof DataLaunchKind.Missing; dir: string }
+  | { kind: typeof DataLaunchKind.Taken; dir: string };
 
 /** What deciding a launch needs to know besides the record. */
 export interface DataLaunchContext {
@@ -88,6 +101,10 @@ export function parseDataFolderRecord(raw: unknown): DataFolderRecord {
   if (moveTo) record.moveTo = moveTo;
   const moving = Array.isArray(fields.moving) ? fields.moving.filter(isEntryName) : [];
   if (moveTo && moving.length) record.moving = moving;
+  const done = parseDone(fields.done);
+  if (moveTo && Object.keys(done).length) record.done = done;
+  const relinkFrom = absolute(fields.relinkFrom);
+  if (relinkFrom) record.relinkFrom = relinkFrom;
   const leftover = parseLeftovers(fields.leftover);
   if (leftover.length) record.leftover = leftover;
   const failed = parseFailed(fields.failed);
@@ -100,6 +117,16 @@ function isEntryName(name: unknown): name is string {
   return typeof name === "string" && name !== "" && name !== "." && name !== ".." && !/[\\/]/.test(name);
 }
 
+/** How a move moved each entry: entry names only, ways it knows. */
+function parseDone(raw: unknown): Record<string, EntryMove> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const done: Record<string, EntryMove> = {};
+  for (const [name, how] of Object.entries(raw)) {
+    if (isEntryName(name) && typeof how === "string" && ENTRY_MOVES.has(how)) done[name] = how as EntryMove;
+  }
+  return done;
+}
+
 function parseLeftovers(raw: unknown): DataLeftover[] {
   if (!Array.isArray(raw)) return [];
   return raw.flatMap((item): DataLeftover[] => {
@@ -108,7 +135,8 @@ function parseLeftovers(raw: unknown): DataLeftover[] {
     const dir = absolute(fields.dir);
     const entries = Array.isArray(fields.entries) ? fields.entries.filter(isEntryName) : [];
     const since = typeof fields.since === "number" && Number.isFinite(fields.since) ? fields.since : 0;
-    return dir && entries.length ? [{ dir, entries, since }] : [];
+    if (!dir || !entries.length) return [];
+    return [{ dir, entries, since, ...(fields.changed === true ? { changed: true as const } : {}) }];
   });
 }
 
@@ -167,6 +195,7 @@ export function electronDataDir(launch: DataLaunch, temp: string): string | null
       return launch.dir;
     case DataLaunchKind.Move:
     case DataLaunchKind.Missing:
+    case DataLaunchKind.Taken:
       return path.join(temp, DATA_MOVE_SESSION);
     default:
       return null;
@@ -180,7 +209,18 @@ export interface DataPathsHost {
   temp: string;
   argvNormal: boolean;
   setPath(name: "userData" | "sessionData", dir: string): void;
+  /**
+   * Electron's one-instance lock, taken for the data folder userData names now; false when another
+   * Genex holds it. Every Genex holds it for its data folder, so a move takes it there first.
+   */
+  lock(): boolean;
 }
+
+/**
+ * Chromium's own files for the one-instance lock in a data folder: a move takes the lock in the old
+ * folder, so they stay there, and a folder the data moves back into may still hold them.
+ */
+export const LOCK_FILES: readonly string[] = ["lockfile", "SingletonLock", "SingletonCookie", "SingletonSocket"];
 
 /** Where `boot.ts` leaves this launch's decision for the app bundle, which is built apart from it. */
 const LAUNCH_KEY = Symbol.for("genex.data-launch");
@@ -202,7 +242,8 @@ export function pointElectronAtData(host: DataPathsHost): DataLaunch {
   return launch;
 }
 
-function pointAt(host: DataPathsHost, launch: DataLaunch): DataLaunch {
+function pointAt(host: DataPathsHost, decided: DataLaunch): DataLaunch {
+  const launch = decided.kind === DataLaunchKind.Move ? lockForMove(host, decided) : decided;
   const dir = electronDataDir(launch, host.temp);
   if (!dir) return launch;
   try {
@@ -221,4 +262,21 @@ function pointAt(host: DataPathsHost, launch: DataLaunch): DataLaunch {
 export function thisDataLaunch(defaultDir: string): DataLaunch {
   const launch = (globalThis as Record<symbol, unknown>)[LAUNCH_KEY] as DataLaunch | undefined;
   return launch ?? { kind: DataLaunchKind.Default, dir: defaultDir };
+}
+
+/**
+ * Take the one-instance lock in the folder the data moves out of, as the Genex using it would: a
+ * move never starts while another Genex runs on that data. The lock stays this launch's; userData
+ * is then pointed at the move's own temp folder.
+ */
+function lockForMove(
+  host: DataPathsHost,
+  launch: Extract<DataLaunch, { kind: typeof DataLaunchKind.Move }>,
+): DataLaunch {
+  try {
+    host.setPath("userData", launch.from);
+    return host.lock() ? launch : { kind: DataLaunchKind.Taken, dir: launch.from };
+  } catch {
+    return { kind: DataLaunchKind.Taken, dir: launch.from };
+  }
 }

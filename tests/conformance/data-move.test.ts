@@ -24,6 +24,7 @@ import { removeTree, tmpDir } from "../helpers/tmp.ts";
 import {
   DataMoveError,
   DataMoveMode,
+  EntryMove,
   measureData,
   moveData,
   removeEntries,
@@ -264,4 +265,84 @@ test("a resumed copy whose half copy cannot be removed stops, names that copy le
   );
   await chmod(half, 0o755);
   assert.deepEqual((await readdir(from)).sort(), [RECORD, "projects.json", "scratch"]);
+});
+
+test("on one volume a failure never removes a renamed entry's new side, even when its old name came back", {
+  skip: NO_CHMOD,
+}, async (t) => {
+  const root = await scratch(t);
+  const from = await dataFolder(root);
+  const to = path.join(root, "to");
+  await mkdir(to);
+  // The earlier attempt renamed projects.json; something wrote the name again in the old folder.
+  await rename(path.join(from, "projects.json"), path.join(to, "projects.json"));
+  await writeFile(path.join(from, "projects.json"), "written after the rename");
+  await chmod(from, 0o555);
+  try {
+    await assert.rejects(
+      moveData({
+        from,
+        to,
+        keep: [RECORD],
+        resume: ["projects.json", "scratch"],
+        done: { "projects.json": EntryMove.Renamed },
+      }),
+      (error: unknown) => error instanceof DataMoveError && error.stranded.includes("projects.json"),
+    );
+  } finally {
+    await chmod(from, 0o755);
+  }
+  assert.equal(await readFile(path.join(to, "projects.json"), "utf8"), '{"version":1}', "the moved data stays");
+  assert.equal(await readFile(path.join(from, "projects.json"), "utf8"), "written after the rename");
+});
+
+test("carrying on after renames: a renamed entry whose old name came back is doubled, both sides kept", async (t) => {
+  const root = await scratch(t);
+  const from = await dataFolder(root);
+  const to = path.join(root, "to");
+  await mkdir(to);
+  await rename(path.join(from, "projects.json"), path.join(to, "projects.json"));
+  await mkdir(path.join(from, "projects.json"));
+  const moved = await moveData({
+    from,
+    to,
+    keep: [RECORD],
+    resume: ["projects.json", "scratch"],
+    done: { "projects.json": EntryMove.Renamed },
+  });
+  assert.deepEqual(moved.doubled, ["projects.json"]);
+  assert.deepEqual(moved.copied, []);
+  assert.equal(await readFile(path.join(to, "projects.json"), "utf8"), '{"version":1}');
+  assert.deepEqual((await readdir(to)).sort(), ["projects.json", "scratch"]);
+});
+
+test("a volume that will not rename across itself (EXDEV) has that entry and the rest copied", async (t) => {
+  const root = await scratch(t);
+  const from = await dataFolder(root);
+  const to = path.join(root, "to");
+  await mkdir(to);
+  const told: Array<[string, string]> = [];
+  const moved = await moveData(
+    { from, to, keep: [RECORD] },
+    {
+      sameVolume: async () => true,
+      freeBytes: async () => Number.MAX_SAFE_INTEGER,
+      rename: async (a, b) => {
+        if (path.basename(a) === "scratch")
+          throw Object.assign(new Error("EXDEV: cross-device link"), { code: "EXDEV" });
+        await rename(a, b);
+      },
+      onEntryMoved: async (name, how) => {
+        told.push([name, how]);
+      },
+    },
+  );
+  assert.deepEqual(told, [
+    ["projects.json", EntryMove.Renamed],
+    ["scratch", EntryMove.Copied],
+  ]);
+  assert.equal(moved.mode, DataMoveMode.Copied);
+  assert.deepEqual(moved.copied, ["scratch"]);
+  assert.deepEqual((await readdir(from)).sort(), [RECORD, "scratch"], "the copied original stays for the caller");
+  assert.deepEqual((await readdir(to)).sort(), ["projects.json", "scratch"]);
 });

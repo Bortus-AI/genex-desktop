@@ -21,6 +21,7 @@ pointElectronAtData({
   temp: app.getPath("temp"),
   argvNormal: isNormalLaunch(process.argv),
   setPath: (name, dir) => app.setPath(name, dir),
+  lock: () => app.requestSingleInstanceLock(),
 });
 
 const { ENABLED, ALREADY_ENABLED } = module.constants.compileCacheStatus;

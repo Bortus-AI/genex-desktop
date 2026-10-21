@@ -237,9 +237,10 @@ test("Storage shows the folder in use and the last move that did not happen, nev
     dir: m.defaultDir,
     movable: true,
     failed: { to: m.drive, problem: DataFolderProblem.NoSpace },
+    kept: [],
   });
   const dev = createDataFolderChoices({ ...m.deps, normal: false });
-  assert.deepEqual(dev.state(), { dir: m.defaultDir, movable: false, failed: null });
+  assert.deepEqual(dev.state(), { dir: m.defaultDir, movable: false, failed: null, kept: [] });
 });
 
 test("a new move forgets the last one's failure and any half-finished entry list", async (t) => {
@@ -262,4 +263,25 @@ test("a folder on the data's own drive needs no free room: the move only renames
   const empty = path.join(m.drive, "Genex");
   await mkdir(empty);
   assert.deepEqual(await m.choices.choose(empty), { ok: true, to: empty, bytes: DATA_BYTES });
+});
+
+test("Storage names the old folders that keep files changed after a move", async (t) => {
+  const m = await machine(t);
+  const old = path.join(m.root, "old");
+  await writeDataFolderRecord(m.defaultDir, {
+    leftover: [
+      { dir: old, entries: ["scratch"], since: 1, changed: true },
+      { dir: m.drive, entries: ["runs"], since: 1 },
+    ],
+  });
+  assert.deepEqual(m.choices.state().kept, [old]);
+});
+
+test("a folder inside what a move left behind is refused: it would go when that is removed", async (t) => {
+  const m = await machine(t);
+  const old = path.join(m.root, "old");
+  await mkdir(path.join(old, "scratch", "inner"), { recursive: true });
+  await writeDataFolderRecord(m.defaultDir, { leftover: [{ dir: old, entries: ["scratch"], since: 1 }] });
+  const choice = await m.choices.choose(path.join(old, "scratch", "inner"));
+  assert.equal(!choice.ok && choice.problem, DataFolderProblem.Overlaps);
 });
