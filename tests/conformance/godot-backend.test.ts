@@ -11,12 +11,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { describe, it } from "node:test";
 import { GodotTool } from "../../src/plugins/godot/backend.ts";
-import {
-  GODOT_DOWNLOAD_URL,
-  GODOT_WINDOWS_DOWNLOAD_URL,
-  getGodotLaunch,
-  isEditorOf,
-} from "../../src/plugins/godot/editor.ts";
+import { GODOT_DOWNLOAD_URL, getGodotLaunch, isEditorOf } from "../../src/plugins/godot/editor.ts";
 import { GodotJob } from "../../src/plugins/godot/godot-run.ts";
 import type { PluginManifest } from "../../src/shared/plugins.ts";
 import { HookEvent } from "../../src/shared/plugin-hooks.ts";
@@ -351,7 +346,7 @@ describe("the panel and the toolbar", () => {
     const card = async (fixture: Awaited<ReturnType<typeof godotBackendFixture>>) =>
       stageCardFrom(await action(fixture, "stage-status"), actions);
     assert.deepEqual(await card(await godotBackendFixture({ apps: [] })), {
-      line: "Plays in Godot 4, which isn't on this Mac yet.",
+      line: "Plays in Godot 4, which isn't on this computer yet.",
       button: { label: "Get Godot", panel: true },
     });
     assert.deepEqual(await card(await godotBackendFixture()), { line: "No Godot project in this game's folder yet." });
@@ -400,32 +395,15 @@ describe("the panel and the toolbar", () => {
     );
   });
 
-  it("tells the panel whether this computer is a Mac, the only one Genex builds Godot games on", async () => {
-    assert.equal((await action(await godotBackendFixture(), "status")).mac, true);
-    assert.equal((await action(await godotBackendFixture({ platform: "win32" }), "status")).mac, false);
+  it("tells the panel whether this computer is a Windows PC, where Get Godot is Genex's own download", async () => {
+    assert.equal((await action(await godotBackendFixture(), "status")).windows, false);
   });
 
-  it("sends Get Godot on Windows to Godot's Windows page", async () => {
-    const fixture = await godotBackendFixture({ platform: "win32" });
+  it("opens Godot's Mac download page with macOS's open", async () => {
+    assert.deepEqual(getGodotLaunch(), { command: "/usr/bin/open", args: [GODOT_DOWNLOAD_URL], detached: false });
+    const fixture = await godotBackendFixture({ apps: [] });
     await action(fixture, "get-godot");
-    const [opened] = fixture.editor.opened;
-    assert.equal(opened?.command.endsWith("explorer.exe"), true, opened?.command);
-    assert.deepEqual(opened?.args, [GODOT_WINDOWS_DOWNLOAD_URL]);
-  });
-
-  it("opens Godot's Windows download page with Windows's own explorer, never macOS's open", () => {
-    assert.deepEqual(getGodotLaunch("win32", { SystemRoot: "D:\\Win" }), {
-      command: "D:\\Win\\explorer.exe",
-      args: [GODOT_WINDOWS_DOWNLOAD_URL],
-      detached: true,
-    });
-    for (const env of [{}, { SystemRoot: "Windows" }])
-      assert.equal(getGodotLaunch("win32", env).command, "C:\\Windows\\explorer.exe");
-    assert.deepEqual(getGodotLaunch("darwin", {}), {
-      command: "/usr/bin/open",
-      args: [GODOT_DOWNLOAD_URL],
-      detached: false,
-    });
+    assert.deepEqual(fixture.editor.opened, [getGodotLaunch()]);
   });
 
   it("knows a Godot editor by its project, never a headless job of Genex's or another project", () => {
@@ -441,7 +419,22 @@ describe("the panel and the toolbar", () => {
       [`${godot} --path ${project}/ --editor`, true],
       [`/usr/bin/vim ${project}/project.godot`, false],
     ];
-    for (const [line, expected] of table) assert.equal(isEditorOf(line, project), expected, line);
+    for (const [line, expected] of table) assert.equal(isEditorOf(line, project, "darwin"), expected, line);
+  });
+
+  it("knows a Windows editor by its project whatever the slashes and case, never a headless job", () => {
+    const project = "C:\\Users\\Ada\\AI Games\\Valley\\godot";
+    const godot = "Godot_v4.7.2-stable_win64.exe";
+    const table: Array<[string, boolean]> = [
+      [`${godot} --path ${project} --editor`, true],
+      [`${godot} --path C:/Users/Ada/AI Games/Valley/godot -e`, true],
+      [`GODOT.EXE --path c:\\users\\ada\\ai games\\valley\\godot\\ --editor`, true],
+      [`${godot} ${project}\\project.godot`, true],
+      [`${godot} --headless --path ${project} --import`, false],
+      [`${godot} --path ${project}-copy --editor`, false],
+      [`notepad.exe ${project}\\project.godot`, false],
+    ];
+    for (const [line, expected] of table) assert.equal(isEditorOf(line, project, "win32"), expected, line);
   });
 
   it("answers no unknown action or tool", async () => {

@@ -161,7 +161,7 @@ svg{flex:none;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin
       <div class="pad"><p id="get-how">Download Godot 4 from godotengine.org, then put Godot in Applications. It's free and open source, about 150 MB.</p></div>
       <div class="foot"><button type="button" id="get-godot" class="primary external">Get Godot</button><button type="button" id="recheck">Check again</button></div>
     </div>
-    <p id="get-waiting" class="waiting"><span class="orb" aria-hidden="true"></span>Waiting for Godot in Applications. This page moves on by itself.</p>
+    <p id="get-waiting" class="waiting" role="status"><span class="orb" aria-hidden="true"></span><span id="get-waiting-text">Waiting for Godot in Applications. This page moves on by itself.</span></p>
   </section>
 
   <section id="pick" hidden aria-labelledby="pick-title">
@@ -258,17 +258,28 @@ const Action = {
   Create: "create",
   OpenEditor: "open-editor",
   GetGodot: "get-godot",
+  DownloadGodot: "download-godot",
   SetUp: "set-up",
   WebExport: "web-export",
   UseProject: "use-project",
 };
 const Tone = { Ok: "ok", Unset: "unset", Quiet: "" };
+/** Where Genex's install of Godot is (the backend's `GodotJobState`), and why a request failed (Studio's `PanelErrorCode`). Wire values: never rename. */
+const JobState = { Running: "running", Failed: "failed" };
+const ErrorCode = { Cancelled: "cancelled" };
+const MEGABYTE = 1024 * 1024;
 const WORDS = {
   getWhy: "Genex builds Godot games with Godot 4.3 or newer.",
   getHow: "Download Godot 4 from godotengine.org, then put Godot in Applications. It's free and open source, about 150 MB.",
-  notMacWhy: "Genex builds Godot games on a Mac only for now.",
-  notMacHow: "You can still download Godot 4 from godotengine.org and use it on its own. It's free and open source.",
+  getHowWindows: "Genex downloads Godot 4 from Godot's own releases into its own folder. It's free and open source, about 86 MB.",
   older: (v) => `This Mac has Godot ${v}. Genex builds with Godot 4.3 or newer in the 4 line: get a current Godot 4 and put it in Applications beside yours.`,
+  olderWindows: (v) => `This PC has Godot ${v}. Genex builds with Godot 4.3 or newer in the 4 line: get a current Godot 4 beside it.`,
+  waitMac: "Waiting for Godot in Applications. This page moves on by itself.",
+  downloading: (done, total) =>
+    `Downloading Godot, ${Math.round(done / MEGABYTE)} of ${Math.round(total / MEGABYTE)} MB. This page moves on by itself.`,
+  installing: "Installing Godot. This page moves on by itself.",
+  get: "Get Godot",
+  tryAgain: "Try again",
   notSetUp: "Not set up",
   notOpen: "Not open",
   ready: "Ready",
@@ -324,18 +335,49 @@ function show(id) {
   for (const section of ["checking", View.Get, View.Pick, View.New, View.Project]) $(section).hidden = section !== id;
 }
 
-/** Why Get Godot shows: the Godot Genex needs on a Mac; elsewhere, that Genex builds Godot games on a Mac only. */
+/** Why Get Godot shows: the Godot Genex needs, or the older one this computer has. */
 function getWhy(s) {
-  if (s.mac === false) return WORDS.notMacWhy;
-  return s.version ? WORDS.older(s.version) : WORDS.getWhy;
+  if (!s.version) return WORDS.getWhy;
+  return s.windows ? WORDS.olderWindows(s.version) : WORDS.older(s.version);
 }
 
-/** Get Godot: where to put Godot on a Mac, and the wait for it; elsewhere nothing to wait for. */
+/** The wait under Get Godot: for Godot in Applications on a Mac; on Windows, how far Genex's download got. */
+function waitText(s) {
+  if (!s.windows) return WORDS.waitMac;
+  const job = s.installing;
+  if (job?.unpacking) return WORDS.installing;
+  return job?.total ? WORDS.downloading(job.done ?? 0, job.total) : WORDS.installing;
+}
+
+/**
+ * Get Godot: on a Mac, where to put Godot and the wait for it; on Windows, Genex's own download,
+ * its progress while it runs and Try again after it stopped.
+ */
 function renderGet(s) {
-  const mac = s.mac !== false;
+  const running = s.installing?.state === JobState.Running;
+  const failed = s.installing?.state === JobState.Failed;
   setText($("get-why"), getWhy(s));
-  setText($("get-how"), mac ? WORDS.getHow : WORDS.notMacHow);
-  $("get-waiting").hidden = !mac;
+  setText($("get-how"), s.windows ? WORDS.getHowWindows : WORDS.getHow);
+  setText($("get-godot"), failed ? WORDS.tryAgain : WORDS.get);
+  $("get-godot").classList.toggle("external", !s.windows);
+  $("get-godot").disabled = running;
+  $("get-waiting").hidden = Boolean(s.windows) && !running;
+  setText($("get-waiting-text"), waitText(s));
+  if (s.windows && failed && !s.installing.stopped) showError(s.installing.why);
+}
+
+/**
+ * Windows's Get Godot: Genex's download, which Studio asks the person to confirm first. It answers
+ * once Godot is in place; the page follows it meanwhile, so this never holds the page busy.
+ */
+async function downloadGodot() {
+  showError(null);
+  try {
+    await api.call("action", Action.DownloadGodot, {});
+  } catch (e) {
+    if (e?.code !== ErrorCode.Cancelled) showError(e);
+  }
+  await refresh();
 }
 
 /** A project's tag: In use, Outside game, or none. */
@@ -533,7 +575,7 @@ async function webExport() {
   $("note").hidden = false;
 }
 
-$("get-godot").onclick = () => void act($("get-godot"), Action.GetGodot);
+$("get-godot").onclick = () => void (last?.windows ? downloadGodot() : act($("get-godot"), Action.GetGodot));
 $("recheck").onclick = () => void refresh();
 $("back").onclick = () => go(View.Project);
 $("change").onclick = () => go(View.Pick);

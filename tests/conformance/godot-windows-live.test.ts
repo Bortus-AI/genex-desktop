@@ -14,7 +14,7 @@ import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { after, before, describe, it } from "node:test";
-import type { PluginContext, PluginSetupCard } from "../../src/plugin-sdk/index.d.ts";
+import type { PluginContext, PluginScalar, PluginSetupCard } from "../../src/plugin-sdk/index.d.ts";
 import { activate } from "../../src/plugins/godot/backend.ts";
 import type { PluginBinding } from "../../src/shared/plugins.ts";
 import { validateManifest } from "../../src/substrate/plugins/manifest.ts";
@@ -40,7 +40,7 @@ type Answer = Record<string, unknown>;
 
 let sandbox: ProcessSandbox;
 let jobs: PluginSandboxJobs;
-let call: (kind: "action" | "tool", name: string, args?: Record<string, unknown>) => Promise<Answer>;
+let call: (kind: "action" | "tool", name: string, args?: Record<string, PluginScalar>) => Promise<Answer>;
 let game: string;
 
 before(async () => {

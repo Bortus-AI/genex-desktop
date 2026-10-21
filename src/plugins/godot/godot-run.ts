@@ -1,16 +1,29 @@
 /**
  * How Genex runs Godot: each job is a value (its arguments, what it may read and write, its
- * deadline), and one runner starts it in the macOS sandbox Genex's native jobs use
- * (`runNativeProcess`). There Godot gets a private home (so a game's `user://` files and Godot's own
- * caches stay out of the person's), no network, writes only to the project and the job's own
- * folders, and its whole process group is stopped at its deadline or the turn's Stop. A deadline is
- * a must: a script that awaits a frame that never draws (a headless capture) would wait forever.
- * Tests hand in their own runner and never start Godot.
+ * deadline), and one runner starts it in Genex's sandbox. On a Mac that is the sandbox Genex's
+ * native jobs use (`runNativeProcess`): Godot gets a private home (so a game's `user://` files and
+ * Godot's own caches stay out of the person's), no network, writes only to the project and the
+ * job's own folders, and its whole process group is stopped at its deadline or the turn's Stop. On
+ * Windows the job is the host's sandbox job (`sandbox.run`: ProcessSandbox, as the sandbox user,
+ * no network), which writes only inside the game: a folder the job writes outside it (a capture's
+ * stills, the class reference) waits in the project's own `.godot` folder and is copied out once
+ * the job ends. A deadline is a must: a script that awaits a frame that never draws (a headless
+ * capture) would wait forever. Tests hand in their own runner and never start Godot.
  */
-import { mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { cp, mkdir, mkdtemp, realpath, rm, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
+import type { PluginContext } from "../../plugin-sdk/index.d.ts";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
+import {
+  type PluginSandboxJob,
+  type PluginSandboxRunArgs,
+  PluginService,
+  SandboxJobState,
+} from "../../shared/plugins.ts";
+import { isBelow } from "../../substrate/paths.ts";
 import { NativeEndReason, runNativeProcess } from "../../substrate/plugins/native-process.ts";
 import { type KeyPress, keysArg, PLAY_FPS, type ShotAt, shotsArg } from "./play-input.ts";
 
@@ -49,9 +62,22 @@ const OUTPUT_BYTES = 200_000;
 const SCRATCH_PREFIX = "genex-godot-";
 /** The private home the sandbox makes in a job's scratch folder (`runNativeProcess`). */
 const HOME_FOLDER = "home";
+/** How often a Windows job's record is read while it runs. */
+const JOB_POLL_MS = SECOND_MS / 4;
+/** Where a Windows job's folders outside the game wait while it runs: the project's own cache folder. */
+const STAGING = [".godot", "genex-jobs"];
+/** The variable naming the folder Godot reads as its data folder (export templates) on Windows. */
+const DATA_HOME_ENV = "XDG_DATA_HOME";
+const DATA_FOLDER = "data";
+/** A terminal's colour sequence, which Godot's Windows build prints into a file too. */
+// biome-ignore lint/suspicious/noControlCharactersInRegex: the escape character is what this removes
+const COLOUR = /\x1b\[[0-9;]*m/g;
 
 const MESSAGE = {
-  MacOnly: "Genex runs Godot on a Mac only for now.",
+  Unsupported: "Genex runs Godot on a Mac and on Windows.",
+  NeedsProject: "On Windows Genex runs Godot inside the game's Godot project: make one first (godot__new-game).",
+  NotStarted: (reason: string) => `Genex's sandbox didn't start Godot (${reason}).`,
+  Lost: "Genex's sandbox lost Godot's job before it ended.",
 } as const;
 
 /** One job: Godot's arguments, the folder it runs in, what it may read and write, and its deadline. */
@@ -66,15 +92,32 @@ export type GodotCall = {
   gpu: boolean;
   /** Files written under names that only start so (a program's own temporary names), as real absolute paths. */
   writePrefixes?: string[];
-  /** Folders linked into the job's private home (`at`, relative to it), read-only: the person's export templates. */
+  /** A Mac's: folders linked into the job's private home (`at`, relative to it), read-only: the person's export templates. */
   homeLinks?: ReadonlyArray<{ at: string; to: string }>;
+  /**
+   * Windows's: files copied from `from` into the folder Godot reads as its data folder for this job
+   * (`at`, relative to it): the person's export templates, which the sandbox user can't read.
+   */
+  dataCopies?: ReadonlyArray<{ at: string; from: string; files: readonly string[] }>;
 };
 
 /** What a job printed (errors first, then the rest), and how it ended. */
 export type GodotResult = { output: string; timedOut: boolean; cancelled: boolean };
 
-/** Starts one job with a Godot binary; the signal stops it. */
-export type GodotRunner = (binary: string, call: GodotCall, signal: AbortSignal) => Promise<GodotResult>;
+/**
+ * What a job runs under: the call's stop, the plugin's host (a Windows job is the host's sandbox
+ * job), the open game's folder, and its Godot project, where a Windows job's folders outside the
+ * game wait while it runs.
+ */
+export type GodotJobScope = {
+  signal: AbortSignal;
+  host: PluginContext["host"];
+  game: string | undefined;
+  project: string | null;
+};
+
+/** Starts one job with a Godot binary; the scope's signal stops it. */
+export type GodotRunner = (binary: string, call: GodotCall, job: GodotJobScope) => Promise<GodotResult>;
 
 /** An import: Godot reads the project's assets and scripts into `.godot/`, which a check and a run need first. */
 export function importCall(project: string): GodotCall {
@@ -201,34 +244,151 @@ async function linkIntoHome(scratch: string, links: NonNullable<GodotCall["homeL
   }
 }
 
-/** The runner Genex uses: each job in the native-job sandbox, in a scratch folder removed after it. */
+/** The runner Genex uses on this computer: a Mac's native-job sandbox, Windows's host sandbox jobs. */
 export function confinedRunner(platform: NodeJS.Platform = process.platform): GodotRunner {
-  return async (binary, call, signal) => {
-    if (platform !== "darwin") throw new Error(MESSAGE.MacOnly);
-    const scratch = await mkdtemp(path.join(os.tmpdir(), SCRATCH_PREFIX));
+  if (platform === "darwin") return macRunner;
+  if (platform === "win32") return windowsRunner();
+  return async () => {
+    throw new Error(MESSAGE.Unsupported);
+  };
+}
+
+/** A Mac's: each job in the native-job sandbox, in a scratch folder removed after it. */
+const macRunner: GodotRunner = async (binary, call, { signal }) => {
+  const scratch = await mkdtemp(path.join(os.tmpdir(), SCRATCH_PREFIX));
+  try {
+    await linkIntoHome(scratch, call.homeLinks ?? []);
+    const ended = await runNativeProcess({
+      binary,
+      args: call.args,
+      cwd: call.cwd,
+      scratch,
+      reads: call.reads,
+      writes: call.writes,
+      ...(call.writePrefixes ? { writePrefixes: call.writePrefixes } : {}),
+      denyRead: [],
+      gpu: call.gpu,
+      signal,
+      timeoutMs: call.timeoutMs,
+      maxOutputBytes: OUTPUT_BYTES,
+    });
+    return {
+      output: `${ended.stderr}\n${ended.stdout}`,
+      timedOut: ended.reason === NativeEndReason.Timeout,
+      cancelled: ended.reason === NativeEndReason.Cancelled,
+    };
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
+  }
+};
+
+/** A folder a Windows job writes outside the game, and where it waits inside the project while the job runs. */
+type Staged = { folder: string; staged: string };
+
+/** Whether a Windows job may name `folder` as one it writes: a folder inside the game, in none of its hidden folders. */
+function writableInGame(game: string, folder: string): boolean {
+  if (!isBelow(game, folder)) return false;
+  return !path
+    .relative(game, folder)
+    .split(path.sep)
+    .some((part) => part.startsWith("."));
+}
+
+/**
+ * A Windows job's folders: those inside the game it names as it writes them, each other one staged
+ * in the project's `.godot` (the project named in their place), and the data folder its copies go to.
+ */
+async function windowsFolders(call: GodotCall, job: GodotJobScope) {
+  if (!job.project || !job.game) throw new Error(MESSAGE.NeedsProject);
+  const game = await realpath(job.game);
+  const project = await realpath(job.project);
+  if (!writableInGame(game, project)) throw new Error(MESSAGE.NeedsProject);
+  const root = path.join(project, ...STAGING, randomUUID());
+  const writes: string[] = [];
+  const staged: Staged[] = [];
+  for (const folder of call.writes) {
+    const real = await realpath(folder).catch(() => folder);
+    if (writableInGame(game, real)) writes.push(real);
+    else staged.push({ folder, staged: path.join(root, String(staged.length)) });
+  }
+  return { root, writes: writes.length ? writes : [project], staged, data: path.join(root, DATA_FOLDER) };
+}
+
+/** The data folder's copies (the person's export templates) and each staged folder, made before the job starts. */
+async function stageFolders(call: GodotCall, staged: readonly Staged[], data: string): Promise<void> {
+  for (const { staged: folder } of staged) await mkdir(folder, { recursive: true });
+  for (const { at, from, files } of call.dataCopies ?? []) {
+    await mkdir(path.join(data, at), { recursive: true });
+    for (const file of files) await cp(path.join(from, file), path.join(data, at, file));
+  }
+}
+
+/** A text with each staged folder's path put in place of its folder's (`toStaged`), or back. */
+function swapFolders(text: string, staged: readonly Staged[], toStaged: boolean): string {
+  return staged.reduce(
+    (swapped, { folder, staged: inProject }) =>
+      toStaged ? swapped.replaceAll(folder, inProject) : swapped.replaceAll(inProject, folder),
+    text,
+  );
+}
+
+/** The sandbox job a Godot call is: Godot itself, reading its own folder and the call's, writing the folders named. */
+function sandboxRequest(binary: string, call: GodotCall, folders: Awaited<ReturnType<typeof windowsFolders>>) {
+  const reads = [...new Set([path.dirname(binary), ...call.reads])];
+  const request: PluginSandboxRunArgs = {
+    program: binary,
+    args: call.args.map((arg) => swapFolders(arg, folders.staged, true)),
+    reads,
+    writes: folders.writes,
+    timeoutMs: call.timeoutMs,
+    ...(call.dataCopies?.length ? { env: { [DATA_HOME_ENV]: folders.data } } : {}),
+  };
+  return request;
+}
+
+/** Follows a sandbox job until it ends; a stop of the call stops it. */
+async function jobEnd(job: GodotJobScope, id: string, wait: (ms: number) => Promise<unknown>) {
+  let stopping = false;
+  for (;;) {
+    if (job.signal.aborted && !stopping) {
+      stopping = true;
+      await job.host(PluginService.SandboxStop, { id }).catch(() => undefined);
+    }
+    const record: PluginSandboxJob | null = await job.host(PluginService.SandboxResult, { id });
+    if (!record) throw new Error(MESSAGE.Lost);
+    if (record.state !== SandboxJobState.Running) return record;
+    await wait(JOB_POLL_MS);
+  }
+}
+
+/** A job's end as a Godot result: what it printed (as a Mac's lines read), staged paths named as their folders, and how it ended. */
+function resultOf(record: PluginSandboxJob, staged: readonly Staged[]): GodotResult {
+  if (record.state === SandboxJobState.Failed) throw new Error(MESSAGE.NotStarted(record.reason ?? ""));
+  const printed = `${record.stderr ?? ""}\n${record.stdout ?? ""}`.replaceAll("\r\n", "\n").replace(COLOUR, "");
+  return {
+    output: swapFolders(printed.slice(-OUTPUT_BYTES), staged, false),
+    timedOut: record.state === SandboxJobState.TimedOut,
+    cancelled: record.state === SandboxJobState.Stopped,
+  };
+}
+
+/**
+ * Windows's: each job a sandbox job of the host's (ProcessSandbox, as the sandbox user), followed
+ * until it ends; what it wrote in a staged folder is copied out to the folder the call named, and
+ * the staged folders are removed either way. `wait` is the pause between two reads of its record.
+ */
+export function windowsRunner(wait: (ms: number) => Promise<unknown> = sleep): GodotRunner {
+  return async (binary, call, job) => {
+    job.signal.throwIfAborted();
+    const folders = await windowsFolders(call, job);
     try {
-      await linkIntoHome(scratch, call.homeLinks ?? []);
-      const ended = await runNativeProcess({
-        binary,
-        args: call.args,
-        cwd: call.cwd,
-        scratch,
-        reads: call.reads,
-        writes: call.writes,
-        ...(call.writePrefixes ? { writePrefixes: call.writePrefixes } : {}),
-        denyRead: [],
-        gpu: call.gpu,
-        signal,
-        timeoutMs: call.timeoutMs,
-        maxOutputBytes: OUTPUT_BYTES,
-      });
-      return {
-        output: `${ended.stderr}\n${ended.stdout}`,
-        timedOut: ended.reason === NativeEndReason.Timeout,
-        cancelled: ended.reason === NativeEndReason.Cancelled,
-      };
+      await stageFolders(call, folders.staged, folders.data);
+      const { id } = await job.host(PluginService.SandboxRun, sandboxRequest(binary, call, folders));
+      const result = resultOf(await jobEnd(job, id, wait), folders.staged);
+      for (const { folder, staged } of folders.staged) await cp(staged, folder, { recursive: true });
+      return result;
     } finally {
-      await rm(scratch, { recursive: true, force: true });
+      await rm(folders.root, { recursive: true, force: true });
     }
   };
 }

@@ -2,18 +2,27 @@
  * A fake Mac for the Godot plugin: Godot apps where the test puts them (each binary an empty file
  * whose version the fake answers), a runner that records every Godot job and answers it with
  * Godot's recorded words (`tests/fixtures/godot-cli/`), and the plugin's backend over both in an
- * open Genex game, with the host calls it makes recorded. Nothing here starts Godot.
+ * open Genex game, with the host calls it makes recorded. A fake Windows PC too: Godot's
+ * executables where the test puts them, and the backend on it with the real Windows runner over a
+ * host whose sandbox jobs and pinned-runtime install the test plays. Nothing here starts Godot.
  */
 import { mkdir, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { PluginContext } from "../../src/plugin-sdk/index.d.ts";
+import type { PluginRuntimeInstall, PluginSandboxJob, PluginSandboxRunArgs } from "../../src/shared/plugins.ts";
 import { createGodotBackend } from "../../src/plugins/godot/backend.ts";
 import type { EditorEnv, Launch } from "../../src/plugins/godot/editor.ts";
 import { BRIDGE_FOLDER } from "../../src/plugins/godot/editor-bridge.ts";
 import type { GodotEnv } from "../../src/plugins/godot/find-godot.ts";
 import type { GodotInstallDeps } from "../../src/plugins/godot/godot-setup.ts";
 import type { ColyseusRelease } from "../../src/plugins/godot/multiplayer.ts";
-import { type GodotCall, GodotJob, type GodotResult, type GodotRunner } from "../../src/plugins/godot/godot-run.ts";
+import {
+  type GodotCall,
+  GodotJob,
+  type GodotResult,
+  type GodotRunner,
+  windowsRunner,
+} from "../../src/plugins/godot/godot-run.ts";
 import { tmpDir } from "./tmp.ts";
 
 /** The shipped scripts and templates, read where the source keeps them. */
@@ -119,18 +128,58 @@ export async function fakeMac(
     pathDirs: [],
     applications,
     binaries: [],
+    programFiles: [],
+    dataHome: path.join(home, "Library", "Application Support"),
     version: async (binary) => versions.get(binary) ?? null,
     userTemp: async () => path.join(root, "user-temp"),
   };
   return { root, home, env, versions };
 }
 
-/** An editor that records what it opens and answers the process list it is given. */
-export function recordingEditor(lines: string[] = []) {
+/** Godot's Windows build where a test puts it: `where` from the fake PC's root, and the version it answers. */
+export type FakeExe = { where: string; version: string | null };
+
+/**
+ * A fake Windows PC (its folders made under a temporary root): Program Files and Program Files
+ * (x86), a home with Downloads, and Godot executables where the test puts them (each an empty file
+ * whose version the fake answers). Genex's own install sits in its data folder in the home.
+ */
+export async function fakeWindows(exes: readonly FakeExe[] = []) {
+  const root = await realpath(await tmpDir("studio-godot-win-"));
+  const home = path.join(root, "Users", "Ada");
+  const programFiles = [path.join(root, "Program Files"), path.join(root, "Program Files (x86)")];
+  const own = path.join(home, "AppData", "Roaming", "Genex", "native-runtimes", "godot", "godot");
+  for (const folder of [home, ...programFiles]) await mkdir(folder, { recursive: true });
+  const versions = new Map<string, string | null>();
+  const place = async ({ where, version }: FakeExe) => {
+    const binary = path.join(root, where);
+    await mkdir(path.dirname(binary), { recursive: true });
+    await writeFile(binary, "");
+    versions.set(await realpath(binary), version);
+    return realpath(binary);
+  };
+  for (const exe of exes) await place(exe);
+  const env: GodotEnv = {
+    platform: "win32",
+    home,
+    pathDirs: [],
+    applications: path.join(root, "Applications"),
+    binaries: [],
+    programFiles,
+    dataHome: path.join(home, "AppData", "Roaming"),
+    version: async (binary) => versions.get(binary) ?? null,
+    userTemp: async () => null,
+  };
+  return { root, home, own, env, versions, place };
+}
+
+/** An editor that records what it opens and answers the process list it is given, on a Mac unless a test names another computer. */
+export function recordingEditor(lines: string[] = [], platform: NodeJS.Platform = "darwin") {
   const opened: Launch[] = [];
   const clock = { at: Date.UTC(2026, 9, 14, 12) };
   let standIn: (() => Promise<void>) | null = null;
   const editor: EditorEnv = {
+    platform,
     open: async (launch) => {
       opened.push(launch);
     },
@@ -207,7 +256,7 @@ export async function godotBackendFixture(
   await mkdir(storage, { recursive: true });
   await mkdir(gameDir, { recursive: true });
   const runner = recordingRunner(options.answers);
-  const recorded = recordingEditor(options.editorLines);
+  const recorded = recordingEditor(options.editorLines, options.platform);
   const backend = createGodotBackend({
     env: options.platform ? { ...mac.env, platform: options.platform } : mac.env,
     editor: recorded.editor,
@@ -246,4 +295,98 @@ export async function godotBackendFixture(
     ...more,
   });
   return { ...mac, storage, gameDir, made, backend, runner, jobs: runner.jobs, editor: recorded, hostCalls, context };
+}
+
+/** Godot 4.7.2's own version line, as the Windows build says it. */
+export const GODOT_472 = "4.7.2.stable.official.ed1daf0bf";
+/** Where the host keeps Genex's own Godot on the fake PC, from its root. */
+export const OWN_GODOT = "Users/Ada/AppData/Roaming/Genex/native-runtimes/godot/godot/Godot_v4.7.2-stable_win64.exe";
+
+/** How the fake host's sandbox ends a job: what Godot printed, its exit code, or another end. */
+export type SandboxEnd = Partial<Pick<PluginSandboxJob, "state" | "exitCode" | "stdout" | "stderr" | "reason">>;
+
+/**
+ * The backend on a fake Windows PC in an open game (`valley`, its folder `game/`), running Godot's
+ * jobs through the real Windows runner. The host plays the rest: the sandbox jobs (`sandbox.run`,
+ * each answered by `sandbox` from its request, read once while running, `sandbox.stop` recorded),
+ * and the pinned Godot (`runtime.detect` finds it once `runtime.install` placed it, or the test
+ * did; `runtime.installation` answers `record`).
+ */
+export async function godotWindowsFixture(
+  options: {
+    exes?: FakeExe[];
+    /** Whether Genex's own Godot is already in place. */
+    installed?: boolean;
+    sandbox?: (request: PluginSandboxRunArgs) => Promise<SandboxEnd> | SandboxEnd;
+    editorLines?: string[];
+  } = {},
+) {
+  const pc = await fakeWindows(options.exes);
+  const storage = path.join(pc.root, "storage");
+  const gameDir = path.join(pc.root, "Users", "Ada", "AI Games", "Valley");
+  await mkdir(storage, { recursive: true });
+  await mkdir(gameDir, { recursive: true });
+  const own = { binary: options.installed ? await pc.place({ where: OWN_GODOT, version: GODOT_472 }) : null };
+  const runtime: { record: PluginRuntimeInstall | null; install: () => Promise<void> } = {
+    record: null,
+    install: async () => {
+      own.binary = await pc.place({ where: OWN_GODOT, version: GODOT_472 });
+      runtime.record = { runtime: "godot", phase: "ready", completed: 1, total: 1, active: false, updatedAt: "" };
+    },
+  };
+  const requests: PluginSandboxRunArgs[] = [];
+  const stopped: string[] = [];
+  const jobs = new Map<string, { reads: number; end: PluginSandboxJob }>();
+  const recorded = recordingEditor(options.editorLines, "win32");
+  const backend = createGodotBackend({
+    env: pc.env,
+    editor: recorded.editor,
+    run: windowsRunner(async () => undefined),
+    scripts: SCRIPTS,
+    templates: TEMPLATES,
+    addon: ADDON,
+    multiplayer: MULTIPLAYER,
+  });
+  const hostCalls: HostCall[] = [];
+  const sandboxRun = async (request: PluginSandboxRunArgs) => {
+    requests.push(request);
+    const id = `job-${requests.length}`;
+    const end = { state: "exited", exitCode: 0, stdout: "", stderr: "", ...(await options.sandbox?.(request)) };
+    jobs.set(id, { reads: 0, end: { id, ...end } as PluginSandboxJob });
+    return { id };
+  };
+  const sandboxResult = (id: string): PluginSandboxJob | null => {
+    const job = jobs.get(id);
+    if (!job) return null;
+    job.reads += 1;
+    if (stopped.includes(id)) return { ...job.end, state: "stopped" };
+    return job.reads === 1 ? { id, state: "running" } : job.end;
+  };
+  const idOf = (args: unknown) => String((args as { id?: unknown })?.id);
+  const host = (async (method: string, args?: unknown) => {
+    hostCalls.push({ method, args });
+    if (method === "storage.root") return storage;
+    if (method === "game.engine.read") return null;
+    if (method === "game.engine.steps") return true;
+    if (method === "runtime.detect") return own.binary ? { state: "ready", path: own.binary } : { state: "missing" };
+    if (method === "runtime.install") return runtime.install();
+    if (method === "runtime.installation") return runtime.record;
+    if (method === "runtime.cancelInstall") return true;
+    if (method === "sandbox.run") return sandboxRun(args as PluginSandboxRunArgs);
+    if (method === "sandbox.result") return sandboxResult(idOf(args));
+    if (method === "sandbox.stop") {
+      stopped.push(idOf(args));
+      return { stopped: true };
+    }
+    throw new Error(`unexpected host call ${method}`);
+  }) as PluginContext["host"];
+  const context = (more: Partial<PluginContext> = {}): PluginContext => ({
+    project: "valley",
+    directory: gameDir,
+    signal: new AbortController().signal,
+    callId: 1,
+    host,
+    ...more,
+  });
+  return { ...pc, storage, gameDir, own, runtime, backend, requests, stopped, editor: recorded, hostCalls, context };
 }

@@ -1,11 +1,11 @@
 {
   "apiVersion": 3,
   "id": "godot",
-  "version": "0.9.1",
+  "version": "0.10.0",
   "icon": "icon.svg",
   "name": "Godot",
   "publisher": "Genex",
-  "description": "Agents build your game in Godot 4 on this Mac: they make its project, write its scenes and GDScript, check it and look at it with Godot's own tools. Open it in your Godot editor any time.",
+  "description": "Agents build your game in Godot 4 on this computer: they make its project, write its scenes and GDScript, check it and look at it with Godot's own tools. Open it in your Godot editor any time.",
   "backend": "backend.mjs",
   "capabilities": ["game-engine", "native-runtime"],
   "detect": [
@@ -26,7 +26,7 @@
   "tools": [
     {
       "name": "show-steps",
-      "description": "Show the user the Godot setup card in this game's chat: Genex installs Godot 4 for them (Do it for me). Use it when the user wants a Godot game and this Mac has no Godot 4.3 or newer (new-game refuses, or the engine question says Godot needs installing first); then tell them in one line and end your reply, and the chat tells you when Godot is ready. It does nothing when Godot is installed.",
+      "description": "Show the user the Godot setup card in this game's chat: Genex installs Godot 4 for them (Do it for me). Use it when the user wants a Godot game and this computer has no Godot 4.3 or newer (new-game refuses, or the engine question says Godot needs installing first); then tell them in one line and end your reply, and the chat tells you when Godot is ready. It does nothing when Godot is installed.",
       "parameters": {
         "type": "object",
         "properties": {}
@@ -169,7 +169,7 @@
     {
       "name": "engine-status",
       "audience": "harness",
-      "description": "Whether this Mac's Godot can make a new Godot game now, and the words the engine question offers it with.",
+      "description": "Whether this computer's Godot can make a new Godot game now, and the words the engine question offers it with.",
       "parameters": {
         "type": "object",
         "properties": {}
@@ -248,7 +248,7 @@
   "actions": [
     {
       "name": "status",
-      "label": "Godot on this Mac"
+      "label": "Godot on this computer"
     },
     {
       "name": "create",
@@ -291,7 +291,13 @@
     { "name": "steps", "label": "Godot setup" },
     { "name": "install-godot", "label": "Install Godot", "native": true },
     { "name": "stop-install", "label": "Stop installing Godot", "native": true },
-    { "name": "skip", "label": "Don't use Godot", "native": true }
+    { "name": "skip", "label": "Don't use Godot", "native": true },
+    {
+      "name": "download-godot",
+      "label": "Download Godot 4.7.2",
+      "confirmation": "Download Godot 4.7.2 (86 MB) from Godot's own releases into Genex's folder? Genex checks the download, and any Godot you have stays as it is.",
+      "native": true
+    }
   ],
   "toolbar": [
     {
@@ -376,7 +382,33 @@
         "args": ["--version"],
         "pattern": "^(\\d+\\.\\d+(?:\\.\\d+)?)\\.",
         "minimum": "4.3.0"
-      }
+      },
+      "install": {
+        "platform": "win32-x64",
+        "action": "download-godot",
+        "url": "https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_win64.exe.zip",
+        "sha256": "731980f9608d61333e5baf54a2ef17210acc7a538446c0cb9969f002aca1e953",
+        "bytes": 86013866,
+        "unpackedBytes": 200000000,
+        "format": "zip",
+        "entry": "Godot_v4.7.2-stable_win64.exe",
+        "executable": "Godot_v4.7.2-stable_win64.exe",
+        "notices": []
+      },
+      "installs": [
+        {
+          "platform": "win32-arm64",
+          "action": "download-godot",
+          "url": "https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_windows_arm64.exe.zip",
+          "sha256": "2d206e0b1d2366eb3508971c670c52333dcd7218b818102d77ca7ceaa86892ba",
+          "bytes": 84263370,
+          "unpackedBytes": 210000000,
+          "format": "zip",
+          "entry": "Godot_v4.7.2-stable_windows_arm64.exe",
+          "executable": "Godot_v4.7.2-stable_windows_arm64.exe",
+          "notices": []
+        }
+      ]
     }
   ],
   "nativeJobs": []
