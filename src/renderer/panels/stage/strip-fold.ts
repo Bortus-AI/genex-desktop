@@ -113,7 +113,7 @@ export function useStripFold(
       const seen: unknown[] = [];
       for (const _ of STRIP_STEPS) {
         const w = firstRow(row, parts);
-        seen.push([current, row.dataset.fold, Math.round(w.row), Math.round(w.room), getComputedStyle(row).paddingInlineEnd, getComputedStyle(document.documentElement).getPropertyValue("--window-controls-end"), window.innerWidth]);
+        seen.push([current, row.dataset.fold, Math.round(w.row), Math.round(w.room), getComputedStyle(row).paddingInlineEnd, getComputedStyle(document.documentElement).getPropertyValue("--window-controls-end"), window.innerWidth, getComputedStyle(row).gridTemplateColumns, parts.map((p) => [p.dataset.row ?? "", getComputedStyle(p).marginInlineEnd, Math.round(p.getBoundingClientRect().left), Math.round(p.getBoundingClientRect().right), p.scrollWidth, getComputedStyle(p).flexWrap])]);
         const next = nextFold(current, w);
         if (next === current) break;
         apply(next);
