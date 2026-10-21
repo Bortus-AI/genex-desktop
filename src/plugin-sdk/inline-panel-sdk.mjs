@@ -18,6 +18,14 @@ export const PANEL_FONTS_MARKER = "<!-- STUDIO_PANEL_FONTS -->";
 export const PANEL_FONTS = [
   { family: "Zalando Sans SemiExpanded", file: "ZalandoSansSemiExpanded-variable.woff2", weight: "200 900" },
   { family: "Geist Mono", file: "GeistMono-variable.woff2", weight: "100 900" },
+  // Zalando Sans has Latin only: Cyrillic and Greek come from TikTok Sans tuned to it (renderer/theme.css).
+  {
+    family: "TikTok Sans Genex",
+    file: "TikTokSansGenex-variable.woff2",
+    weight: "275 792",
+    extra:
+      "size-adjust:101.3%;unicode-range:U+0301,U+0370-03FF,U+0400-052F,U+1C80-1C88,U+1F00-1FFF,U+2116,U+2DE0-2DFF,U+A640-A69F;",
+  },
 ];
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -65,7 +73,7 @@ export async function inlinePanelFonts(html, fontsDir) {
   const faces = await Promise.all(
     PANEL_FONTS.map(async (font) => {
       const data = (await readFile(path.join(fontsDir, font.file))).toString("base64");
-      return `@font-face{font-family:"${font.family}";font-style:normal;font-weight:${font.weight};font-display:swap;src:url(data:font/woff2;base64,${data}) format("woff2")}`;
+      return `@font-face{font-family:"${font.family}";font-style:normal;font-weight:${font.weight};font-display:swap;${font.extra ?? ""}src:url(data:font/woff2;base64,${data}) format("woff2")}`;
     }),
   );
   return html.replace(PANEL_FONTS_MARKER, () => `<style>${faces.join("\n")}</style>`);
