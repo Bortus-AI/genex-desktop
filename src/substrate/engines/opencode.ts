@@ -68,6 +68,7 @@ import { ModelCatalogSource } from "../../shared/model-catalog.ts";
 import { engineMode, PermissionMode } from "../../shared/permissions.ts";
 import { EngineId } from "../../shared/providers.ts";
 import { t } from "../../shared/i18n.ts";
+import { stripTerminalCodes } from "../../shared/terminal.ts";
 
 /** How long `opencode models --verbose` may take: it may refresh its catalog from models.dev first. */
 const MODELS_TIMEOUT_MS = 30 * SECOND_MS;
@@ -866,7 +867,7 @@ async function listOpenCodeModels(binary: string | undefined): Promise<string> {
     env,
     timeoutMs: Math.max(MODELS_TIMEOUT_MS, CATALOG_DEADLINE_MS),
   });
-  if (result.code !== 0) throw new Error(result.stderr.trim() || MESSAGE.Stopped(result.code));
+  if (result.code !== 0) throw new Error(stripTerminalCodes(result.stderr).trim() || MESSAGE.Stopped(result.code));
   return result.stdout;
 }
 
@@ -1069,5 +1070,6 @@ async function* childEvents(
     invocation.signal.removeEventListener("abort", onAbort);
   }
   const code = await exit;
-  if (code !== 0 && !said && !invocation.signal.aborted) throw new Error(stderr.trim() || MESSAGE.Stopped(code));
+  if (code !== 0 && !said && !invocation.signal.aborted)
+    throw new Error(stripTerminalCodes(stderr).trim() || MESSAGE.Stopped(code));
 }
