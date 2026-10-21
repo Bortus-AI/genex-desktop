@@ -1,157 +1,146 @@
 /**
- * Godot on Windows for real (probe): what Godot's Windows build does under Genex's process sandbox.
- * Windows with a provisioned sandbox and STUDIO_NETWORK_TESTS=1 only.
+ * The Godot plugin on Windows for real, wired as the app wires it: its backend (`activate`) over a
+ * host whose `runtime.*` calls go to `PluginNativeServices` and whose `sandbox.*` calls go to
+ * `PluginSandboxJobs` on a real `ProcessSandbox` (srt-win). The setup card's Do it for me gets
+ * Godot (the manifest's pinned download, about 86 MB), the agent is offered Godot, a new game is
+ * made, imported, checked, run and photographed in the sandbox, the class reference is made, and
+ * the person's editor opens the project and is found by its command line. Windows only, on a
+ * machine whose sandbox is provisioned (the Windows CI job sets GENEX_WINDOWS_SANDBOX=ready), and
+ * opt-in (`STUDIO_NETWORK_TESTS=1`): it reaches GitHub for Godot.
  */
 import assert from "node:assert/strict";
-import { execFile, spawn } from "node:child_process";
-import { mkdir, readdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
 import { after, before, describe, it } from "node:test";
+import type { PluginContext, PluginSetupCard } from "../../src/plugin-sdk/index.d.ts";
+import { activate } from "../../src/plugins/godot/backend.ts";
+import type { PluginBinding } from "../../src/shared/plugins.ts";
+import { validateManifest } from "../../src/substrate/plugins/manifest.ts";
+import { PluginNativeServices } from "../../src/substrate/plugins/native.ts";
+import { PluginSandboxJobs } from "../../src/substrate/plugins/sandbox-jobs.ts";
 import { killProcessTree } from "../../src/substrate/process-tree.ts";
 import { ProcessSandbox } from "../../src/substrate/spawn.ts";
 import { windowsProcesses } from "../../src/substrate/windows-processes.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
-const run = promisify(execFile);
 const SKIP =
   (process.platform !== "win32" ||
     process.env.GENEX_WINDOWS_SANDBOX !== "ready" ||
     process.env.STUDIO_NETWORK_TESTS !== "1") &&
   "Windows with a provisioned sandbox and STUDIO_NETWORK_TESTS=1 only";
-const ZIP = "https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_win64.exe.zip";
-const EXE = "Godot_v4.7.2-stable_win64.exe";
-const CONSOLE = "Godot_v4.7.2-stable_win64_console.exe";
-const PROJECT = `config_version=5\n\n[application]\n\nconfig/name="Probe"\nrun/main_scene="res://main.tscn"\n`;
-const SCENE = `[gd_scene format=3]\n\n[node name="Main" type="Node3D"]\n\n[node name="Camera3D" type="Camera3D" parent="."]\n`;
-const SHOT = `extends SceneTree
-var frames := 0
-func _process(_d):
-\tframes += 1
-\tif frames == 20:
-\t\tvar img := root.get_viewport().get_texture().get_image()
-\t\tprint("SHOT ", img.get_width(), "x", img.get_height(), " ", img.save_png(OS.get_environment("SHOT_OUT")))
-\t\tquit()
-\treturn false
-`;
+const PACKAGE = fileURLToPath(new URL("../../src/plugins/godot/", import.meta.url));
+const PLUGIN = "godot";
+/** How long the editor may take to show up in the process list, and how often it is looked for. */
+const EDITOR_WAIT_MS = 60_000;
+const EDITOR_POLL_MS = 1_000;
 
-let root: string;
-let godot: string;
-let game: string;
-let project: string;
+type Answer = Record<string, unknown>;
+
 let sandbox: ProcessSandbox;
-
-const log = (label: string, value: unknown) => console.log(`[probe] ${label}: ${JSON.stringify(value)}`);
-const tail = (text: string) => text.slice(-1500);
+let jobs: PluginSandboxJobs;
+let call: (kind: "action" | "tool", name: string, args?: Record<string, unknown>) => Promise<Answer>;
+let game: string;
 
 before(async () => {
   if (SKIP) return;
-  root = await tmpDir("gwin-");
-  godot = path.join(root, "godot");
-  game = path.join(root, "game");
-  project = path.join(game, "godot");
-  await mkdir(godot, { recursive: true });
-  await mkdir(project, { recursive: true });
-  await writeFile(path.join(project, "project.godot"), PROJECT);
-  await writeFile(path.join(project, "main.tscn"), SCENE);
-  await writeFile(path.join(project, "shot.gd"), SHOT);
-  const zip = path.join(root, "godot.zip");
-  const response = await fetch(ZIP);
-  await writeFile(zip, Buffer.from(await response.arrayBuffer()));
-  await run(path.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe"), ["-xf", zip, "-C", godot]);
-  log("unpacked", await readdir(godot));
+  const root = await tmpDir("gwin-live-");
+  const runtimes = path.join(root, "native-runtimes");
+  const work = path.join(root, "native-work");
+  const storage = path.join(root, "storage");
+  game = path.join(root, "AI Games", "Valley & Co");
+  for (const dir of [runtimes, work, storage, game]) await mkdir(dir, { recursive: true });
+  const manifest = validateManifest(JSON.parse(await readFile(path.join(PACKAGE, "plugin.json"), "utf8")));
+  const scratch = path.join(root, "scratch");
   sandbox = await ProcessSandbox.create({
-    writableRoots: [game],
-    scratchDir: path.join(root, "scratch"),
+    writableRoots: [game, work],
+    scratchDir: scratch,
     secretPaths: [],
-    readableRoots: [godot],
+    readableRoots: [runtimes, PACKAGE],
   });
+  jobs = new PluginSandboxJobs({ run: (request) => sandbox.run(request), scratch: path.join(scratch, "plugin-jobs") });
+  const native = new PluginNativeServices(root, [], {
+    settings: async () => ({}),
+    windows: { sandbox: () => sandbox, work, runtimes },
+  });
+  const backend = await activate({} as never);
+  const binding: PluginBinding = { project: "valley", directory: game };
+  call = async (kind, name, args = {}) => {
+    const signal = new AbortController().signal;
+    const invocation = { method: kind, name, signal };
+    const host = (async (method: string, hostArgs?: unknown) => {
+      if (method === "storage.root") return storage;
+      if (method === "game.engine.steps") return true;
+      if (method === "game.engine.read") return null;
+      if (method.startsWith("sandbox.")) return jobs.call(PLUGIN, method, hostArgs, binding);
+      if (method.startsWith("runtime."))
+        return native.call(manifest, PACKAGE, storage, method, hostArgs, binding, invocation, () => {});
+      throw new Error(`unexpected host call ${method}`);
+    }) as PluginContext["host"];
+    const context: PluginContext = { project: "valley", directory: game, signal, callId: 1, host };
+    const answer =
+      kind === "action" ? await backend.action?.(name, args, context) : await backend.tool?.(name, args, context);
+    return answer as Answer;
+  };
 });
 
 after(async () => {
   if (SKIP) return;
+  await jobs?.stopAll();
+  for (const row of (await windowsProcesses(["Godot%"])) ?? []) await killProcessTree(row.pid);
   await sandbox?.dispose();
 });
 
-describe("Godot on Windows, facts", { skip: SKIP, timeout: 15 * 60_000 }, () => {
-  it("signature and --version as the runner's user", async () => {
-    const ps = await run("powershell.exe", [
-      "-NoProfile",
-      "-Command",
-      `Get-AuthenticodeSignature '${path.join(godot, EXE)}' | Format-List Status,StatusMessage,SignerCertificate`,
-    ]).catch((e: unknown) => ({ stdout: String(e), stderr: "" }));
-    log("authenticode", ps.stdout);
-    for (const exe of [EXE, CONSOLE]) {
-      const out = await run(path.join(godot, exe), ["--version"], { timeout: 30_000 }).catch((e: unknown) => ({
-        stdout: `ERR ${String(e)}`,
-        stderr: "",
-      }));
-      log(`version ${exe}`, out);
-    }
+describe("Godot on Windows, for real", { skip: SKIP }, () => {
+  it("gets Godot with the setup card's Do it for me, and the agent is offered it", async () => {
+    const card = (await call("action", "steps")) as unknown as PluginSetupCard;
+    assert.equal(card.open, true);
+    assert.ok(card.primary, "the card has Do it for me");
+    await call("action", card.primary.name);
+    const status = await call("tool", "engine-status");
+    assert.equal(status.ready, true, JSON.stringify(status));
+    assert.equal(status.version, "4.7.2");
+    assert.equal(((await call("action", "steps")) as unknown as PluginSetupCard).open, false);
   });
 
-  it("runs in the sandbox: env, version, import, check", async () => {
-    const env = await sandbox.run({
-      command: 'echo "APPDATA=$APPDATA LOCALAPPDATA=$LOCALAPPDATA USERPROFILE=$USERPROFILE HOME=$HOME"; whoami',
-      cwd: game,
-      timeoutMs: 60_000,
-    });
-    log("sandbox env", { out: env.stdout, err: env.stderr, code: env.code });
-    for (const exe of [EXE, CONSOLE]) {
-      const file = path.join(godot, exe).replaceAll("\\", "/");
-      const version = await sandbox.run({ command: `'${file}' --headless --version`, cwd: game, timeoutMs: 60_000 });
-      log(`sandbox version ${exe}`, { out: version.stdout, err: tail(version.stderr), code: version.code });
-      const started = Date.now();
-      const imported = await sandbox.run({
-        command: `'${file}' --headless --path '${project.replaceAll("\\", "/")}' --import`,
-        cwd: game,
-        timeoutMs: 240_000,
-      });
-      log(`sandbox import ${exe}`, {
-        ms: Date.now() - started,
-        out: tail(imported.stdout),
-        err: tail(imported.stderr),
-        code: imported.code,
-        timedOut: imported.timedOut,
-      });
-    }
-    log("project after import", await readdir(project));
-    const appdata = await sandbox.run({
-      command: 'ls -la "$APPDATA/Godot" 2>&1 | head -20; ls -la "$LOCALAPPDATA/Godot" 2>&1 | head',
-      cwd: game,
-      timeoutMs: 60_000,
-    });
-    log("sandbox godot dirs", appdata.stdout);
+  it("makes a new game, imported in the sandbox", async () => {
+    const made = await call("tool", "new-game", { template: "3d", name: "Valley" });
+    assert.match(String(made), /Made this game's Godot project/);
+    assert.doesNotMatch(String(made), /first import didn't finish/);
+    assert.ok(await stat(path.join(game, "godot", ".godot")));
   });
 
-  it("draws a still in a window in the sandbox", async () => {
-    const file = path.join(godot, EXE).replaceAll("\\", "/");
-    for (const driver of ["", "--rendering-driver opengl3", "--rendering-driver d3d12"]) {
-      const out = path.join(project, `shot${driver ? driver.split(" ")[1] : ""}.png`);
-      const shot = await sandbox.run({
-        command: `SHOT_OUT='${out.replaceAll("\\", "/")}' '${file}' ${driver} --position -10000,-10000 --resolution 320x180 --path '${project.replaceAll("\\", "/")}' -s res://shot.gd`,
-        cwd: game,
-        timeoutMs: 120_000,
-      });
-      const made = await stat(out).catch(() => null);
-      log(`still ${driver || "default"}`, {
-        size: made?.size ?? null,
-        out: tail(shot.stdout),
-        err: tail(shot.stderr),
-        code: shot.code,
-      });
-    }
+  it("checks the game in the sandbox", async () => {
+    const checked = await call("tool", "check");
+    assert.equal(checked.ok, true, JSON.stringify(checked));
+    assert.match(String(checked.summary), /Loaded \d+ scripts, scenes and resources/);
   });
 
-  it("opens the editor as the runner's user and lists its command line", async () => {
-    const exe = path.join(godot, EXE);
-    const child = spawn(exe, ["--path", project, "--editor"], { detached: true, stdio: "ignore", windowsHide: true });
-    child.unref();
-    await sleep(20_000);
-    const rows = await windowsProcesses(["Godot%"]);
-    log("processes", rows);
-    for (const row of rows ?? []) await killProcessTree(row.pid);
-    assert.ok(child.pid);
+  it("runs the main scene in the sandbox", async () => {
+    const ran = await call("tool", "run-scene", { seconds: 2 });
+    assert.deepEqual(ran.errors, [], JSON.stringify(ran));
+    assert.equal(ran.summary, undefined, JSON.stringify(ran));
+  });
+
+  it("takes a still of the hero camera in the sandbox", async () => {
+    const shot = await call("tool", "screenshot");
+    assert.deepEqual(shot.shots, ["HeroCamera"], JSON.stringify(shot.shots));
+  });
+
+  it("answers the installed Godot's class reference", async () => {
+    const answer = await call("tool", "class-reference", { query: "Node3D" });
+    assert.match(String(answer), /class Node3D extends Node/);
+  });
+
+  it("opens the project in the person's Godot editor and finds it open", async () => {
+    await call("action", "open-editor");
+    const ends = Date.now() + EDITOR_WAIT_MS;
+    let open = false;
+    while (!open && Date.now() < ends) {
+      open = (await call("action", "status")).editorOpen === true;
+      if (!open) await sleep(EDITOR_POLL_MS);
+    }
+    assert.equal(open, true);
   });
 });
