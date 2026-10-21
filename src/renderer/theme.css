@@ -1164,7 +1164,8 @@
   grid-area: end;
   justify-self: end;
 }
-.stage-strip:is([data-fold="plugins"], [data-fold="game"]) {
+.stage-strip[data-fold="plugins"],
+.stage-strip[data-fold="game"] {
   grid-template-rows: 47px 1px minmax(47px, auto);
   background-image: linear-gradient(var(--line), var(--line));
   background-size: 100% 1px;
@@ -1177,7 +1178,8 @@
 .stage-strip[data-fold="game"] {
   grid-template-areas: "start start start start" ". . . ." "game . end end";
 }
-.stage-strip:is([data-fold="plugins"], [data-fold="game"]) .stage-strip-end {
+.stage-strip[data-fold="plugins"] .stage-strip-end,
+.stage-strip[data-fold="game"] .stage-strip-end {
   flex-wrap: wrap;
   justify-content: flex-end;
   row-gap: 8px;
