@@ -325,6 +325,7 @@ export function StageStrip({
     onToolbarOpen(pluginsOpen || viewsOpen);
     return () => onToolbarOpen(false);
   }, [pluginsOpen, viewsOpen, onToolbarOpen]);
+  const secondRow = step === StripFoldStep.Plugins || step === StripFoldStep.Game;
   const tabs = stageTabs({ views: live.views, plugins, hasBuilds, buildsLive, beside });
   const active = activeStageTab(stageView, live.views, live.shown);
   return (
@@ -366,7 +367,7 @@ export function StageStrip({
         {livePreview && gameControls ? <SoundButton on={sound.on} onToggle={sound.toggle} /> : null}
         {livePreview ? <FullScreenButton offered={fullScreen.offered} onEnter={fullScreen.enter} /> : null}
       </div>
-      <div ref={end} className="stage-strip-end flex items-center gap-2">
+      <div ref={end} data-row={secondRow ? "second" : undefined} className="stage-strip-end flex items-center gap-2">
         <PluginToolbar
           plugins={plugins}
           project={project}

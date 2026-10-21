@@ -1178,8 +1178,8 @@
 .stage-strip[data-fold="game"] {
   grid-template-areas: "start start start start" ". . . ." "game . end end";
 }
-.stage-strip[data-fold="plugins"] .stage-strip-end,
-.stage-strip[data-fold="game"] .stage-strip-end {
+/* The group says it is on the second row itself (`data-row`), so its own style follows each step. */
+.stage-strip-end[data-row="second"] {
   flex-wrap: wrap;
   justify-content: flex-end;
   row-gap: 8px;
