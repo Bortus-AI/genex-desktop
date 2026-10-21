@@ -501,6 +501,11 @@ describe("an entry on one folder alone", () => {
       [{ ok: true, ms: 12, deferred: true }],
       "an edit that left its walk for later says so",
     );
+    assert.deepEqual(
+      folderAceOutcomes('[{"ok":true,"ms":9,"refused":"Access is denied."}]', 1),
+      [{ ok: true, ms: 9, refused: "Access is denied." }],
+      "a deny Windows refused where none was needed carries Windows' words",
+    );
   });
 
   it("uses PowerShell's answer when it gives one, and runs nothing for no edits", async () => {
@@ -728,6 +733,104 @@ describe("an entry on one folder alone, on Windows", {
       await folderOwnEditor()([{ ...denyLater(secret), deny: null, walk: undefined }]);
     });
   }
+
+  /**
+   * What Chrome gives its own sandboxed processes on its profile's network folder: app container
+   * and capability SIDs, which no process gets by its user, groups or logon.
+   */
+  const chromeSandboxes = async (secret: string) => {
+    const network = path.join(secret, "Default", "Network");
+    await mkdir(network, { recursive: true });
+    await writeFile(path.join(network, "Cookies"), "cookies");
+    const containers = ["S-1-15-2-1", "S-1-15-2-2", "S-1-15-3-1"].map((sid) => `*${sid}:(OI)(CI)(RX)`);
+    execFileSync("icacls", [network, "/grant", ...containers], { stdio: "ignore" });
+  };
+
+  it("leaves the walk for later where only app containers may open something under the path besides", async () => {
+    const root = realpathSync.native(await tmpDir("folder-deny-containers-"));
+    const secret = path.join(root, "User Data");
+    await mkdir(secret);
+    await chromeSandboxes(secret);
+    ownerOnly(secret);
+    const outcomes = await folderOwnEditor()([denyLater(secret)]);
+    assert.equal(outcomes?.[0]?.ok && outcomes[0].deferred, true, JSON.stringify(outcomes));
+    await folderOwnEditor()([{ ...denyLater(secret), deny: null, walk: undefined }]);
+  });
+
+  /**
+   * A folder the person may read but whose entries they may not change: SYSTEM owns it and the
+   * person's own entry reads only, as security software or a profile copied from another account
+   * can leave a browser profile. `also` adds entries; the elevated runner sets the owner.
+   */
+  const refusesChanges = (dir: string, ...also: string[]) => {
+    const readOnly = [`*${runningUser()}:(OI)(CI)(RX)`, "*S-1-5-18:(OI)(CI)(F)", ...also];
+    execFileSync("icacls", [dir, "/inheritance:r", "/grant:r", ...readOnly], { stdio: "ignore" });
+    execFileSync("icacls", [dir, "/setowner", "*S-1-5-18", "/T", "/C"], { stdio: "ignore" });
+  };
+  /** Give a {@link refusesChanges} folder back to the running user, as it inherits, so it can be removed. */
+  const giveBack = (dir: string) => {
+    execFileSync("icacls", [dir, "/setowner", `*${runningUser()}`, "/T", "/C"], { stdio: "ignore" });
+    execFileSync("icacls", [dir, "/reset", "/T", "/C"], { stdio: "ignore" });
+  };
+  /** A start's own entries for denying `secret`, logging into `lines`. */
+  const startDenying = (root: string, secret: string, lines: string[], pid = 1) => {
+    const denies = ownAclEntries(path.join(root, "holders"), {
+      sid: async () => GUESTS,
+      pid,
+      alive: () => false,
+      log: (line) => lines.push(line),
+    });
+    return { denies, sync: () => denies.sync(routeWindowsDenies({ read: [secret], write: [] }).own) };
+  };
+
+  for (const [shape, plant] of [
+    ["a folder only its owner, SYSTEM and the Administrators may open", async () => {}],
+    ["a profile whose network folder Chrome opened to its own sandboxes", chromeSandboxes],
+  ] as const) {
+    it(`starts where Windows refuses a deny on ${shape}`, async () => {
+      // A field PC refused the deny on Chrome's "User Data" at every start ("Access is denied"),
+      // so the agents never started, though the sandbox user could open nothing in it anyway.
+      const root = realpathSync.native(await tmpDir("folder-deny-refused-"));
+      const above = path.join(root, "above");
+      const secret = path.join(above, "User Data");
+      const login = path.join(secret, "Default", "Login Data");
+      await mkdir(path.dirname(login), { recursive: true });
+      await writeFile(login, "login");
+      await plant(secret);
+      refusesChanges(secret);
+      const lines: string[] = [];
+      const start = startDenying(root, secret, lines);
+      try {
+        assert.equal(await start.sync(), true, "the start goes on");
+        assert.doesNotMatch(sddl(secret, root), /;;;BG\)/, "the folder is left as it was");
+        assert.match(sddl(above, root), /\(D;;(?:0x40|DT);;;BG\)/, "its parent is guarded as before");
+        assert.ok(
+          lines.some((line) => line.includes(secret)),
+          `the log names the folder left as it was: ${lines.join(" | ")}`,
+        );
+        const next = startDenying(root, secret, lines, 2);
+        assert.equal(await next.sync(), true, "the next start tries again, and goes on again");
+        await next.denies.revokeAll();
+      } finally {
+        giveBack(secret);
+        await start.denies.revokeAll();
+      }
+    });
+  }
+
+  it("still stops where Windows refuses a deny on a folder the sandbox user may open", async () => {
+    const root = realpathSync.native(await tmpDir("folder-deny-refused-open-"));
+    const secret = path.join(root, "above", "User Data");
+    await mkdir(path.join(secret, "Default"), { recursive: true });
+    refusesChanges(secret, `*${USERS}:(OI)(CI)(RX)`);
+    const start = startDenying(root, secret, []);
+    try {
+      await assert.rejects(start.sync(), /could not set the sandbox user's entries on .*User Data/);
+    } finally {
+      giveBack(secret);
+      await start.denies.revokeAll();
+    }
+  });
 
   it("passes a deny down at once where the folder itself passes Users an allow", async () => {
     const root = realpathSync.native(await tmpDir("folder-deny-open-"));
@@ -2106,6 +2209,54 @@ describe("Genex's own deny entries", () => {
       ssh,
     ]);
     assert.deepEqual(logged, [`own entries: ${at(".ssh")} took 41 s (once; they stay)`]);
+  });
+
+  it("goes on past a deny Windows refused where none was needed, says so, and tries it again next start", async () => {
+    // The script answers so only where the sandbox user can open nothing at or under the path.
+    const holders = await tmpDir("windows-denies-");
+    const logged: string[] = [];
+    const asked: FolderOwnEdit[][] = [];
+    const refused: FolderOwnEditor = async (edits) => {
+      asked.push([...edits]);
+      return edits.map((edit) =>
+        edit.deny ? ({ ok: true, refused: "Access is denied." } as const) : ({ ok: true } as const),
+      );
+    };
+    const denies = holder(holders, 1, [], { edit: refused, log: (line) => logged.push(line) });
+    assert.equal(await denies.sync([guard, ssh]), true);
+    assert.deepEqual(logged, [
+      `own entries: left ${at(".ssh")} as it is: Windows refused the deny (Access is denied.), and the sandbox user can open nothing in it`,
+    ]);
+    await denies.walkDeferred();
+    assert.equal(asked.length, 1, "no walk is left for later");
+    assert.equal(await denies.sync([guard, ssh]), true);
+    assert.ok(
+      asked[1]?.some((edit) => edit.dir === ssh.path && edit.deny === DenyAccess.Read),
+      "the next start asks for the deny again",
+    );
+  });
+
+  it("lets a later walk Windows refused where none was needed go, and says so", async () => {
+    const holders = await tmpDir("windows-denies-");
+    const logged: string[] = [];
+    const asked: FolderOwnEdit[][] = [];
+    const denies = holder(holders, 1, [], {
+      log: (line) => logged.push(line),
+      edit: async (edits) => {
+        asked.push([...edits]);
+        return edits.map((edit) => {
+          if (edit.dir !== ssh.path) return { ok: true } as const;
+          return edit.walk === OwnWalk.Later
+            ? ({ ok: true, deferred: true } as const)
+            : ({ ok: true, refused: "Access is denied." } as const);
+        });
+      },
+    });
+    assert.equal(await denies.sync([guard, ssh]), true);
+    await denies.walkDeferred();
+    assert.match(logged.join("\n"), /left .*\.ssh as it is: Windows refused the deny/);
+    await denies.walkDeferred();
+    assert.equal(asked.length, 2, "the walk is not tried again by this Genex");
   });
 
   it("touches the group's passed-down allows only on a folder Genex grants or once granted", async () => {
