@@ -1746,6 +1746,22 @@ describe("deny paths Genex sets itself", () => {
     await s.session.dispose();
   });
 
+  it("starts a deferred walk only once a regrant already running has finished", async () => {
+    const s = session({ ownDenies: true, walkDelayMs: 10 });
+    const owner = {};
+    await s.session.join(owner, denying([at(".ssh")]));
+    const release = s.runtime.hold();
+    s.session.update(owner, { write: [PONG, LATE], read: [] });
+    await turn();
+    await delay(30);
+    assert.equal(s.own.walked(), 0, "the walk waits for the regrant that is setting the entries");
+    release();
+    await s.session.settled();
+    await turn();
+    assert.equal(s.own.walked(), 1);
+    await s.session.dispose();
+  });
+
   it("starts no deferred walk once disposed", async () => {
     const s = session({ ownDenies: true, walkDelayMs: 0 });
     await s.session.join({}, denying([at(".ssh")]));

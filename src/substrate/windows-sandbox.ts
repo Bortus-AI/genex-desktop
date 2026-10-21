@@ -1516,7 +1516,12 @@ export class WindowsSandboxSession {
     if (!own || this.#walkTimer) return;
     this.#walkTimer = setTimeout(() => {
       this.#walkTimer = null;
-      this.#walking = this.#timed("own entries passed down", () => own.walkDeferred())
+      // An apply already running is setting the entries a walk would rewrite: let it finish first.
+      const applying = this.#applying;
+      this.#walking = (async () => {
+        await applying?.catch(() => {});
+        await this.#timed("own entries passed down", () => own.walkDeferred());
+      })()
         .catch((error: unknown) => this.#deps.log?.(MESSAGE.WalkFailed(error)))
         .finally(() => {
           this.#walking = null;

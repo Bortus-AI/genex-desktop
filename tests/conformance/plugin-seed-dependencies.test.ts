@@ -1,7 +1,7 @@
 // A bundled plugin's dependencies stay in the app: a first launch copies a seed without its
 // node_modules, and the plugin's backend and its host-cli servers find them in the seed.
 import assert from "node:assert/strict";
-import { cp, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -71,9 +71,12 @@ test("a plugin's backend hears of a seed only when it has one", () => {
   assert.equal(pluginBackendEnv({ ...parent, [PLUGIN_SEED_ENV]: "/elsewhere" }, "linux")[PLUGIN_SEED_ENV], undefined);
 });
 
-/** A folder whose node_modules hold a stand-in Genex CLI. */
+/**
+ * A folder whose node_modules hold a stand-in Genex CLI, by its real path: `require` resolves the
+ * CLI through links (macOS `/var` and `/tmp` are links to `/private/…`).
+ */
 async function folderWithCli(): Promise<string> {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "studio-cli-"));
+  const dir = await realpath(await mkdtemp(path.join(os.tmpdir(), "studio-cli-")));
   const pkg = path.join(dir, "node_modules", "@genex-ai", "cli-demo");
   await mkdir(path.join(pkg, "dist"), { recursive: true });
   await writeFile(path.join(pkg, "package.json"), '{"name":"@genex-ai/cli-demo","version":"0.0.0"}\n');
