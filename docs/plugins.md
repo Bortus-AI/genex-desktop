@@ -3407,10 +3407,11 @@ copied in), and its CRLF, coloured output is read as a Mac's. The backend runs a
 makes and lists a stage only through real folders (a link or a junction in place of `.godot`,
 `genex-jobs` or a stage stops the job and is never followed), copies out only its stills and class
 reference pages, one plain file at a time (`.png`, `.xml`, opened without following a link and kept
-only while their folder still resolves to itself), and never removes a stage itself: a sandbox job
+only while their folder still resolves to itself and their name still names the very file read), and never removes a stage itself: a sandbox job
 runs Windows's `rd /s /q`, which removes a link rather than what it points to, as the sandbox user,
 so even a junction swapped in mid-walk reaches only what that user may write (an empty folder `rd`
-leaves goes by itself). The sweep takes only stages Genex named (a UUID). A job that waited for its
+leaves goes by itself; one still there after its tries is a line in the backend's log, and the next
+sweep tries again). The sweep takes only stages Genex named (a UUID). A job that waited for its
 turn starts with what its call's budget leaves (`web-export`'s), or not at all. Godot's own spelling
 of a stage's path (forward slashes) is named as its folder too. The Genex addon's folders
 (`addons/genex`, `addons/genex_multiplayer`) are made one at a time as folders of their own, and

@@ -11,6 +11,7 @@
  * capture) would wait forever. Tests hand in their own runner and never start Godot.
  */
 import { randomUUID } from "node:crypto";
+import { constants as FS } from "node:fs";
 import { lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm, rmdir, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -24,7 +25,7 @@ import {
   PluginService,
   SandboxJobState,
 } from "../../shared/plugins.ts";
-import { createFileInDir, readRegularFile, writeFileNoFollow } from "../../substrate/fsx.ts";
+import { createFileInDir, openNoFollow, writeFileNoFollow } from "../../substrate/fsx.ts";
 import { isBelow, isInside } from "../../substrate/paths.ts";
 import { NativeEndReason, runNativeProcess } from "../../substrate/plugins/native-process.ts";
 import { type KeyPress, keysArg, PLAY_FPS, type ShotAt, shotsArg } from "./play-input.ts";
@@ -89,6 +90,8 @@ const STAGE_NAME = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 const WINDOWS_ROOT = "C:\\Windows";
 const WINDOWS_CMD = ["System32", "cmd.exe"];
 const REMOVE_MS = MINUTE_MS;
+/** The most of rd's own words a log line keeps. */
+const REMOVAL_WORDS_CHARS = 300;
 /** The variable `rd`'s line reaches cmd in: expanded before cmd reads `&` or `^`, which stay plain inside its quotes. */
 const REMOVE_LINE_ENV = "GODOT_STAGE_RD";
 /** What a job leaves in a staged folder for Genex (stills, class reference pages), how much, and how deep. */
@@ -110,6 +113,9 @@ const MESSAGE = {
   StageLink: (folder: string) =>
     `Genex runs Godot's jobs only in folders of the game's own: ${folder} is a link or a junction, so Genex stopped. Remove it, then try again.`,
   TooManyFiles: "Godot's job left more files than Genex copies out of it.",
+  /** A line for the backend's log (the developer's debug sink), never shown to the person. */
+  StageLeft: (stage: string, why: string) =>
+    `Genex Godot: a job's folder is still there after its removal (${why}); the next sweep tries again: ${stage}`,
 } as const;
 
 /** One job: Godot's arguments, the folder it runs in, what it may read and write, and its deadline. */
@@ -507,17 +513,28 @@ function removalRequest(cmd: string, { base, stage }: Stage): PluginSandboxRunAr
  */
 async function removeStage(
   stage: Stage,
-  remove: (stage: Stage) => Promise<unknown>,
+  remove: (stage: Stage) => Promise<string>,
   wait: (ms: number) => Promise<unknown>,
 ): Promise<void> {
   for (let tries = 0; ; tries += 1) {
     if (!(await realBelow(stage.base, stage.stage))) return;
-    await remove(stage).catch(() => undefined);
+    const why = await remove(stage).catch((error: unknown) => (error instanceof Error ? error.message : String(error)));
     // rd may leave the folder itself where the sandbox user may not remove it: an empty one goes now.
     if (await realBelow(stage.base, stage.stage)) await rmdir(stage.stage).catch(() => undefined);
-    if (!(await realBelow(stage.base, stage.stage)) || tries >= CLEANUP_RETRIES) return;
+    if (!(await realBelow(stage.base, stage.stage))) return;
+    if (tries >= CLEANUP_RETRIES) {
+      console.error(MESSAGE.StageLeft(stage.stage, why || "Windows still holds a file in it"));
+      return;
+    }
     await wait(CLEANUP_RETRY_MS);
   }
+}
+
+/** What a removal job's end says when it removed nothing: rd's own words, or its exit code. */
+function removalWords(record: PluginSandboxJob): string {
+  const said = `${record.stderr ?? ""} ${record.stdout ?? ""}`.trim();
+  if (said) return said.slice(0, REMOVAL_WORDS_CHARS);
+  return record.reason ?? `rd ended with ${record.exitCode ?? record.state}`;
 }
 
 /**
@@ -563,10 +580,35 @@ async function copyFolderOut(base: string, from: string, to: string, depth: numb
     if (!entry.isFile() || !COPY_OUT_KINDS.has(path.extname(entry.name).toLowerCase())) continue;
     left.files -= 1;
     if (left.files < 0) throw new Error(MESSAGE.TooManyFiles);
-    const bytes = await readRegularFile(source, COPY_OUT_MAX_BYTES).catch(() => null);
-    // Read through a folder that still is the stage's own, or not kept at all.
-    if (!bytes || !(await realBelow(base, from))) continue;
-    await writeFileNoFollow(path.join(to, entry.name), bytes);
+    const bytes = await readStaged(base, from, source).catch(() => null);
+    if (bytes) await writeFileNoFollow(path.join(to, entry.name), bytes);
+  }
+}
+
+/**
+ * A staged file's bytes, or null: a plain file opened without following a link, kept only while its
+ * folder still is the stage's own and its name still names the very file read, and that folder
+ * still is the stage's after that (a junction put in for the open and taken out for the checks reads
+ * another file than the name holds now, and is refused). `between` runs after the open: a test's swap.
+ */
+export async function readStaged(
+  base: string,
+  folder: string,
+  file: string,
+  between?: () => Promise<void>,
+): Promise<Buffer | null> {
+  const handle = await openNoFollow(file, FS.O_RDONLY | FS.O_NONBLOCK);
+  try {
+    await between?.();
+    const read = await handle.stat();
+    if (!read.isFile() || read.size > COPY_OUT_MAX_BYTES) return null;
+    const bytes = await handle.readFile();
+    if (bytes.length > COPY_OUT_MAX_BYTES || !(await realBelow(base, folder))) return null;
+    const named = await lstat(file).catch(() => null);
+    const same = named !== null && !named.isSymbolicLink() && named.dev === read.dev && named.ino === read.ino;
+    return same && (await realBelow(base, folder)) ? bytes : null;
+  } finally {
+    await handle.close();
   }
 }
 
@@ -637,7 +679,7 @@ export function windowsRunner(wait: (ms: number) => Promise<unknown> = sleep, cm
     const done = await turn(always);
     try {
       const { id } = await job.host(PluginService.SandboxRun, removalRequest(cmd, stage));
-      await jobEnd({ ...job, signal: always }, id, wait);
+      return removalWords(await jobEnd({ ...job, signal: always }, id, wait));
     } finally {
       done();
     }

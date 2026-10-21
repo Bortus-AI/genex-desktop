@@ -13,7 +13,7 @@
  * opt-in (`STUDIO_NETWORK_TESTS=1`): it reaches GitHub for Godot.
  */
 import assert from "node:assert/strict";
-import { cp, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
@@ -155,6 +155,13 @@ describe("Godot on Windows, for real", { skip: SKIP }, () => {
     assert.ok((await stat(web)).size > 1_000_000, "Do it for me fetched the Web template");
   });
 
+  it("answers the class reference before the game has a project, in a job folder of its own at the game's root", async () => {
+    const answer = await call("tool", "class-reference", { query: "Node3D" });
+    assert.match(String(answer), /class Node3D extends Node/);
+    const own = (await readdir(game)).filter((name) => name.startsWith("genex-godot-job-"));
+    assert.deepEqual(own, [], "its folder is gone with it, removed by the sandbox user's rd");
+  });
+
   it("makes a new game, imported in the sandbox", async () => {
     const made = await call("tool", "new-game", { template: "3d", name: "Valley" });
     assert.match(String(made), /Made this game's Godot project/);
@@ -215,6 +222,14 @@ describe("Godot on Windows, for real", { skip: SKIP }, () => {
   it("starts the game for Genex's play with its launcher in the sandbox", async () => {
     const played = await sandbox.run({ command: "sh bin/play", cwd: game, timeoutMs: PLAY_MS });
     assert.match(played.stdout, /"event":\s*"ready"/, `${played.stdout}\n${played.stderr}`.slice(-3000));
+  });
+
+  it("removes every job's folder with the sandbox user's rd: none left in the project's .godot or at the game's root", async () => {
+    // Each job above staged Genex's script or its output, so its folder held files only rd removes.
+    const left = await readdir(path.join(game, "godot", ".godot", "genex-jobs")).catch(() => [] as string[]);
+    assert.deepEqual(left, [], "the project's stages");
+    const own = (await readdir(game)).filter((name) => name.startsWith("genex-godot-job-"));
+    assert.deepEqual(own, [], "the game's own job folders");
   });
 
   it("opens the project in the person's Godot editor and finds it open", async () => {

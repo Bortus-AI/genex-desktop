@@ -9,7 +9,19 @@
  */
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { lstat, mkdir, readdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  lstat,
+  mkdir,
+  readdir,
+  readFile,
+  realpath,
+  rename,
+  rm,
+  rmdir,
+  symlink,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { describe, it } from "node:test";
@@ -17,7 +29,13 @@ import type { PluginSetupCard } from "../../src/plugin-sdk/index.d.ts";
 import { GodotTool } from "../../src/plugins/godot/backend.ts";
 import { HookEvent } from "../../src/shared/plugin-hooks.ts";
 import { GodotSetupAction } from "../../src/plugins/godot/godot-setup.ts";
-import { type GodotCall, GodotJob, type GodotJobScope, windowsRunner } from "../../src/plugins/godot/godot-run.ts";
+import {
+  type GodotCall,
+  GodotJob,
+  type GodotJobScope,
+  readStaged,
+  windowsRunner,
+} from "../../src/plugins/godot/godot-run.ts";
 import { unzipCall } from "../../src/plugins/godot/multiplayer.ts";
 import { InstallPhase, type RuntimeInstallPhase } from "../../src/shared/model-install.ts";
 import type { PluginSandboxRunArgs } from "../../src/shared/plugins.ts";
@@ -452,6 +470,25 @@ describe("Godot on Windows: jobs in Genex's sandbox", () => {
     assert.equal((await lstat(path.join(outside, "left", "keep.txt"))).isFile(), true);
   });
 
+  it("never copies out a file read through a junction that was taken out again before the checks", async () => {
+    const outside = await outsideFolder();
+    const base = await realpath(await tmpDir("godot-stage-read-"));
+    const stage = path.join(base, "stage");
+    const aside = path.join(base, "aside");
+    await mkdir(stage);
+    await writeFile(path.join(stage, "notes.txt"), "the stage's own");
+    assert.equal(String(await readStaged(base, stage, path.join(stage, "notes.txt"))), "the stage's own");
+    // The person's file opened through a junction put in place of the stage, and the stage put back before the checks.
+    await rename(stage, aside);
+    await link(outside, stage);
+    const read = await readStaged(base, stage, path.join(stage, "notes.txt"), async () => {
+      // A junction goes with rmdir on Windows, a link with unlink elsewhere: never what it points to.
+      await (process.platform === "win32" ? rmdir(stage) : unlink(stage));
+      await rename(aside, stage);
+    });
+    assert.equal(read, null, "the file read isn't the one the stage's name holds now");
+  });
+
   it("never removes what a junction swapped in for a stage while the sandbox removes it points to", async () => {
     const outside = await outsideFolder();
     const before = await holds(outside);
@@ -473,7 +510,7 @@ describe("Godot on Windows: jobs in Genex's sandbox", () => {
     assert.deepEqual(await holds(outside), before, "nor did the next sweep");
   });
 
-  it("removes a stage Windows still holds once it lets go, and never fails the job when it doesn't", async () => {
+  it("removes a stage Windows still holds once it lets go, and never fails the job when it doesn't", async (t) => {
     const held = (times: number) => {
       const tries: string[] = [];
       const remove = async (folder: string) => {
@@ -491,7 +528,14 @@ describe("Godot on Windows: jobs in Genex's sandbox", () => {
     const always = held(Number.POSITIVE_INFINITY);
     const stuck = await windowsProject({ remove: always.remove });
     always.tries.length = 0;
+    const logged = t.mock.method(console, "error", () => undefined);
     await tool(stuck, GodotTool.Check);
+    const lines = logged.mock.calls.map((call) => String(call.arguments[0]));
+    assert.equal(
+      lines.filter((line) => line.includes("still there after its removal")).length,
+      1,
+      "one line in the log",
+    );
     // The import's stage is empty and goes by itself at once; the check's holds Genex's script.
     assert.equal(always.tries.length, 7, "one try for the import's stage, six for the check's");
     assert.equal(
