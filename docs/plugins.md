@@ -2681,8 +2681,9 @@ command, so the toolbar may ask as often as it does.
 | `opening` | An editor has it open and does not answer yet | Starting | Restart Unity |
 | `ready` | Its main thread answers (the panel says when it plays or compiles) | Ready | Restart Unity |
 | `stalled` | Its server is there and its main thread runs nothing | Stalled, `warn`, `attention` | Restart Unity |
+| `terms` | It does not answer and this Mac's Unity never had its Software Terms accepted (no `Terms-…` key in its preferences): the first start's terms window waits | Waiting for you, `warn`, `attention` | Words only |
 
-Every badge but Stalled is a `dot` (grey, amber while Starting, green once Ready). The first three
+Every badge but Stalled and Waiting for you is a `dot` (grey, amber while Starting, green once Ready). The first three
 steps never reach the button, which a game without a Unity project doesn't show; the plugin page's
 Editor connection reads the same word, so it never says Ready without Unity.
 
