@@ -930,23 +930,43 @@ foreach ($p in $paths) { [GenexTestToken]::Own($p, $env:GENEX_OWNER_SID) }
   // the start. An entry on the folder alone lets the walk wait, so the deny is written on the folder
   // alone (SetFileSecurityW), which Windows refuses; one passed down or deeper walks now, refused
   // only without the runner's privileges.
-  const refusedOpen: Array<[string, string[], Partial<OwnAclDeps>]> = [
-    ["Everyone may list it", ["*S-1-1-0:(RX)"], {}],
-    ["Authenticated Users may list it", ["*S-1-5-11:(RX)"], {}],
-    ["Users may list it", [`*${USERS}:(RX)`], {}],
-    ["the sandbox users' group itself may list it", [`*${GUESTS}:(RX)`], {}],
-    ["a SID that only looks like an app container's may list it", ["*S-1-15-21-1-2-3-4:(RX)"], {}],
+  /** An allow for `sid` to list `dir` alone, set through .NET: icacls refuses a SID no account has. */
+  const allowListing = (dir: string, sid: string) =>
+    powershellScript(
+      `$ErrorActionPreference = 'Stop'
+$acl = Get-Acl -LiteralPath $env:GENEX_ACL_PATH
+$sid = New-Object Security.Principal.SecurityIdentifier $env:GENEX_ACL_SID
+$acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($sid, 'ReadAndExecute', 'None', 'None', 'Allow')))
+Set-Acl -LiteralPath $env:GENEX_ACL_PATH -AclObject $acl`,
+      { GENEX_ACL_PATH: dir, GENEX_ACL_SID: sid },
+    );
+  /** One shape: its name, the icacls entries it adds, how it plants one icacls cannot, and the start's editor. */
+  type RefusedOpen = [string, string[], (secret: string) => void, Partial<OwnAclDeps>];
+  const nothing = () => {};
+  const refusedOpen: RefusedOpen[] = [
+    ["Everyone may list it", ["*S-1-1-0:(RX)"], nothing, {}],
+    ["Authenticated Users may list it", ["*S-1-5-11:(RX)"], nothing, {}],
+    ["Users may list it", [`*${USERS}:(RX)`], nothing, {}],
+    ["the sandbox users' group itself may list it", [`*${GUESTS}:(RX)`], nothing, {}],
+    [
+      "a SID that only looks like an app container's may list it",
+      [],
+      (secret) => allowListing(secret, "S-1-15-21-1-2-3-4"),
+      {},
+    ],
     [
       "Users may open everything in it",
       [`*${USERS}:(OI)(CI)(RX)`],
+      nothing,
       { edit: folderOwnEditor({ powershell: withoutPrivileges }) },
     ],
   ];
-  for (const [shape, also, options] of refusedOpen) {
+  for (const [shape, also, plant, options] of refusedOpen) {
     it(`still stops where Windows refuses a deny on a folder ${shape}`, async () => {
       const root = realpathSync.native(await tmpDir("folder-deny-refused-open-"));
       const secret = path.join(root, "above", "User Data");
       await mkdir(path.join(secret, "Default"), { recursive: true });
+      plant(secret);
       refusesChanges(secret, ...also);
       const before = ownerAndDacl(secret);
       const start = startDenying(root, secret, [], options);
