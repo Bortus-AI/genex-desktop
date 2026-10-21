@@ -195,8 +195,11 @@ describe("Godot on Windows, for real", { skip: SKIP }, () => {
     assert.ok((await stat(path.join(TEMPLATES, "windows_release_x86_64.exe"))).size > 1_000_000);
     const project = path.join(game, "godot");
     const presets = path.join(project, "export_presets.cfg");
-    const preset = `[preset.9]\n\nname="Windows"\nplatform="Windows Desktop"\nrunnable=true\nexport_filter="all_resources"\nexport_path="../Builds/Windows/Valley.exe"\n\n[preset.9.options]\n\n`;
-    await writeFile(presets, `${await readFile(presets, "utf8")}\n${preset}`);
+    const current = await readFile(presets, "utf8");
+    // Godot reads presets numbered from 0 with no gap: this one follows Genex's Web preset.
+    const next = (current.match(/^\[preset\.\d+\]$/gm) ?? []).length;
+    const preset = `[preset.${next}]\n\nname="Windows"\nplatform="Windows Desktop"\nrunnable=true\nexport_filter="all_resources"\nexport_path="../Builds/Windows/Valley.exe"\n\n[preset.${next}.options]\n\n`;
+    await writeFile(presets, `${current}\n${preset}`);
     await mkdir(path.join(game, "Builds", "Windows"), { recursive: true });
     // What the agent's own shell runs, as the sandbox user: Godot finds the templates in that user's data folder.
     const godot = ((await call("action", "status")).godot as { binary: string }).binary.replaceAll("\\", "/");
