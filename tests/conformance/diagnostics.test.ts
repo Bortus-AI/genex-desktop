@@ -89,6 +89,12 @@ describe("the studio log", () => {
       "no@localhost a@b..invalid @missing.example local@.example",
       "(name@example.com). another_name@123.456",
       "before+name@example.com..after and trailing-name@domain.test-",
+      "a@b.co+c@d.org",
+      "a@b.co..c@d.org",
+      "before a@b.co+c@d.org+e@f.gg after",
+      "before a@b.co..c@d.org..e@f.gg after",
+      "embedded<user+tag@example.com> tail",
+      "unchanged.words+with-dashes no address; lone@localhost",
     ];
     for (const sample of samples) assert.equal(scrubForLog(sample, HOME), sample.replace(original, "[email]"));
   });

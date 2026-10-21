@@ -187,7 +187,8 @@ function loadAnswers(): void {
 async function readKeptAnswers(file: string, revision: number): Promise<void> {
   try {
     const kept: unknown = JSON.parse(await readFile(file, "utf8"));
-    if (revision !== answersRevision || typeof kept !== "object" || kept === null) return;
+    const staleOrInvalid = revision !== answersRevision || typeof kept !== "object" || kept === null;
+    if (staleOrInvalid) return;
     for (const [identity, answers] of Object.entries(kept))
       if (isAnswers(answers) && !answered.has(identity)) answered.set(identity, answers);
   } catch {
@@ -717,7 +718,8 @@ async function checkCliCapabilities(
   const help = known?.help ?? (await probe(file, HELP_ARGS[provider], probeEnv, signal, platform));
   const missing = required.filter((flag) => !help.includes(flag));
   if (missing.length) throw new Error(MESSAGE.MissingOptions(missing));
-  if (identity && !known && context.generation === discoveryGeneration(provider)) {
+  const keepNewAnswer = identity && !known && context.generation === discoveryGeneration(provider);
+  if (keepNewAnswer) {
     answered.set(identity, { version: status.version, help });
     // A discovery ends with its answers on disk, never with a write still landing in the folder.
     await keepAnswers();
@@ -751,7 +753,8 @@ export async function resolveCodingCli(
   const cached = diagnostics.get(key);
   const cacheFresh = cached !== undefined && Date.now() - cached.at < DIAGNOSTIC_CACHE_MS;
   const current = generation === discoveryGeneration(provider);
-  if (!refresh && cacheFresh && current) return copyInstallation(cached.value);
+  const useCache = !refresh && cacheFresh && current;
+  if (useCache) return copyInstallation(cached.value);
   const shared = !refresh && signal === undefined && current;
   const existing = shared ? diagnosticReads.get(key) : undefined;
   if (existing) return copyInstallation(await existing);
