@@ -20,6 +20,8 @@ licenses and terms of included third-party software.
 - On Windows, Git for Windows (GPL-2.0 and its components' licenses) keeps its `LICENSE.txt` and
   `usr/share/licenses` under `resources/git`
   ([Bundled Git for Windows](#bundled-git-for-windows)).
+- On Windows, Microsoft's Visual C++ runtime DLL ships beside sandbox-runtime's `srt-win.exe`
+  ([Visual C++ runtime](#visual-c-runtime-windows)).
 - The TypeScript 7 compiler (Apache-2.0), `@types/node` and `undici-types` (MIT) that the
   self-edit type gate runs keep their license and notice files under `dist/resources/tsc`.
 - The Genex asset CLI (`@genex-ai/cli-demo`, MIT) and its dependencies keep their license files
@@ -63,9 +65,9 @@ text behind a Studio-written preface; `vendor.json` records each source, version
 `npm run genex:skills` refreshes them.
 
 - Eight platform cards and their references, copied unchanged from
-  `@genex-ai/cli-demo` 1.36.9 `templates/skills` (MIT, Copyright (c) 2026 me-ai-org). The
+  `@genex-ai/cli-demo` 1.36.11 `templates/skills` (MIT, Copyright (c) 2026 me-ai-org). The
   license text ships beside them as `skills/LICENSE-cards`, copied from the CLI's `LICENSE`.
-- `genex/SKILL.md` wraps https://genex.games/SKILL.md (v1.36.9), which is not part of the npm
+- `genex/SKILL.md` wraps https://genex.games/SKILL.md (v1.36.11), which is not part of the npm
   package. It is attributed to Genex here; its license is not yet confirmed (see "Status not yet
   recorded" below).
 
@@ -127,6 +129,17 @@ it. The copy is the release's own files with its documentation, graphical tools,
 Credential Manager left out (`scripts/vendor-git-for-windows.ts`); nothing in it is modified. The
 source of every part is published with that release on GitHub and in the MSYS2 and Git for Windows
 package repositories it names.
+
+## Visual C++ runtime (Windows)
+
+The Windows app ships Microsoft's Visual C++ 2015-2022 runtime library `vcruntime140.dll`
+(Copyright (c) Microsoft Corporation) beside sandbox-runtime's `srt-win.exe`, which imports it and
+would not start without it: Windows does not include it. Packaging copies it unchanged, for that
+executable's architecture, from the Visual C++ redistributable folder of the Visual Studio that
+builds the package (`VC\Redist\MSVC\<version>\<arch>\Microsoft.VC14x.CRT`,
+`scripts/package-vc-runtime.cjs`): app-local deployment, which the Distributable Code terms of the
+Visual Studio license allow. It remains under those terms. Any other Visual C++ runtime DLL a
+bundled program imports ships the same way, and the packaged smoke fails when one is missing.
 
 ## Vendored Genex embed SDK (@genex-ai/embed-sdk)
 
@@ -327,10 +340,11 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-### @genex-ai/multiplayer 0.17.0
+### @genex-ai/multiplayer 0.17.1
 
 Bundled into `vendor/genex/`, the multiplayer SDK a game made from Studio's template maps in its import
-map. Its package and repository (https://github.com/genex-games/genex) declare the MIT license
+map, and shipped as `genex-multiplayer-bridge.js` (its `dist/bridge.global.js`) beside a multiplayer
+Godot game's web export. Its package and repository (https://github.com/genex-games/genex) declare the MIT license
 without a license file. The MIT terms:
 
 Copyright (c) 2026 Genex

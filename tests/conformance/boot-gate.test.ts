@@ -122,8 +122,9 @@ describe("boot gate", () => {
 });
 
 describe("starting and a studio that would not start", () => {
-  it("moves the starting window on at the core's games and sandbox marks", () => {
+  it("moves the starting window on at the core's seed, games and sandbox marks", () => {
     assert.equal(startStepAfter("core:settings"), null);
+    assert.equal(startStepAfter("core:seed"), StartStep.Games);
     assert.equal(startStepAfter("core:games"), StartStep.Workspace);
     assert.equal(startStepAfter("core:sandbox"), StartStep.Studio);
   });
@@ -327,6 +328,19 @@ describe("Set up (Windows)", () => {
     await gate.setUp();
     await gate.setUp();
     assert.equal(installs, 2);
+  });
+
+  it("hands the install the problem it is held on, so Set up does what that problem needs", async () => {
+    const handed: SandboxProblem[] = [];
+    const gate = createBootGate(StudioPlatform.Windows, {
+      installSandbox: async (problem) => {
+        handed.push(problem);
+        return { cancelled: true };
+      },
+    });
+    gate.hold(NOT_PROVISIONED, async () => {});
+    await gate.setUp();
+    assert.deepEqual(handed, [NOT_PROVISIONED]);
   });
 
   it("says a Set up has run this launch, so a window that loads again does not run it by itself", async () => {
