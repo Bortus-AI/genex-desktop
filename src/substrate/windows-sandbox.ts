@@ -1725,18 +1725,23 @@ export class WindowsSandboxSession {
     if (!own || this.#walkTimer) return;
     this.#walkTimer = setTimeout(() => {
       this.#walkTimer = null;
-      // An apply already running is setting the entries a walk would rewrite: let it finish first.
+      // An apply already running is setting the entries a walk would rewrite, and a walk already
+      // running (an apply elsewhere went ahead of it) passes down what this one would: both first.
       const applying = this.#applying;
+      const before = this.#walking;
       this.#walkingPaths = own.walks();
-      this.#walking = (async () => {
+      const walking: Promise<void> = (async () => {
+        await before;
         await applying?.catch(() => {});
         await this.#timed("own entries passed down", () => own.walkDeferred());
       })()
         .catch((error: unknown) => this.#deps.log?.(MESSAGE.WalkFailed(error)))
         .finally(() => {
+          if (this.#walking !== walking) return;
           this.#walking = null;
           this.#walkingPaths = [];
         });
+      this.#walking = walking;
     }, this.#deps.walkDelayMs ?? DEFERRED_WALK_DELAY_MS);
     this.#walkTimer.unref?.();
   }

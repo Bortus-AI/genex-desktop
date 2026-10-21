@@ -2190,6 +2190,9 @@ describe("deny paths Genex sets itself", () => {
     await s.session.settled();
     const regranted = ["own entries", "initialize", "reset", "own entries", "initialize"];
     assert.deepEqual(s.runtime.calls, regranted, "a folder elsewhere is granted while the walk runs");
+    await delay(0);
+    await turn();
+    assert.equal(s.own.walked(), 1, "the walk that regrant left waits for the one still running");
     void s.session.join({}, denying([at(".ssh"), at(".ssh", "id_ed25519")]));
     await turn();
     await turn();
@@ -2197,6 +2200,7 @@ describe("deny paths Genex sets itself", () => {
     finish();
     await s.session.settled();
     assert.deepEqual(s.runtime.calls, [...regranted, "reset", "own entries", "initialize"]);
+    assert.ok(s.own.walked() >= 2, "then it runs");
     await s.session.dispose();
   });
 
