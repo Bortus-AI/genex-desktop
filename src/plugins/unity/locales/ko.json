@@ -48,6 +48,7 @@
   "Starting": "시작 중",
   "Stop installing Unity": "Unity 설치 중지",
   "Take back what Genex added to this Unity project: the Pipeline package's line in its Packages/manifest.json. Anything else you changed stays, and agents can no longer reach its editor.": "Genex가 이 Unity 프로젝트에 추가한 것, 즉 Packages/manifest.json에 있는 Pipeline 패키지 줄을 되돌려요. 직접 바꾼 다른 내용은 그대로 남고, 에이전트는 더 이상 이 에디터에 접근할 수 없어요.",
+  "The first time it starts, Unity shows its Software Terms in a window of its own. Bring Unity to the front and accept them; Genex goes on once Unity answers.": "Unity는 처음 시작할 때 자체 창에 소프트웨어 이용 약관을 보여 줘요. Unity를 앞으로 가져와 약관에 동의하세요. Unity가 응답하면 Genex가 이어서 진행해요.",
   "They go ahead even in Play mode, and may stop your play. Turn off to have them wait until you stop.": "플레이 모드에서도 작업을 계속해서 플레이가 멈출 수 있어요. 끄면 플레이를 멈출 때까지 기다려요.",
   "This computer": "이 컴퓨터",
   "This computer has Unity {version}, and Genex builds Unity games in Unity 6 or later. Install it in Unity Hub: Installs, then Install Editor.": "이 컴퓨터에는 Unity {version} 버전이 있어요. Genex는 Unity 6 이상에서 Unity 게임을 만들어요. Unity Hub에서 Installs, Install Editor 순서로 설치하세요.",
@@ -68,11 +69,13 @@
   "Unity has this project open: bring Unity to the front so it loads the package.": "Unity에서 이 프로젝트가 열려 있어요. 패키지를 불러오도록 Unity를 앞으로 가져오세요.",
   "Unity is ready": "Unity 준비 완료",
   "Unity is starting": "Unity 시작 중",
+  "Unity is waiting for you": "Unity가 기다리고 있어요",
   "Unity isn't answering": "Unity가 응답하지 않아요",
   "Unity isn't open": "Unity가 열려 있지 않아요",
   "Unity project": "Unity 프로젝트",
   "Unity setup": "Unity 설정",
   "Unity {version} isn't installed": "Unity {version} 버전이 설치되어 있지 않아요",
   "Unity {version} isn't installed, so the project was not opened.": "Unity {version} 버전이 설치되어 있지 않아서 프로젝트를 열지 않았어요.",
+  "Waiting for you": "기다리는 중",
   "Whether agents may use Unity while you play": "플레이하는 동안 에이전트의 Unity 사용 여부"
 }

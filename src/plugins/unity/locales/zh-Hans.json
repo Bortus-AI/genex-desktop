@@ -48,6 +48,7 @@
   "Starting": "启动中",
   "Stop installing Unity": "停止安装 Unity",
   "Take back what Genex added to this Unity project: the Pipeline package's line in its Packages/manifest.json. Anything else you changed stays, and agents can no longer reach its editor.": "撤回 Genex 对这个 Unity 项目的添加：Packages/manifest.json 中 Pipeline 包的那一行。你做的其他改动都会保留，但智能体将无法再连接它的编辑器。",
+  "The first time it starts, Unity shows its Software Terms in a window of its own. Bring Unity to the front and accept them; Genex goes on once Unity answers.": "首次启动时，Unity 会在单独的窗口中显示其软件条款。把 Unity 切到前台并接受条款；Unity 一响应，Genex 就会继续。",
   "They go ahead even in Play mode, and may stop your play. Turn off to have them wait until you stop.": "即使在播放模式下，它们也会继续工作，可能会中断你的游玩。关闭后，它们会等你停下来。",
   "This computer": "这台电脑",
   "This computer has Unity {version}, and Genex builds Unity games in Unity 6 or later. Install it in Unity Hub: Installs, then Install Editor.": "这台电脑装的是 Unity {version}，而 Genex 用 Unity 6 或更高版本制作 Unity 游戏。请在 Unity Hub 中依次点 Installs、Install Editor 进行安装。",
@@ -68,11 +69,13 @@
   "Unity has this project open: bring Unity to the front so it loads the package.": "Unity 已打开这个项目：请把 Unity 调到前面，让它加载这个包。",
   "Unity is ready": "Unity 已就绪",
   "Unity is starting": "Unity 正在启动",
+  "Unity is waiting for you": "Unity 在等你",
   "Unity isn't answering": "Unity 没有响应",
   "Unity isn't open": "Unity 未打开",
   "Unity project": "Unity 项目",
   "Unity setup": "Unity 设置",
   "Unity {version} isn't installed": "未安装 Unity {version}",
   "Unity {version} isn't installed, so the project was not opened.": "未安装 Unity {version}，所以没有打开项目。",
+  "Waiting for you": "等你处理",
   "Whether agents may use Unity while you play": "你游玩时智能体能否使用 Unity"
 }

@@ -48,6 +48,7 @@
   "Starting": "Iniciando",
   "Stop installing Unity": "Parar a instalação do Unity",
   "Take back what Genex added to this Unity project: the Pipeline package's line in its Packages/manifest.json. Anything else you changed stays, and agents can no longer reach its editor.": "Remover o que o Genex adicionou a este projeto do Unity: a linha do pacote Pipeline no Packages/manifest.json dele. Todo o resto que você mudou continua, e os agentes não vão mais acessar o editor dele.",
+  "The first time it starts, Unity shows its Software Terms in a window of its own. Bring Unity to the front and accept them; Genex goes on once Unity answers.": "Na primeira vez que abre, o Unity mostra os Termos de Software dele numa janela própria. Traga o Unity para a frente e aceite-os; o Genex continua assim que o Unity responder.",
   "They go ahead even in Play mode, and may stop your play. Turn off to have them wait until you stop.": "Eles continuam mesmo no modo Play e podem parar sua partida. Desative para que esperem até você parar.",
   "This computer": "Este computador",
   "This computer has Unity {version}, and Genex builds Unity games in Unity 6 or later. Install it in Unity Hub: Installs, then Install Editor.": "Este computador tem o Unity {version}, e o Genex cria jogos do Unity no Unity 6 ou mais recente. Instale-o no Unity Hub: Installs e depois Install Editor.",
@@ -68,11 +69,13 @@
   "Unity has this project open: bring Unity to the front so it loads the package.": "O Unity está com este projeto aberto: traga o Unity para a frente para ele carregar o pacote.",
   "Unity is ready": "O Unity está pronto",
   "Unity is starting": "O Unity está iniciando",
+  "Unity is waiting for you": "O Unity está esperando por você",
   "Unity isn't answering": "O Unity não está respondendo",
   "Unity isn't open": "O Unity não está aberto",
   "Unity project": "Projeto do Unity",
   "Unity setup": "Configuração do Unity",
   "Unity {version} isn't installed": "O Unity {version} não está instalado",
   "Unity {version} isn't installed, so the project was not opened.": "O Unity {version} não está instalado, então o projeto não foi aberto.",
+  "Waiting for you": "Esperando por você",
   "Whether agents may use Unity while you play": "Se os agentes podem usar o Unity enquanto você joga"
 }

@@ -48,6 +48,7 @@
   "Starting": "起動中",
   "Stop installing Unity": "Unityのインストールを中止",
   "Take back what Genex added to this Unity project: the Pipeline package's line in its Packages/manifest.json. Anything else you changed stays, and agents can no longer reach its editor.": "GenexがこのUnityプロジェクトに追加したもの（Packages/manifest.jsonにあるPipelineパッケージの行）を取り除きます。あなたが変えたほかの部分はそのまま残り、エージェントはこのエディターを使えなくなります。",
+  "The first time it starts, Unity shows its Software Terms in a window of its own. Bring Unity to the front and accept them; Genex goes on once Unity answers.": "初めて起動するとき、Unityは専用のウィンドウにソフトウェア利用規約を表示します。Unityを前面に出して同意してください。Unityが応答するとGenexが続けます。",
   "They go ahead even in Play mode, and may stop your play. Turn off to have them wait until you stop.": "プレイモード中も作業を続けるため、プレイが止まることがあります。オフにすると、プレイを終えるまで待ちます。",
   "This computer": "このコンピューター",
   "This computer has Unity {version}, and Genex builds Unity games in Unity 6 or later. Install it in Unity Hub: Installs, then Install Editor.": "このコンピューターにはUnity {version}があります。GenexはUnity 6以降でUnityのゲームをつくります。Unity Hubの「Installs」から「Install Editor」でインストールしてください。",
@@ -68,11 +69,13 @@
   "Unity has this project open: bring Unity to the front so it loads the package.": "Unityでこのプロジェクトが開いています。パッケージを読み込ませるため、Unityを前面に出してください。",
   "Unity is ready": "Unityの準備ができました",
   "Unity is starting": "Unityを起動しています",
+  "Unity is waiting for you": "Unityがあなたを待っています",
   "Unity isn't answering": "Unityが応答しません",
   "Unity isn't open": "Unityが開いていません",
   "Unity project": "Unityプロジェクト",
   "Unity setup": "Unityのセットアップ",
   "Unity {version} isn't installed": "Unity {version}がインストールされていません",
   "Unity {version} isn't installed, so the project was not opened.": "Unity {version}がインストールされていないため、プロジェクトを開きませんでした。",
+  "Waiting for you": "あなたを待っています",
   "Whether agents may use Unity while you play": "プレイ中にエージェントがUnityを使えるかどうか"
 }

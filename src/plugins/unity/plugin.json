@@ -1,7 +1,7 @@
 {
   "apiVersion": 3,
   "id": "unity",
-  "version": "0.5.8",
+  "version": "0.6.1",
   "icon": "icon.svg",
   "name": "Unity",
   "publisher": "Genex",
@@ -25,6 +25,25 @@
       "parameters": {
         "type": "object",
         "properties": {}
+      }
+    },
+    {
+      "name": "multiplayer",
+      "facts": ["unity-project"],
+      "description": "Make this Unity game playable online with Genex multiplayer, in its WebGL build and its Mac and Windows builds alike (web and native players meet in the same rooms): embeds Genex's package (Packages/com.genex.multiplayer), asks for the Colyseus Unity SDK it runs on in Packages/manifest.json, writes Assets/Genex/link.xml and the game's Genex project in Assets/Resources/GenexSettings.json, and its matchmaking in genex.json. Call it once when the person wants people to play together, then read the unity-multiplayer skill and write the online play; call it again with slug after the first publish. Never add npm or a package.json for this.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "matchmaking": {
+            "type": "object",
+            "acceptJsonString": true,
+            "description": "How players are matched, as Genex reads it at publish: {\"preset\": \"open\" | \"duel\" | \"arena\" | \"teams\" | \"private\", \"winCondition\"?: \"lastStanding\" | \"firstToScore\" | \"highScoreInTime\" | \"firstToFinish\", \"config\"?: {\"minPlayers\": 2, \"maxPlayers\": 10, …}}. Leave it out to keep the game's current matchmaking."
+          },
+          "slug": {
+            "type": "string",
+            "description": "The game's Genex project (genex__publish-status names it after the first publish): every build joins that game. Lowercase letters, digits and dashes."
+          }
+        }
       }
     },
     {
@@ -262,6 +281,13 @@
     }
   ],
   "skills": [
+    {
+      "name": "unity-multiplayer",
+      "facts": ["unity-project"],
+      "tools": ["multiplayer"],
+      "summary": "Genex multiplayer for this Unity game, WebGL and native builds in the same rooms: unity__multiplayer sets it up, then GenexMultiplayer joins, syncs players, shared state and host-run objects. MANDATORY before any online or multiplayer code; the genex-threejs-* skills don't apply to a Unity game.",
+      "file": "skills/unity-multiplayer.md"
+    },
     {
       "name": "unity-editor",
       "facts": ["unity-project"],

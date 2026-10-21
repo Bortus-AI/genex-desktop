@@ -607,6 +607,9 @@ export function buildContractorBrief({
   ];
   const workersLine = workers ? WORKERS_BRIEF_LINE : "";
 
+  // A folder with no kind yet hears how its request picks one on every message, a resumed session's
+  // too: a plugin turned on from the chat's card resumes the session that asked for it.
+  const kindRule = !game.legacy && kindPending(game) ? pendingKindRule(engine, kinds, null, game.holds, false) : [];
   // A resumed session was told the rules in its first brief; the language comes again, since the
   // resume's own words are Genex's, in English, and the app's language may have changed since.
   if (resume)
@@ -614,6 +617,7 @@ export function buildContractorBrief({
       ask,
       "",
       identity,
+      ...kindRule,
       resumePickup(afterLoopRun, launch),
       ...launchBlock,
       workersLine,

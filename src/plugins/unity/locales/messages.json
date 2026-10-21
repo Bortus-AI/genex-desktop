@@ -48,6 +48,7 @@
   "Starting",
   "Stop installing Unity",
   "Take back what Genex added to this Unity project: the Pipeline package's line in its Packages/manifest.json. Anything else you changed stays, and agents can no longer reach its editor.",
+  "The first time it starts, Unity shows its Software Terms in a window of its own. Bring Unity to the front and accept them; Genex goes on once Unity answers.",
   "They go ahead even in Play mode, and may stop your play. Turn off to have them wait until you stop.",
   "This computer",
   "This computer has Unity {version}, and Genex builds Unity games in Unity 6 or later. Install it in Unity Hub: Installs, then Install Editor.",
@@ -68,11 +69,13 @@
   "Unity has this project open: bring Unity to the front so it loads the package.",
   "Unity is ready",
   "Unity is starting",
+  "Unity is waiting for you",
   "Unity isn't answering",
   "Unity isn't open",
   "Unity project",
   "Unity setup",
   "Unity {version} isn't installed",
   "Unity {version} isn't installed, so the project was not opened.",
+  "Waiting for you",
   "Whether agents may use Unity while you play"
 ]

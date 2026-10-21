@@ -936,6 +936,7 @@ export default {
   "Context · {percent}% used": "Contexte · {percent} % utilisé",
   "Context: {used} tokens": "Contexte : {used} tokens",
   Continue: "Continuer",
+  "Continue as me": "Continuer en tant que moi",
   "Continue on this Mac": "Continuer sur ce Mac",
   "Continue to confirmation": "Continuer vers la confirmation",
   Contractor: "Prestataire",
@@ -1059,6 +1060,8 @@ export default {
   "Couldn't start the sign-in on this Mac. Paste a key instead.":
     "Impossible de lancer la connexion sur ce Mac. Colle plutôt une clé.",
   "Couldn't stop play": "Impossible d’arrêter le jeu",
+  "Couldn't stop sharing who you are. Try again in a moment.":
+    "Impossible d’arrêter de partager qui tu es. Réessaie dans un instant.",
   "Couldn't take a motion strip": "Impossible de capturer une séquence de mouvement",
   "Couldn't take a picture of {asset}": "Impossible de photographier {asset}",
   "Couldn't take a play-view shot": "Impossible de capturer la vue de jeu",
@@ -1531,6 +1534,8 @@ export default {
   "Genex couldn't download the Luau checks. Check the connection and press Add Luau checks again.":
     "Genex n’a pas pu télécharger les vérifications Luau. Vérifie la connexion et appuie de nouveau sur « Ajouter les vérifications Luau ».",
   "Genex couldn't get Roblox Studio.": "Genex n’a pas pu installer Roblox Studio.",
+  "Genex couldn't stop sharing who you are with this game. Try again in a moment.":
+    "Genex n’a pas pu arrêter de partager qui tu es avec ce jeu. Réessaie dans un instant.",
   "Genex couldn't tell whether {app} was free, so nothing was rewound. Rewind again in a moment.":
     "Genex n’a pas pu savoir si {app} était libre, donc aucun retour en arrière n’a été fait. Réessaie dans un instant.",
   "Genex couldn't tell whether {app} was free, so the newer version didn't come back. Try again in a moment.":
@@ -1942,6 +1947,8 @@ export default {
   "It turns on when installed: agents in all your games can use it from your next message.":
     "Il s’active dès l’installation : les agents de tous tes jeux peuvent l’utiliser dès ton prochain message.",
   "It was paused before it could write up the build.": "Il a été mis en pause avant de pouvoir résumer le build.",
+  "It will see your display name and avatar, so your progress and scores can be saved to your account. Games are code written by other people, not by Genex. You can stop sharing any time in Settings › Storage.":
+    "Il verra ton nom affiché et ton avatar, pour que ta progression et tes scores soient enregistrés sur ton compte. Les jeux sont du code écrit par d’autres personnes, pas par Genex. Tu peux arrêter le partage à tout moment dans Réglages › Stockage.",
   "It's no longer there.": "Ce n’est plus disponible.",
   "It's switched on in Studio's settings. Studio answers once a place is open: open one in Studio, or press New Roblox game.":
     "Il est activé dans les réglages de Studio. Studio répond dès qu’un lieu est ouvert : ouvres-en un dans Studio, ou appuie sur « Nouveau jeu Roblox ».",
@@ -2001,6 +2008,7 @@ export default {
     "Gardé. {count, plural, one {# vérification qui échouait passe maintenant} other {# vérifications qui échouaient passent maintenant}}, rien de ce qui passait ne s’est cassé et le vérificateur qui compare côte à côte n’a pas fait d’objection.",
   Kind: "Type",
   "Kinds of asset": "Types de ressource",
+  "Knows who you are": "Sait qui tu es",
   "Koi drifting through a neon night market, seen from above":
     "Des carpes koï qui dérivent au-dessus d’un marché de nuit au néon, vues d’en haut",
   "Laid the terrain": "Terrain posé",
@@ -2041,6 +2049,7 @@ export default {
     "Laisser l’agent de ce chat utiliser cette app ? Il peut cliquer, écrire et lire ce que cette app affiche.",
   "Let this chat's agent use {app}? It can click, type and read what {app} shows.":
     "Laisser l’agent de ce chat utiliser {app} ? Il peut cliquer, écrire et lire ce que {app} affiche.",
+  "Let {game} know who you are?": "Laisser {game} savoir qui tu es ?",
   "Letters a–z, digits and dashes.": "Lettres a–z, chiffres et tirets.",
   "Letting go of every input": "Relâche toutes les commandes",
   "Letting the game settle": "Attend que le jeu se stabilise",
@@ -2767,6 +2776,7 @@ export default {
   "Plans first, asks to proceed": "Planifie d’abord, demande pour continuer",
   Platforms: "Plateformes",
   Play: "Jouer",
+  "Play as guest": "Jouer en invité",
   "Play build": "Jouer à ce build",
   "Play game": "Lancer le jeu",
   "Play latest": "Jouer au dernier build",
@@ -3555,6 +3565,7 @@ export default {
   "Stop game": "Arrêter le jeu",
   "Stop replying about {about}": "Ne plus répondre à propos de {about}",
   "Stop sharing": "Arrêter le partage",
+  "Stop sharing who you are with {game}": "Arrêter de partager qui tu es avec {game}",
   "Stop this background work": "Arrêter ce travail en arrière-plan",
   "Stop this game's build before removing it.": "Arrête le build de ce jeu avant de le retirer.",
   "Stop this terminal before closing its session.": "Arrête ce terminal avant de fermer sa session.",
@@ -4329,6 +4340,8 @@ export default {
     "Unity Hub dit avoir installé Unity {version}, mais pas là où Genex cherche les éditeurs. Ouvre Unity Hub, puis Installs, et vérifie où il a été installé.",
   "Unity is open and answers": "Unity est ouvert et répond",
   "Unity is starting": "Unity démarre",
+  "Unity is waiting for you to accept its Software Terms in its window":
+    "Unity attend que tu acceptes ses Conditions d’utilisation du logiciel dans sa fenêtre",
   "Unity isn't answering: a dialog may be waiting in it":
     "Unity ne répond pas : une boîte de dialogue y attend peut-être",
   "Unity isn't open": "Unity n’est pas ouvert",
@@ -4883,6 +4896,7 @@ export default {
     "chaque tour doit battre le précédent, et {reviewer}, qui vérifie sans savoir quel build est lequel, choisit le gagnant",
   "edited itself": "a modifié son propre code",
   "edited the code": "a modifié le code",
+  "editor\u0004Waiting for you": "En attente de toi",
   "effort\u0004Auto": "Auto",
   "effort\u0004High": "Élevé",
   "effort\u0004Low": "Faible",
@@ -4945,6 +4959,7 @@ export default {
   "how well the screen reads": "à quel point l’écran est lisible",
   "how well the screen reads {score}": "à quel point l’écran est lisible : {score}",
   "how well the screen reads {score} out of {max}": "à quel point l’écran est lisible : {score} sur {max}",
+  "identity\u0004Stop sharing": "Arrêter le partage",
   "in hand": "en cours",
   "in {game}": "dans {game}",
   "in {game} and {count} more": "dans {game} et {count, plural, one {# autre} other {# autres}}",
@@ -5585,6 +5600,8 @@ export default {
   "{game} cover preview": "Aperçu de la couverture de {game}",
   "{game} has your receipt.": "Le reçu a été envoyé à {game}.",
   "{game} in play": "{game} en jeu",
+  "{game} no longer knows who you are. It asks again next time you play.":
+    "{game} ne sait plus qui tu es. Il te redemandera la prochaine fois que tu joueras.",
   "{game} now builds in {engine} · {project}": "{game} se crée maintenant dans {engine} · {project}",
   "{game} {number}": "{game} {number}",
   "{game} · started {time}": "{game} · lancé le {time}",

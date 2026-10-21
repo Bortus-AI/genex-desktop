@@ -48,6 +48,7 @@
   "Starting": "Запуск",
   "Stop installing Unity": "Остановить установку Unity",
   "Take back what Genex added to this Unity project: the Pipeline package's line in its Packages/manifest.json. Anything else you changed stays, and agents can no longer reach its editor.": "Убрать то, что Genex добавил в этот проект Unity: строку пакета Pipeline в его Packages/manifest.json. Остальные твои изменения останутся, а агенты больше не смогут работать с его редактором.",
+  "The first time it starts, Unity shows its Software Terms in a window of its own. Bring Unity to the front and accept them; Genex goes on once Unity answers.": "При первом запуске Unity показывает свои условия использования в отдельном окне. Выведи Unity на передний план и прими их — Genex продолжит, как только Unity ответит.",
   "They go ahead even in Play mode, and may stop your play. Turn off to have them wait until you stop.": "Они продолжают работу даже в режиме Play и могут прервать твою игру. Выключи, чтобы они ждали, пока ты не закончишь.",
   "This computer": "Этот компьютер",
   "This computer has Unity {version}, and Genex builds Unity games in Unity 6 or later. Install it in Unity Hub: Installs, then Install Editor.": "На этом компьютере стоит Unity {version}, а Genex собирает игры на Unity в Unity 6 и новее. Установи его в Unity Hub: Installs, затем Install Editor.",
@@ -68,11 +69,13 @@
   "Unity has this project open: bring Unity to the front so it loads the package.": "В Unity уже открыт этот проект: выведи Unity на передний план, чтобы он загрузил пакет.",
   "Unity is ready": "Unity готов",
   "Unity is starting": "Unity запускается",
+  "Unity is waiting for you": "Unity ждёт тебя",
   "Unity isn't answering": "Unity не отвечает",
   "Unity isn't open": "Unity не открыт",
   "Unity project": "Проект Unity",
   "Unity setup": "Настройка Unity",
   "Unity {version} isn't installed": "Unity {version} не установлен",
   "Unity {version} isn't installed, so the project was not opened.": "Unity {version} не установлен, поэтому проект не открыт.",
+  "Waiting for you": "Ждёт тебя",
   "Whether agents may use Unity while you play": "Могут ли агенты пользоваться Unity, пока ты играешь"
 }

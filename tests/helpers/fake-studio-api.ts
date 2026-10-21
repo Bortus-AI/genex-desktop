@@ -168,6 +168,7 @@ const METHODS = [
   "playInstallCancel",
   "playInstalls",
   "playUninstall",
+  "playForgetIdentity",
   "playLaunch",
   "playSession",
   "playSessions",

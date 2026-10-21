@@ -396,6 +396,9 @@ async function buildUnity(root, resources, sdk) {
   for (const file of ["plugin.json", "icon.svg"])
     await cp(path.join(root, "src/plugins/unity", file), path.join(unity, file));
   await copyLocales(path.join(root, "src/plugins/unity"), unity);
+  // Genex's Unity multiplayer package a game embeds, and the skill that explains it.
+  for (const folder of ["multiplayer", "skills"])
+    await cp(path.join(root, "src/plugins/unity", folder), path.join(unity, folder), { recursive: true });
   // Genex's own type goes in as data: a panel can load no font from anywhere else.
   const panel = await inlinePanelSdk(
     await readFile(path.join(root, "src/plugins/unity/panel.html"), "utf8"),

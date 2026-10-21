@@ -1849,10 +1849,11 @@ run at its moments, their observers feed its finish check and their worker types
 `web` is `web-game` at the root. A game New game made lists `awaitingFirstBuild` until an answer
 in any of its chats, or a run on it, ends with the folder holding a kind (`core/build-ends.ts`);
 it stays built after. `multiplayer` is set while the game's package.json names
-`@genex-ai/multiplayer`, its page maps Studio's copy, or its Godot project carries Genex's
-multiplayer addon (`godot/addons/genex_multiplayer/plugin.cfg`) (`usesGenexMultiplayer`); a build's end tells the game list when it changed. The stage strip's
+`@genex-ai/multiplayer`, its page maps Studio's copy, its Godot project carries Genex's
+multiplayer addon (`godot/addons/genex_multiplayer/plugin.cfg`) or its Unity project embeds Genex's
+package (`[unity/]Packages/com.genex.multiplayer/package.json`) (`usesGenexMultiplayer`); a build's end tells the game list when it changed. The stage strip's
 Multiplayer shows only on a built game that is not multiplayer (`showsMultiplayer`), and on an
-engine's web export only for a Godot game (`takesEngineMultiplayer`), whose project takes it.
+engine's web export only for a Godot or Unity game (`takesEngineMultiplayer`), whose project takes it.
 
 ### Workspace rules
 
@@ -2638,6 +2639,27 @@ editors are found where Unity Hub puts them (`editors.ts`): its own folder
 (`/Applications/Unity/Hub/Editor/<version>/Unity.app`) and the folder Hub records in
 `secondaryInstallPath.json`; an editor that is a link to one is not listed.
 
+#### Multiplayer
+
+`multiplayer` (agent tool, `multiplayer.ts`; its `unity-multiplayer` file skill says how to write
+the online play) puts Genex multiplayer into the game's Unity project, WebGL and native alike:
+- **The package.** Genex's package is embedded as `Packages/com.genex.multiplayer/`, a copy of the
+  Genex SDK's `sdks/unity` (`MULTIPLAYER_PACKAGE_SOURCE`). A changed file is kept beside it as
+  `<name>.mine~`, a name Unity never imports.
+- **Colyseus.** The Colyseus Unity SDK it runs on is asked for in `Packages/manifest.json` at the
+  tested `upm` commit (`COLYSEUS_PACKAGE_URL`). Unity fetches it from Colyseus's repository, which
+  needs git on the Mac. Studio ships none of it: its bundled serializer carries Asset Store terms.
+  A version the person chose stays.
+- **IL2CPP.** `Assets/Genex/link.xml` keeps the Genex and Colyseus assemblies from stripping, since
+  the relay's schema is reached by reflection.
+- **The game's settings.** `Assets/Resources/GenexSettings.json` holds the slug (when given) and
+  API, which the game reads with `Resources.Load`. Matchmaking goes into the game's `genex.json`,
+  as for Godot (`substrate/genex-game-settings.ts`).
+- **Identity.** A WebGL build's player comes from the published page's `window.genexEmbed` (the
+  connect module's). A native build's comes from `GenexNativeIdentity`: Play's gateway and ticket
+  (`GENEX_API_URL`, `GENEX_EMBED_TICKET`), or a guest.
+- **Not yet verified:** the package in a real Unity editor, an IL2CPP build or a WebGL build.
+
 #### The panel and the toolbar button
 
 The toolbar button (`unity:editor`, labelled Unity with the `unity` icon, only on a game with a
@@ -2661,8 +2683,9 @@ command, so the toolbar may ask as often as it does.
 | `opening` | An editor has it open and does not answer yet | Starting | Restart Unity |
 | `ready` | Its main thread answers (the panel says when it plays or compiles) | Ready | Restart Unity |
 | `stalled` | Its server is there and its main thread runs nothing | Stalled, `warn`, `attention` | Restart Unity |
+| `terms` | It does not answer and this Mac's Unity never had its Software Terms accepted (no `Terms-…` key in its preferences): the first start's terms window waits | Waiting for you, `warn`, `attention` | Words only |
 
-Every badge but Stalled is a `dot` (grey, amber while Starting, green once Ready). The first three
+Every badge but Stalled and Waiting for you is a `dot` (grey, amber while Starting, green once Ready). The first three
 steps never reach the button, which a game without a Unity project doesn't show; the plugin page's
 Editor connection reads the same word, so it never says Ready without Unity.
 
@@ -3231,7 +3254,8 @@ Genex:
   (`/vendor/genex/embed-sdk/index.js`, which the build copies from the pinned devDependency) and
   loads `/vendor/genex/connect.js` after the map (`withGenexSdkImport`); its page must be a
   regular file, never a link. Multiplayer is refused there. A Godot game (`godot/project.godot`)
-  is refused with a pointer to `godot__multiplayer`: its multiplayer goes into its project. The paid tool and the package tool need consent; fixture profiles refuse
+  or a Unity game (`[unity/]ProjectSettings/ProjectVersion.txt`) is refused with a pointer to
+  `godot__multiplayer` or `unity__multiplayer`: its multiplayer goes into its project. The paid tool and the package tool need consent; fixture profiles refuse
   both host steps (`studio:plugins.host-cli`, `studio:plugins.host-package`).
 - `genex__asset` accepts only each lane's own options (`LANE_OPTIONS`, `plugins/genex/request.ts`),
   and a refusal names them (`Unsupported Genex option for <op>`). Each lane's provider is fixed and
@@ -3443,8 +3467,9 @@ the online play) puts Genex multiplayer into the game's Godot project, web and n
   `<script src="genex-multiplayer-bridge.js">` and leaves `addons/colyseus/*` out. Every export of
   a game with the addon copies the pinned SDK's `bridge.global.js` beside the page, with `genex-multiplayer-bridge.LICENSES.md` (the licenses of what it bundles, made at build by `bridgeLicenses`), which the
   addon's web backend drives through `window.GenexMultiplayerBridge`. The publish connect module
-  hands that bridge the page's one player (`setIdentity` with Studio's embed SDK) and puts the
-  game's slug into `window.__GENEX__`.
+  hands that bridge the page's one player (`setIdentity` with Studio's embed SDK), exposes it as
+  `window.genexEmbed` for a Unity WebGL build (a page's own kept), and puts the game's slug into
+  `window.__GENEX__`.
 - **Not yet.** Native play inside Studio's sandbox has no network, so online play is tested in an
   exported build or on the published web page.
 

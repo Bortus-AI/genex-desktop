@@ -894,6 +894,7 @@ export default {
   "Context · {percent}% used": "Контекст · занято {percent}%",
   "Context: {used} tokens": "Контекст: {used} токенов",
   Continue: "Продолжить",
+  "Continue as me": "Продолжить как я",
   "Continue on this Mac": "Продолжить на этом Mac",
   "Continue to confirmation": "Перейти к подтверждению",
   Contractor: "Агент",
@@ -1016,6 +1017,8 @@ export default {
   "Couldn't start the sign-in on this Mac. Paste a key instead.":
     "Не удалось начать вход на этом Mac. Вставь ключ вручную.",
   "Couldn't stop play": "Не удалось остановить игру",
+  "Couldn't stop sharing who you are. Try again in a moment.":
+    "Не удалось перестать делиться данными о тебе. Попробуй ещё раз чуть позже.",
   "Couldn't take a motion strip": "Не удалось снять серию кадров",
   "Couldn't take a picture of {asset}": "Не удалось сфотографировать {asset}",
   "Couldn't take a play-view shot": "Не удалось снять кадр из игры",
@@ -1485,6 +1488,8 @@ export default {
   "Genex couldn't download the Luau checks. Check the connection and press Add Luau checks again.":
     "Genex не смог скачать проверки Luau. Проверь подключение и снова нажми «Добавить проверки Luau».",
   "Genex couldn't get Roblox Studio.": "Genex не смог установить Roblox Studio.",
+  "Genex couldn't stop sharing who you are with this game. Try again in a moment.":
+    "Genex не смог перестать делиться с этой игрой данными о тебе. Попробуй ещё раз чуть позже.",
   "Genex couldn't tell whether {app} was free, so nothing was rewound. Rewind again in a moment.":
     "{app}: Genex не удалось понять, свободно ли приложение, поэтому ничего не откатилось. Откати ещё раз чуть позже.",
   "Genex couldn't tell whether {app} was free, so the newer version didn't come back. Try again in a moment.":
@@ -1889,6 +1894,8 @@ export default {
   "It turns on when installed: agents in all your games can use it from your next message.":
     "Включается сразу после установки: агенты во всех твоих играх смогут им пользоваться со следующего сообщения.",
   "It was paused before it could write up the build.": "Сборку приостановили раньше, чем появился отчёт.",
+  "It will see your display name and avatar, so your progress and scores can be saved to your account. Games are code written by other people, not by Genex. You can stop sharing any time in Settings › Storage.":
+    "Игра увидит твоё отображаемое имя и аватар, чтобы прогресс и рекорды сохранялись в твоём аккаунте. Игры — это код, который пишут другие люди, а не Genex. Перестать делиться можно в любой момент в разделе «Настройки › Место на диске».",
   "It's no longer there.": "Этого больше нет.",
   "It's switched on in Studio's settings. Studio answers once a place is open: open one in Studio, or press New Roblox game.":
     "Он включён в настройках Studio. Studio ответит, когда будет открыт плейс: открой его в Studio или нажми «Новая игра Roblox».",
@@ -1947,6 +1954,7 @@ export default {
     "Оставлено. {count, plural, one {# проверка, которая раньше не проходила, теперь проходит} few {# проверки, которые раньше не проходили, теперь проходят} many {# проверок, которые раньше не проходили, теперь проходят} other {# проверки, которые раньше не проходили, теперь проходят}}, ничего из того, что проходило, не сломалось, и проверяющий при сравнении не возражал.",
   Kind: "Тип",
   "Kinds of asset": "Типы ассетов",
+  "Knows who you are": "Знает, кто ты",
   "Koi drifting through a neon night market, seen from above":
     "Карпы кои плывут над неоновым ночным рынком, вид сверху",
   "Laid the terrain": "Ландшафт построен",
@@ -1988,6 +1996,7 @@ export default {
     "Разрешить агенту этого чата работать в этом приложении? Он сможет нажимать, печатать и читать то, что в нём видно.",
   "Let this chat's agent use {app}? It can click, type and read what {app} shows.":
     "Разрешить агенту этого чата работать в {app}? Он сможет нажимать, печатать и читать то, что показывает {app}.",
+  "Let {game} know who you are?": "Рассказать игре «{game}», кто ты?",
   "Letters a–z, digits and dashes.": "Буквы a–z, цифры и дефисы.",
   "Letting go of every input": "Отпускает все кнопки",
   "Letting the game settle": "Ждёт, пока игра стабилизируется",
@@ -2699,6 +2708,7 @@ export default {
   "Plans first, asks to proceed": "Сначала планирует, потом спрашивает",
   Platforms: "Платформы",
   Play: "Играть",
+  "Play as guest": "Играть как гость",
   "Play build": "Играть в сборку",
   "Play game": "Запустить игру",
   "Play latest": "Играть в последнюю сборку",
@@ -3479,6 +3489,7 @@ export default {
   "Stop game": "Остановить игру",
   "Stop replying about {about}": "Отменить ответ о «{about}»",
   "Stop sharing": "Снять с публикации",
+  "Stop sharing who you are with {game}": "Перестать сообщать игре «{game}», кто ты",
   "Stop this background work": "Остановить эту фоновую работу",
   "Stop this game's build before removing it.": "Останови сборку этой игры, прежде чем удалять её.",
   "Stop this terminal before closing its session.": "Останови этот терминал, прежде чем закрывать его сессию.",
@@ -4239,6 +4250,8 @@ export default {
     "Unity Hub сообщает, что установил Unity {version}, но не туда, где Genex ищет редакторы. Открой в Unity Hub раздел Installs и проверь, куда он установился.",
   "Unity is open and answers": "Unity открыт и отвечает",
   "Unity is starting": "Unity запускается",
+  "Unity is waiting for you to accept its Software Terms in its window":
+    "Unity ждёт, пока ты примешь его условия использования в его окне",
   "Unity isn't answering: a dialog may be waiting in it": "Unity не отвечает: возможно, в нём открыто диалоговое окно",
   "Unity isn't open": "Unity не открыт",
   "Unity setup": "Настройка Unity",
@@ -4789,6 +4802,7 @@ export default {
     "каждый раунд должен превзойти предыдущий, а победителя выбирает {reviewer}, не зная, какая сборка какая",
   "edited itself": "изменил свой код",
   "edited the code": "изменил код",
+  "editor\u0004Waiting for you": "Ждёт тебя",
   "effort\u0004Auto": "Авто",
   "effort\u0004High": "Высокое",
   "effort\u0004Low": "Низкое",
@@ -4850,6 +4864,7 @@ export default {
   "how well the screen reads": "насколько понятен экран",
   "how well the screen reads {score}": "насколько понятен экран: {score}",
   "how well the screen reads {score} out of {max}": "насколько понятен экран: {score} из {max}",
+  "identity\u0004Stop sharing": "Перестать делиться",
   "in hand": "в работе",
   "in {game}": "в «{game}»",
   "in {game} and {count} more": "в «{game}» и ещё {count}",
@@ -5521,6 +5536,8 @@ export default {
   "{game} cover preview": "Превью обложки «{game}»",
   "{game} has your receipt.": "Игра «{game}» получила чек.",
   "{game} in play": "{game}: игровой процесс",
+  "{game} no longer knows who you are. It asks again next time you play.":
+    "Игра «{game}» больше не знает, кто ты. В следующий раз она спросит снова.",
   "{game} now builds in {engine} · {project}": "{game} теперь собирается в {engine} · {project}",
   "{game} {number}": "{game} {number}",
   "{game} · started {time}": "{game} · запуск {time}",
