@@ -11,7 +11,7 @@
  */
 import { chmod, lstat, mkdir, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
-import { readJsonForUpdate, writeFileNoFollow } from "../../substrate/fsx.ts";
+import { ensureDirBelow, readJsonForUpdate, writeFileInDir, writeFileNoFollow } from "../../substrate/fsx.ts";
 import { isInside } from "../../substrate/paths.ts";
 import { PROJECT_FILE } from "./game-project.ts";
 
@@ -199,10 +199,9 @@ export async function addonState(gameDir: string, project: string, source: strin
  * the person changed is kept beside it as `.mine`. Answers the names kept.
  */
 export async function installAddonFolder(project: string, source: string, addonFolder: string): Promise<string[]> {
-  const folder = path.join(project, addonFolder);
-  await assertNoLink(path.join(project, "addons"));
-  await assertNoLink(folder);
-  await mkdir(folder, { recursive: true });
+  // Each folder on the way made or found as a folder of its own (a link or a junction refused), and
+  // each file written only while that folder still resolves to itself: a link swapped in is refused.
+  const folder = await ensureDirBelow(project, addonFolder.split(/[\\/]/)).catch(linkRefused(addonFolder));
   const kept: string[] = [];
   for (const [name, text] of await shippedFiles(source)) {
     const file = path.join(folder, name);
@@ -210,13 +209,21 @@ export async function installAddonFolder(project: string, source: string, addonF
     const now = await textOf(file);
     if (now === text) continue;
     if (now !== null) {
-      await writeFileNoFollow(`${file}${MINE_SUFFIX}`, now);
+      await writeFileInDir(folder, `${name}${MINE_SUFFIX}`, now).catch(linkRefused(name));
       kept.push(name);
     }
-    await writeFileNoFollow(file, text);
+    await writeFileInDir(folder, name, text).catch(linkRefused(name));
   }
   return kept;
 }
+
+/** A write refused for a link on its way (ELOOP), as the addon's own refusal; any other failure as it was. */
+const linkRefused =
+  (name: string) =>
+  (error: NodeJS.ErrnoException): never => {
+    if (error.code === "ELOOP") throw new AddonError(MESSAGE.Link(path.basename(name)));
+    throw error;
+  };
 
 /** The autoload line and the editor plugin into `project.godot`, when they aren't there. */
 async function addToSettings(project: string): Promise<void> {

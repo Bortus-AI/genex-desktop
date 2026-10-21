@@ -527,7 +527,10 @@ async function webExport(deps: GodotBackendDeps, context: PluginContext): Promis
   const left = deadline - now();
   if (left < MIN_EXPORT_MS) throw new Error(MESSAGE.Web.NoTimeLeft);
   const started = Date.now();
-  const result = await deps.run(install.binary, { ...call, timeoutMs: Math.min(call.timeoutMs, left) }, job);
+  // A Windows job may wait its turn first: the runner reads the budget again when it starts.
+  const budget = { until: deadline, now, least: MIN_EXPORT_MS, refusal: MESSAGE.Web.NoTimeLeft };
+  const exporting = { ...call, timeoutMs: Math.min(call.timeoutMs, left) };
+  const result = await deps.run(install.binary, exporting, { ...job, budget });
   if (result.timedOut) throw new Error(MESSAGE.Web.TimedOut);
   const pack = await stat(path.join(folder, WEB_PACK)).catch(() => null);
   const written = pack !== null && pack.mtimeMs >= started - EXPORT_CLOCK_SLACK_MS;
@@ -1059,19 +1062,31 @@ const macSetup = (installer: GodotInstaller): Setup => ({
  * Windows's: the host's install of the pinned Godot (`download-godot`, which the person confirmed),
  * awaited to its end, its record the card's progress; a failure is on that record, never thrown here.
  */
-const windowsSetup = (deps: GodotBackendDeps): Setup => ({
+const windowsSetup = (deps: GodotBackendDeps, fetching: TemplateFetches): Setup => ({
   job: async (context) =>
     windowsJob(await context.host(HostService.RuntimeInstallation, GODOT_RUNTIME).catch(() => null)),
   install: async (context) => {
     await context.host(HostService.RuntimeInstall, GODOT_RUNTIME).catch(() => undefined);
     // With Godot, its Web template, so the game plays in Live and publishes without a trip to Godot's editor.
     const installed = usableGodot(await godots(deps, context));
-    if (installed) await ensureTemplates(deps, installed, [ExportTemplate.Web], context.signal).catch(() => undefined);
+    if (!installed) return;
+    const stop = new AbortController();
+    fetching.add(stop);
+    try {
+      const signal = AbortSignal.any([context.signal, stop.signal]);
+      await ensureTemplates(deps, installed, [ExportTemplate.Web], signal).catch(() => undefined);
+    } finally {
+      fetching.delete(stop);
+    }
   },
   stop: async (context) => {
+    for (const fetch of fetching) fetch.abort();
     await context.host(HostService.RuntimeCancelInstall, GODOT_RUNTIME).catch(() => undefined);
   },
 });
+
+/** The Web template fetches Windows's Do it for me has under way, which its Stop stops too. */
+type TemplateFetches = Set<AbortController>;
 
 /** Godot's setup card for this computer now, the install under way, and the game's Don't use Godot. */
 async function setupSteps(deps: GodotBackendDeps, setup: Setup, context: PluginContext) {
@@ -1117,9 +1132,10 @@ export function createGodotBackend(deps: GodotBackendDeps): PluginActivation {
   let installing: GodotInstaller | undefined;
   let storageRoot = "";
   const windows = deps.env.platform === "win32";
+  const fetching: TemplateFetches = new Set();
   // The install goes on across calls; every call names the same plugin storage.
   const setupOf = async (context: PluginContext): Promise<Setup> => {
-    if (windows) return windowsSetup(deps);
+    if (windows) return windowsSetup(deps, fetching);
     storageRoot = await storageOf(context);
     installing ??= createGodotInstaller(deps.install ?? systemInstallDeps(deps.env), async () => storageRoot);
     return macSetup(installing);

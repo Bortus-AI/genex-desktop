@@ -28,7 +28,6 @@ import {
   GodotJob,
   type GodotResult,
   type GodotRunner,
-  type RemoveStage,
   windowsRunner,
 } from "../../src/plugins/godot/godot-run.ts";
 import { tmpDir } from "./tmp.ts";
@@ -335,8 +334,11 @@ export async function godotWindowsFixture(
     linked?: string;
     /** How many reads of a job's record say it still runs; one unless a test holds jobs longer. */
     runningReads?: number;
-    /** How the runner removes a stage, when a test stands in for one Windows holds. */
-    remove?: RemoveStage;
+    /**
+     * The sandbox user's `rd` of a stage (the runner's removal job), when a test stands in for one
+     * Windows holds or for a link swapped in while it runs; removes the stage, never following a link, unless given.
+     */
+    remove?: (stage: string) => Promise<void>;
     /** Godot's templates archive as the network serves it (`templatesArchive`); offline unless given. */
     templates?: typeof fetch;
   } = {},
@@ -355,6 +357,8 @@ export async function godotWindowsFixture(
     },
   };
   const requests: PluginSandboxRunArgs[] = [];
+  /** The removal jobs, apart from Godot's own. */
+  const removals: PluginSandboxRunArgs[] = [];
   const stopped: string[] = [];
   const peak = { running: 0, most: 0 };
   const jobs = new Map<string, { reads: number; ended: boolean; end: PluginSandboxJob }>();
@@ -363,7 +367,7 @@ export async function godotWindowsFixture(
     env: pc.env,
     editor: recorded.editor,
     // Each wait for a job's record lets the event loop turn, as a real pause does, so other calls go on meanwhile.
-    run: windowsRunner(() => setImmediate(), options.remove),
+    run: windowsRunner(() => setImmediate(), WINDOWS_CMD),
     scripts: SCRIPTS,
     templates: TEMPLATES,
     addon: ADDON,
@@ -375,6 +379,17 @@ export async function godotWindowsFixture(
     if (peak.running >= PLUGIN_SANDBOX_MAX_RUNNING) throw new Error("This plugin already runs 2 sandbox jobs");
     peak.running += 1;
     peak.most = Math.max(peak.most, peak.running);
+    const removed = removalOf(request);
+    if (removed !== null) {
+      removals.push(request);
+      const id = `removal-${removals.length}`;
+      const code = await (options.remove ?? removeUnfollowed)(removed).then(
+        () => 0,
+        () => 1,
+      );
+      jobs.set(id, { reads: 0, ended: false, end: { id, state: "exited", exitCode: code, stdout: "", stderr: "" } });
+      return { id };
+    }
     requests.push(request);
     const id = `job-${requests.length}`;
     const end = { state: "exited", exitCode: 0, stdout: "", stderr: "", ...(await options.sandbox?.(request)) };
@@ -426,6 +441,7 @@ export async function godotWindowsFixture(
     runtime,
     backend,
     requests,
+    removals,
     stopped,
     peak,
     editor: recorded,
@@ -433,6 +449,20 @@ export async function godotWindowsFixture(
     context,
   };
 }
+
+/** Windows's command interpreter as the fake PC's runner names it. */
+export const WINDOWS_CMD = "C:\\Windows\\System32\\cmd.exe";
+
+/** The stage a removal job's `rd` line names, or null for any other job. */
+function removalOf(request: PluginSandboxRunArgs): string | null {
+  if (request.program !== WINDOWS_CMD) return null;
+  const line = Object.values(request.env ?? {}).find((value) => value.startsWith("rd /s /q "));
+  const quoted = line ? /^rd \/s \/q "(.+)"$/.exec(line) : null;
+  return quoted?.[1] ?? null;
+}
+
+/** What `rd /s /q` does to a stage: removes it and all in it, removing a link it meets rather than what it points to. */
+const removeUnfollowed = (stage: string) => rm(stage, { recursive: true, force: true });
 
 /** A computer with no network and no programs to install with: nothing a test didn't give is reached. */
 export function offlineInstall(root: string): GodotInstallDeps {

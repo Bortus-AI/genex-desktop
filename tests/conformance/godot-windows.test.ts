@@ -17,6 +17,7 @@ import type { PluginSetupCard } from "../../src/plugin-sdk/index.d.ts";
 import { GodotTool } from "../../src/plugins/godot/backend.ts";
 import { HookEvent } from "../../src/shared/plugin-hooks.ts";
 import { GodotSetupAction } from "../../src/plugins/godot/godot-setup.ts";
+import { type GodotCall, GodotJob, type GodotJobScope, windowsRunner } from "../../src/plugins/godot/godot-run.ts";
 import { unzipCall } from "../../src/plugins/godot/multiplayer.ts";
 import { InstallPhase, type RuntimeInstallPhase } from "../../src/shared/model-install.ts";
 import type { PluginSandboxRunArgs } from "../../src/shared/plugins.ts";
@@ -29,6 +30,7 @@ import {
   playArg,
   SCRIPTS,
   templatesArchive,
+  WINDOWS_CMD,
 } from "../helpers/godot-fake-engine.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
@@ -94,6 +96,29 @@ describe("Godot on Windows: Genex's own Godot", () => {
     await action(fixture, GodotSetupAction.Download);
     const templates = path.join(fixture.env.dataHome, "Godot", "export_templates", "4.7.2.stable");
     assert.equal(await readFile(path.join(templates, "web_nothreads_release.zip"), "utf8"), "web");
+  });
+
+  it("stops the Web template's fetch with Stop, as it stops Godot's download", async () => {
+    const network = templatesArchive({ "templates/web_nothreads_release.zip": "web" });
+    let asked: () => void = () => undefined;
+    const reached = new Promise<void>((resolve) => {
+      asked = resolve;
+    });
+    // A server that answers the first range only once the fetch is stopped.
+    const held = (async (url, init) => {
+      if (init?.method === "HEAD") return network.fetch(url, init);
+      asked();
+      return new Promise<Response>((_, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+      });
+    }) as typeof fetch;
+    const fixture = await godotWindowsFixture({ templates: held });
+    const downloading = action(fixture, GodotSetupAction.Download);
+    await reached;
+    await action(fixture, GodotSetupAction.Stop);
+    await downloading;
+    const templates = path.join(fixture.env.dataHome, "Godot", "export_templates", "4.7.2.stable");
+    assert.deepEqual(await readdir(templates).catch(() => []), [], "nothing kept of it");
   });
 
   it("shows the host's install as it goes: the download, the unpacking, a stop and a failure", async () => {
@@ -336,34 +361,31 @@ describe("Godot on Windows: jobs in Genex's sandbox", () => {
     );
   });
 
-  it("clears the stages a crash left in the game before its first job", async () => {
+  it("clears the stages a crash left in the game before its first job, and only those, as the sandbox user", async () => {
     const fixture = await windowsProject();
-    const left = [
-      path.join(fixture.gameDir, "genex-godot-job-left", "0"),
-      path.join(fixture.project, ".godot", "genex-jobs", "left", "0"),
-    ];
-    for (const folder of left) await mkdir(folder, { recursive: true });
+    const stage = STAGE_ID;
+    const jobs = path.join(fixture.project, ".godot", "genex-jobs");
+    const left = [path.join(fixture.gameDir, `genex-godot-job-${stage}`, "0"), path.join(jobs, stage, "0")];
+    // Folders a stage's name doesn't fit: someone else's, never swept.
+    const others = [path.join(fixture.gameDir, "genex-godot-job-notes"), path.join(jobs, "mine")];
+    for (const folder of [...left, ...others]) await mkdir(folder, { recursive: true });
     const again = await godotWindowsFixture({ installed: true });
     await tool(again, GodotTool.Check, {}, { directory: fixture.gameDir });
-    assert.equal((await readdir(fixture.gameDir)).includes("genex-godot-job-left"), false);
-    assert.deepEqual(await readdir(path.join(fixture.project, ".godot", "genex-jobs")), []);
+    assert.equal((await readdir(fixture.gameDir)).includes(`genex-godot-job-${stage}`), false);
+    assert.deepEqual(await readdir(jobs), ["mine"]);
+    assert.ok((await readdir(fixture.gameDir)).includes("genex-godot-job-notes"));
+    const removed = again.removals.map((request) => Object.values(request.env ?? {}).join(""));
+    assert.ok(
+      removed.some((line) => line === `rd /s /q "${path.join(jobs, stage)}"`),
+      removed.join("\n"),
+    );
+    for (const request of again.removals) {
+      assert.equal(request.program, WINDOWS_CMD, "Windows's own rd, run by the sandbox");
+      assert.equal(request.writes.length, 1);
+    }
   });
 
   it("never makes, lists, copies out of or removes anything through a link or a junction in a job's stage", async () => {
-    /** A folder outside the game with what a person keeps there, and what it holds now. */
-    const outsideFolder = async () => {
-      const folder = path.join(await realpath(await tmpDir("godot-stage-outside-")), "Documents");
-      await mkdir(path.join(folder, "left"), { recursive: true });
-      await writeFile(path.join(folder, "left", "keep.txt"), "mine");
-      await writeFile(path.join(folder, "notes.txt"), "mine too");
-      return folder;
-    };
-    const holds = async (folder: string) => {
-      const names = (await readdir(folder, { recursive: true })).map(String).sort();
-      return { names, keep: await readFile(path.join(folder, "left", "keep.txt"), "utf8") };
-    };
-    // A junction on Windows (no privilege needed), a link elsewhere: the backend runs as the person either way.
-    const link = (target: string, at: string) => symlink(target, at, process.platform === "win32" ? "junction" : "dir");
     const rows: Array<
       [string, (game: { gameDir: string; project: string }, outside: string) => Promise<void>, RegExp | null]
     > = [
@@ -385,12 +407,12 @@ describe("Godot on Windows: jobs in Genex's sandbox", () => {
       ],
       [
         "a stage left in genex-jobs",
-        ({ project }, outside) => link(outside, path.join(project, ".godot", "genex-jobs", "left")),
+        ({ project }, outside) => link(outside, path.join(project, ".godot", "genex-jobs", STAGE_ID)),
         null,
       ],
       [
         "a job's own folder at the game's root",
-        ({ gameDir }, outside) => link(outside, path.join(gameDir, "genex-godot-job-left")),
+        ({ gameDir }, outside) => link(outside, path.join(gameDir, `genex-godot-job-${STAGE_ID}`)),
         null,
       ],
     ];
@@ -430,6 +452,27 @@ describe("Godot on Windows: jobs in Genex's sandbox", () => {
     assert.equal((await lstat(path.join(outside, "left", "keep.txt"))).isFile(), true);
   });
 
+  it("never removes what a junction swapped in for a stage while the sandbox removes it points to", async () => {
+    const outside = await outsideFolder();
+    const before = await holds(outside);
+    let swapping = false;
+    // The sandbox user's rd, with a junction to the person's folder swapped in for the stage while it works.
+    const remove = async (stage: string) => {
+      if (!swapping) return rm(stage, { recursive: true, force: true });
+      swapping = false;
+      await rm(stage, { recursive: true, force: true });
+      await link(outside, stage);
+      throw Object.assign(new Error("busy"), { code: "EBUSY" });
+    };
+    const fixture = await windowsProject({ remove });
+    swapping = true;
+    await tool(fixture, GodotTool.Check);
+    assert.deepEqual(await holds(outside), before, "Genex removed nothing through the junction");
+    const again = await godotWindowsFixture({ installed: true, remove });
+    await tool(again, GodotTool.Check, {}, { directory: fixture.gameDir });
+    assert.deepEqual(await holds(outside), before, "nor did the next sweep");
+  });
+
   it("removes a stage Windows still holds once it lets go, and never fails the job when it doesn't", async () => {
     const held = (times: number) => {
       const tries: string[] = [];
@@ -448,8 +491,14 @@ describe("Godot on Windows: jobs in Genex's sandbox", () => {
     const always = held(Number.POSITIVE_INFINITY);
     const stuck = await windowsProject({ remove: always.remove });
     always.tries.length = 0;
-    assert.deepEqual((await tool(stuck, GodotTool.RunScene)).errors, []);
-    assert.equal(always.tries.length, 12, "six tries for each of the run's two jobs");
+    await tool(stuck, GodotTool.Check);
+    // The import's stage is empty and goes by itself at once; the check's holds Genex's script.
+    assert.equal(always.tries.length, 7, "one try for the import's stage, six for the check's");
+    assert.equal(
+      (await readdir(path.join(stuck.project, ".godot", "genex-jobs"))).length,
+      1,
+      "left for the next sweep",
+    );
   });
 
   it("refuses a project linked from outside the game, never building it, and its save point's stills never throw", async () => {
@@ -471,6 +520,55 @@ describe("Godot on Windows: jobs in Genex's sandbox", () => {
     const offered = ((await action(fixture, "status")).projects as Array<{ name: string }>).map((p) => p.name);
     assert.equal(offered.includes("Moon"), false, JSON.stringify(offered));
     await assert.rejects(action(fixture, "use-project", { folder: outside }), /only inside the game's folder/);
+  });
+
+  it("starts a job with what its call's budget leaves once its turn comes, or not at all", async () => {
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const fixture = await windowsProject({
+      sandbox: async (request) => {
+        if (request.args.includes("hold")) await gate;
+        return {};
+      },
+    });
+    const clock = { at: 0 };
+    const turnOver = () => new Promise<void>((resolve) => setImmediate(resolve));
+    const run = windowsRunner(turnOver, WINDOWS_CMD);
+    const MINUTE = 60_000;
+    const call = (tag: string): GodotCall => ({
+      job: GodotJob.Import,
+      args: ["--headless", tag],
+      cwd: fixture.project,
+      reads: [],
+      writes: [fixture.project],
+      timeoutMs: 8 * MINUTE,
+      gpu: false,
+    });
+    const scope = (budget?: GodotJobScope["budget"]): GodotJobScope => ({
+      signal: new AbortController().signal,
+      host: fixture.context().host,
+      game: fixture.gameDir,
+      project: fixture.project,
+      ...(budget ? { budget } : {}),
+    });
+    const budget = { until: 2 * MINUTE, now: () => clock.at, least: MINUTE, refusal: "no time left" };
+    await run(OWN_GODOT, call("first"), scope(budget));
+    assert.equal(fixture.requests.at(-1)?.timeoutMs, 2 * MINUTE, "what the budget leaves, not the job's own 8 minutes");
+    // Both turns held: a third job waits, and the call's clock moves on meanwhile.
+    const holding = [run(OWN_GODOT, call("hold"), scope()), run(OWN_GODOT, call("hold"), scope())];
+    const waiting = run(OWN_GODOT, call("late"), scope(budget));
+    for (let turns = 0; turns < 20; turns += 1) await turnOver();
+    clock.at = 1.5 * MINUTE;
+    release();
+    await Promise.all(holding);
+    await assert.rejects(waiting, /no time left/);
+    assert.equal(
+      fixture.requests.some((request) => request.args.includes("late")),
+      false,
+      "never started with less than its least",
+    );
   });
 
   it("runs at most the host's limit of jobs at once, the others waiting their turn, none refused as busy", async () => {
@@ -534,6 +632,27 @@ describe("Godot on Windows: jobs in Genex's sandbox", () => {
     await assert.rejects(tool(fixture, GodotTool.RunScene), /Genex's sandbox didn't start Godot \(ENOENT\)/);
   });
 });
+
+/** A folder outside the game with what a person keeps there. */
+async function outsideFolder(): Promise<string> {
+  const folder = path.join(await realpath(await tmpDir("godot-stage-outside-")), "Documents");
+  await mkdir(path.join(folder, "left"), { recursive: true });
+  await writeFile(path.join(folder, "left", "keep.txt"), "mine");
+  await writeFile(path.join(folder, "notes.txt"), "mine too");
+  return folder;
+}
+
+/** What an outside folder holds now: its names and the file a removal through a link would take. */
+async function holds(folder: string) {
+  const names = (await readdir(folder, { recursive: true })).map(String).sort();
+  return { names, keep: await readFile(path.join(folder, "left", "keep.txt"), "utf8") };
+}
+
+/** A junction on Windows (no privilege needed), a link elsewhere: the backend runs as the person either way. */
+const link = (target: string, at: string) => symlink(target, at, process.platform === "win32" ? "junction" : "dir");
+
+/** A stage's name as Genex gives one: a UUID. */
+const STAGE_ID = "0b6f3c55-7d0e-4b7e-9a51-2f8c6d1e4a90";
 
 describe("Godot on Windows: the person's editor", () => {
   it("opens the project in Genex's own Godot as a window of its own", async () => {

@@ -11,7 +11,7 @@
  * capture) would wait forever. Tests hand in their own runner and never start Godot.
  */
 import { randomUUID } from "node:crypto";
-import { cp, lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm, symlink } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm, rmdir, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -24,7 +24,7 @@ import {
   PluginService,
   SandboxJobState,
 } from "../../shared/plugins.ts";
-import { writeFileNoFollow } from "../../substrate/fsx.ts";
+import { createFileInDir, readRegularFile, writeFileNoFollow } from "../../substrate/fsx.ts";
 import { isBelow, isInside } from "../../substrate/paths.ts";
 import { NativeEndReason, runNativeProcess } from "../../substrate/plugins/native-process.ts";
 import { type KeyPress, keysArg, PLAY_FPS, type ShotAt, shotsArg } from "./play-input.ts";
@@ -82,9 +82,20 @@ const OWN_FOLDER_IGNORE = `${OWN_FOLDER_PREFIX}*/`;
 /** How often, and how far apart, removing a stage is tried again while Windows still holds a file in it. */
 const CLEANUP_RETRIES = 5;
 const CLEANUP_RETRY_MS = SECOND_MS / 5;
-/** What a removal refused for a file still held: tried again. */
-const HELD = new Set(["EBUSY", "EPERM", "ENOTEMPTY"]);
 const INPUTS_FOLDER = "in";
+/** A stage's own name: a UUID, so the sweep never takes a folder someone else named. */
+const STAGE_NAME = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** Windows's own folder when its environment names none, and its command interpreter in it, whose `rd` removes a stage. */
+const WINDOWS_ROOT = "C:\\Windows";
+const WINDOWS_CMD = ["System32", "cmd.exe"];
+const REMOVE_MS = MINUTE_MS;
+/** The variable `rd`'s line reaches cmd in: expanded before cmd reads `&` or `^`, which stay plain inside its quotes. */
+const REMOVE_LINE_ENV = "GODOT_STAGE_RD";
+/** What a job leaves in a staged folder for Genex (stills, class reference pages), how much, and how deep. */
+const COPY_OUT_KINDS: ReadonlySet<string> = new Set([".png", ".xml"]);
+const COPY_OUT_MAX_BYTES = 16 * 1024 * 1024;
+const COPY_OUT_MAX_FILES = 5000;
+const COPY_OUT_DEPTH = 4;
 /** A terminal's colour sequence, which Godot's Windows build prints into a file too. */
 // biome-ignore lint/suspicious/noControlCharactersInRegex: the escape character is what this removes
 const COLOUR = /\x1b\[[0-9;]*m/g;
@@ -98,6 +109,7 @@ const MESSAGE = {
   Lost: "Genex's sandbox lost Godot's job before it ended.",
   StageLink: (folder: string) =>
     `Genex runs Godot's jobs only in folders of the game's own: ${folder} is a link or a junction, so Genex stopped. Remove it, then try again.`,
+  TooManyFiles: "Godot's job left more files than Genex copies out of it.",
 } as const;
 
 /** One job: Godot's arguments, the folder it runs in, what it may read and write, and its deadline. */
@@ -134,6 +146,11 @@ export type GodotJobScope = {
   host: PluginContext["host"];
   game: string | undefined;
   project: string | null;
+  /**
+   * The time a call has for this job, read when it starts (after any wait for its turn): its
+   * deadline on `now`'s clock, and the least it starts with (`refusal` when less is left).
+   */
+  budget?: { until: number; now: () => number; least: number; refusal: string };
 };
 
 /** Starts one job with a Godot binary; the scope's signal stops it. */
@@ -295,7 +312,7 @@ async function linkIntoHome(scratch: string, links: NonNullable<GodotCall["homeL
 /** The runner Genex uses on this computer: a Mac's native-job sandbox, Windows's host sandbox jobs. */
 export function confinedRunner(platform: NodeJS.Platform = process.platform): GodotRunner {
   if (platform === "darwin") return macRunner;
-  if (platform === "win32") return windowsRunner();
+  if (platform === "win32") return windowsRunner(sleep, windowsCmd(process.env));
   return async () => {
     throw new Error(MESSAGE.Unsupported);
   };
@@ -441,12 +458,14 @@ type Stage = { base: string; stage: string };
  * `.godot` or its `genex-jobs`, is never listed through or removed.
  */
 async function staleStages(game: string, project: string | null): Promise<Stage[]> {
-  const own = (await foldersIn(game)).filter((name) => name.startsWith(OWN_FOLDER_PREFIX));
+  const own = (await foldersIn(game)).filter(
+    (name) => name.startsWith(OWN_FOLDER_PREFIX) && STAGE_NAME.test(name.slice(OWN_FOLDER_PREFIX.length)),
+  );
   const stages = own.map((name) => ({ base: game, stage: path.join(game, name) }));
   const inProject = project ? path.join(project, ...STAGING) : null;
   if (!project || !inProject || !(await realBelow(project, inProject))) return stages;
-  const left = (await foldersIn(inProject)).map((name) => ({ base: project, stage: path.join(inProject, name) }));
-  return [...stages, ...left];
+  const left = (await foldersIn(inProject)).filter((name) => STAGE_NAME.test(name));
+  return [...stages, ...left.map((name) => ({ base: project, stage: path.join(inProject, name) }))];
 }
 
 /** The names of the real folders in `folder` (no link, junction or file). */
@@ -455,27 +474,48 @@ async function foldersIn(folder: string): Promise<string[]> {
   return entries.filter((entry) => entry.isDirectory() && !entry.isSymbolicLink()).map((entry) => entry.name);
 }
 
-/** Removes a folder and all it holds; tests stand in for one Windows holds. */
-export type RemoveStage = (folder: string) => Promise<void>;
-const removeFolder: RemoveStage = (folder) => rm(folder, { recursive: true, force: true });
+/** Windows's own command interpreter by its full path under SystemRoot, so neither PATH nor the current folder stands in. */
+export function windowsCmd(env: NodeJS.ProcessEnv): string {
+  const root = env.SystemRoot && path.win32.isAbsolute(env.SystemRoot) ? env.SystemRoot : WINDOWS_ROOT;
+  return path.win32.join(root, ...WINDOWS_CMD);
+}
 
 /**
- * Removes a stage, trying again while Windows still holds a file in it (an antivirus scan, Godot
- * not quite gone); one still held is left for the next sweep, never failing the job. A stage that
- * is no longer a real folder of `base` (a link or a junction put on its way) is left as it is.
+ * The sandbox job that removes a stage: Windows's `rd`, which removes a link or a junction it meets
+ * rather than what it points to, run as the sandbox user, so even one swapped in while it works
+ * reaches only what that user may write. Genex's backend, which runs as the person, never walks a
+ * stage to remove it.
+ */
+function removalRequest(cmd: string, { base, stage }: Stage): PluginSandboxRunArgs {
+  // A stage of the project's is removed with the project's rights; one of the job's own at the game's root with its own.
+  const writes = path.dirname(stage) === base ? [stage] : [base];
+  return {
+    program: cmd,
+    args: ["/d", "/v:off", "/c", `%${REMOVE_LINE_ENV}%`],
+    env: { [REMOVE_LINE_ENV]: `rd /s /q "${stage}"` },
+    reads: [path.win32.dirname(cmd)],
+    writes,
+    timeoutMs: REMOVE_MS,
+  };
+}
+
+/**
+ * Removes a stage through the sandbox (`removalRequest`), trying again while Windows still holds a
+ * file in it (an antivirus scan, Godot not quite gone); one still held is left for the next sweep,
+ * never failing the job. What the sandbox left is an empty folder at most, removed by itself (never
+ * what is in it). A stage that isn't there, or no longer a real folder of `base`, is left as it is.
  */
 async function removeStage(
-  { base, stage }: Stage,
-  remove: RemoveStage,
+  stage: Stage,
+  remove: (stage: Stage) => Promise<unknown>,
   wait: (ms: number) => Promise<unknown>,
 ): Promise<void> {
   for (let tries = 0; ; tries += 1) {
-    if (!(await realBelow(base, stage))) return;
-    const failure = await remove(stage).then(
-      () => null,
-      (error: NodeJS.ErrnoException) => error,
-    );
-    if (!failure || !HELD.has(failure.code ?? "") || tries >= CLEANUP_RETRIES) return;
+    if (!(await realBelow(stage.base, stage.stage))) return;
+    await remove(stage).catch(() => undefined);
+    // rd may leave the folder itself where the sandbox user may not remove it: an empty one goes now.
+    if (await realBelow(stage.base, stage.stage)) await rmdir(stage.stage).catch(() => undefined);
+    if (!(await realBelow(stage.base, stage.stage)) || tries >= CLEANUP_RETRIES) return;
     await wait(CLEANUP_RETRY_MS);
   }
 }
@@ -493,19 +533,40 @@ async function stageFolders(
   for (const { staged: folder } of staged) await makeBelow(base, folder);
   for (const { folder: file, staged: copy } of inputs) {
     await makeBelow(base, path.dirname(copy));
-    await cp(file, copy, { errorOnExist: true, force: false });
+    // Made new, and only while its folder still resolves to itself: never written through a link swapped in.
+    await createFileInDir(path.dirname(copy), path.basename(copy), await readFile(file));
   }
 }
 
 /**
- * What a job wrote in a staged folder, copied out to the folder the call named: only when the stage
- * is still a real folder of `base`, and never a link or a junction in it.
+ * What a job wrote in a staged folder, copied out to the folder the call named: only its stills and
+ * class reference pages, one plain file at a time, each opened without following a link and kept
+ * only while its folder still resolves to itself under `base`. Links, junctions and anything else
+ * are left behind; nothing is copied as a tree.
  */
 async function copyOut(base: string, staged: readonly Staged[]): Promise<void> {
-  for (const { folder, staged: inProject } of staged) {
-    if (!(await realBelow(base, inProject))) throw new Error(MESSAGE.StageLink(inProject));
-    const plain = async (source: string) => !(await lstat(source)).isSymbolicLink();
-    await cp(inProject, folder, { recursive: true, filter: plain });
+  const left = { files: COPY_OUT_MAX_FILES };
+  for (const { folder, staged: inProject } of staged) await copyFolderOut(base, inProject, folder, 0, left);
+}
+
+/** One staged folder's stills and pages copied out to `to`, and its folders' to theirs, `depth` folders down. */
+async function copyFolderOut(base: string, from: string, to: string, depth: number, left: { files: number }) {
+  if (!(await realBelow(base, from))) throw new Error(MESSAGE.StageLink(from));
+  await mkdir(to, { recursive: true });
+  for (const entry of await readdir(from, { withFileTypes: true })) {
+    if (entry.isSymbolicLink()) continue;
+    const source = path.join(from, entry.name);
+    if (entry.isDirectory() && depth < COPY_OUT_DEPTH) {
+      await copyFolderOut(base, source, path.join(to, entry.name), depth + 1, left);
+      continue;
+    }
+    if (!entry.isFile() || !COPY_OUT_KINDS.has(path.extname(entry.name).toLowerCase())) continue;
+    left.files -= 1;
+    if (left.files < 0) throw new Error(MESSAGE.TooManyFiles);
+    const bytes = await readRegularFile(source, COPY_OUT_MAX_BYTES).catch(() => null);
+    // Read through a folder that still is the stage's own, or not kept at all.
+    if (!bytes || !(await realBelow(base, from))) continue;
+    await writeFileNoFollow(path.join(to, entry.name), bytes);
   }
 }
 
@@ -567,19 +628,28 @@ function resultOf(record: PluginSandboxJob, staged: readonly Staged[]): GodotRes
  * until it ends; what it wrote in a staged folder is copied out to the folder the call named, and
  * the staged folders are removed either way. `wait` is the pause between two reads of its record.
  */
-export function windowsRunner(
-  wait: (ms: number) => Promise<unknown> = sleep,
-  remove: RemoveStage = removeFolder,
-): GodotRunner {
+export function windowsRunner(wait: (ms: number) => Promise<unknown> = sleep, cmd = windowsCmd({})): GodotRunner {
   const turn = jobTurns(PLUGIN_SANDBOX_MAX_RUNNING);
+  // Cleaning up is never stopped: a stopped call's stage still goes.
+  const always = new AbortController().signal;
+  /** A stage removed by the sandbox user, at its turn among the plugin's jobs. */
+  const removal = (job: GodotJobScope) => async (stage: Stage) => {
+    const done = await turn(always);
+    try {
+      const { id } = await job.host(PluginService.SandboxRun, removalRequest(cmd, stage));
+      await jobEnd({ ...job, signal: always }, id, wait);
+    } finally {
+      done();
+    }
+  };
   // Once per game after the backend starts, before its first stage: what a crash or a held file left.
   const swept = new Map<string, Promise<void>>();
-  const sweep = (game: string, project: string | null) => {
+  const sweep = (job: GodotJobScope, game: string, project: string | null) => {
     const key = path.resolve(game).toLowerCase();
     const sweeping =
       swept.get(key) ??
       staleStages(game, project).then(async (stages) => {
-        for (const stage of stages) await removeStage(stage, remove, wait);
+        for (const stage of stages) await removeStage(stage, removal(job), wait);
       });
     swept.set(key, sweeping);
     return sweeping;
@@ -587,12 +657,13 @@ export function windowsRunner(
   return async (binary, call, job) => {
     job.signal.throwIfAborted();
     const folders = await windowsFolders(call, job);
-    await sweep(folders.game, folders.project);
+    await sweep(job, folders.game, folders.project);
     try {
       await stageFolders(folders, folders.staged, folders.inputs);
       const done = await turn(job.signal);
       try {
-        const { id } = await job.host(PluginService.SandboxRun, sandboxRequest(binary, call, folders));
+        const request = sandboxRequest(binary, withBudget(call, job), folders);
+        const { id } = await job.host(PluginService.SandboxRun, request);
         const result = resultOf(await jobEnd(job, id, wait), [...folders.inputs, ...folders.staged]);
         await copyOut(folders.base, folders.staged);
         return result;
@@ -600,9 +671,17 @@ export function windowsRunner(
         done();
       }
     } finally {
-      await removeStage({ base: folders.base, stage: folders.root }, remove, wait);
+      await removeStage({ base: folders.base, stage: folders.root }, removal(job), wait);
     }
   };
+}
+
+/** The call as it starts now: its deadline cut to what its budget leaves, or refused when too little is left. */
+function withBudget(call: GodotCall, { budget }: GodotJobScope): GodotCall {
+  if (!budget) return call;
+  const left = budget.until - budget.now();
+  if (left < budget.least) throw new Error(budget.refusal);
+  return { ...call, timeoutMs: Math.min(call.timeoutMs, left) };
 }
 
 /**

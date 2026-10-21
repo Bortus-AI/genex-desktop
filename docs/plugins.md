@@ -3403,11 +3403,18 @@ game (with no project yet, as for the class reference, in a folder of the
 job's own at the game's root, `genex-godot-job-*`, which the game's `.gitignore` names so no save
 point keeps it; a stage Windows still holds is removed again a few times, and what a crash left is
 cleared before the plugin's first job in that game) and is copied out (a file it reads from outside,
-copied in), and its CRLF, coloured output is read as a Mac's. The backend runs as the person, so a
-stage is made, listed, copied out of and removed only through real folders: a link or a junction in
-place of `.godot`, `genex-jobs` or a stage stops the job and is never followed, and a link a job
-leaves in its stage is not copied out. Godot's own spelling of a stage's path (forward slashes) is
-named as its folder too. A save point's or the observer's
+copied in), and its CRLF, coloured output is read as a Mac's. The backend runs as the person, so it
+makes and lists a stage only through real folders (a link or a junction in place of `.godot`,
+`genex-jobs` or a stage stops the job and is never followed), copies out only its stills and class
+reference pages, one plain file at a time (`.png`, `.xml`, opened without following a link and kept
+only while their folder still resolves to itself), and never removes a stage itself: a sandbox job
+runs Windows's `rd /s /q`, which removes a link rather than what it points to, as the sandbox user,
+so even a junction swapped in mid-walk reaches only what that user may write (an empty folder `rd`
+leaves goes by itself). The sweep takes only stages Genex named (a UUID). A job that waited for its
+turn starts with what its call's budget leaves (`web-export`'s), or not at all. Godot's own spelling
+of a stage's path (forward slashes) is named as its folder too. The Genex addon's folders
+(`addons/genex`, `addons/genex_multiplayer`) are made one at a time as folders of their own, and
+each file is written only while its folder still resolves to itself. A save point's or the observer's
 stills that fail answer nothing, as the checkpoint's check does.
 Its observer is a `card` whose `stage-status` says where the game stands (get Godot, set
 it up for Genex's play, open it, or open in the person's Godot) and its manifest has no lock: it never drives the person's editor.
@@ -3460,7 +3467,7 @@ checked against the archive's CRC-32 and size; when that fails the tool is refus
 runs, naming Godot's Template Manager. Only a 206 answer naming the range asked is read (a server
 that sends the whole archive is refused, its body cancelled); each request has a deadline by its
 size and the call's stop, and is tried up to three times. `web-export` fits the fetch, the copy and
-Godot's export in its one call, and starts no export with less than a minute left. Windows's Do it for me fetches the Web template with Godot.
+Godot's export in its one call, and starts no export with less than a minute left. Windows's Do it for me fetches the Web template with Godot, and its Stop stops that fetch too.
 `export-templates {platforms}` (web, windows, mac) does the same for an app export the agent runs
 with Godot's command line, puts them where the sandbox user's Godot reads them on Windows, and for
 mac sets `textures/vram_compression/import_etc2_astc` (new games from either template have it).
