@@ -645,10 +645,10 @@ rewinding ([conversation lifecycle](../conversation-coordinator.md#sending-and-r
 notes are `docs/notes/NOTES.<facet>.md`.
 `.studio/` is gitignored; on the long turn the studio copies `.studio/DIRECTOR.md` to run and thread
 artifacts and restores it on resume, clamped to `MAX_DIRECTOR_MEMORY`. Adoption writes a real `.gitignore` before
-`git init`; `ensureRepo` finishes a first commit an interrupted start left. Snapshot commits land on the user's checked-out branch with hooks disabled and are
-refused during a merge, rebase, cherry-pick or revert. `SnapshotEngine.restore` runs every check
-before any reset and refuses (`branch-changed`, `history-changed`, `operation-in-progress`,
-`rescue-failed`) leaving the folder untouched; the mandatory rescue snapshot is named on
+`git init`. `checkOutNewRepo` fast-imports the installed seed as the first harness repository; `ensureRepo` finishes an interrupted first commit. Snapshots commit to the checked-out branch, hooks off, never during a merge,
+rebase, cherry-pick or revert. `SnapshotEngine.restore` checks everything before any reset and
+refuses (`branch-changed`, `history-changed`, `operation-in-progress`, `rescue-failed`), folder
+untouched; the mandatory rescue snapshot is named on
 `workspace_restored`. Every loop shell command is built in `loop/git.ts`; model text goes through
 `shellQuote` and a commit reaches a command line only when `isCommit`.
 

@@ -16,6 +16,7 @@
   "Filter",
   "Filter projects",
   "Genex adds its addon to the project so its computer tool, playtesters and judges can play it, and your open Godot saves before save points.",
+  "Genex builds Godot games on a Mac only for now.",
   "Genex builds Godot games with Godot 4.3 or newer.",
   "Genex makes a new game for it.",
   "Get Godot",
@@ -66,6 +67,7 @@
   "Waiting for Godot in Applications. This page moves on by itself.",
   "Web export template",
   "Writes web/ at the game's root: Live's Web game tab plays it and Publish puts it online.",
+  "You can still download Godot 4 from godotengine.org and use it on its own. It's free and open source.",
   "Your Godot has the project open: it reloads the files Genex changes, and saves for save points.",
   "a player that moves around the screen",
   "a player that walks and jumps under a sky"

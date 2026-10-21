@@ -16,6 +16,7 @@
   "Filter": "筛选",
   "Filter projects": "筛选项目",
   "Genex adds its addon to the project so its computer tool, playtesters and judges can play it, and your open Godot saves before save points.": "Genex 会向项目添加它的附加组件，让 Genex 的电脑控制、试玩员和评审都能游玩，你打开的 Godot 也会在存档点前保存。",
+  "Genex builds Godot games on a Mac only for now.": "Genex 目前只能在 Mac 上制作 Godot 游戏。",
   "Genex builds Godot games with Godot 4.3 or newer.": "Genex 使用 Godot 4.3 或更高版本制作 Godot 游戏。",
   "Genex makes a new game for it.": "Genex 会为它新建一个游戏。",
   "Get Godot": "获取 Godot",
@@ -66,6 +67,7 @@
   "Waiting for Godot in Applications. This page moves on by itself.": "正在等待 Godot 出现在“应用程序”中。此页面会自动继续。",
   "Web export template": "网页导出模板",
   "Writes web/ at the game's root: Live's Web game tab plays it and Publish puts it online.": "在游戏根目录写入 web/：“实时”中的“网页游戏”标签页可以运行它，“发布”会将其上线。",
+  "You can still download Godot 4 from godotengine.org and use it on its own. It's free and open source.": "你仍可以从 godotengine.org 下载 Godot 4 单独使用。它免费开源。",
   "Your Godot has the project open: it reloads the files Genex changes, and saves for save points.": "你的 Godot 已打开此项目：它会重新加载 Genex 修改的文件，并为存档点保存。",
   "a player that moves around the screen": "在屏幕上移动的玩家",
   "a player that walks and jumps under a sky": "在天空下行走和跳跃的玩家"

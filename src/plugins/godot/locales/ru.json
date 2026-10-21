@@ -16,6 +16,7 @@
   "Filter": "Фильтр",
   "Filter projects": "Фильтр проектов",
   "Genex adds its addon to the project so its computer tool, playtesters and judges can play it, and your open Godot saves before save points.": "Genex добавит в проект свой аддон, чтобы управление компьютером, тестировщики и судьи Genex могли играть в игру, а твой открытый Godot сохранял её перед точками сохранения.",
+  "Genex builds Godot games on a Mac only for now.": "Пока Genex делает игры на Godot только на Mac.",
   "Genex builds Godot games with Godot 4.3 or newer.": "Для игр на Godot Genex нужен Godot 4.3 или новее.",
   "Genex makes a new game for it.": "Genex создаст для него новую игру.",
   "Get Godot": "Скачать Godot",
@@ -66,6 +67,7 @@
   "Waiting for Godot in Applications. This page moves on by itself.": "Ждём Godot в «Программах». Страница сама перейдёт дальше.",
   "Web export template": "Шаблон веб-экспорта",
   "Writes web/ at the game's root: Live's Web game tab plays it and Publish puts it online.": "Создаёт web/ в корне игры: вкладка «Веб-игра» в Live запускает её, а «Опубликовать» выкладывает в сеть.",
+  "You can still download Godot 4 from godotengine.org and use it on its own. It's free and open source.": "Godot 4 всё равно можно скачать с godotengine.org и работать в нём самому. Он бесплатный, с открытым кодом.",
   "Your Godot has the project open: it reloads the files Genex changes, and saves for save points.": "Проект открыт в твоём Godot: он перезагружает файлы, которые меняет Genex, и сохраняет всё для точек сохранения.",
   "a player that moves around the screen": "игрок, который двигается по экрану",
   "a player that walks and jumps under a sky": "игрок, который ходит и прыгает под небом"

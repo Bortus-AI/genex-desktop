@@ -16,6 +16,7 @@
   "Filter": "Filtrer",
   "Filter projects": "Filtrer les projets",
   "Genex adds its addon to the project so its computer tool, playtesters and judges can play it, and your open Godot saves before save points.": "Genex ajoute son addon au projet pour que son contrôle de l’ordinateur, ses testeurs et ses juges puissent y jouer, et que ton Godot ouvert enregistre avant les points de sauvegarde.",
+  "Genex builds Godot games on a Mac only for now.": "Pour l’instant, Genex crée les jeux Godot sur Mac uniquement.",
   "Genex builds Godot games with Godot 4.3 or newer.": "Genex crée les jeux Godot avec Godot 4.3 ou plus récent.",
   "Genex makes a new game for it.": "Genex crée un nouveau jeu pour lui.",
   "Get Godot": "Installer Godot",
@@ -66,6 +67,7 @@
   "Waiting for Godot in Applications. This page moves on by itself.": "En attente de Godot dans Applications. Cette page avance toute seule.",
   "Web export template": "Modèle d’export web",
   "Writes web/ at the game's root: Live's Web game tab plays it and Publish puts it online.": "Écrit web/ à la racine du jeu : l’onglet Jeu web de Live le lance, et la publication le met en ligne.",
+  "You can still download Godot 4 from godotengine.org and use it on its own. It's free and open source.": "Tu peux quand même télécharger Godot 4 sur godotengine.org et l’utiliser de ton côté. C’est gratuit et open source.",
   "Your Godot has the project open: it reloads the files Genex changes, and saves for save points.": "Ton Godot a le projet ouvert : il recharge les fichiers que Genex modifie et enregistre pour les points de sauvegarde.",
   "a player that moves around the screen": "un joueur qui se déplace à l’écran",
   "a player that walks and jumps under a sky": "un joueur qui marche et saute sous un ciel"
