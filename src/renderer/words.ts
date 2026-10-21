@@ -3609,7 +3609,8 @@ export const INSTALLED_GAMES_WORDS = {
   knowsYou: t("Knows who you are"),
   stopSharing: tc("identity", "Stop sharing"),
   stopSharingLabel: (title: string) => t("Stop sharing who you are with {game}", { game: title }),
-  stopped: (title: string) => t("{game} no longer knows who you are. It asks again next time you play.", { game: title }),
+  stopped: (title: string) =>
+    t("{game} no longer knows who you are. It asks again next time you play.", { game: title }),
   stopFailed: t("Couldn't stop sharing who you are. Try again in a moment."),
 } as const;
 
