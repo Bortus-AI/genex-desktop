@@ -8,8 +8,10 @@
  * starts Godot; `godot-windows-live.test.ts` does, on a Windows runner.
  */
 import assert from "node:assert/strict";
-import { mkdir, readdir, readFile, realpath, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { mkdir, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { promisify } from "node:util";
 import { describe, it } from "node:test";
 import type { PluginSetupCard } from "../../src/plugin-sdk/index.d.ts";
 import { GodotTool } from "../../src/plugins/godot/backend.ts";
@@ -30,6 +32,8 @@ import {
 import { tmpDir } from "../helpers/tmp.ts";
 
 type Answer = Record<string, unknown>;
+const git = async (cwd: string, args: string[]) =>
+  (await promisify(execFile)("git", ["-c", "core.autocrlf=false", ...args], { cwd })).stdout;
 type Fixture = Awaited<ReturnType<typeof godotWindowsFixture>>;
 const tool = async (fixture: Fixture, name: string, args = {}, more = {}) =>
   (await fixture.backend.tool?.(name, args, fixture.context(more))) as Answer;
@@ -261,7 +265,72 @@ describe("Godot on Windows: jobs in Genex's sandbox", () => {
     const [doctool] = fixture.requests;
     assert.equal(path.dirname(doctool?.writes[0] ?? ""), await realpath(fixture.gameDir));
     assert.match(path.basename(doctool?.writes[0] ?? ""), /^genex-godot-job-/);
-    assert.deepEqual(await readdir(fixture.gameDir), []);
+    assert.deepEqual(await readdir(fixture.gameDir), [".gitignore"]);
+  });
+
+  it("keeps a job's own folder out of a checkpoint taken while the job runs", async () => {
+    const committed: string[] = [];
+    let fixture: Fixture | undefined;
+    fixture = await godotWindowsFixture({
+      installed: true,
+      sandbox: async (request) => {
+        const game = fixture?.gameDir ?? "";
+        const at = request.args.indexOf("--doctool");
+        const classes = path.join(request.args[at + 1] ?? "", "doc", "classes");
+        await mkdir(classes, { recursive: true });
+        await writeFile(path.join(classes, "Node.xml"), '<class name="Node" inherits="Object"></class>');
+        assert.ok(
+          (await readdir(game)).some((name) => name.startsWith("genex-godot-job-")),
+          "the job's folder is there",
+        );
+        await git(game, ["add", "-A"]);
+        committed.push(...(await git(game, ["diff", "--cached", "--name-only"])).split("\n").filter(Boolean));
+        return {};
+      },
+    });
+    await writeFile(path.join(fixture.gameDir, ".gitignore"), "node_modules\n");
+    await git(fixture.gameDir, ["init", "-q"]);
+    await tool(fixture, GodotTool.ClassReference, { query: "Node" });
+    assert.deepEqual(committed, [".gitignore"]);
+    assert.equal(
+      await readFile(path.join(fixture.gameDir, ".gitignore"), "utf8"),
+      "node_modules\ngenex-godot-job-*/\n",
+    );
+  });
+
+  it("clears the stages a crash left in the game before its first job", async () => {
+    const fixture = await windowsProject();
+    const left = [
+      path.join(fixture.gameDir, "genex-godot-job-left", "0"),
+      path.join(fixture.project, ".godot", "genex-jobs", "left", "0"),
+    ];
+    for (const folder of left) await mkdir(folder, { recursive: true });
+    const again = await godotWindowsFixture({ installed: true });
+    await tool(again, GodotTool.Check, {}, { directory: fixture.gameDir });
+    assert.equal((await readdir(fixture.gameDir)).includes("genex-godot-job-left"), false);
+    assert.deepEqual(await readdir(path.join(fixture.project, ".godot", "genex-jobs")), []);
+  });
+
+  it("removes a stage Windows still holds once it lets go, and never fails the job when it doesn't", async () => {
+    const held = (times: number) => {
+      const tries: string[] = [];
+      const remove = async (folder: string) => {
+        tries.push(folder);
+        if (tries.length <= times) throw Object.assign(new Error("busy"), { code: "EBUSY" });
+        await rm(folder, { recursive: true, force: true });
+      };
+      return { tries, remove };
+    };
+    const briefly = held(2);
+    const fixture = await windowsProject({ remove: briefly.remove });
+    briefly.tries.length = 0;
+    await tool(fixture, GodotTool.Check);
+    assert.deepEqual(await readdir(path.join(fixture.project, ".godot", "genex-jobs")), []);
+    const always = held(Number.POSITIVE_INFINITY);
+    const stuck = await windowsProject({ remove: always.remove });
+    always.tries.length = 0;
+    assert.deepEqual((await tool(stuck, GodotTool.RunScene)).errors, []);
+    assert.equal(always.tries.length, 12, "six tries for each of the run's two jobs");
   });
 
   it("refuses a project linked from outside the game, never building it, and its save point's stills never throw", async () => {

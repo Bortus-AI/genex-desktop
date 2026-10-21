@@ -27,6 +27,7 @@ import {
   GodotJob,
   type GodotResult,
   type GodotRunner,
+  type RemoveStage,
   windowsRunner,
 } from "../../src/plugins/godot/godot-run.ts";
 import { tmpDir } from "./tmp.ts";
@@ -330,6 +331,8 @@ export async function godotWindowsFixture(
     linked?: string;
     /** How many reads of a job's record say it still runs; one unless a test holds jobs longer. */
     runningReads?: number;
+    /** How the runner removes a stage, when a test stands in for one Windows holds. */
+    remove?: RemoveStage;
   } = {},
 ) {
   const pc = await fakeWindows(options.exes);
@@ -354,7 +357,7 @@ export async function godotWindowsFixture(
     env: pc.env,
     editor: recorded.editor,
     // Each wait for a job's record lets the event loop turn, as a real pause does, so other calls go on meanwhile.
-    run: windowsRunner(() => setImmediate()),
+    run: windowsRunner(() => setImmediate(), options.remove),
     scripts: SCRIPTS,
     templates: TEMPLATES,
     addon: ADDON,

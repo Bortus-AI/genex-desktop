@@ -3392,7 +3392,9 @@ links only projects inside the game); at most two at once, the host's limit, the
 their turn;
 a folder it writes outside the game (a capture's stills, the class reference) waits in the
 project's `.godot/genex-jobs/` (with no project yet, as for the class reference, in a folder of the
-job's own at the game's root, removed after it) and is copied out (a file it reads from outside,
+job's own at the game's root, `genex-godot-job-*`, which the game's `.gitignore` names so no save
+point keeps it; a stage Windows still holds is removed again a few times, and what a crash left is
+cleared before the plugin's first job in that game) and is copied out (a file it reads from outside,
 copied in), and its CRLF, coloured output is read as a Mac's. A save point's or the observer's
 stills that fail answer nothing, as the checkpoint's check does.
 Its observer is a `card` whose `stage-status` says where the game stands (get Godot, set

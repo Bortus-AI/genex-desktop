@@ -11,7 +11,7 @@
  * capture) would wait forever. Tests hand in their own runner and never start Godot.
  */
 import { randomUUID } from "node:crypto";
-import { cp, mkdir, mkdtemp, realpath, rm, symlink } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readdir, readFile, realpath, rm, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -24,6 +24,7 @@ import {
   PluginService,
   SandboxJobState,
 } from "../../shared/plugins.ts";
+import { writeFileNoFollow } from "../../substrate/fsx.ts";
 import { isBelow, isInside } from "../../substrate/paths.ts";
 import { NativeEndReason, runNativeProcess } from "../../substrate/plugins/native-process.ts";
 import { type KeyPress, keysArg, PLAY_FPS, type ShotAt, shotsArg } from "./play-input.ts";
@@ -75,6 +76,14 @@ const JOB_POLL_MS = SECOND_MS / 4;
  */
 const STAGING = [".godot", "genex-jobs"];
 const OWN_FOLDER_PREFIX = "genex-godot-job-";
+/** The game's ignore file, and its line that keeps a job's own folder out of every save point and checkpoint. */
+const IGNORE_FILE = ".gitignore";
+const OWN_FOLDER_IGNORE = `${OWN_FOLDER_PREFIX}*/`;
+/** How often, and how far apart, removing a stage is tried again while Windows still holds a file in it. */
+const CLEANUP_RETRIES = 5;
+const CLEANUP_RETRY_MS = SECOND_MS / 5;
+/** What a removal refused for a file still held: tried again. */
+const HELD = new Set(["EBUSY", "EPERM", "ENOTEMPTY"]);
 const INPUTS_FOLDER = "in";
 /** A terminal's colour sequence, which Godot's Windows build prints into a file too. */
 // biome-ignore lint/suspicious/noControlCharactersInRegex: the escape character is what this removes
@@ -340,19 +349,72 @@ async function windowsFolders(call: GodotCall, job: GodotJobScope) {
   const root = project
     ? path.join(project, ...STAGING, randomUUID())
     : path.join(game, `${OWN_FOLDER_PREFIX}${randomUUID()}`);
-  const writes: string[] = [];
-  const staged: Staged[] = [];
-  for (const folder of call.writes) {
-    const real = await realpath(folder).catch(() => folder);
-    if (linked && !project && isInside(linked, real)) throw new Error(MESSAGE.OutsideGame);
-    if (writableInGame(game, real)) writes.push(real);
-    else staged.push({ folder, staged: path.join(root, String(staged.length)) });
-  }
+  const outside = linked && !project ? linked : null;
+  const { writes, staged } = await splitWrites(call.writes, { game, outside, root });
   const inputs = (call.stagedInputs ?? []).map((file, index) => ({
     folder: file,
     staged: path.join(root, INPUTS_FOLDER, String(index), path.basename(file)),
   }));
-  return { root, writes: writes.length ? writes : [project ?? root], staged, inputs };
+  if (!project) await ignoreOwnFolders(game);
+  return { root, game, project, writes: writes.length ? writes : [project ?? root], staged, inputs };
+}
+
+/**
+ * A job's write folders: those inside the game named as they are, each other one staged under
+ * `root`; one in a project linked from outside the game (`outside`) is refused.
+ */
+async function splitWrites(folders: readonly string[], at: { game: string; outside: string | null; root: string }) {
+  const writes: string[] = [];
+  const staged: Staged[] = [];
+  for (const folder of folders) {
+    const real = await realpath(folder).catch(() => folder);
+    if (at.outside && isInside(at.outside, real)) throw new Error(MESSAGE.OutsideGame);
+    if (writableInGame(at.game, real)) writes.push(real);
+    else staged.push({ folder, staged: path.join(at.root, String(staged.length)) });
+  }
+  return { writes, staged };
+}
+
+/**
+ * The game's `.gitignore` names a job's own folders (`genex-godot-job-` and any name after), so a save point or a
+ * checkpoint taken while the job runs, or after a crash left it, never keeps it; what is there
+ * stays, and nothing is written through a link.
+ */
+async function ignoreOwnFolders(game: string): Promise<void> {
+  const file = path.join(game, IGNORE_FILE);
+  const current = await readFile(file, "utf8").catch(() => null);
+  if (current?.split(/\r?\n/).some((line) => line.trim() === OWN_FOLDER_IGNORE)) return;
+  const before = current === null ? "" : `${current.replace(/\s*$/, "")}\n`;
+  await writeFileNoFollow(file, `${before}${OWN_FOLDER_IGNORE}\n`);
+}
+
+/** Every stage a job of this game left, at the game's root and in its project's `.godot`: none of them is running. */
+async function staleStages(game: string, project: string | null): Promise<string[]> {
+  const own = (await readdir(game).catch(() => [] as string[])).filter((name) => name.startsWith(OWN_FOLDER_PREFIX));
+  const inProject = project ? path.join(project, ...STAGING) : null;
+  const left = inProject
+    ? (await readdir(inProject).catch(() => [] as string[])).map((n) => path.join(inProject, n))
+    : [];
+  return [...own.map((name) => path.join(game, name)), ...left];
+}
+
+/** Removes a folder and all it holds; tests stand in for one Windows holds. */
+export type RemoveStage = (folder: string) => Promise<void>;
+const removeFolder: RemoveStage = (folder) => rm(folder, { recursive: true, force: true });
+
+/**
+ * Removes a stage, trying again while Windows still holds a file in it (an antivirus scan, Godot
+ * not quite gone); one still held is left for the next sweep, never failing the job.
+ */
+async function removeStage(stage: string, remove: RemoveStage, wait: (ms: number) => Promise<unknown>): Promise<void> {
+  for (let tries = 0; ; tries += 1) {
+    const failure = await remove(stage).then(
+      () => null,
+      (error: NodeJS.ErrnoException) => error,
+    );
+    if (!failure || !HELD.has(failure.code ?? "") || tries >= CLEANUP_RETRIES) return;
+    await wait(CLEANUP_RETRY_MS);
+  }
 }
 
 /** The stage, each staged folder in it, and each file read from outside the game copied in, before the job starts. */
@@ -418,11 +480,27 @@ function resultOf(record: PluginSandboxJob, staged: readonly Staged[]): GodotRes
  * until it ends; what it wrote in a staged folder is copied out to the folder the call named, and
  * the staged folders are removed either way. `wait` is the pause between two reads of its record.
  */
-export function windowsRunner(wait: (ms: number) => Promise<unknown> = sleep): GodotRunner {
+export function windowsRunner(
+  wait: (ms: number) => Promise<unknown> = sleep,
+  remove: RemoveStage = removeFolder,
+): GodotRunner {
   const turn = jobTurns(PLUGIN_SANDBOX_MAX_RUNNING);
+  // Once per game after the backend starts, before its first stage: what a crash or a held file left.
+  const swept = new Map<string, Promise<void>>();
+  const sweep = (game: string, project: string | null) => {
+    const key = path.resolve(game).toLowerCase();
+    const sweeping =
+      swept.get(key) ??
+      staleStages(game, project).then(async (stages) => {
+        for (const stage of stages) await removeStage(stage, remove, wait);
+      });
+    swept.set(key, sweeping);
+    return sweeping;
+  };
   return async (binary, call, job) => {
     job.signal.throwIfAborted();
     const folders = await windowsFolders(call, job);
+    await sweep(folders.game, folders.project);
     try {
       await stageFolders(folders.root, folders.staged, folders.inputs);
       const done = await turn(job.signal);
@@ -435,7 +513,7 @@ export function windowsRunner(wait: (ms: number) => Promise<unknown> = sleep): G
         done();
       }
     } finally {
-      await rm(folders.root, { recursive: true, force: true });
+      await removeStage(folders.root, remove, wait);
     }
   };
 }
