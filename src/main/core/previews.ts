@@ -530,6 +530,8 @@ export class PreviewService {
   readonly #sessionWindows = new Map<string, number>();
   /** The engine's web build Live last loaded with its game folder (`engineWebFolderOf`), and its files' print. */
   #liveWebBuild: WebBuildSeen | null = null;
+  /** The person stopped Live's game (`stopLive`): nothing loads into it until Play or a load of theirs. */
+  #liveStopped = false;
 
   constructor(core: StudioCore, x: CoreInternals) {
     this.#core = core;
@@ -748,7 +750,7 @@ export class PreviewService {
       const url = await port.load(p.project, served.entry, served.root, { loopback: served.loopback });
       // Only now is Live current: a load that failed leaves what waited for Reload waiting.
       if (isLive) await this.#live.loaded(p.project, { print, root: checkedRoot });
-      if (isLive) this.#liveWebBuild = webBuild;
+      if (isLive) this.#liveLoaded(webBuild);
       remembered.loaded = servedKey(served);
       if (isLive) await this.#identifyLoaded(p.project, checkedRoot, served.stale, revisionBefore);
       // Loading clears the port's error, and the build is still broken: the agent loop and the
@@ -1603,7 +1605,7 @@ export class PreviewService {
       const rebuilt = last ? await this.#rebuildServed(port, last, handle, p?.retry === true) : false;
       if (!rebuilt) await port.reload();
       if (last && handle === LIVE_HANDLE) await this.#live.loaded(last.project, { print, root: last.root });
-      if (handle === LIVE_HANDLE) this.#liveWebBuild = webBuild;
+      if (handle === LIVE_HANDLE) this.#liveLoaded(webBuild);
       return true;
     });
   }
@@ -1612,6 +1614,7 @@ export class PreviewService {
   stopLive(): Promise<void> {
     return serial(this.#x.previewOperations, LIVE_HANDLE, async () => {
       await this.#optionalPreview()?.stop?.();
+      this.#liveStopped = true;
     });
   }
 
@@ -1619,6 +1622,7 @@ export class PreviewService {
   playLive(): Promise<void> {
     return serial(this.#x.previewOperations, LIVE_HANDLE, async () => {
       await this.#optionalPreview()?.resume?.();
+      this.#liveStopped = false;
     });
   }
 
@@ -1631,29 +1635,52 @@ export class PreviewService {
    * the engine's own output, never edited, which Live loads at once.
    */
   async offerLive(offer: LiveOffer): Promise<void> {
-    const loaded = (await this.#bringsWebBuild(offer)) && (await this.#loadWebBuild(offer.project));
+    const loaded = (await this.#offersGameFolder(offer)) && (await this.loadWebBuild(offer.project));
     if (!loaded) await this.#live.offer(offer);
   }
 
-  /** Live loads the game's new web build; false when the load failed, which leaves the offer to Reload. */
-  async #loadWebBuild(project: string): Promise<boolean> {
-    try {
-      await this.loadPreview({ project });
-      return true;
-    } catch {
-      return false;
-    }
+  /** Whether an offer is of the game folder itself: no build named by commit, no other folder. */
+  async #offersGameFolder(offer: LiveOffer): Promise<boolean> {
+    if (offer.commit) return false;
+    return offer.root === null || sameRealPath(offer.root, this.#core.games.dirFor(offer.project));
   }
 
-  /** Whether an offer of the game folder Live shows brings an engine's web build Live has not loaded. */
-  async #bringsWebBuild(offer: LiveOffer): Promise<boolean> {
+  /**
+   * Live loads the game's finished engine web build (`#bringsWebBuild`): one decision per Live
+   * operation, after any load under way, so a checkpoint's offer and the Web game tab never load
+   * it twice. Whether it loaded; a load that fails is false.
+   */
+  loadWebBuild(project: string): Promise<boolean> {
+    return serial(this.#x.previewOperations, LIVE_HANDLE, async () => {
+      if (!(await this.#bringsWebBuild(project))) return false;
+      try {
+        const checkedRoot = await this.#x.assertHarnessRoot(project, null);
+        this.#x.profileSources.delete(LIVE_HANDLE);
+        await this.#loadServedPreview({ project }, LIVE_HANDLE, checkedRoot, this.preview());
+        return true;
+      } catch {
+        return false;
+      }
+    });
+  }
+
+  /**
+   * Whether Live, running this game's own folder (never a build the person chose to view, never a
+   * stopped game), lacks the game's engine web build: one that is finished and that Live has not
+   * loaded, as when the game was opened before its export existed.
+   */
+  async #bringsWebBuild(project: string): Promise<boolean> {
     const served = this.#x.servedRoots.get(LIVE_HANDLE);
-    if (offer.commit || served?.project !== offer.project || served.root !== null) return false;
-    const dir = this.#core.games.dirFor(offer.project);
-    if (offer.root !== null && !(await sameRealPath(offer.root, dir))) return false;
-    const now = await this.#webBuildSeen(offer.project);
+    if (served?.project !== project || served.root !== null || this.#liveStopped) return false;
+    const now = await this.#webBuildSeen(project);
     if (now.folder === null || !now.finished) return false;
     return !sameWebBuild(this.#liveWebBuild, now);
+  }
+
+  /** A load reached Live: the engine web build it shows (null for none), and a game running again. */
+  #liveLoaded(webBuild: WebBuildSeen | null): void {
+    this.#liveWebBuild = webBuild;
+    this.#liveStopped = false;
   }
 
   /** The engine web build a load of Live's game folder is about to show; null for any other load. */

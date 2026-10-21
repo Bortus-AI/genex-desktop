@@ -615,6 +615,12 @@ export interface StudioApi {
   /** Take back one learned change, leaving every later change and the game lessons in place. */
   undoChange(snapshotId: string): Promise<{ file: string }>;
   loadPreview(project: string): Promise<string>;
+  /**
+   * Live loads the game's finished web build in a folder (a Godot or Unity export in web/) when it
+   * runs the game's folder without it, as when the game was opened before its export existed; never
+   * a build the person chose to view or a stopped game. Whether it loaded.
+   */
+  loadWebBuild(project: string): Promise<boolean>;
   buildPreview(
     request: import("./build-preview.ts").BuildPreviewRequest,
   ): Promise<import("./build-preview.ts").BuildPreviewFrame | null>;
@@ -710,8 +716,6 @@ export interface StudioApi {
     stopped: boolean;
     loadError: string | null;
     crashed: boolean;
-    /** The page Live last loaded, relative to the game (`web/index.html`); null before any load. */
-    entry: string | null;
     page: { complete: boolean; resources: number; state: Record<string, unknown> | null } | null;
   }>;
   /** Why the stage cannot show this game's own build; null when the last build was fine. */

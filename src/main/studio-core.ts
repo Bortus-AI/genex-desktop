@@ -2480,6 +2480,11 @@ export class StudioCore {
   }
 
   /** Something would have changed Live: it waits for the person's Reload instead (`live.behind`). */
+  /** Live loads the game's finished web build in a folder when it holds another page of the game (`PreviewService.loadWebBuild`). */
+  loadWebBuild(project: string): Promise<boolean> {
+    return this.#previews.loadWebBuild(project);
+  }
+
   offerLive(...args: Parameters<PreviewService["offerLive"]>): ReturnType<PreviewService["offerLive"]> {
     return this.#previews.offerLive(...args);
   }

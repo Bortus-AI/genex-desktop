@@ -286,6 +286,36 @@ describe("an engine's web build in Live", () => {
     assert.equal(behind.at(-1)?.reason, "changed", "and waits for Reload");
   });
 
+  it("the Web game tab loads a finished build Live lacks, once; never one still written, a build the person views, or a stopped game", async () => {
+    const { lite, live, dir } = await unityGame();
+    for (const rel of UNITY_BUILD) await put(dir, rel, `${rel}\n`);
+    assert.equal(await lite.core.loadWebBuild("arena"), false, "a build written a moment ago may still be writing");
+    assert.equal(live.entries.length, 1);
+
+    await settle(dir, UNITY_BUILD);
+    // A checkpoint's offer and the tab ask at once: one of them loads it.
+    await Promise.all([lite.core.offerLive({ project: "arena", root: null }), lite.core.loadWebBuild("arena")]);
+    assert.deepEqual(live.entries.slice(1), ["web/index.html"], "loaded once, whoever asked first");
+    assert.equal(await lite.core.loadWebBuild("arena"), false, "Live already has it");
+    assert.equal(await lite.core.loadWebBuild("pong"), false, "a game Live does not hold");
+
+    await lite.core.stopLive();
+    await put(dir, "web/Build/web.wasm", "the arena, built again\n");
+    await settle(dir, ["web/Build/web.wasm"]);
+    assert.equal(await lite.core.loadWebBuild("arena"), false, "a stopped game stays stopped");
+    await lite.core.playLive();
+    assert.equal(await lite.core.loadWebBuild("arena"), true, "Play lets the new build in");
+    assert.equal(live.entries.length, 3);
+
+    const review = path.join(lite.core.layout.scratch, "review-arena");
+    await mkdir(review, { recursive: true });
+    await lite.core.loadPreview({ project: "arena", root: review });
+    await put(dir, "web/Build/web.data", "the arena's data, again\n");
+    await settle(dir, ["web/Build/web.data"]);
+    assert.equal(await lite.core.loadWebBuild("arena"), false, "a build the person chose to view stays");
+    assert.deepEqual(live.loads.at(-1), { project: "arena", root: await realpath(review) });
+  });
+
   it("a web build Live fails to load is still offered to Reload", async () => {
     const { live, behind, dir, offer } = await unityGame();
     for (const rel of UNITY_BUILD) await put(dir, rel, `${rel}\n`);

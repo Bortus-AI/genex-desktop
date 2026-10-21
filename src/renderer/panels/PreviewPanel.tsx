@@ -625,7 +625,7 @@ function useStageSurface({
   const { graph, planning } = run;
   const { project } = stage;
   const flags = stageFlags({ view: shownView, beside, graph, planning, project, liveView, pending, live });
-  useWebGamePage({ project, game, onWebGame: flags.previewOnStage }, live.loadLive);
+  useWebGamePage({ project, game, onWebGame: visible && flags.previewOnStage }, live);
   const has = { beside: Boolean(beside), builds: graph !== null || planning, project: Boolean(project) };
   return { run, flags, pressedView: resolveStageView(view, has) };
 }
