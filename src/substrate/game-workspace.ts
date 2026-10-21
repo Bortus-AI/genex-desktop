@@ -59,6 +59,7 @@ import {
   type ProjectStarter,
   type ScaffoldRecord,
   type SourcedFactRule,
+  engineWebVersion,
   settleFacts,
   withEngineWebVersion,
 } from "../shared/project-facts.ts";
@@ -364,20 +365,27 @@ export function isImageFile(file: string): boolean {
   return assetFormat(path.extname(file))?.raster === true;
 }
 
-/**
- * What a game's records say about its facts: its engine link, what a port replaced, New game's
- * stamp, and whether studio.json records the web starter Genex wrote (`contractVersion`).
- */
+/** What a game's records say about its facts: its engine link, what a port replaced, New game's stamp. */
 interface FactRecord {
   engine: EngineBinding | undefined;
   portedFrom: ProjectFact[];
   scaffoldStamp: string | undefined;
-  webStarter: boolean;
 }
 
-/** Whether a studio.json records the web starter Genex wrote: its `contractVersion`, a number. */
-const webStarterRecorded = (meta: { contractVersion?: unknown } | null | undefined): boolean =>
-  typeof meta?.contractVersion === "number";
+/**
+ * The web starter's files that tell its page from a game built on it: the page, and the game code it
+ * boots, which every build of a web game changes. Neither has changed in the template since 0.1.0.
+ */
+const STARTER_PAGE_FILES = ["index.html", "src/main.js"] as const;
+
+/** The placeholder New game fills with the game's title (`fillTemplateTitle`). */
+const TITLE_PLACEHOLDER = "__GAME_TITLE__";
+
+/** Whether `text` is the template's `template` with its title placeholders filled by any one-line title. */
+function filledTemplate(template: string, text: string): boolean {
+  const escaped = template.split(TITLE_PLACEHOLDER).map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  return new RegExp(`^${escaped.join("[^\\n]*")}$`).test(text);
+}
 
 /** A game's studio.json as an object, or null when it is missing or does not parse. */
 async function readStudioMeta(dir: string): Promise<Record<string, unknown> | null> {
@@ -1025,25 +1033,14 @@ export class GameWorkspaces {
   async #describe(name: string, dir: string): Promise<GameProject> {
     const meta = await readFile(path.join(dir, "studio.json"), "utf8").catch(() => null);
     const parsed = meta
-      ? (JSON.parse(meta) as {
-          title?: string;
-          createdAt?: string;
-          portedFrom?: unknown;
-          scaffold?: unknown;
-          contractVersion?: unknown;
-        })
+      ? (JSON.parse(meta) as { title?: string; createdAt?: string; portedFrom?: unknown; scaffold?: unknown })
       : {};
     const shape = await readProjectShape(dir);
     const presentation = this.#presentation.get(await realpath(dir));
     const engine = await this.#engineLink(dir);
     const portedFrom = parsePortedFrom(parsed.portedFrom);
     const scaffold = parseScaffoldRecord(parsed.scaffold);
-    const record = {
-      engine,
-      portedFrom,
-      scaffoldStamp: presentation?.scaffoldStamp,
-      webStarter: webStarterRecorded(parsed),
-    };
+    const record = { engine, portedFrom, scaffoldStamp: presentation?.scaffoldStamp };
     // A folder that can't be read is still listed: it has no facts and is of no kind Genex can name.
     const { facts, holds } = await this.#kind(dir, record).catch(unreadableKind);
     const hookEvents = this.#hookEvents({ facts, ...(holds ? { holds } : {}) });
@@ -1092,10 +1089,8 @@ export class GameWorkspaces {
     const dir = this.dirFor(name);
     const presentation = this.#presentation.get(await presentationPath(dir));
     const engine = await this.#engineLink(dir);
-    const meta = await readStudioMeta(dir);
-    const portedFrom = parsePortedFrom(meta?.portedFrom);
-    const webStarter = webStarterRecorded(meta);
-    return this.#kind(dir, { engine, portedFrom, scaffoldStamp: presentation?.scaffoldStamp, webStarter });
+    const portedFrom = parsePortedFrom((await readStudioMeta(dir))?.portedFrom);
+    return this.#kind(dir, { engine, portedFrom, scaffoldStamp: presentation?.scaffoldStamp });
   }
 
   /**
@@ -1198,7 +1193,8 @@ export class GameWorkspaces {
       if (hasFact(record.portedFrom, fact.id, fact.path)) return false;
       return !(linkedLegacy && fact.id === CoreFact.WebGame && fact.path === ".");
     });
-    const facts = withEngineWebVersion(counted, found, record.webStarter);
+    const besideWebVersion = engineWebVersion(counted, found) !== null && hasFact(counted, CoreFact.WebGame, ".");
+    const facts = withEngineWebVersion(counted, found, besideWebVersion && (await this.#starterPageAtRoot(dir)));
     // New game's untouched starter is the template as it was made: nothing of the person's yet.
     if (await this.#untouchedStarter(dir, raw, record.scaffoldStamp)) return { facts: [], holds: FolderHolds.Nothing };
     if (facts.length > 0) return { facts };
@@ -1218,6 +1214,18 @@ export class GameWorkspaces {
     if (stamp === scaffoldStamp) return true;
     if (stamp) this.#touched.add(key);
     return false;
+  }
+
+  /** Whether the folder's root page is still the web starter's (`STARTER_PAGE_FILES`), nothing built on it. */
+  async #starterPageAtRoot(dir: string): Promise<boolean> {
+    for (const file of STARTER_PAGE_FILES) {
+      const [own, template] = await Promise.all([
+        readFile(path.join(dir, file), "utf8").catch(() => null),
+        readFile(path.join(this.templateDir, file), "utf8").catch(() => null),
+      ]);
+      if (own === null || template === null || !filledTemplate(template, own)) return false;
+    }
+    return true;
   }
 
   /** Write a detected shape into studio.json once, so the folder's way of running is explicit and editable. */

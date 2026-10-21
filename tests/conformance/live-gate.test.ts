@@ -7,10 +7,11 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, realpath, writeFile } from "node:fs/promises";
+import { mkdir, realpath, rm, utimes, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createIpcHandle, type IpcResult, type IpcSender } from "../../src/main/ipc-handle.ts";
 import { registerPreviewIpc } from "../../src/main/ipc/preview.ts";
+import { BUILD_SETTLE_MS, buildFinished } from "../../src/main/core/live-gate.ts";
 import { coreLite, type CoreLite } from "../helpers/core-lite.ts";
 import { gitFile } from "../helpers/git.ts";
 import { makeFakePreview } from "../helpers/studio-rig.ts";
@@ -219,8 +220,22 @@ describe("an engine's web build in Live", () => {
     await mkdir(path.dirname(path.join(dir, rel)), { recursive: true });
     await writeFile(path.join(dir, rel), text);
   };
+  /** Unity's WebGL build of `name`, as its export writes it into web/. */
+  const UNITY_BUILD = [
+    "web/index.html",
+    "web/Build/web.loader.js",
+    "web/Build/web.framework.js",
+    "web/Build/web.wasm",
+    "web/Build/web.data",
+  ];
+  /** Files the engine wrote a while ago: an export that has finished writing. */
+  const settle = async (dir: string, rels: readonly string[]) => {
+    const before = new Date(Date.now() - 10 * 1000);
+    for (const rel of rels) await utimes(path.join(dir, rel), before, before);
+  };
 
-  it("a Unity game's web build that appears or is built again after the game was opened loads on its own", async () => {
+  /** A Unity game with no web build yet, opened in Live. */
+  async function unityGame() {
     const live = fakePort();
     const behind: Stage["behind"] = [];
     const lite = await coreLite({
@@ -235,24 +250,70 @@ describe("an engine's web build in Live", () => {
     const game = await lite.core.games.makeEmpty("arena");
     await put(game.dir, "unity/ProjectSettings/ProjectVersion.txt", "m_EditorVersion: 6000.6.0f1\n");
     await lite.core.loadPreview({ project: "arena" });
+    const offer = () => lite.core.offerLive({ project: "arena", root: null, note: "built for the web" });
+    return { lite, live, behind, dir: game.dir, offer };
+  }
+
+  it("a Unity game's finished web build that appears or is built again loads on its own; one still being written waits for Reload", async () => {
+    const { live, behind, dir, offer } = await unityGame();
     assert.equal(live.entries.length, 1, "the person opened the game before it had a web build");
 
-    await put(game.dir, "web/index.html", "<canvas id=unity-canvas></canvas>\n");
-    await put(game.dir, "web/Build/web.loader.js", "createUnityInstance\n");
-    await lite.core.offerLive({ project: "arena", root: null, note: "built for the web" });
-    assert.deepEqual(live.entries.slice(1), ["web/index.html"], "Live plays the build with no Reload");
+    for (const rel of UNITY_BUILD) await put(dir, rel, `${rel}\n`);
+    await offer();
+    assert.equal(live.entries.length, 1, "a build written a moment ago may still be writing");
+    assert.equal(behind.at(-1)?.reason, "changed", "it lights Reload instead");
+
+    await settle(dir, UNITY_BUILD);
+    await offer();
+    assert.deepEqual(live.entries.slice(1), ["web/index.html"], "Live plays the finished build with no Reload");
     assert.equal(behind.at(-1)?.reason ?? null, null, "nothing waits for Reload");
 
-    await put(game.dir, "web/Build/web.wasm", "the arena, built again\n");
-    await lite.core.offerLive({ project: "arena", root: null });
-    assert.equal(live.entries.length, 3, "a build made again loads too");
-    await lite.core.offerLive({ project: "arena", root: null });
+    await rm(path.join(dir, "web/Build/web.data"));
+    await put(dir, "web/Build/web.wasm", "the arena, built again\n");
+    await settle(dir, ["web/Build/web.wasm"]);
+    await offer();
+    assert.equal(live.entries.length, 2, "a build missing a part is never loaded");
+    await put(dir, "web/Build/web.data", "the arena's data\n");
+    await settle(dir, ["web/Build/web.data"]);
+    await offer();
+    assert.equal(live.entries.length, 3, "the build made again loads once it is whole");
+    await offer();
     assert.equal(live.entries.length, 3, "the same build is not loaded twice");
 
-    await put(game.dir, "unity/Assets/Enemy.cs", "class Enemy {}\n");
-    await lite.core.offerLive({ project: "arena", root: null });
+    await put(dir, "unity/Assets/Enemy.cs", "class Enemy {}\n");
+    await offer();
     assert.equal(live.entries.length, 3, "a change to the project alone leaves Live as it is");
     assert.equal(behind.at(-1)?.reason, "changed", "and waits for Reload");
+  });
+
+  it("a web build Live fails to load is still offered to Reload", async () => {
+    const { live, behind, dir, offer } = await unityGame();
+    for (const rel of UNITY_BUILD) await put(dir, rel, `${rel}\n`);
+    await settle(dir, UNITY_BUILD);
+    live.failNext = true;
+    await offer();
+    assert.equal(live.entries.length, 1, "the load did not arrive");
+    assert.equal(behind.at(-1)?.reason, "changed", "Reload still brings the build in");
+  });
+
+  it("tells a finished build of each engine from one still being written", () => {
+    const NOW = 1_000_000;
+    const build = (files: string[], newestMs = NOW - BUILD_SETTLE_MS) => ({
+      print: "p",
+      files: new Set(files),
+      newestMs,
+    });
+    const unity = ["index.html", "Build/g.loader.js", "Build/g.framework.js.br", "Build/g.wasm.br", "Build/g.data.br"];
+    const rows: Array<[string, ReturnType<typeof build>, string[], boolean]> = [
+      ["a Unity build packed with Brotli", build(unity), ["unity-project"], true],
+      ["a Unity build with no data yet", build(unity.slice(0, 4)), ["unity-project"], false],
+      ["a Unity build with no loader", build(unity.slice(2)), ["unity-project"], false],
+      ["a Unity build written a moment ago", build(unity, NOW - 1), ["unity-project"], false],
+      ["a Godot export", build(["index.html", "index.pck", "index.wasm", "index.js"]), ["godot-project"], true],
+      ["a Godot export with no engine yet", build(["index.html", "index.pck"]), ["godot-project"], false],
+      ["a Unity build in a game of no engine", build(unity), ["web-game"], false],
+    ];
+    for (const [title, files, kinds, finished] of rows) assert.equal(buildFinished(files, kinds, NOW), finished, title);
   });
 });
 

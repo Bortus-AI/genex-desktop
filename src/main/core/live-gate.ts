@@ -11,7 +11,9 @@
 import { createHash } from "node:crypto";
 import { lstat, readdir, realpath } from "node:fs/promises";
 import path from "node:path";
+import { SECOND_MS } from "../../shared/duration.ts";
 import { LiveBehindReason, type LiveBehindEvent } from "../../shared/live-behind.ts";
+import { CoreFact } from "../../shared/project-facts.ts";
 import { gitOrNull } from "../../substrate/snapshots.ts";
 
 /** The most uncommitted paths a folder's print reads the size and time of; past this it counts them. */
@@ -106,19 +108,63 @@ async function buildFiles(dir: string, rel = "", depth = 0): Promise<string[]> {
   return files;
 }
 
+/** A web build as Live reads it: its files' print, which files it has, and when the newest was written. */
+export interface BuildFiles {
+  print: string;
+  files: ReadonlySet<string>;
+  newestMs: number;
+}
+
 /**
  * A web build's state as far as Live cares: each of its files' path, size and time, read without
  * git, which may ignore an engine's build. Null when the folder can't be read.
  */
-export async function buildPrint(dir: string): Promise<string | null> {
+export async function readBuild(dir: string): Promise<BuildFiles | null> {
   const files = await buildFiles(dir).catch(() => null);
   if (files === null) return null;
   const hash = createHash("sha1");
-  for (const file of files.slice(0, BUILD_PRINT_MAX_FILES)) {
+  let newestMs = 0;
+  for (const file of files) {
     const stat = await lstat(path.join(dir, file)).catch(() => null);
+    newestMs = Math.max(newestMs, stat?.mtimeMs ?? 0);
     hash.update(`${file}:${stat ? `${stat.size}:${stat.mtimeMs}` : "gone"}\0`);
   }
-  return hash.digest("hex");
+  return { print: hash.digest("hex"), files: new Set(files), newestMs };
+}
+
+/** The endings Unity gives a build file: as written, or packed by Brotli, gzip or its own fallback. */
+const UNITY_PACKINGS = ["", ".br", ".gz", ".unityweb"] as const;
+/** The parts of a Unity WebGL build beside its `Build/<name>.loader.js`. */
+const UNITY_PARTS = [".data", ".framework.js", ".wasm"] as const;
+const UNITY_LOADER = /^Build\/([^/]+)\.loader\.js$/;
+
+/** Whether a Unity WebGL build holds its loader and every part it loads. */
+function unityBuildWhole(files: ReadonlySet<string>): boolean {
+  const name = [...files].map((file) => UNITY_LOADER.exec(file)?.[1]).find((found) => found !== undefined);
+  if (name === undefined) return false;
+  const has = (part: string) => UNITY_PACKINGS.some((packing) => files.has(`Build/${name}${part}${packing}`));
+  return UNITY_PARTS.every(has);
+}
+
+/** Whether a Godot web export holds its game pack and its engine. */
+const godotBuildWhole = (files: ReadonlySet<string>): boolean => files.has("index.pck") && files.has("index.wasm");
+
+/** How each engine's finished web build is told, by the kind of the game's project. */
+const WHOLE_BUILD: Readonly<Record<string, (files: ReadonlySet<string>) => boolean>> = {
+  [CoreFact.UnityProject]: unityBuildWhole,
+  [CoreFact.GodotProject]: godotBuildWhole,
+};
+
+/** How long a web build's newest file must be left alone before Live takes the build as finished. */
+export const BUILD_SETTLE_MS = 2 * SECOND_MS;
+
+/**
+ * Whether a web build is finished: whole for the engine of one of the game's `kinds`, and no file of
+ * it written in the last `BUILD_SETTLE_MS` before `now` (an export still writing is never loaded).
+ */
+export function buildFinished(build: BuildFiles, kinds: readonly string[], now: number): boolean {
+  const whole = kinds.some((kind) => WHOLE_BUILD[kind]?.(build.files) === true);
+  return whole && now - build.newestMs >= BUILD_SETTLE_MS;
 }
 
 /** A folder's checked-out commit, or null when git cannot say. */

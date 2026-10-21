@@ -519,7 +519,7 @@ describe("a listed game's facts", () => {
     }
   });
 
-  it("a root page of the folder's own keeps its place beside an engine's web build; a linked game and Web/ get theirs", async () => {
+  it("a root page of the folder's own, or a web game built on the starter, keeps its place beside an engine's web build; a linked game and Web/ get theirs", async () => {
     /** A game whose files are these, written into a folder New game left empty or into the web starter. */
     const holding = async (name: string, files: string[], start: "empty" | "starter") => {
       const game = start === "empty" ? await lite.core.games.makeEmpty(name) : await lite.core.games.scaffold(name);
@@ -539,6 +539,20 @@ describe("a listed game's facts", () => {
     const ownGodot = await holding("own-godot", ["index.html", "godot/project.godot", "web/index.html"], "empty");
     assert.deepEqual(await factsOf(ownGodot.name), ["web-game@.:core", "godot-project@godot:core"]);
     assert.equal(webFolderOf(await listed(ownGodot.name)), null, "and a Godot game's");
+    const builtUnity = await holding(
+      "built-unity",
+      ["src/main.js", "unity/ProjectSettings/ProjectVersion.txt", "web/index.html"],
+      "starter",
+    );
+    assert.deepEqual(await factsOf(builtUnity.name), ["web-game@.:core", "unity-project@unity:core"]);
+    assert.equal(webFolderOf(await listed(builtUnity.name)), null, "a web game built on the starter keeps its page");
+    const builtGodot = await holding(
+      "built-godot",
+      ["src/main.js", "godot/project.godot", "web/index.html"],
+      "starter",
+    );
+    assert.deepEqual(await factsOf(builtGodot.name), ["web-game@.:core", "godot-project@godot:core"]);
+    assert.equal(webFolderOf(await listed(builtGodot.name)), null, "beside a Godot project too");
 
     const elsewhere = await realpath(await tmpDir("studio-linked-godot-web-"));
     await writeFile(path.join(elsewhere, "project.godot"), "config_version=5\n");

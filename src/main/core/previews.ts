@@ -41,7 +41,7 @@ import {
 } from "../../substrate/snapshots.ts";
 import { sizeWords } from "../../shared/byte-size.ts";
 import { isAssetPath, ruleMatches, webFolderOf } from "../../shared/project-workspace.ts";
-import { engineWebFolderOf } from "../../shared/project-facts.ts";
+import { engineWebFolderOf, isEngineWebFolder } from "../../shared/project-facts.ts";
 import type { DelegateRequest } from "../../substrate/engines/types.ts";
 import type { ReferenceFrame } from "../../shared/protocol.ts";
 import type { Revision } from "../../shared/optimization.ts";
@@ -72,7 +72,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { ReadyPhase, CaptureSurface, GameClock, GameFront } from "../../shared/preview-contract.ts";
 import { StateShape, keepPathsOf } from "../../shared/studio-state-shape.ts";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
-import { buildPrint, LiveGate, type LiveOffer } from "./live-gate.ts";
+import { buildFinished, LiveGate, type LiveOffer, readBuild } from "./live-gate.ts";
 import type { LiveBehindEvent } from "../../shared/live-behind.ts";
 import type { GameSoundRequest } from "../../shared/game-sound.ts";
 import { liveAudible, type LiveSound } from "../game-sound.ts";
@@ -497,11 +497,13 @@ async function servedOnLoopback(
   return !shape.own && (await templateLoadsGenexSdk(dir));
 }
 
-/** An engine's web build of a game as Live saw it: its folder (null for none) and its files' print. */
+/** An engine's web build of a game as Live saw it: its folder (null for none), its files' print, whether it is finished. */
 interface WebBuildSeen {
   project: string;
   folder: string | null;
   print: string | null;
+  /** Whole and left alone for a while (`buildFinished`): never a build still being written. */
+  finished: boolean;
 }
 
 /** The same build of the same game: its folder, and files that did not change. */
@@ -1629,11 +1631,18 @@ export class PreviewService {
    * the engine's own output, never edited, which Live loads at once.
    */
   async offerLive(offer: LiveOffer): Promise<void> {
-    if (await this.#bringsWebBuild(offer)) {
-      await this.loadPreview({ project: offer.project });
-      return;
+    const loaded = (await this.#bringsWebBuild(offer)) && (await this.#loadWebBuild(offer.project));
+    if (!loaded) await this.#live.offer(offer);
+  }
+
+  /** Live loads the game's new web build; false when the load failed, which leaves the offer to Reload. */
+  async #loadWebBuild(project: string): Promise<boolean> {
+    try {
+      await this.loadPreview({ project });
+      return true;
+    } catch {
+      return false;
     }
-    await this.#live.offer(offer);
   }
 
   /** Whether an offer of the game folder Live shows brings an engine's web build Live has not loaded. */
@@ -1643,7 +1652,7 @@ export class PreviewService {
     const dir = this.#core.games.dirFor(offer.project);
     if (offer.root !== null && !(await sameRealPath(offer.root, dir))) return false;
     const now = await this.#webBuildSeen(offer.project);
-    if (now.folder === null) return false;
+    if (now.folder === null || !now.finished) return false;
     return !sameWebBuild(this.#liveWebBuild, now);
   }
 
@@ -1653,16 +1662,21 @@ export class PreviewService {
     return this.#webBuildSeen(served.project);
   }
 
-  /** The game's engine web build as it is now: its folder (null when it has none) and its files' print. */
+  /**
+   * The game's engine web build as it is now: its folder (null when it has none), its files' print and
+   * whether it is finished. A game with no `web/` folder is not walked for its kinds.
+   */
   async #webBuildSeen(project: string): Promise<WebBuildSeen> {
-    let folder: string | null = null;
-    try {
-      folder = engineWebFolderOf(await this.#core.games.kindOf(project));
-    } catch {
-      // A folder that can't be read has no build to bring.
-    }
-    const print = folder ? await buildPrint(path.join(this.#core.games.dirFor(project), folder)) : null;
-    return { project, folder, print };
+    const none: WebBuildSeen = { project, folder: null, print: null, finished: false };
+    const dir = this.#core.games.dirFor(project);
+    const names = await readdir(dir).catch(() => [] as string[]);
+    if (!names.some(isEngineWebFolder)) return none;
+    const game = await this.#core.games.kindOf(project).catch(() => null);
+    const folder = game ? engineWebFolderOf(game) : null;
+    const build = folder ? await readBuild(path.join(dir, folder)) : null;
+    if (!game || !folder || !build) return { ...none, folder };
+    const kinds = game.facts.map((fact) => fact.id);
+    return { project, folder, print: build.print, finished: buildFinished(build, kinds, Date.now()) };
   }
 
   /**

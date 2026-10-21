@@ -273,8 +273,11 @@ export function factsOfFiles(files: readonly string[], rules: readonly SourcedFa
 /** Where a game engine puts the game's web version (Godot's web export, Unity's WebGL build): `web/` at its root. */
 const ENGINE_WEB_FOLDER = "web";
 
-/** Whether a fact's folder is `ENGINE_WEB_FOLDER`, in any case: `Web/` is the same folder on macOS and Windows. */
-const inEngineWebFolder = (fact: FactRef): boolean => fact.path.toLowerCase() === ENGINE_WEB_FOLDER;
+/** Whether a folder of the game is `ENGINE_WEB_FOLDER`, in any case: `Web/` is the same folder on macOS and Windows. */
+export const isEngineWebFolder = (folder: string): boolean => folder.toLowerCase() === ENGINE_WEB_FOLDER;
+
+/** Whether a fact sits in `ENGINE_WEB_FOLDER`. */
+const inEngineWebFolder = (fact: FactRef): boolean => isEngineWebFolder(fact.path);
 
 /** The kinds whose engine exports the game for the web into `ENGINE_WEB_FOLDER`. */
 const WEB_EXPORTING: ReadonlySet<string> = new Set<string>([CoreFact.UnityProject, CoreFact.GodotProject]);
@@ -290,23 +293,29 @@ export function engineWebFolderOf(game: GameKind): string | null {
 }
 
 /**
- * A Unity or Godot game's listed facts with its web version: the web game in `ENGINE_WEB_FOLDER`
- * among `found` (the folder's facts before settling, which drops a web game below another) is the
- * game's web game. A web game at the root beside it is left out when it is the web starter Genex
- * wrote (`starterAtRoot`: studio.json records it), whether or not the game's port was recorded; a
- * root page of the folder's own keeps its place and the facts are returned as they are, as are any
- * other game's.
+ * A Unity or Godot game's web version among `found` (the folder's facts before settling, which drops
+ * a web game below another): its web game in `ENGINE_WEB_FOLDER`; null for any other game.
+ */
+export function engineWebVersion(listed: readonly FactRef[], found: readonly ProjectFact[]): ProjectFact | null {
+  if (!listed.some((fact) => WEB_EXPORTING.has(fact.id))) return null;
+  return found.find((fact) => fact.id === CoreFact.WebGame && inEngineWebFolder(fact)) ?? null;
+}
+
+/**
+ * A Unity or Godot game's listed facts with its web version (`engineWebVersion`) as its web game. A
+ * web game at the root beside it is left out when it is Genex's web starter page nobody built on
+ * (`starterAtRoot`), whether or not the game's port was recorded; a root page of the folder's own,
+ * or a web game built from the starter, keeps its place and the facts are returned as they are, as
+ * are any other game's.
  */
 export function withEngineWebVersion(
   listed: readonly ProjectFact[],
   found: readonly ProjectFact[],
   starterAtRoot: boolean,
 ): ProjectFact[] {
-  const webVersion = found.find((fact) => fact.id === CoreFact.WebGame && inEngineWebFolder(fact));
-  const exports = listed.some((fact) => WEB_EXPORTING.has(fact.id));
+  const webVersion = engineWebVersion(listed, found);
   const ownRootPage = hasFact(listed, CoreFact.WebGame, ROOT) && !starterAtRoot;
-  const unchanged = !webVersion || !exports || ownRootPage;
-  if (unchanged) return [...listed];
+  if (!webVersion || ownRootPage) return [...listed];
   const besides = listed.filter((fact) => !(fact.id === CoreFact.WebGame && fact.path === ROOT));
   return settleFacts([...besides, webVersion]);
 }

@@ -1841,9 +1841,12 @@ game's project in that engine: another project of that engine the folder holds i
 what a port replaced (`portedFrom` in `studio.json`, kept as the reference), and a starter an older
 New game wrote that nothing has been built in yet (its `scaffoldStamp` still matching). A Unity or
 Godot game's web version in `web/` (`ENGINE_WEB_FOLDER`, `Web/` too) is listed as its web game even
-though a page at the root is above it; that root page is then left out when it is the web starter
-Genex wrote (studio.json's `contractVersion`), whether or not the port was recorded, and a root page
-of the folder's own keeps its place (`withEngineWebVersion`). New game
+though a page at the root is above it; that root page is then left out when it is still the web
+starter's page nobody built on (its `index.html` and `src/main.js` are the template's), whether or
+not the port was recorded, and any other root page keeps its place (`withEngineWebVersion`). Live
+loads such a web build by itself once it is finished (whole for its engine, no file written in the
+last 2 s) and new since Live loaded the game (`PreviewService.offerLive`), and the game's file
+server unpacks a Unity build's Brotli or gzip parts (`packedBuildFile`). New game
 now makes an empty folder. Either way the game lists no facts and has no kind until its first
 message picks one (`start_web_game`, or `game.start` from the harness, writes the web starter).
 A Loop on any project that isn't a web game (`loopProfileOf`) is led in place by the chat's own
