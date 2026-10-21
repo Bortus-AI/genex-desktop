@@ -513,6 +513,46 @@ describe("a listed game's facts", () => {
     }
   });
 
+  it("a root page of the folder's own keeps its place beside an engine's web build; a linked game and Web/ get theirs", async () => {
+    /** A game whose files are these, written into a folder New game left empty or into the web starter. */
+    const holding = async (name: string, files: string[], start: "empty" | "starter") => {
+      const game = start === "empty" ? await lite.core.games.makeEmpty(name) : await lite.core.games.scaffold(name);
+      for (const file of files) {
+        await mkdir(path.dirname(path.join(game.dir, file)), { recursive: true });
+        await writeFile(path.join(game.dir, file), "the folder's own\n");
+      }
+      return game;
+    };
+    const ownUnity = await holding(
+      "own-unity",
+      ["index.html", "unity/ProjectSettings/ProjectVersion.txt", "web/index.html"],
+      "empty",
+    );
+    assert.deepEqual(await factsOf(ownUnity.name), ["web-game@.:core", "unity-project@unity:core"]);
+    assert.equal(webFolderOf(await listed(ownUnity.name)), null, "the folder's own page is its web game");
+    const ownGodot = await holding("own-godot", ["index.html", "godot/project.godot", "web/index.html"], "empty");
+    assert.deepEqual(await factsOf(ownGodot.name), ["web-game@.:core", "godot-project@godot:core"]);
+    assert.equal(webFolderOf(await listed(ownGodot.name)), null, "and a Godot game's");
+
+    const elsewhere = await realpath(await tmpDir("studio-linked-godot-web-"));
+    await writeFile(path.join(elsewhere, "project.godot"), "config_version=5\n");
+    const linked = await holding("linked-godot-web", ["web/index.html", "web/index.pck"], "starter");
+    await writeEngineBinding(linked.dir, path.join(elsewhere, "project.godot"), GODOT_ENGINE.id, ENGINES);
+    assert.deepEqual(await factsOf(linked.name), [
+      `${CoreFact.GodotProject}@${elsewhere}:${FactSource.Link}`,
+      "web-game@web:core",
+    ]);
+    assert.equal(webFolderOf(await listed(linked.name)), "web", "a linked game's export plays too");
+
+    const cased = await holding(
+      "unity-cased-web",
+      ["unity/ProjectSettings/ProjectVersion.txt", "Web/index.html", "Web/Build/Web.loader.js"],
+      "starter",
+    );
+    assert.deepEqual(await factsOf(cased.name), ["web-game@Web:core", "unity-project@unity:core"]);
+    assert.equal(webFolderOf(await listed(cased.name)), "Web", "Web/ is the same folder");
+  });
+
   it("a link to a project outside the game is one absolute fact, and stands for the game's Unreal project", async () => {
     const elsewhere = await realpath(await tmpDir("studio-outside-uproject-"));
     const outside = path.join(elsewhere, "B.uproject");

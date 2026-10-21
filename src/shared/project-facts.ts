@@ -273,20 +273,30 @@ export function factsOfFiles(files: readonly string[], rules: readonly SourcedFa
 /** Where a game engine puts the game's web version (Godot's web export, Unity's WebGL build): `web/` at its root. */
 const ENGINE_WEB_FOLDER = "web";
 
+/** Whether a fact's folder is `ENGINE_WEB_FOLDER`, in any case: `Web/` is the same folder on macOS and Windows. */
+const inEngineWebFolder = (fact: FactRef): boolean => fact.path.toLowerCase() === ENGINE_WEB_FOLDER;
+
 /** The kinds whose engine exports the game for the web into `ENGINE_WEB_FOLDER`. */
 const WEB_EXPORTING: ReadonlySet<string> = new Set<string>([CoreFact.UnityProject, CoreFact.GodotProject]);
 
 /**
  * A Unity or Godot game's listed facts with its web version: the web game in `ENGINE_WEB_FOLDER`
- * among `found` (the folder's facts before settling) is the game's web game, and a web game at the
- * root beside it is the web starter the game was made from, whether or not its port was recorded
- * (settling alone drops the web version below the starter's page). Any other game's facts are
- * returned as they are.
+ * among `found` (the folder's facts before settling, which drops a web game below another) is the
+ * game's web game. A web game at the root beside it is left out when it is the web starter Genex
+ * wrote (`starterAtRoot`: studio.json records it), whether or not the game's port was recorded; a
+ * root page of the folder's own keeps its place and the facts are returned as they are, as are any
+ * other game's.
  */
-export function withEngineWebVersion(listed: readonly ProjectFact[], found: readonly ProjectFact[]): ProjectFact[] {
-  const webVersion = found.find((fact) => fact.id === CoreFact.WebGame && fact.path === ENGINE_WEB_FOLDER);
+export function withEngineWebVersion(
+  listed: readonly ProjectFact[],
+  found: readonly ProjectFact[],
+  starterAtRoot: boolean,
+): ProjectFact[] {
+  const webVersion = found.find((fact) => fact.id === CoreFact.WebGame && inEngineWebFolder(fact));
   const exports = listed.some((fact) => WEB_EXPORTING.has(fact.id));
-  if (!webVersion || !exports) return [...listed];
+  const ownRootPage = hasFact(listed, CoreFact.WebGame, ROOT) && !starterAtRoot;
+  const unchanged = !webVersion || !exports || ownRootPage;
+  if (unchanged) return [...listed];
   const besides = listed.filter((fact) => !(fact.id === CoreFact.WebGame && fact.path === ROOT));
   return settleFacts([...besides, webVersion]);
 }

@@ -1840,9 +1840,10 @@ game's project in that engine: another project of that engine the folder holds i
 `scaffold`, see [Scaffolds](#scaffolds)). Never counted: the web template beside an older engine link,
 what a port replaced (`portedFrom` in `studio.json`, kept as the reference), and a starter an older
 New game wrote that nothing has been built in yet (its `scaffoldStamp` still matching). A Unity or
-Godot game's web version in `web/` (`ENGINE_WEB_FOLDER`) is listed as its web game even though the
-starter's page at the root is above it, and that root page, the starter the game was made from, is
-then never counted, whether or not its port was recorded (`withEngineWebVersion`). New game
+Godot game's web version in `web/` (`ENGINE_WEB_FOLDER`, `Web/` too) is listed as its web game even
+though a page at the root is above it; that root page is then left out when it is the web starter
+Genex wrote (studio.json's `contractVersion`), whether or not the port was recorded, and a root page
+of the folder's own keeps its place (`withEngineWebVersion`). New game
 now makes an empty folder. Either way the game lists no facts and has no kind until its first
 message picks one (`start_web_game`, or `game.start` from the harness, writes the web starter).
 A Loop on any project that isn't a web game (`loopProfileOf`) is led in place by the chat's own
@@ -2549,7 +2550,10 @@ through Unity's Pipeline package (`com.unity.pipeline`), the HTTP server an edit
 Unity project is the one in the game's own folder, found with the walk and the rule the host finds
 the `unity-project` fact by (the game's own folder first, then `unity/`, then the first by path;
 `project-folder.ts`), so the game's checkpoints and Rewind cover it. A project outside the game's
-folder is not reached; a Unity project opened as a project of its own is its game's folder. Genex
+folder is not reached; a Unity project opened as a project of its own is its game's folder. Its
+`detect` names a WebGL build's folder `unity-web-build` (a folder with `Build/*.loader.js`), so its
+web version in `web/` is a plugin's web build (the seed's `web-build.ts`): briefs never hand it the
+web template's rules, and a turn that only built it is no new kind. Genex
 runs the harness tool `find-project` at `turn.start` and `run.prepare` of a game holding the fact:
 it keeps the real paths of the project and of the game's folder in the plugin's storage as
 `projects/<game>.json`, which the connector reads for every call (it knows only its game's id, from
