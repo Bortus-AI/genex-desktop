@@ -37,6 +37,7 @@ import {
   HttpStatus,
   MAX_REWRITE_BYTES,
   confinePreviewContents,
+  packedBuildFile,
   gameRequestAllowed,
   previewNavigationAllowed,
   rewriteGameHtml,
@@ -50,6 +51,7 @@ import {
   THREE_HOOK_PATH,
   threeHookModule,
   tooLargeNote,
+  unpackedResponse,
 } from "./page-serve.ts";
 import { PAGE_DISPATCH } from "./page-dispatch.ts";
 import { anchoredBounds } from "./preview-anchor.ts";
@@ -575,6 +577,8 @@ export class GamePreview {
     });
     if (!served.ok) return textResponse(served.status);
     const target = served.path;
+    const packed = packedBuildFile(relative);
+    if (packed) return unpackedResponse(target, packed);
     try {
       const response = await net.fetch(pathToFileURL(target).toString());
       // Never cached: these are local files a contractor is actively rewriting. The first kiosk

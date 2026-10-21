@@ -22,7 +22,7 @@ game has content, Full screen (hold Esc), plugin actions, Multiplayer, Publish. 
 Play/Reload. An empty scaffold shows “Ready for your first idea”, or
 “Building your game” with Watch progress, then Play latest; the first healthy build shows itself.
 Otherwise only the user changes Live (opening a game, Reload, Play, Make live, a chat request while
-hidden). A newer healthy build, a changed game folder (checkpoint, landing, rewind), a chat's show
+hidden) or a finished Unity/Godot `web/` build. A newer healthy build, a changed game folder (checkpoint, landing, rewind), a chat's show
 or landing, or a broken shown build lights Reload; hidden and not stopped, all but a new build go
 in at once. The
 preview reaches only public library CDNs; Open Game names other hosts. Other folders' views:
