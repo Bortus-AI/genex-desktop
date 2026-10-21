@@ -22,6 +22,7 @@ import {
   WEB_LOOP_FACTS,
 } from "../../src/shared/project-facts.ts";
 import { GameEngine } from "../../src/shared/game-engine.ts";
+import { webFolderOf } from "../../src/shared/project-workspace.ts";
 import { PluginSourceKind } from "../../src/shared/plugins.ts";
 import { writeEngineBinding } from "../../src/substrate/game-engine-binding.ts";
 import { ENGINES, GODOT_ENGINE, TOY_ENGINE, UNREAL_ENGINE } from "../helpers/engines.ts";
@@ -445,6 +446,71 @@ describe("a listed game's facts", () => {
     await writeFile(path.join(ported.dir, "studio.json"), `${JSON.stringify({ ...meta, portedFrom }, null, 2)}\n`);
     assert.deepEqual(await factsOf(ported.name), ["unreal-project@.:core"], "the web files stay as the reference");
     assert.deepEqual((await listed(ported.name)).portedFrom, portedFrom);
+  });
+
+  it("a Unity or Godot game's web version in web/ is its web game, never hidden by the web starter at its root", async () => {
+    const portedFrom = [{ id: CoreFact.WebGame, path: ".", source: FactSource.Core }];
+    /** A game New game made from the web starter, with these files written into it, its port recorded or not. */
+    const made = async (name: string, files: string[], ported: boolean) => {
+      const game = await lite.core.games.scaffold(name);
+      for (const file of files) {
+        await mkdir(path.dirname(path.join(game.dir, file)), { recursive: true });
+        await writeFile(path.join(game.dir, file), "made by the engine\n");
+      }
+      const meta = JSON.parse(await readFile(path.join(game.dir, "studio.json"), "utf8")) as object;
+      if (ported)
+        await writeFile(path.join(game.dir, "studio.json"), `${JSON.stringify({ ...meta, portedFrom }, null, 2)}\n`);
+      return game.name;
+    };
+    const unity = ["unity/ProjectSettings/ProjectVersion.txt", "web/index.html", "web/Build/web.loader.js"];
+    const godot = ["godot/project.godot", "web/index.html", "web/index.pck"];
+    const rows: Array<[string, string, string[], boolean, string[], string | null]> = [
+      [
+        "a Unity game with its WebGL build",
+        "unity-web",
+        unity,
+        true,
+        ["unity-project@unity:core", "web-game@web:core"],
+        "web",
+      ],
+      [
+        "a Godot game with its web export",
+        "godot-web",
+        godot,
+        true,
+        ["godot-project@godot:core", "web-game@web:core"],
+        "web",
+      ],
+      [
+        "a Unity game whose port Genex never saw",
+        "unity-unported",
+        unity,
+        false,
+        ["unity-project@unity:core", "web-game@web:core"],
+        "web",
+      ],
+      [
+        "a Unity game with no web build yet keeps what it had",
+        "unity-no-web",
+        ["unity/ProjectSettings/ProjectVersion.txt"],
+        false,
+        ["web-game@.:core", "unity-project@unity:core"],
+        null,
+      ],
+      [
+        "a web game with a page in web/ stays one web game",
+        "web-in-web",
+        ["web/index.html"],
+        false,
+        ["web-game@.:core"],
+        null,
+      ],
+    ];
+    for (const [title, name, files, ported, facts, webFolder] of rows) {
+      await made(name, files, ported);
+      assert.deepEqual(await factsOf(name), facts, title);
+      assert.equal(webFolderOf(await listed(name)), webFolder, `${title}: the page Live plays and Publish sends`);
+    }
   });
 
   it("a link to a project outside the game is one absolute fact, and stands for the game's Unreal project", async () => {

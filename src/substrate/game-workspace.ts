@@ -60,6 +60,7 @@ import {
   type ScaffoldRecord,
   type SourcedFactRule,
   settleFacts,
+  withEngineWebVersion,
 } from "../shared/project-facts.ts";
 import {
   copySkipRulesFor,
@@ -83,7 +84,7 @@ import {
 } from "./fsx.ts";
 import { ensureFactIgnoreRules, ensureIgnoreRules, ignoreRulesToWrite, nestedRepos } from "./nested-repos.ts";
 import { isBelow, isInside, samePath, throughClaudeFolder, toPosixRelative } from "./paths.ts";
-import { detectFacts } from "./project-facts.ts";
+import { detectFoundFacts } from "./project-facts.ts";
 import type { HookEvent } from "../shared/plugin-hooks.ts";
 import {
   declaresDependencies,
@@ -1094,16 +1095,20 @@ export class GameWorkspaces {
    * of `scaffold`, else of the scaffold studio.json records) and its engine link.
    */
   async #rawFacts(dir: string, engine: EngineBinding | undefined, scaffold?: ScaffoldRecord): Promise<ProjectFact[]> {
+    return settleFacts(await this.#foundFacts(dir, engine, scaffold));
+  }
+
+  /** `#rawFacts` before they are settled: a web game below another (an engine's web version) is still there. */
+  async #foundFacts(dir: string, engine: EngineBinding | undefined, scaffold?: ScaffoldRecord): Promise<ProjectFact[]> {
     const recorded = scaffold ?? (await readScaffold(dir));
-    const detected = await detectFacts(dir, [...this.#factRules(), ...scaffoldRules(recorded)]);
+    const detected = await detectFoundFacts(dir, [...this.#factRules(), ...scaffoldRules(recorded)]);
     const declared = engine ? this.#engines().get(engine.kind) : undefined;
     if (!engine || !declared) return detected;
     // The link stands for the game's project in its engine: a project file of that engine it holds
     // besides (one the game made before it was switched to another) is no second one, and its files
     // are the link's own.
     const linked = await linkFact(dir, engine, declared);
-    const others = detected.filter((fact) => fact.id !== linked.id);
-    return settleFacts([linked, ...others]);
+    return [linked, ...detected.filter((fact) => fact.id !== linked.id)];
   }
 
   /** The game's engine link among the installed plugins' engines, or undefined for a web game. */
@@ -1160,16 +1165,19 @@ export class GameWorkspaces {
   /**
    * The facts a game lists: its raw facts minus what a port replaced (`portedFrom`), minus the web
    * template an engine link left beside its project (a link with no `portedFrom` is an older
-   * record), and none at all for a starter nothing has been built in yet (no kind picked). With no
-   * facts, what the folder holds besides (`folderHolds`).
+   * record), with a Unity or Godot game's web version in web/ as its web game
+   * (`withEngineWebVersion`), and none at all for a starter nothing has been built in yet (no kind
+   * picked). With no facts, what the folder holds besides (`folderHolds`).
    */
   async #kind(dir: string, record: FactRecord): Promise<FolderKind> {
-    const raw = await this.#rawFacts(dir, record.engine);
+    const found = await this.#foundFacts(dir, record.engine);
+    const raw = settleFacts(found);
     const linkedLegacy = record.engine !== undefined && record.portedFrom.length === 0;
-    const facts = raw.filter((fact) => {
+    const counted = raw.filter((fact) => {
       if (hasFact(record.portedFrom, fact.id, fact.path)) return false;
       return !(linkedLegacy && fact.id === CoreFact.WebGame && fact.path === ".");
     });
+    const facts = withEngineWebVersion(counted, found);
     // New game's untouched starter is the template as it was made: nothing of the person's yet.
     if (await this.#untouchedStarter(dir, raw, record.scaffoldStamp)) return { facts: [], holds: FolderHolds.Nothing };
     if (facts.length > 0) return { facts };

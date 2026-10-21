@@ -1838,7 +1838,10 @@ folder that already has the same one is dropped. The engine link reads as its en
 game's project in that engine: another project of that engine the folder holds is not a second one. A scaffold recorded in `studio.json` adds its rules (source
 `scaffold`, see [Scaffolds](#scaffolds)). Never counted: the web template beside an older engine link,
 what a port replaced (`portedFrom` in `studio.json`, kept as the reference), and a starter an older
-New game wrote that nothing has been built in yet (its `scaffoldStamp` still matching). New game
+New game wrote that nothing has been built in yet (its `scaffoldStamp` still matching). A Unity or
+Godot game's web version in `web/` (`ENGINE_WEB_FOLDER`) is listed as its web game even though the
+starter's page at the root is above it, and that root page, the starter the game was made from, is
+then never counted, whether or not its port was recorded (`withEngineWebVersion`). New game
 now makes an empty folder. Either way the game lists no facts and has no kind until its first
 message picks one (`start_web_game`, or `game.start` from the harness, writes the web starter).
 A Loop on any project that isn't a web game (`loopProfileOf`) is led in place by the chat's own

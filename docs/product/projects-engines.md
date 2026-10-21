@@ -44,7 +44,8 @@ project** links one. `web/` plays in Live; **Multiplayer** joins web, native.
 
 **Roblox Studio** sets up your Studio; **New Roblox game** writes a Baseplate place, **Use in this
 game** links one per game. Unity sets up and opens its project; agents add packages, build and
-play (keys, mouse: Input System). Publish lists Web, Mac and Windows builds.
+play (keys, mouse: Input System); a WebGL build in `web/` plays in Live. Publish lists Web, Mac and
+Windows builds.
 
 ## Live's views
 
