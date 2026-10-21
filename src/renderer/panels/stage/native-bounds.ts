@@ -133,7 +133,7 @@ export interface StageCover {
   watching: boolean;
 }
 
-/** Whether the studio window is on screen: not hidden, minimized or covered by another app's windows. */
+/** Whether the studio window is shown: not hidden or minimized (a window merely covered by others still counts as shown). */
 function useWindowShown(): boolean {
   return useSyncExternalStore(
     (changed) => {
