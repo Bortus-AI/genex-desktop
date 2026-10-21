@@ -102,4 +102,6 @@ test("a test or fixture launch reads English unless it asks to see one of the ap
   assert.deepEqual(testLanguageSwitches(true, "ru"), [["lang", "ru"]]);
   assert.deepEqual(testLanguageSwitches(true, "zh-Hans"), [["lang", "zh-CN"]]);
   assert.deepEqual(testLanguageSwitches(true, "--disable-web-security"), [["lang", "en-US"]]);
+  // "system": no pin, so the launch finds its language as a person's launch does.
+  assert.deepEqual(testLanguageSwitches(true, "system"), []);
 });
