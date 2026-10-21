@@ -52,11 +52,15 @@ jobs:
         run: npm run lint
       - name: Windows sandbox setup (srt-sandbox user and WFP filters)
         run: node scripts/ci-windows-sandbox.mjs
+      # Temporary (PR #346): the real Codex CLI for codex-sandbox-cli.test.ts; dropped after this run.
+      - if: ${{ inputs.files }}
+        run: npm install -g @openai/codex@0.163.0
       - name: Tests
         if: ${{ !inputs.desktop }}
         env:
           FILES: ${{ inputs.files }}
           BACKLOG: ${{ inputs.backlog }}
+          STUDIO_CODEX_CLI_TESTS: ${{ inputs.files && '1' || '' }}
         run: |
           # Windows minutes are billed: a dispatch can name files (a probe, a fix's own tests), and
           # the informational pass runs only when asked for.
