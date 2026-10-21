@@ -2296,6 +2296,30 @@ describe("deny paths Genex sets itself", () => {
     assert.equal(s.own.signals[0]?.aborted, true, "its PowerShell is stopped");
   });
 
+  it("stops every walk when Genex quits, the one under way and one waiting behind it", async () => {
+    let finish = () => {};
+    const walking = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const s = session({ ownDenies: true, walk: () => walking, walks: [at(".ssh")], walkDelayMs: 0 });
+    const owner = {};
+    await s.session.join(owner, denying([at(".ssh")]));
+    await delay(0);
+    await turn();
+    s.session.update(owner, { write: [PONG, LATE], read: [] });
+    await s.session.settled();
+    await delay(0);
+    await turn();
+    assert.equal(s.own.walked(), 1, "a second walk waits behind the first");
+    s.session.stopWalks();
+    assert.equal(s.own.signals[0]?.aborted, true, "the walk under way stops");
+    finish();
+    await delay(0);
+    await turn();
+    await turn();
+    assert.equal(s.own.walked(), 1, "and the one waiting behind it never starts");
+  });
+
   it("starts a deferred walk only once a regrant already running has finished", async () => {
     const s = session({ ownDenies: true, walkDelayMs: 10 });
     const owner = {};

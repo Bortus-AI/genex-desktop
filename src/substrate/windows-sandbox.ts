@@ -1523,9 +1523,9 @@ export class WindowsSandboxSession {
   #walkTimer: NodeJS.Timeout | null = null;
   #walking: Promise<void> | null = null;
   #walkingPaths: string[] = [];
-  /** The walk after the start under way, past its wait; and what stops the one that runs last. */
+  /** The walk after the start under way, past its wait; and what stops each walk not yet ended. */
   #walkActive: Promise<void> | null = null;
-  #walkStop: AbortController | null = null;
+  readonly #walkStops = new Set<AbortController>();
   /** The paths srt-win set entries on in the applied config: a reset takes them back. */
   #srtPaths: string[] = [];
 
@@ -1827,7 +1827,7 @@ export class WindowsSandboxSession {
    */
   #walkAfter(own: OwnAclEntries, before: Promise<void> | null): Promise<void> {
     const stop = new AbortController();
-    this.#walkStop = stop;
+    this.#walkStops.add(stop);
     const walking: Promise<void> = (async () => {
       await before;
       for (let running = this.#applying; running; running = this.#applying) await running.catch(() => {});
@@ -1845,6 +1845,7 @@ export class WindowsSandboxSession {
     })()
       .catch((error: unknown) => this.#deps.log?.(MESSAGE.WalkFailed(error)))
       .finally(() => {
+        this.#walkStops.delete(stop);
         if (this.#walking !== walking) return;
         this.#walking = null;
         this.#walkingPaths = [];
@@ -1856,7 +1857,7 @@ export class WindowsSandboxSession {
   #cancelWalks(): void {
     if (this.#walkTimer) clearTimeout(this.#walkTimer);
     this.#walkTimer = null;
-    this.#walkStop?.abort();
+    for (const stop of this.#walkStops) stop.abort();
   }
 
   /** Stop the walks after the start, at once: Genex is quitting ({@link windowsSessionFor}). */

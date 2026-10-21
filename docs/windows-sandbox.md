@@ -148,7 +148,8 @@ the setup screen opens on `git-missing`. What differs from macOS:
   after the edit, and every entry under it, read for its owner and DACL alone, is owned by them
   and allows only them, protected or not), the start writes the path alone, which files made in it
   inherit, and records the walk; the session runs
-  it two minutes after the start (`own entries passed down` in the log), and the next start runs
+  it two minutes after the start, or at once when a grant is left to walk too (`own entries passed
+  down` in the log), and the next start runs
   one a Genex quit before. A walk says the paths it walks in the same turn it reads them, once no
   regrant is setting entries; a regrant that starts while it is under way waits for it only when it
   sets or takes back entries in or around those paths (or one still to walk), which the walk could
