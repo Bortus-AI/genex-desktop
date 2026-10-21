@@ -43,7 +43,7 @@ import {
   usableGodot,
   versionName,
 } from "./find-godot.ts";
-import { checkedCount, isError, MAX_PROBLEMS, problemLines, readProblems } from "./godot-output.ts";
+import { checkedCount, dataCopied, isError, MAX_PROBLEMS, problemLines, readProblems } from "./godot-output.ts";
 import {
   checkCall,
   confinedRunner,
@@ -183,6 +183,8 @@ const MESSAGE = {
   StepsDone: "Godot is installed here; there is no setup card to show. Call godot__new-game.",
   StepsNoChat: "There is no chat to show the Godot setup card in.",
   NoGameOpen: "Open a game in Genex first: a Godot project is made in a game's folder.",
+  OutsideOnWindows:
+    "On Windows, Genex builds a Godot project only inside the game's folder: choose one there, or make a new one.",
   NewGame: (template: string, version: string) =>
     `Made this game's Godot project in ${GAME_PROJECT_FOLDER}/ from the ${template.toUpperCase()} template, for Godot ${version}: main.tscn (a player that moves, and a HeroCamera in the genex_shot group) and player.gd. Build the game there in GDScript and scenes, never as a web page. After each change call godot__check; call godot__screenshot to see it. The person opens it in Godot from the Godot button.`,
   ImportFailed: (why: string) => `Godot's first import didn't finish (${why}); godot__check imports again.`,
@@ -199,6 +201,9 @@ const MESSAGE = {
     Failed: (lines: readonly string[]) =>
       `Godot's web export didn't finish${lines.length ? `: ${lines.join(" | ")}` : ""}. Fix what it names (godot__check helps), then export again.`,
     TimedOut: "Godot's web export didn't finish in time and was stopped.",
+    NoTemplateCopy: (why: string) =>
+      `Genex couldn't put Godot's Web export template where its sandbox reads it (${why}). Export again; if it keeps failing, install the template again in Godot (Editor → Manage Export Templates).`,
+    NothingSaid: "Godot said nothing",
     Exported: "Exported for the web into web/: Live's Web game tab plays it, and Publish puts it online.",
     NotKept: (why: string) => `Godot's web build in web/ wasn't refreshed (${why}); it plays the game as it was.`,
     Done: (files: number) =>
@@ -476,8 +481,7 @@ async function webExport(deps: GodotBackendDeps, context: PluginContext): Promis
   });
   const job = jobOf(context, project);
   // Windows: the sandbox user's Godot reads templates in its own data folder, so the person's goes there first.
-  if (deps.env.platform === "win32")
-    await deps.run(install.binary, templateCopyCall(project, deps.scripts, deps.env.dataHome, install), job);
+  if (deps.env.platform === "win32") await placeTemplate(deps, install, project, job);
   const started = Date.now();
   const result = await deps.run(install.binary, call, job);
   if (result.timedOut) throw new Error(MESSAGE.Web.TimedOut);
@@ -487,6 +491,15 @@ async function webExport(deps: GodotBackendDeps, context: PluginContext): Promis
   if (!written) throw new Error(MESSAGE.Web.Failed(problemLines(errors.slice(0, NOTED_PROBLEMS))));
   if (multiplayer) await copyBridge(folder, deps.multiplayer, MESSAGE.Web.Link);
   return (await readdir(folder)).filter((name) => !name.startsWith(".")).length;
+}
+
+/** Windows: the person's Web template put in the sandbox user's own data folder, or why it couldn't be, before Godot exports. */
+async function placeTemplate(deps: GodotBackendDeps, install: GodotInstall, project: string, job: GodotJobScope) {
+  const call = templateCopyCall(project, deps.scripts, deps.env.dataHome, install);
+  const copy = await deps.run(install.binary, call, job);
+  const placed = dataCopied(copy.output);
+  if (copy.timedOut) throw new Error(MESSAGE.Web.NoTemplateCopy(MESSAGE.TimedOut));
+  if (!placed.copied) throw new Error(MESSAGE.Web.NoTemplateCopy(placed.why || MESSAGE.Web.NothingSaid));
 }
 
 /** The most of a project's files `keep-web-build` looks at for the newest change. */
@@ -633,6 +646,15 @@ async function heroShots(deps: GodotBackendDeps, context: PluginContext): Promis
   const project = await projectOf(context);
   const install = usableGodot(await godots(deps, context));
   if (!project || !install) return {};
+  const taken = takeHeroShots(deps, context, install, project);
+  // A save point's or the observer's pictures are never a reason to fail it, as a checkpoint's check isn't.
+  if (context.hook || context.observe)
+    return taken.then((shots) => stillsAnswer(shots, Boolean(context.observe))).catch(() => ({}));
+  return stillsForAgent(await taken);
+}
+
+/** The main scene's hero stills, after an import, and a short recording unless a moment asks. */
+async function takeHeroShots(deps: GodotBackendDeps, context: PluginContext, install: GodotInstall, project: string) {
   const signal = context.observe ? observeSignal(context.signal, context.observe.withinMs) : context.signal;
   const job = jobOf(context, project, signal);
   const storage = await storageOf(context);
@@ -640,8 +662,7 @@ async function heroShots(deps: GodotBackendDeps, context: PluginContext): Promis
   await deps.run(install.binary, importCall(project), job);
   const recording = context.hook ? [] : recordingShots(HERO_RECORDING_SECONDS, HERO_RECORDING_FRAMES);
   const request = { scene: "", at: frameAt(HERO_SECONDS), recording, keys: [], most: MAX_STILLS, hero: true };
-  const taken = await takeStills({ ...deps, storage }, install, project, request, job);
-  return context.hook || context.observe ? stillsAnswer(taken, Boolean(context.observe)) : stillsForAgent(taken);
+  return takeStills({ ...deps, storage }, install, project, request, job);
 }
 
 /** An observer's call ends with the turn or once the time Genex gives it, less what keeping the pictures takes, runs out. */
@@ -670,7 +691,7 @@ async function chooserProjects(deps: GodotBackendDeps, context: PluginContext, p
   const found = await findProjects(deps.env.home, deps.env.dataHome);
   const own = project && !found.some((p) => p.folder === project) ? await readProject(project) : undefined;
   const game = gameFolderOf(context);
-  return Promise.all(
+  const offered = await Promise.all(
     [...(own ? [own] : []), ...found].map(async (p) => ({
       ...p,
       shown: shownPath(p.folder, deps.env.home),
@@ -678,6 +699,8 @@ async function chooserProjects(deps: GodotBackendDeps, context: PluginContext, p
       outside: game ? await outsideGame(game, p.folder) : false,
     })),
   );
+  // Windows offers only projects inside the game (`useProject`), and the one in use wherever it is.
+  return deps.env.platform === "win32" ? offered.filter((p) => !p.outside || p.inUse) : offered;
 }
 
 /** A folder as the panel shows it: from `~` when it is in the home folder, else as it is. */
@@ -747,7 +770,8 @@ async function status(deps: GodotBackendDeps, setup: Setup, context: PluginConte
   const place = project ? await projectPlace(context, project) : null;
   return {
     ...godotReadiness(installs),
-    /** Whether this computer is a Windows PC, where Get Godot is Genex's own download (`download-godot`). */
+    /** Whether this computer is a Mac, or a Windows PC, where Get Godot is Genex's own download (`download-godot`); Genex builds Godot games on no other. */
+    mac: deps.env.platform === "darwin",
     windows: deps.env.platform === "win32",
     installing: await setup.job(context),
     godot: install
@@ -767,9 +791,13 @@ async function status(deps: GodotBackendDeps, setup: Setup, context: PluginConte
 }
 
 /** The panel's Use this project: links the open game to the chosen Godot project, wherever it is. */
-async function useProject(args: Record<string, unknown>, context: PluginContext) {
-  if (!gameFolderOf(context)) throw new Error(MESSAGE.NoGameOpen);
-  return { linked: await linkProject(context, textArg(args, "folder")) };
+async function useProject(deps: GodotBackendDeps, args: Record<string, unknown>, context: PluginContext) {
+  const game = gameFolderOf(context);
+  if (!game) throw new Error(MESSAGE.NoGameOpen);
+  const folder = textArg(args, "folder");
+  // Windows's sandbox writes only inside the game's folder, so a project there is the only one Genex can build.
+  if (deps.env.platform === "win32" && (await outsideGame(game, folder))) throw new Error(MESSAGE.OutsideOnWindows);
+  return { linked: await linkProject(context, folder) };
 }
 
 /**
@@ -1007,7 +1035,7 @@ export function createGodotBackend(deps: GodotBackendDeps): PluginActivation {
     [GodotAction.ToolbarStatus]: (_args, context) => toolbarStatus(deps, context),
     [GodotAction.StageStatus]: (_args, context) => stageStatus(deps, context),
     [GodotAction.SetUp]: (_args, context) => setUp(deps, context),
-    [GodotAction.UseProject]: (args, context) => useProject(args, context),
+    [GodotAction.UseProject]: (args, context) => useProject(deps, args, context),
     [GodotAction.WebExport]: async (_args, context) => {
       await webExport(deps, context);
       return { note: MESSAGE.Web.Exported };

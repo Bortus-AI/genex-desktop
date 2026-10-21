@@ -3377,10 +3377,14 @@ only the project (Godot's `.godot/` cache) and the job's own folder, gets a priv
 `user://` and Godot's caches) and a deadline, and a still is drawn in a window off every screen
 (`gpu`). On Windows each job is a host sandbox job instead (`sandbox.run`, `windowsRunner`):
 ProcessSandbox as the sandbox user, reading Godot's folder and Genex's scripts, writing the project
-(one inside the game: a project linked from elsewhere is refused there);
+(one inside the game: a project linked from elsewhere is refused there, and the panel offers and
+links only projects inside the game); at most two at once, the host's limit, the others waiting
+their turn;
 a folder it writes outside the game (a capture's stills, the class reference) waits in the
-project's `.godot/genex-jobs/` and is copied out (a file it reads from outside, copied in), and its
-CRLF, coloured output is read as a Mac's.
+project's `.godot/genex-jobs/` (with no project yet, as for the class reference, in a folder of the
+job's own at the game's root, removed after it) and is copied out (a file it reads from outside,
+copied in), and its CRLF, coloured output is read as a Mac's. A save point's or the observer's
+stills that fail answer nothing, as the checkpoint's check does.
 Its observer is a `card` whose `stage-status` says where the game stands (get Godot, set
 it up for Genex's play, open it, or open in the person's Godot) and its manifest has no lock: it never drives the person's editor.
 On a Mac without Godot 4.3 or newer, `show-steps` (and the refusals of `new-game` and the engine
@@ -3395,7 +3399,7 @@ found. On Windows Do it for me (and the panel's Get Godot) is `download-godot`, 
 confirms: the host installs the manifest's pinned Godot (the 4.7.2 x64 or arm64 zip, its sha256
 checked) into `native-runtimes`, which the sandbox reads from its start, and the card follows the
 host's install record; Stop cancels it. Windows finds Godot there (`runtime.detect`), in Program
-Files (Steam's too) and on the PATH, never elsewhere in the person's profile, which the sandbox user
+Files, in every Steam library (`libraryfolders.vdf`) and on the PATH, never elsewhere in the person's profile, which the sandbox user
 can't read. The editor opens as a window of its own and is found by its command line
 (`windows-processes.ts`).
 Set up (and New Godot game) also turns on the addon's editor plugin (`addons/genex/editor_bridge.gd`,
@@ -3425,7 +3429,8 @@ version (`export_templates/<version>.<status>[.mono]/web_nothreads_release.zip`,
 Godot's Export Template Manager in Godot's data folder, a Mac's Application Support or Windows's
 `%APPDATA%`) linked read-only into a Mac job's private home; on Windows a Godot job of Genex's
 (`genex_data.gd`) first copies it into the sandbox user's own data folder, where that user's Godot
-looks; without it the tool is refused before Godot runs. `keep-web-build` at `turn.end` and `restore.after` makes it again
+looks, and the export stops with a plain message when that copy fails; without the template the tool
+is refused before Godot runs. `keep-web-build` at `turn.end` and `restore.after` makes it again
 whenever the project changed since the last build (its `.pck` older than the project's newest file,
 `.godot/` left out), so Live's Web game tab and Publish follow the game; with no Web template it does
 nothing, and a failure is a note. The plugin's `detect` names the folder `godot-web-export` (a folder

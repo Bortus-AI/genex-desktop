@@ -8,8 +8,14 @@
  */
 import { mkdir, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { setImmediate } from "node:timers/promises";
 import type { PluginContext } from "../../src/plugin-sdk/index.d.ts";
-import type { PluginRuntimeInstall, PluginSandboxJob, PluginSandboxRunArgs } from "../../src/shared/plugins.ts";
+import {
+  PLUGIN_SANDBOX_MAX_RUNNING,
+  type PluginRuntimeInstall,
+  type PluginSandboxJob,
+  type PluginSandboxRunArgs,
+} from "../../src/shared/plugins.ts";
 import { createGodotBackend } from "../../src/plugins/godot/backend.ts";
 import type { EditorEnv, Launch } from "../../src/plugins/godot/editor.ts";
 import { BRIDGE_FOLDER } from "../../src/plugins/godot/editor-bridge.ts";
@@ -308,7 +314,8 @@ export type SandboxEnd = Partial<Pick<PluginSandboxJob, "state" | "exitCode" | "
 /**
  * The backend on a fake Windows PC in an open game (`valley`, its folder `game/`), running Godot's
  * jobs through the real Windows runner. The host plays the rest: the sandbox jobs (`sandbox.run`,
- * each answered by `sandbox` from its request, read once while running, `sandbox.stop` recorded),
+ * each answered by `sandbox` from its request, read once while running, `sandbox.stop` recorded,
+ * refused as busy past the host's limit of jobs at once, the most at once kept in `peak`),
  * and the pinned Godot (`runtime.detect` finds it once `runtime.install` placed it, or the test
  * did; `runtime.installation` answers `record`).
  */
@@ -319,6 +326,10 @@ export async function godotWindowsFixture(
     installed?: boolean;
     sandbox?: (request: PluginSandboxRunArgs) => Promise<SandboxEnd> | SandboxEnd;
     editorLines?: string[];
+    /** A Godot project the game is linked to (its `project.godot`), as the host keeps the link. */
+    linked?: string;
+    /** How many reads of a job's record say it still runs; one unless a test holds jobs longer. */
+    runningReads?: number;
   } = {},
 ) {
   const pc = await fakeWindows(options.exes);
@@ -336,12 +347,14 @@ export async function godotWindowsFixture(
   };
   const requests: PluginSandboxRunArgs[] = [];
   const stopped: string[] = [];
-  const jobs = new Map<string, { reads: number; end: PluginSandboxJob }>();
+  const peak = { running: 0, most: 0 };
+  const jobs = new Map<string, { reads: number; ended: boolean; end: PluginSandboxJob }>();
   const recorded = recordingEditor(options.editorLines, "win32");
   const backend = createGodotBackend({
     env: pc.env,
     editor: recorded.editor,
-    run: windowsRunner(async () => undefined),
+    // Each wait for a job's record lets the event loop turn, as a real pause does, so other calls go on meanwhile.
+    run: windowsRunner(() => setImmediate()),
     scripts: SCRIPTS,
     templates: TEMPLATES,
     addon: ADDON,
@@ -349,24 +362,31 @@ export async function godotWindowsFixture(
   });
   const hostCalls: HostCall[] = [];
   const sandboxRun = async (request: PluginSandboxRunArgs) => {
+    if (peak.running >= PLUGIN_SANDBOX_MAX_RUNNING) throw new Error("This plugin already runs 2 sandbox jobs");
+    peak.running += 1;
+    peak.most = Math.max(peak.most, peak.running);
     requests.push(request);
     const id = `job-${requests.length}`;
     const end = { state: "exited", exitCode: 0, stdout: "", stderr: "", ...(await options.sandbox?.(request)) };
-    jobs.set(id, { reads: 0, end: { id, ...end } as PluginSandboxJob });
+    jobs.set(id, { reads: 0, ended: false, end: { id, ...end } as PluginSandboxJob });
     return { id };
   };
   const sandboxResult = (id: string): PluginSandboxJob | null => {
     const job = jobs.get(id);
     if (!job) return null;
     job.reads += 1;
-    if (stopped.includes(id)) return { ...job.end, state: "stopped" };
-    return job.reads === 1 ? { id, state: "running" } : job.end;
+    const record = stopped.includes(id) ? { ...job.end, state: "stopped" as const } : job.end;
+    if (job.reads <= (options.runningReads ?? 1) || record.state === "running") return { id, state: "running" };
+    if (!job.ended) peak.running -= 1;
+    job.ended = true;
+    return record;
   };
   const idOf = (args: unknown) => String((args as { id?: unknown })?.id);
   const host = (async (method: string, args?: unknown) => {
     hostCalls.push({ method, args });
     if (method === "storage.root") return storage;
-    if (method === "game.engine.read") return null;
+    if (method === "game.engine.read")
+      return options.linked ? { kind: "godot", project: options.linked, name: "linked", linkedAt: "" } : null;
     if (method === "game.engine.steps") return true;
     if (method === "runtime.detect") return own.binary ? { state: "ready", path: own.binary } : { state: "missing" };
     if (method === "runtime.install") return runtime.install();
@@ -388,5 +408,18 @@ export async function godotWindowsFixture(
     host,
     ...more,
   });
-  return { ...pc, storage, gameDir, own, runtime, backend, requests, stopped, editor: recorded, hostCalls, context };
+  return {
+    ...pc,
+    storage,
+    gameDir,
+    own,
+    runtime,
+    backend,
+    requests,
+    stopped,
+    peak,
+    editor: recorded,
+    hostCalls,
+    context,
+  };
 }

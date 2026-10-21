@@ -2,14 +2,14 @@
  * The Godot installs on this computer, each asked its version (`--version`, which runs nothing of a
  * project). On a Mac: the app in Applications (the user's own too), in Downloads (where Godot's zip
  * lands), Steam's, Homebrew's and any `godot` on the PATH. On Windows: the Godot Genex installed in
- * its own folder (the host's pinned runtime, which Genex's sandbox reads), a Godot in Program Files
- * (Steam's too) and any `godot.exe` on the PATH; one elsewhere in the person's profile is left out,
+ * its own folder (the host's pinned runtime, which Genex's sandbox reads), a Godot in Program Files,
+ * Steam's (in every Steam library) and any `godot.exe` on the PATH; one elsewhere in the person's profile is left out,
  * since the sandbox user that runs Genex's Godot jobs can't read it. Genex builds with Godot 4.3 or
  * newer in the 4 line; a .NET build counts as Godot too, though Genex's tools speak GDScript. The
  * newest supported install is the one Genex uses.
  */
 import { execFile } from "node:child_process";
-import { readdir, realpath, stat } from "node:fs/promises";
+import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -39,8 +39,14 @@ const WINDOWS_EXE = /^godot[^\\/]*\.exe$/i;
 const CONSOLE_EXE = /_console\.exe$/i;
 /** A folder in Program Files that may hold Godot: `Godot`, `Godot Engine`, `Godot 4.7`. */
 const WINDOWS_FOLDER = /^godot/i;
-/** Steam's Godot, under Program Files (x86). */
-const STEAM_GODOT = ["Steam", "steamapps", "common", "Godot Engine"];
+/** Steam under Program Files (x86), its list of library folders, and Godot's folder in a library. */
+const STEAM = "Steam";
+const STEAM_LIBRARIES = ["steamapps", "libraryfolders.vdf"];
+const STEAM_GODOT = ["steamapps", "common", "Godot Engine"];
+/** A library's folder in `libraryfolders.vdf`: `"path"  "D:\\SteamLibrary"`, its backslashes doubled. */
+const STEAM_LIBRARY_PATH = /"path"\s+"((?:[^"\\]|\\.)*)"/g;
+/** The most Steam libraries looked in. */
+const MAX_STEAM_LIBRARIES = 16;
 /** The names Godot goes by on Windows's PATH. */
 const WINDOWS_PATH_NAMES = ["godot.exe", "godot4.exe"];
 /** Where Godot keeps the person's data under their home: a Mac's, and Windows's when `APPDATA` names none. */
@@ -188,11 +194,21 @@ async function windowsExesIn(folder: string): Promise<string[]> {
   return names.map((name) => path.join(folder, name));
 }
 
-/** Every Godot in Program Files: in each folder whose name starts with Godot, and Steam's. */
+/** Steam's library folders: its own, under Program Files, and each other its `libraryfolders.vdf` names (`D:\\SteamLibrary`). */
+async function steamLibraries(programFiles: string): Promise<string[]> {
+  const steam = path.join(programFiles, STEAM);
+  const listed = await readFile(path.join(steam, ...STEAM_LIBRARIES), "utf8").catch(() => "");
+  const named = [...listed.matchAll(STEAM_LIBRARY_PATH)].map((found) => (found[1] ?? "").replace(/\\(.)/g, "$1"));
+  return [...new Set([steam, ...named.filter((folder) => path.isAbsolute(folder))])].slice(0, MAX_STEAM_LIBRARIES);
+}
+
+/** Every Godot in Program Files: in each folder whose name starts with Godot, and in each Steam library. */
 async function programFilesGodots(programFiles: string): Promise<string[]> {
   const folders = (await entries(programFiles)).filter((name) => WINDOWS_FOLDER.test(name));
-  const steam = path.join(programFiles, ...STEAM_GODOT);
-  const found = await Promise.all([...folders.map((name) => path.join(programFiles, name)), steam].map(windowsExesIn));
+  const steam = (await steamLibraries(programFiles)).map((library) => path.join(library, ...STEAM_GODOT));
+  const found = await Promise.all(
+    [...folders.map((name) => path.join(programFiles, name)), ...steam].map(windowsExesIn),
+  );
   return found.flat();
 }
 

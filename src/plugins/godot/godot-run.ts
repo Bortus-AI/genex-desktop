@@ -18,12 +18,13 @@ import { setTimeout as sleep } from "node:timers/promises";
 import type { PluginContext } from "../../plugin-sdk/index.d.ts";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
 import {
+  PLUGIN_SANDBOX_MAX_RUNNING,
   type PluginSandboxJob,
   type PluginSandboxRunArgs,
   PluginService,
   SandboxJobState,
 } from "../../shared/plugins.ts";
-import { isBelow } from "../../substrate/paths.ts";
+import { isBelow, isInside } from "../../substrate/paths.ts";
 import { NativeEndReason, runNativeProcess } from "../../substrate/plugins/native-process.ts";
 import { type KeyPress, keysArg, PLAY_FPS, type ShotAt, shotsArg } from "./play-input.ts";
 
@@ -67,8 +68,13 @@ const SCRATCH_PREFIX = "genex-godot-";
 const HOME_FOLDER = "home";
 /** How often a Windows job's record is read while it runs. */
 const JOB_POLL_MS = SECOND_MS / 4;
-/** Where a Windows job's folders and files outside the game wait while it runs: the project's own cache folder. */
+/**
+ * Where a Windows job's folders and files outside the game wait while it runs: the project's own
+ * cache folder, or with no project in the game (a class reference before the first game) a folder
+ * of the job's own at the game's root, removed with it.
+ */
 const STAGING = [".godot", "genex-jobs"];
+const OWN_FOLDER_PREFIX = "genex-godot-job-";
 const INPUTS_FOLDER = "in";
 /** A terminal's colour sequence, which Godot's Windows build prints into a file too. */
 // biome-ignore lint/suspicious/noControlCharactersInRegex: the escape character is what this removes
@@ -76,7 +82,7 @@ const COLOUR = /\x1b\[[0-9;]*m/g;
 
 const MESSAGE = {
   Unsupported: "Genex runs Godot on a Mac and on Windows.",
-  NeedsProject: "On Windows Genex runs Godot inside the game's Godot project: make one first (godot__new-game).",
+  NoGame: "Open a game in Genex first: on Windows Genex runs Godot in the game's folder.",
   OutsideGame:
     "On Windows Genex runs Godot only on a project inside the game's folder; this game's project is linked from elsewhere.",
   NotStarted: (reason: string) => `Genex's sandbox didn't start Godot (${reason}).`,
@@ -322,19 +328,23 @@ function writableInGame(game: string, folder: string): boolean {
 
 /**
  * A Windows job's folders: those inside the game it names as it writes them, each other one staged
- * in the project's `.godot` (the project named in their place), and each file it reads from
- * outside the game staged there too.
+ * (the stage named in their place), and each file it reads from outside the game staged too. The
+ * stage is in the project's `.godot`, or a folder of the job's own when the game has no project of
+ * its own; a job that writes a project linked from outside the game is refused.
  */
 async function windowsFolders(call: GodotCall, job: GodotJobScope) {
-  if (!job.project || !job.game) throw new Error(MESSAGE.NeedsProject);
+  if (!job.game) throw new Error(MESSAGE.NoGame);
   const game = await realpath(job.game);
-  const project = await realpath(job.project);
-  if (!writableInGame(game, project)) throw new Error(MESSAGE.OutsideGame);
-  const root = path.join(project, ...STAGING, randomUUID());
+  const linked = job.project ? await realpath(job.project).catch(() => job.project) : null;
+  const project = linked && writableInGame(game, linked) ? linked : null;
+  const root = project
+    ? path.join(project, ...STAGING, randomUUID())
+    : path.join(game, `${OWN_FOLDER_PREFIX}${randomUUID()}`);
   const writes: string[] = [];
   const staged: Staged[] = [];
   for (const folder of call.writes) {
     const real = await realpath(folder).catch(() => folder);
+    if (linked && !project && isInside(linked, real)) throw new Error(MESSAGE.OutsideGame);
     if (writableInGame(game, real)) writes.push(real);
     else staged.push({ folder, staged: path.join(root, String(staged.length)) });
   }
@@ -342,11 +352,12 @@ async function windowsFolders(call: GodotCall, job: GodotJobScope) {
     folder: file,
     staged: path.join(root, INPUTS_FOLDER, String(index), path.basename(file)),
   }));
-  return { root, writes: writes.length ? writes : [project], staged, inputs };
+  return { root, writes: writes.length ? writes : [project ?? root], staged, inputs };
 }
 
-/** Each staged folder made, and each file read from outside the game copied in, before the job starts. */
-async function stageFolders(staged: readonly Staged[], inputs: readonly Staged[]): Promise<void> {
+/** The stage, each staged folder in it, and each file read from outside the game copied in, before the job starts. */
+async function stageFolders(root: string, staged: readonly Staged[], inputs: readonly Staged[]): Promise<void> {
+  await mkdir(root, { recursive: true });
   for (const { staged: folder } of staged) await mkdir(folder, { recursive: true });
   for (const { folder: file, staged: copy } of inputs) {
     await mkdir(path.dirname(copy), { recursive: true });
@@ -408,17 +419,65 @@ function resultOf(record: PluginSandboxJob, staged: readonly Staged[]): GodotRes
  * the staged folders are removed either way. `wait` is the pause between two reads of its record.
  */
 export function windowsRunner(wait: (ms: number) => Promise<unknown> = sleep): GodotRunner {
+  const turn = jobTurns(PLUGIN_SANDBOX_MAX_RUNNING);
   return async (binary, call, job) => {
     job.signal.throwIfAborted();
     const folders = await windowsFolders(call, job);
     try {
-      await stageFolders(folders.staged, folders.inputs);
-      const { id } = await job.host(PluginService.SandboxRun, sandboxRequest(binary, call, folders));
-      const result = resultOf(await jobEnd(job, id, wait), folders.staged);
-      for (const { folder, staged } of folders.staged) await cp(staged, folder, { recursive: true });
-      return result;
+      await stageFolders(folders.root, folders.staged, folders.inputs);
+      const done = await turn(job.signal);
+      try {
+        const { id } = await job.host(PluginService.SandboxRun, sandboxRequest(binary, call, folders));
+        const result = resultOf(await jobEnd(job, id, wait), folders.staged);
+        for (const { folder, staged } of folders.staged) await cp(staged, folder, { recursive: true });
+        return result;
+      } finally {
+        done();
+      }
     } finally {
       await rm(folders.root, { recursive: true, force: true });
     }
+  };
+}
+
+/**
+ * Turns at the host's sandbox: at most `size` of the plugin's jobs at once, as many as the host
+ * runs for one plugin, the others waiting in order (never refused as busy); a stop ends a wait.
+ * Answers the turn's end, which hands it to the next job waiting.
+ */
+function jobTurns(size: number) {
+  let free = size;
+  const waiting: Array<() => void> = [];
+  const pass = () => {
+    const next = waiting.shift();
+    if (next) next();
+    else free += 1;
+  };
+  const once = () => {
+    let passed = false;
+    return () => {
+      if (!passed) pass();
+      passed = true;
+    };
+  };
+  return async (signal: AbortSignal): Promise<() => void> => {
+    signal.throwIfAborted();
+    if (free > 0) {
+      free -= 1;
+      return once();
+    }
+    await new Promise<void>((resolve, reject) => {
+      const go = () => {
+        signal.removeEventListener("abort", stop);
+        resolve();
+      };
+      const stop = () => {
+        waiting.splice(waiting.indexOf(go), 1);
+        reject(signal.reason);
+      };
+      waiting.push(go);
+      signal.addEventListener("abort", stop, { once: true });
+    });
+    return once();
   };
 }

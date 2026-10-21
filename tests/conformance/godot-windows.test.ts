@@ -8,11 +8,12 @@
  * starts Godot; `godot-windows-live.test.ts` does, on a Windows runner.
  */
 import assert from "node:assert/strict";
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, it } from "node:test";
 import type { PluginSetupCard } from "../../src/plugin-sdk/index.d.ts";
 import { GodotTool } from "../../src/plugins/godot/backend.ts";
+import { HookEvent } from "../../src/shared/plugin-hooks.ts";
 import { GodotSetupAction } from "../../src/plugins/godot/godot-setup.ts";
 import { unzipCall } from "../../src/plugins/godot/multiplayer.ts";
 import { InstallPhase, type RuntimeInstallPhase } from "../../src/shared/model-install.ts";
@@ -26,6 +27,7 @@ import {
   playArg,
   SCRIPTS,
 } from "../helpers/godot-fake-engine.ts";
+import { tmpDir } from "../helpers/tmp.ts";
 
 type Answer = Record<string, unknown>;
 type Fixture = Awaited<ReturnType<typeof godotWindowsFixture>>;
@@ -200,6 +202,8 @@ describe("Godot on Windows: jobs in Genex's sandbox", () => {
       sandbox: async (asked) => {
         const copy = asked.args.find((arg) => arg.startsWith("from="));
         if (copy) seen.push(await readFile(copy.slice("from=".length), "utf8"));
+        if (copy)
+          return { stdout: "GENEX_DATA_COPIED C:/Users/srt-sandbox/AppData/Roaming/Godot/export_templates\r\n" };
         if (!asked.args.includes("--export-release")) return {};
         const page = asked.args.at(-1) ?? "";
         for (const name of ["index.html", "index.pck"]) await writeFile(path.join(path.dirname(page), name), name);
@@ -222,6 +226,71 @@ describe("Godot on Windows: jobs in Genex's sandbox", () => {
     );
     assert.deepEqual(exported?.writes, [fixture.project, path.join(fixture.gameDir, "web")]);
     assert.deepEqual(await readdir(path.join(fixture.project, ".godot", "genex-jobs")), []);
+  });
+
+  it("stops a web export before Godot runs when the template couldn't be put in the sandbox user's folder", async () => {
+    const fixture = await windowsProject({
+      sandbox: (asked) =>
+        asked.args.some((arg) => arg.startsWith("from=")) ? { stdout: "GENEX_DATA_FAILED File not found\r\n" } : {},
+    });
+    const templates = path.join(fixture.env.dataHome, "Godot", "export_templates", "4.7.2.stable");
+    await mkdir(templates, { recursive: true });
+    await writeFile(path.join(templates, "web_nothreads_release.zip"), "zip");
+    await assert.rejects(
+      tool(fixture, GodotTool.WebExport),
+      /couldn't put Godot's Web export template where its sandbox reads it \(File not found\)/,
+    );
+    assert.equal(
+      fixture.requests.some((request) => request.args.includes("--export-release")),
+      false,
+    );
+  });
+
+  it("makes the class reference in a game with no Godot project yet, in a folder of the job's own it removes", async () => {
+    const fixture = await godotWindowsFixture({
+      installed: true,
+      sandbox: async (request) => {
+        const at = request.args.indexOf("--doctool");
+        const classes = path.join(request.args[at + 1] ?? "", "doc", "classes");
+        await mkdir(classes, { recursive: true });
+        await writeFile(path.join(classes, "Node.xml"), '<class name="Node" inherits="Object"></class>');
+        return {};
+      },
+    });
+    assert.match(String(await tool(fixture, GodotTool.ClassReference, { query: "Node" })), /class Node extends Object/);
+    const [doctool] = fixture.requests;
+    assert.equal(path.dirname(doctool?.writes[0] ?? ""), await realpath(fixture.gameDir));
+    assert.match(path.basename(doctool?.writes[0] ?? ""), /^genex-godot-job-/);
+    assert.deepEqual(await readdir(fixture.gameDir), []);
+  });
+
+  it("refuses a project linked from outside the game, never building it, and its save point's stills never throw", async () => {
+    const outside = path.join(await realpath(await tmpDir("godot-outside-")), "Elsewhere");
+    await mkdir(outside, { recursive: true });
+    await writeFile(path.join(outside, "project.godot"), "config_version=5\n");
+    const fixture = await godotWindowsFixture({ installed: true, linked: path.join(outside, "project.godot") });
+    await assert.rejects(tool(fixture, GodotTool.Check), /only on a project inside the game's folder/);
+    const hook = { on: HookEvent.CheckpointAfter, runId: "run-1" };
+    assert.deepEqual(await tool(fixture, GodotTool.HeroShots, {}, { hook }), {});
+    assert.deepEqual(fixture.requests, []);
+  });
+
+  it("offers and links only projects inside the game on Windows", async () => {
+    const fixture = await windowsProject();
+    const outside = path.join(fixture.home, "Documents", "Godot Projects", "Moon");
+    await mkdir(outside, { recursive: true });
+    await writeFile(path.join(outside, "project.godot"), 'config_version=5\n[application]\nconfig/name="Moon"\n');
+    const offered = ((await action(fixture, "status")).projects as Array<{ name: string }>).map((p) => p.name);
+    assert.equal(offered.includes("Moon"), false, JSON.stringify(offered));
+    await assert.rejects(action(fixture, "use-project", { folder: outside }), /only inside the game's folder/);
+  });
+
+  it("runs at most the host's limit of jobs at once, the others waiting their turn, none refused as busy", async () => {
+    const fixture = await windowsProject({ runningReads: 20 });
+    const runs = [GodotTool.Check, GodotTool.RunScene, GodotTool.Check].map((name) => tool(fixture, name));
+    await Promise.all(runs);
+    assert.equal(fixture.peak.most, 2);
+    assert.equal(fixture.requests.length, 6);
   });
 
   it("passes a Stop on to the sandbox and starts nothing after it", async () => {

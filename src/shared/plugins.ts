@@ -1093,6 +1093,8 @@ export type PluginService = (typeof PluginService)[keyof typeof PluginService];
 
 /** The longest a plugin's sandbox job may be given: an Unreal plugin's package takes up to 45 minutes. */
 export const PLUGIN_SANDBOX_MAX_TIMEOUT_MS = 60 * MINUTE_MS;
+/** How many of one plugin's sandbox jobs may run at once; another is refused until one ends. */
+export const PLUGIN_SANDBOX_MAX_RUNNING = 2;
 /** The shortest deadline a sandbox job may ask for. */
 export const PLUGIN_SANDBOX_MIN_TIMEOUT_MS = 1000;
 /** How much of each of a sandbox job's stdout and stderr the host keeps, in characters, from its end. */

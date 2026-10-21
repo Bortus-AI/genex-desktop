@@ -143,6 +143,25 @@ describe("finding Godot on Windows", () => {
     assert.equal(usableGodot(found)?.binary, own);
   });
 
+  it("finds Steam's Godot in every library Steam lists, its own and one on another drive", async () => {
+    const pc = await fakeWindows([
+      {
+        where: "SteamLibrary/steamapps/common/Godot Engine/godot.windows.opt.tools.64.exe",
+        version: GODOT_461,
+      },
+    ]);
+    const library = path.join(pc.root, "SteamLibrary");
+    const vdf = path.join(pc.root, "Program Files (x86)", "Steam", "steamapps", "libraryfolders.vdf");
+    await mkdir(path.dirname(vdf), { recursive: true });
+    const escaped = library.replaceAll("\\", "\\\\");
+    await writeFile(vdf, `"libraryfolders"\n{\n\t"1"\n\t{\n\t\t"path"\t\t"${escaped}"\n\t}\n}\n`);
+    const found = await findGodots(pc.env);
+    assert.deepEqual(
+      found.map((install) => install.binary),
+      [path.join(library, "steamapps", "common", "Godot Engine", "godot.windows.opt.tools.64.exe")],
+    );
+  });
+
   it("leaves out a Godot in the person's profile Genex didn't install: its sandbox can't read it", async () => {
     const pc = await fakeWindows([
       { where: "Users/Ada/Downloads/Godot_v4.7.2-stable_win64.exe/Godot_v4.7.2-stable_win64.exe", version: GODOT_472 },

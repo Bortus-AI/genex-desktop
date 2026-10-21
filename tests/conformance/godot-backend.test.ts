@@ -395,8 +395,11 @@ describe("the panel and the toolbar", () => {
     );
   });
 
-  it("tells the panel whether this computer is a Windows PC, where Get Godot is Genex's own download", async () => {
-    assert.equal((await action(await godotBackendFixture(), "status")).windows, false);
+  it("tells the panel whether this computer is a Mac or a Windows PC, the ones Genex builds Godot games on", async () => {
+    const mac = await action(await godotBackendFixture(), "status");
+    assert.deepEqual([mac.mac, mac.windows], [true, false]);
+    const linux = await action(await godotBackendFixture({ platform: "linux" }), "status");
+    assert.deepEqual([linux.mac, linux.windows], [false, false]);
   });
 
   it("opens Godot's Mac download page with macOS's open", async () => {
