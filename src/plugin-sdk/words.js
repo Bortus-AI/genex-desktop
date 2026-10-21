@@ -131,7 +131,11 @@
 
   /** Each placeholder kind, filled in. */
   const FILL = {
-    pound: (_node, _params, _lang, count) => (count === undefined ? "#" : String(count)),
+    // A plural's count as the language writes numbers ("1 200" in Russian); English keeps "1200".
+    pound: (_node, _params, lang, count) => {
+      if (count === undefined) return "#";
+      return lang === ENGLISH ? String(count) : number(count, lang);
+    },
     arg: (node, params) => (node.name in params ? String(params[node.name]) : `{${node.name}}`),
     number: (node, params, lang) => number(Number(params[node.name]), lang),
     plural: (node, params, lang) => {

@@ -214,10 +214,10 @@ import { migrateLegacyUserData, userDataMigrationLine } from "./user-data-migrat
 import { confirmPluginInstall, reacquirePlugin } from "./plugin-install-dialog.ts";
 import { PLUGIN_PANEL_CSP } from "./plugin-panel-csp.ts";
 import { HttpStatus, textResponse } from "./page-serve.ts";
-import { applyMainLanguage, pageLanguageArguments } from "./language.ts";
+import { applyMainLanguage, pageLanguageArguments, systemLanguages } from "./language.ts";
 import { appMenuTemplate } from "./app-menu.ts";
 import { intlLocale, t } from "../shared/i18n.ts";
-import { SYSTEM_LANGUAGE } from "../shared/locale.ts";
+import { matchLocale, SYSTEM_LANGUAGE } from "../shared/locale.ts";
 import { GamePreview, registerGameScheme } from "./preview.ts";
 import { RunSummaryReader } from "./run-summary-reader.ts";
 import { registerRunSharingIpc } from "./ipc/run-sharing.ts";
@@ -2155,6 +2155,7 @@ function setAppMenu(): void {
     platform: process.platform,
     appName: app.name,
     checkForUpdates: () => void answerUpdateCheck(),
+    macLanguage: matchLocale(systemLanguages()),
   });
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }

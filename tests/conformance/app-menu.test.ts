@@ -148,3 +148,32 @@ describe("the application menu", () => {
     assert.ok(findItem(template("darwin"), "Edit"));
   });
 });
+
+describe("macOS's Edit menu", () => {
+  it("titles macOS's Edit menu in the Mac's own word, which macOS finds it by to add Dictation and Emoji & Symbols", () => {
+    const edit = (macLanguage: Locale) =>
+      appMenuTemplate({ platform: "darwin", appName: "Genex", checkForUpdates: () => {}, macLanguage })[2]?.label;
+    setLocale(Locale.Japanese, { [messageKey("menu", "Edit")]: "編集" });
+    assert.equal(edit(Locale.English), "Edit", "Genex in Japanese on an English Mac");
+    assert.equal(edit(Locale.Japanese), "編集");
+    setLocale(Locale.English, {});
+    const macWords: Array<[Locale, string]> = [
+      [Locale.Russian, "Правка"],
+      [Locale.Spanish, "Edición"],
+      [Locale.PortugueseBrazil, "Editar"],
+      [Locale.German, "Bearbeiten"],
+      [Locale.French, "Édition"],
+      [Locale.Japanese, "編集"],
+      [Locale.Korean, "편집"],
+      [Locale.ChineseSimplified, "编辑"],
+    ];
+    for (const [mac, word] of macWords) assert.equal(edit(mac), word, mac);
+    const windows = appMenuTemplate({
+      platform: "win32",
+      appName: "Genex",
+      checkForUpdates: () => {},
+      macLanguage: Locale.Japanese,
+    });
+    assert.equal(windows[1]?.label, "Edit", "elsewhere the menu speaks the app's language");
+  });
+});

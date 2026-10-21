@@ -101,7 +101,7 @@ describe("the panel SDK's words", () => {
     assert.equal(html.lang, "ru", "the page says which language it is in");
     assert.equal(sdk.t("Set up {name}", { name: "Drift" }), "Настроить Drift");
     const games = (count: number) => sdk.t("{count, plural, one {# game} other {# games}}", { count });
-    assert.deepEqual([1, 3, 5, 21].map(games), ["1 игра", "3 игры", "5 игр", "21 игра"]);
+    assert.deepEqual([1, 3, 5, 21, 1200].map(games), ["1 игра", "3 игры", "5 игр", "21 игра", "1\u00a0200 игр"]);
     assert.equal(sdk.formatList(["a", "b", "c"]), "a, b и c");
   });
 

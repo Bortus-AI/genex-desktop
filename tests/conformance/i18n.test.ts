@@ -114,6 +114,18 @@ describe("choosing a language", () => {
 });
 
 describe("t", () => {
+  it("shows the English when a translation cannot be read, never an error", () => {
+    setLocale(Locale.Russian, { "Played {days} days ago": "Сыграно {days, plural, one {# день" });
+    assert.equal(t("Played {days} days ago", { days: 3 }), "Played 3 days ago");
+  });
+
+  it("writes a plural's count the way the language writes numbers, English as it was", () => {
+    setLocale(Locale.Russian, { [GAMES]: GAMES_RU });
+    assert.equal(t(GAMES, { count: 1200 }), "1\u00a0200 игр");
+    setLocale(Locale.English, {});
+    assert.equal(t(GAMES, { count: 1200 }), "1200 games");
+  });
+
   it("is the English itself until a language is set, and falls back to it for a missing translation", () => {
     assert.equal(t("Publish"), "Publish");
     setLocale(Locale.Russian, { Publish: "Опубликовать" });
@@ -133,7 +145,7 @@ describe("t", () => {
     assert.equal(t(GAMES, { count: 5 }), "5 games");
     setLocale(Locale.Russian, { [GAMES]: GAMES_RU });
     const russian = [1, 2, 5, 11, 21, 22, 25, 1.5].map((count) => t(GAMES, { count }));
-    assert.deepEqual(russian, ["1 игра", "2 игры", "5 игр", "11 игр", "21 игра", "22 игры", "25 игр", "1.5 игры"]);
+    assert.deepEqual(russian, ["1 игра", "2 игры", "5 игр", "11 игр", "21 игра", "22 игры", "25 игр", "1,5 игры"]);
     setLocale(Locale.Japanese, { [GAMES]: "{count, plural, other {#本のゲーム}}" });
     assert.equal(t(GAMES, { count: 1 }), "1本のゲーム");
   });

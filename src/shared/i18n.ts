@@ -80,10 +80,18 @@ export function tc(context: string, source: string, params?: MessageParams): str
   return translate(messageKey(context, source), source, params);
 }
 
+/** The translation of `key`, filled in; the English when there is none or it cannot be read. */
 function translate(key: string, source: string, params: MessageParams | undefined): string {
   const { locale, catalog } = slot();
   const translation = catalog[key];
-  return formatMessage(translation || source, params, translation ? locale : Locale.English);
+  if (translation) {
+    try {
+      return formatMessage(translation, params, locale);
+    } catch {
+      // A catalog with a broken message shows that one message in English, never an error.
+    }
+  }
+  return formatMessage(source, params, Locale.English);
 }
 
 /** "a, b and c" in the active language. English keeps the app's own form: no comma before "and". */
@@ -272,7 +280,7 @@ function render(
 
 function renderNode(node: MessageNode, params: MessageParams, locale: Locale, count: number | undefined): string {
   if (typeof node === "string") return node;
-  if (node.kind === "pound") return count === undefined ? "#" : String(count);
+  if (node.kind === "pound") return poundWords(count, locale);
   if (node.kind === "arg") return node.name in params ? String(params[node.name]) : `{${node.name}}`;
   if (node.kind === "number") return formatNumber(Number(params[node.name]), locale);
   if (node.kind === "plural") {
@@ -292,6 +300,12 @@ function pluralBranch(cases: ReadonlyMap<string, MessageNode[]>, value: number, 
     pluralRules.set(locale, rules);
   }
   return cases.get(rules.select(value)) ?? cases.get("other") ?? [];
+}
+
+/** A plural's `#`: its count as the language writes numbers ("1 200" in Russian); English keeps "1200". */
+function poundWords(count: number | undefined, locale: Locale): string {
+  if (count === undefined) return "#";
+  return locale === Locale.English ? String(count) : formatNumber(count, locale);
 }
 
 function formatNumber(value: number, locale: Locale): string {

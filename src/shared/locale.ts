@@ -118,13 +118,12 @@ const LANGUAGE_TAG = /^[a-z]{2,8}(?:-[a-z0-9]{1,8})*$/;
 
 /**
  * Up to {@link MAX_SYSTEM_LANGUAGES} of `tags` as plain tags ({@link plainTag}: "ja_JP.UTF-8" →
- * "ja-jp"), in order, the rest dropped: they read as the same language main reads them as.
+ * "ja-jp"), in order and once each, the rest dropped: they read as the same language main reads them as.
  */
 function languageTags(tags: readonly string[]): string[] {
-  return tags
-    .map(plainTag)
-    .filter((tag) => LANGUAGE_TAG.test(tag))
-    .slice(0, MAX_SYSTEM_LANGUAGES);
+  const plain = tags.map(plainTag).filter((tag) => LANGUAGE_TAG.test(tag));
+  // Once each, before the cap: glibc spells a language four ways, which would crowd out the rest.
+  return [...new Set(plain)].slice(0, MAX_SYSTEM_LANGUAGES);
 }
 
 /**

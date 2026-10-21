@@ -6,7 +6,8 @@
  * labels are tested without Electron.
  */
 import type { MenuItemConstructorOptions } from "electron";
-import { t, tc } from "../shared/i18n.ts";
+import { currentLocale, t, tc } from "../shared/i18n.ts";
+import { Locale } from "../shared/locale.ts";
 
 /** What the menu needs from the running app. */
 export interface AppMenuOptions {
@@ -16,7 +17,28 @@ export interface AppMenuOptions {
   appName: string;
   /** What Check for Updates… does. */
   checkForUpdates: () => void;
+  /**
+   * The Mac's own language (`matchLocale` of its list): macOS adds Start Dictation… and Emoji &
+   * Symbols only to a menu titled with its word for Edit. The app's language when absent.
+   */
+  macLanguage?: Locale;
 }
+
+/**
+ * macOS's word for the Edit menu in each language, as AppKit spells it (InputManager.loctable):
+ * the title it looks for. A system string, not a translation of Genex's.
+ */
+const MAC_EDIT_MENU = {
+  [Locale.English]: "Edit",
+  [Locale.Russian]: "Правка",
+  [Locale.Spanish]: "Edición",
+  [Locale.PortugueseBrazil]: "Editar",
+  [Locale.German]: "Bearbeiten",
+  [Locale.French]: "Édition",
+  [Locale.Japanese]: "編集",
+  [Locale.Korean]: "편집",
+  [Locale.ChineseSimplified]: "编辑",
+} as const satisfies Record<Locale, string>;
 
 const SEPARATOR: MenuItemConstructorOptions = { type: "separator" };
 
@@ -32,7 +54,7 @@ export function appMenuTemplate(options: AppMenuOptions): MenuItemConstructorOpt
   return [
     ...(mac ? [macAppMenu(options.appName, updates)] : []),
     fileMenu(options.platform),
-    editMenu(mac),
+    editMenu(mac, MAC_EDIT_MENU[options.macLanguage ?? currentLocale()]),
     viewMenu(),
     windowMenu(mac),
     help,
@@ -65,7 +87,8 @@ function fileMenu(platform: NodeJS.Platform): MenuItemConstructorOptions {
   return { label: t("File"), submenu: [platform === "darwin" ? close : quit] };
 }
 
-function editMenu(mac: boolean): MenuItemConstructorOptions {
+/** Edit: on macOS titled `macTitle`, the Mac's word, so the system's own items join it. */
+function editMenu(mac: boolean, macTitle: string): MenuItemConstructorOptions {
   const macOnly: MenuItemConstructorOptions[] = [
     { role: "pasteAndMatchStyle", label: t("Paste and Match Style") },
     { role: "delete", label: t("Delete") },
@@ -85,7 +108,7 @@ function editMenu(mac: boolean): MenuItemConstructorOptions {
     { role: "selectAll", label: t("Select All") },
   ];
   return {
-    label: tc("menu", "Edit"),
+    label: mac ? macTitle : tc("menu", "Edit"),
     submenu: [
       { role: "undo", label: t("Undo") },
       { role: "redo", label: t("Redo") },

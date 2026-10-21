@@ -110,6 +110,16 @@ describe("System in the window and in main's menus", () => {
       ["C.UTF-8", "pt_PT@euro"],
       ["zh-Hant-TW", "en-TW"],
       ["de_DE.UTF-8@euro"],
+      // glibc spells each of four languages four ways before the one Genex speaks.
+      [
+        ...["fi_FI", "sv_SE", "da_DK", "nb_NO"].flatMap((tag) => [
+          `${tag}.UTF-8`,
+          tag,
+          `${tag.slice(0, 2)}.UTF-8`,
+          tag.slice(0, 2),
+        ]),
+        "ja_JP.UTF-8",
+      ],
     ];
     for (const list of lists) {
       page(["en-US"], systemLanguagesFromArgs([systemLanguagesArgument(list)]));
