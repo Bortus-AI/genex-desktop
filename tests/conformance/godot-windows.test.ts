@@ -558,12 +558,13 @@ describe("Godot on Windows: jobs in Genex's sandbox", () => {
     assert.equal(fixture.requests.at(-1)?.timeoutMs, 2 * MINUTE, "what the budget leaves, not the job's own 8 minutes");
     // Both turns held: a third job waits, and the call's clock moves on meanwhile.
     const holding = [run(OWN_GODOT, call("hold"), scope()), run(OWN_GODOT, call("hold"), scope())];
-    const waiting = run(OWN_GODOT, call("late"), scope(budget));
+    // Its refusal is awaited from the start, so it never lands unawaited while the others end.
+    const refused = assert.rejects(run(OWN_GODOT, call("late"), scope(budget)), /no time left/);
     for (let turns = 0; turns < 20; turns += 1) await turnOver();
     clock.at = 1.5 * MINUTE;
     release();
     await Promise.all(holding);
-    await assert.rejects(waiting, /no time left/);
+    await refused;
     assert.equal(
       fixture.requests.some((request) => request.args.includes("late")),
       false,
