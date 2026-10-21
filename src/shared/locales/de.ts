@@ -104,6 +104,10 @@ export default {
   "A farming sim on a floating island that drifts between seasons":
     "Eine Farm-Simulation auf einer schwebenden Insel, die zwischen den Jahreszeiten treibt",
   "A file picker is already open": "Eine Dateiauswahl ist schon offen",
+  "A file was in use, or the drive refused it. Close other apps, then try again.":
+    "Eine Datei war in Benutzung oder das Laufwerk hat sie abgelehnt. Schließ andere Apps und versuch es noch mal.",
+  "A file was in use. Close other programs and try again.":
+    "Eine Datei war in Benutzung. Schließ andere Programme und versuch es noch mal.",
   "A firefly-catching game in a summer meadow at dusk":
     "Ein Spiel, in dem du in der Abenddämmerung auf einer Sommerwiese Glühwürmchen fängst",
   "A frog hopping across lily pads that sink when you stay too long":
@@ -569,6 +573,8 @@ export default {
   "Build again": "Neu bauen",
   "Build cancelled": "Build abgebrochen",
   "Build copies": "Build-Kopien",
+  "Build copies, pictures, chats and sign-ins. Your games stay where they are.":
+    "Build-Kopien, Bilder, Chats und Anmeldungen. Deine Spiele bleiben, wo sie sind.",
   "Build delivered · Checks need attention": "Build übernommen · Prüfungen brauchen Aufmerksamkeit",
   "Build delivered · Verification incomplete": "Build übernommen · Prüfung unvollständig",
   "Build failed": "Build fehlgeschlagen",
@@ -1102,6 +1108,7 @@ export default {
   "Couldn’t load your stats.": "Deine Statistiken konnten nicht geladen werden.",
   "Couldn’t load {title}": "{title} konnte nicht geladen werden",
   "Couldn’t make a copy of that game.": "Das Spiel konnte nicht kopiert werden.",
+  "Couldn’t move to {folder}. {problem}": "Verschieben nach {folder} hat nicht geklappt. {problem}",
   "Couldn’t play this sound.": "Dieser Sound konnte nicht abgespielt werden.",
   "Couldn’t post your comment": "Dein Kommentar konnte nicht gepostet werden",
   "Couldn’t prepare the plan": "Plan konnte nicht erstellt werden",
@@ -1127,6 +1134,7 @@ export default {
   "Couldn’t stop signing in. Try again in a moment.": "Anmeldung ließ sich nicht stoppen. Versuch es gleich noch mal.",
   "Couldn’t unpublish the game.": "Veröffentlichung konnte nicht aufgehoben werden.",
   "Couldn’t use that picture. Try a PNG or JPEG.": "Das Bild ging nicht. Probier ein PNG oder JPEG.",
+  "Counting files": "Dateien werden gezählt",
   "Cover changed": "Cover geändert",
   "Cover for {title}": "Cover für {title}",
   "Cover images must be at most {pixels} pixels across.": "Cover dürfen höchstens {pixels} Pixel breit sein.",
@@ -1368,6 +1376,7 @@ export default {
   Fighting: "Kampf",
   File: "Datei",
   Files: "Dateien",
+  "Files changed after the move stay in {folder}.": "Nach dem Verschieben geänderte Dateien bleiben in {folder}.",
   "Files inside {folders} keep their own history and stay as they are.":
     "Dateien in {folders} haben ihren eigenen Verlauf und bleiben unverändert.",
   "Files that will be uploaded ({count})": "Dateien, die hochgeladen werden ({count})",
@@ -1415,6 +1424,7 @@ export default {
   "Fixes: {task}": "Korrekturen: {task}",
   "Fixing a shader error…": "Behebt einen Shader-Fehler…",
   Flare: "Flare",
+  "Folder for Genex’s files": "Ordner für die Genex-Dateien",
   "Folder for new games": "Ordner für neue Spiele",
   Folders: "Ordner",
   "Folders Genex made to run and show builds.": "Ordner, die Genex anlegt, um Builds zu starten und zu zeigen.",
@@ -1495,6 +1505,7 @@ export default {
   "Genex account": "Genex-Konto",
   "Genex adds the starter's missing files and keeps every file that is there":
     "Genex ergänzt die fehlenden Starter-Dateien und behält jede Datei, die schon da ist",
+  "Genex already keeps its files there.": "Genex speichert seine Dateien schon dort.",
   "Genex answered with something Studio can’t read.": "Genex hat etwas geantwortet, das Studio nicht lesen kann.",
   "Genex authorization expired. Reconnect the Genex plugin before uploading.":
     "Die Genex-Autorisierung ist abgelaufen. Verbinde das Genex-Plugin neu, bevor du hochlädst.",
@@ -1513,6 +1524,9 @@ export default {
     "Genex sieht noch keine App-Fenster: Erlaube Genex in den Systemeinstellungen den Zugriff unter {panes}.",
   "Genex can't take back this project's set-up here, so the link stays.":
     "Genex kann die Einrichtung dieses Projekts hier nicht zurücknehmen, deshalb bleibt die Verknüpfung.",
+  "Genex can’t find its files": "Genex findet seine Dateien nicht",
+  "Genex closes, moves its files and opens again; on another drive this takes a few minutes. Close other apps using its build copies first.":
+    "Genex schließt sich, verschiebt seine Dateien und öffnet sich wieder; auf ein anderes Laufwerk dauert das ein paar Minuten. Schließ vorher andere Apps, die seine Build-Kopien nutzen.",
   "Genex color tokens or VS Code UI colors": "Genex-Farbtokens oder UI-Farben aus VS Code",
   "Genex connects to servers on this computer or your local network. For a hosted API, use OpenRouter or OpenCode.":
     "Genex verbindet sich mit Servern auf diesem Computer oder in deinem lokalen Netzwerk. Für eine gehostete API nimm OpenRouter oder OpenCode.",
@@ -1526,6 +1540,8 @@ export default {
     "Genex konnte nicht erkennen, ob {app} frei war, deshalb wurde nichts zurückgespult. Spul gleich noch mal zurück.",
   "Genex couldn't tell whether {app} was free, so the newer version didn't come back. Try again in a moment.":
     "Genex konnte nicht erkennen, ob {app} frei war, deshalb kam die neuere Version nicht zurück. Versuch es gleich noch mal.",
+  "Genex couldn’t finish moving its files": "Genex konnte seine Dateien nicht fertig verschieben",
+  "Genex couldn’t make that folder private to you.": "Genex konnte diesen Ordner nicht nur für dich zugänglich machen.",
   "Genex couldn’t read that picture. Try another.": "Genex konnte das Bild nicht lesen. Versuch ein anderes.",
   "Genex couldn’t start": "Genex konnte nicht starten",
   "Genex couldn’t take the deletion right now. Nothing was deleted; try again later.":
@@ -1562,6 +1578,8 @@ export default {
   "Genex installs Unity Hub on a Mac only: get it from Unity's page.":
     "Genex installiert Unity Hub nur auf dem Mac: Lade es von der Unity-Website herunter.",
   "Genex is already getting Roblox Studio.": "Genex holt Roblox Studio bereits.",
+  "Genex is already open, or its data folder is locked.":
+    "Genex ist schon geöffnet oder sein Datenordner ist gesperrt.",
   "Genex is connected": "Genex ist verbunden",
   "Genex is connected to OpenRouter": "Genex ist mit OpenRouter verbunden",
   "Genex is doing this. You'll only be asked to sign in.": "Genex erledigt das. Du musst dich nur anmelden.",
@@ -1969,6 +1987,7 @@ export default {
   "Keep building where you left off.": "Bau dort weiter, wo du aufgehört hast.",
   "Keep building: fix what’s left.": "Weiterbauen: Behebe, was noch fehlt.",
   "Keep going from where we left off.": "Mach da weiter, wo wir aufgehört haben.",
+  "Keep here": "Hier lassen",
   "Keep planning: what should change?": "Weiter planen: Was soll sich ändern?",
   "Keep running": "Weiterlaufen lassen",
   "Keep this cover": "Dieses Cover behalten",
@@ -2239,9 +2258,13 @@ export default {
   "More options": "Weitere Optionen",
   "More workers": "Mehr Helfer",
   Move: "Schritt",
+  "Move and restart": "Verschieben und neu starten",
+  "Move {size} to {folder}?": "{size} nach {folder} verschieben?",
   Moved: "Bewegt",
   "Moved {actor}": "{actor} bewegt",
+  "Moving Genex’s files isn’t available here.": "Genex-Dateien lassen sich hier nicht verschieben.",
   "Moving the mouse": "Bewegt die Maus",
+  "Moving your Genex files": "Deine Genex-Dateien werden verschoben",
   "Moving {actor}": "Bewegt {actor}",
   "Multi-agent workflows. Custom plugins. Assets for games.":
     "Multi-Agent-Workflows. Eigene Plugins. Assets für Spiele.",
@@ -2476,6 +2499,8 @@ export default {
   "Older models": "Ältere Modelle",
   "Ollama is not running at {host}. Install or start Ollama, then download again.":
     "Ollama läuft nicht unter {host}. Installiere oder starte Ollama und lade dann erneut herunter.",
+  "Ollama keeps its models in its own folder: move them in Ollama → Settings → Model location.":
+    "Ollama speichert seine Modelle in einem eigenen Ordner: Verschieb sie unter Ollama → Settings → Model location.",
   "Ollama library ↗": "Ollama-Bibliothek ↗",
   "Ollama {version} is running but has no models installed":
     "Ollama {version} läuft, hat aber keine Modelle installiert",
@@ -2724,9 +2749,16 @@ export default {
   Phosphor: "Phosphor",
   Photo: "Foto",
   Physics: "Physik",
+  "Pick a drive inside this computer, not a USB stick.": "Wähl ein Laufwerk in diesem Computer, keinen USB-Stick.",
+  "Pick a folder on this computer, not on a network drive.":
+    "Wähl einen Ordner auf diesem Computer, nicht auf einem Netzlaufwerk.",
+  "Pick a folder outside Genex’s files, your games and Genex’s install.":
+    "Wähl einen Ordner außerhalb der Genex-Dateien, deiner Spiele und der Genex-Installation.",
   "Pick a picture under 40 MB.": "Wähle ein Bild unter 40 MB.",
   "Pick a picture. It’s cropped to 16:9, like every cover.":
     "Wähle ein Bild. Es wird auf 16:9 zugeschnitten, wie jedes Cover.",
+  "Pick an empty folder or a drive. Genex makes a Genex folder in one that has files.":
+    "Wähl einen leeren Ordner oder ein Laufwerk. Wo schon Dateien liegen, legt Genex einen Ordner „Genex“ an.",
   "Pick the build up where it left off": "Den Build dort fortsetzen, wo er aufgehört hat",
   Picture: "Bild",
   "Pictures show here once a Loop takes them.": "Bilder erscheinen hier, sobald ein Loop welche macht.",
@@ -3466,6 +3498,8 @@ export default {
   "Smallest dot": "Kleinster Punkt",
   Smarter: "Klüger",
   "Snapshot: {snapshot}": "Snapshot: {snapshot}",
+  "Some are already in {folder}. Try again to finish moving them.":
+    "Ein Teil liegt schon in {folder}. Mit „Erneut versuchen“ verschiebst du den Rest.",
   "Some of them may have changed outside this chat.": "Manche davon wurden vielleicht außerhalb dieses Chats geändert.",
   "Some skill folders exceeded the discovery limit.": "Einige Skill-Ordner haben das Suchlimit überschritten.",
   "Some surfaces cannot share readable text. Choose backgrounds with similar brightness.":
@@ -3481,6 +3515,7 @@ export default {
   "Something else is working in {app} now, so the newer version didn't come back. Try again once it's done.":
     "Gerade ist {app} mit etwas anderem beschäftigt, deshalb kam die neuere Version nicht zurück. Versuch es noch mal, sobald das erledigt ist.",
   "Something went wrong": "Etwas ist schiefgelaufen",
+  "Something went wrong. Try again.": "Etwas ist schiefgelaufen. Versuch es noch mal.",
   "Sonar returns painting the scene in sweeps": "Sonar-Echos, die die Szene in Wellen malen",
   Sound: "Sound",
   "Sound effect": "Soundeffekt",
@@ -3543,6 +3578,8 @@ export default {
   "Stop this terminal before closing its session.": "Stoppe dieses Terminal, bevor du seine Sitzung schließt.",
   "Stop watching folder": "Ordner nicht mehr beobachten",
   "Stop watching folder for {name}": "Ordner von {name} nicht mehr beobachten",
+  "Stop your builds and replies first, then move.":
+    "Stopp zuerst deine Builds und Antworten, dann kannst du verschieben.",
   Stopped: "Gestoppt",
   "Stopped adding the Luau checks. Nothing was kept.": "Hinzufügen der Luau-Prüfungen gestoppt. Nichts wurde behalten.",
   "Stopped by the lead": "Vom Hauptagenten gestoppt",
@@ -3687,6 +3724,8 @@ export default {
     "Das sieht nicht nach einem Schlüssel aus. Füg den ganzen Schlüssel ohne Leerzeichen ein.",
   "That doesn't look like the code from the sign-in page. Copy it again.":
     "Das sieht nicht wie der Code von der Anmeldeseite aus. Kopier ihn noch mal.",
+  "That drive can’t keep files private to you (FAT32 or exFAT). Pick an NTFS drive.":
+    "Auf diesem Laufwerk lassen sich Dateien nicht nur für dich zugänglich halten (FAT32 oder exFAT). Wähl ein NTFS-Laufwerk.",
   "That file could not be read as a picture. Choose a JPG, PNG or WebP.":
     "Die Datei ließ sich nicht als Bild lesen. Wähl ein JPG, PNG oder WebP.",
   "That file is too large to add.": "Diese Datei ist zu groß zum Hinzufügen.",
@@ -3695,7 +3734,9 @@ export default {
   "That file isn’t a picture the app can read.": "Diese Datei ist kein Bild, das die App lesen kann.",
   "That file isn’t in the build any more.": "Diese Datei ist nicht mehr im Build.",
   "That file isn’t on this computer any more.": "Diese Datei ist nicht mehr auf diesem Computer.",
+  "That folder already has files. Pick an empty one.": "In diesem Ordner liegen schon Dateien. Wähl einen leeren.",
   "That folder is no longer there. Choose another one.": "Diesen Ordner gibt es nicht mehr. Wähle einen anderen.",
+  "That folder was gone when Genex restarted.": "Dieser Ordner war weg, als Genex neu gestartet ist.",
   "That isn't a server address. Enter one like http://127.0.0.1:5000/v1.":
     "Das ist keine Serveradresse. Gib eine wie http://127.0.0.1:5000/v1 ein.",
   "That isn’t a link to a GitHub repository.": "Das ist kein Link zu einem GitHub-Repository.",
@@ -3933,6 +3974,7 @@ export default {
   "The studio couldn't start the sign-in. Try again.":
     "Die Anmeldung konnte nicht gestartet werden. Versuch es noch mal.",
   "The studio is working out what to build": "Studio klärt, was gebaut werden soll",
+  "The studio window is not open.": "Das Studio-Fenster ist nicht geöffnet.",
   "The studio window keeps crashing": "Das Studio-Fenster stürzt immer wieder ab",
   "The terminal could not start. Try opening it again.":
     "Das Terminal konnte nicht starten. Versuch, es erneut zu öffnen.",
@@ -3953,6 +3995,7 @@ export default {
     "Es gibt keine gespeicherte Kopie der Spieldateien von vor dieser Nachricht.",
   "There is nothing to set up: the protected workspace is not waiting on an install.":
     "Hier gibt es nichts einzurichten: Der geschützte Arbeitsbereich wartet auf keine Installation.",
+  "There isn’t enough free space there.": "Dort ist nicht genug Speicherplatz frei.",
   "There was nothing to free.": "Es gab nichts freizugeben.",
   "There's already something called {name} in {place}. Choose another name.":
     "In {place} gibt es schon etwas namens {name}. Wähl einen anderen Namen.",
@@ -3977,6 +4020,8 @@ export default {
   "They preferred this build to the one before it.": "Sie fanden diesen Build besser als den davor.",
   "They run in Genex’s sandbox and can’t change your other games.":
     "Sie laufen in der Sandbox von Genex und können deine anderen Spiele nicht ändern.",
+  "They’re in {folder}. Connect that drive, then try again.":
+    "Sie liegen in {folder}. Schließ dieses Laufwerk an und versuch es noch mal.",
   Thinking: "Denkt nach",
   "Thinking details": "Gedankengang",
   "This .uproject file isn't valid JSON, so Genex won't change it.":
@@ -4193,6 +4238,7 @@ export default {
     "Diese Installation von {name} braucht Node.js, das nicht installiert ist. Installiere stattdessen die native Version.",
   "Three version": "Three-Version",
   Threshold: "Schwelle",
+  "To {folder}. Genex reopens when it’s done.": "Nach {folder}. Genex öffnet sich wieder, wenn alles fertig ist.",
   Today: "Heute",
   "Toggle Developer Tools": "Entwicklertools",
   "Toggle Full Screen": "Vollbild",
@@ -4555,6 +4601,7 @@ export default {
     "Wenn ein Sitzungslimit zurückgesetzt wird, eine Weile nach einem Ausfall des Modellanbieters oder wenn Studios Loop neu startet, macht ein pausierter Build dort weiter, wo er aufgehört hat – bis zu zweimal pro Build. Ein Build, den du stoppst, bleibt gestoppt, und einer, der wegen einer Anmeldung pausiert, wartet auf dich.",
   "When off, Harness stops learning from your builds. What it already learned stays until you undo it.":
     "Wenn aus, lernt Harness nicht mehr aus deinen Builds. Bereits Gelerntes bleibt, bis du es rückgängig machst.",
+  "Where Genex keeps its files": "Wo Genex seine Dateien speichert",
   "Where the server runs": "Wo der Server läuft",
   "Where this game is saved": "Wo dieses Spiel gespeichert ist",
   "Where this game is saved: {folder}": "Wo dieses Spiel gespeichert ist: {folder}",
@@ -5556,6 +5603,7 @@ export default {
   "{first} {second}": "{first} {second}",
   "{first}, and {next}": "{first} und {next}",
   "{folder} is a link, so Genex writes no place there.": "{folder} ist ein Link, daher schreibt Genex dort keinen Ort.",
+  "{folder} is still not there.": "{folder} ist immer noch nicht da.",
   "{folder} isn't a Godot project folder (it has no project.godot).":
     "{folder} ist kein Godot-Projektordner (es gibt kein project.godot).",
   "{folder} isn't a folder.": "{folder} ist kein Ordner.",

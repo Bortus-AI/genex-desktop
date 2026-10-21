@@ -28,6 +28,7 @@ import { ChatFileOpen } from "../shared/chat-files.ts";
 import { sizeWords } from "../shared/byte-size.ts";
 import { homePath, pathLeaf } from "../shared/path-label.ts";
 import { freeableBytes, StorageKind, type StorageFreed, type StorageSpace } from "../shared/storage-space.ts";
+import { DataFolderProblem } from "../shared/data-folder.ts";
 import { SkippedBy, type SkippedFile } from "../shared/chat-rewind.ts";
 import { LiveBehindReason } from "../shared/live-behind.ts";
 import { PlayCardAction, PlayCoverRefusal, PlayMobileSupport } from "../shared/play-manage.ts";
@@ -3557,6 +3558,40 @@ export const STORAGE_WORDS = {
   freedNothing: t("There was nothing to free."),
 } as const;
 
+/** Settings → Storage's data folder (Windows): where Genex keeps its files, and moving them. */
+export const DATA_FOLDER_WORDS = {
+  title: t("Where Genex keeps its files"),
+  hint: t("Build copies, pictures, chats and sign-ins. Your games stay where they are."),
+  change: t("Change…"),
+  checking: t("Checking…"),
+  keep: t("Keep here"),
+  move: t("Move and restart"),
+  moveTitle: (bytes: number, to: string) => t("Move {size} to {folder}?", { size: unbrokenSize(bytes), folder: to }),
+  moveBody: t(
+    "Genex closes, moves its files and opens again; on another drive this takes a few minutes. Close other apps using its build copies first.",
+  ),
+  failed: (to: string, problem: DataFolderProblem) =>
+    t("Couldn’t move to {folder}. {problem}", { folder: to, problem: DATA_FOLDER_PROBLEM_WORDS[problem] }),
+  /** Old copies someone changed after the move: they stay where they were. */
+  kept: (dir: string) => t("Files changed after the move stay in {folder}.", { folder: dir }),
+} as const;
+
+/** Why a picked folder can't hold Genex's files, or why a move didn't happen, by `DataFolderProblem`. */
+export const DATA_FOLDER_PROBLEM_WORDS = {
+  [DataFolderProblem.Unsupported]: t("Moving Genex’s files isn’t available here."),
+  [DataFolderProblem.Busy]: t("Stop your builds and replies first, then move."),
+  [DataFolderProblem.Same]: t("Genex already keeps its files there."),
+  [DataFolderProblem.Overlaps]: t("Pick a folder outside Genex’s files, your games and Genex’s install."),
+  [DataFolderProblem.Network]: t("Pick a folder on this computer, not on a network drive."),
+  [DataFolderProblem.Removable]: t("Pick a drive inside this computer, not a USB stick."),
+  [DataFolderProblem.FileSystem]: t("That drive can’t keep files private to you (FAT32 or exFAT). Pick an NTFS drive."),
+  [DataFolderProblem.NotEmpty]: t("That folder already has files. Pick an empty one."),
+  [DataFolderProblem.NoSpace]: t("There isn’t enough free space there."),
+  [DataFolderProblem.Unwritable]: t("Genex couldn’t make that folder private to you."),
+  [DataFolderProblem.InUse]: t("A file was in use. Close other programs and try again."),
+  [DataFolderProblem.Missing]: t("That folder was gone when Genex restarted."),
+  [DataFolderProblem.Failed]: t("Something went wrong. Try again."),
+} as const satisfies Record<DataFolderProblem, string>;
 /** Settings → Storage's games from Play (`panels/InstalledGamesSection.tsx`). */
 export const INSTALLED_GAMES_WORDS = {
   title: t("Games from Play"),
@@ -4067,6 +4102,29 @@ export const SANDBOX_SETUP_WORDS = {
       workspace: t("Starting the protected workspace"),
       studio: t("Opening the studio"),
     } satisfies Record<StartStep, string>,
+  },
+  /** Genex moving its files to the folder chosen in Settings → Storage, then starting again. */
+  moving: {
+    title: t("Moving your Genex files"),
+    line: (to: string) => t("To {folder}. Genex reopens when it’s done.", { folder: to }),
+    counting: t("Counting files"),
+    progress: (done: number, total: number) =>
+      t("{done} of {total}", { done: sizeWords(done), total: sizeWords(total) }),
+  },
+  /** A move that stopped with some files already in the new folder: Try again carries it on. */
+  moveStopped: {
+    title: t("Genex couldn’t finish moving its files"),
+    line: (to: string) => t("Some are already in {folder}. Try again to finish moving them.", { folder: to }),
+    tryAgain: t("Try again"),
+    quit: t("Quit"),
+  },
+  /** The folder Genex keeps its files in is not there (its drive is unplugged). */
+  dataMissing: {
+    title: t("Genex can’t find its files"),
+    line: (dir: string) => t("They’re in {folder}. Connect that drive, then try again.", { folder: dir }),
+    tryAgain: t("Try again"),
+    checking: t("Checking…"),
+    quit: t("Quit"),
   },
   /** The studio's harness would not start: its error, Try again, a report and Quit. */
   startFailed: {

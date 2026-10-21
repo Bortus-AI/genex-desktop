@@ -85,6 +85,10 @@ export default {
     "モンスターになって勇者たちから宝を守るダンジョン",
   "A farming sim on a floating island that drifts between seasons": "季節の間を漂う浮島での農業シミュレーション",
   "A file picker is already open": "ファイル選択はすでに開いています",
+  "A file was in use, or the drive refused it. Close other apps, then try again.":
+    "ファイルが使用中だったか、ドライブに拒否されました。ほかのアプリを閉じてから、もう一度試してください。",
+  "A file was in use. Close other programs and try again.":
+    "ファイルが使用中でした。ほかのプログラムを閉じて、もう一度試してください。",
   "A firefly-catching game in a summer meadow at dusk": "夏の夕暮れの草原でホタルを捕まえるゲーム",
   "A frog hopping across lily pads that sink when you stay too long": "長く乗っていると沈むハスの葉を跳んでいくカエル",
   "A full path, such as /Users/you/server.": "/Users/you/serverのようなフルパスです。",
@@ -508,6 +512,8 @@ export default {
   "Build again": "もう一度ビルド",
   "Build cancelled": "ビルドをキャンセルしました",
   "Build copies": "ビルドのコピー",
+  "Build copies, pictures, chats and sign-ins. Your games stay where they are.":
+    "ビルドのコピー、画像、チャット、サインイン情報です。ゲームは今の場所に残ります。",
   "Build delivered · Checks need attention": "ビルドを反映 · チェックの確認が必要です",
   "Build delivered · Verification incomplete": "ビルドを反映 · 検証は未完了です",
   "Build failed": "ビルド失敗",
@@ -1033,6 +1039,7 @@ export default {
   "Couldn’t load your stats.": "統計を読み込めませんでした。",
   "Couldn’t load {title}": "{title}を読み込めませんでした",
   "Couldn’t make a copy of that game.": "そのゲームをコピーできませんでした。",
+  "Couldn’t move to {folder}. {problem}": "{folder}に移動できませんでした。{problem}",
   "Couldn’t play this sound.": "このサウンドを再生できませんでした。",
   "Couldn’t post your comment": "コメントを投稿できませんでした",
   "Couldn’t prepare the plan": "プランを準備できませんでした",
@@ -1059,6 +1066,7 @@ export default {
     "サインインを中止できませんでした。少し待ってからもう一度試してください。",
   "Couldn’t unpublish the game.": "ゲームの公開をやめられませんでした。",
   "Couldn’t use that picture. Try a PNG or JPEG.": "その画像は使えませんでした。PNGかJPEGを試してください。",
+  "Counting files": "ファイルを数えています",
   "Cover changed": "カバーを変更しました",
   "Cover for {title}": "{title}のカバー",
   "Cover images must be at most {pixels} pixels across.": "カバー画像の幅は{pixels}ピクセル以内にしてください。",
@@ -1299,6 +1307,7 @@ export default {
   Fighting: "格闘",
   File: "ファイル",
   Files: "ファイル",
+  "Files changed after the move stay in {folder}.": "移動後に変更されたファイルは{folder}に残ります。",
   "Files inside {folders} keep their own history and stay as they are.":
     "{folders}内のファイルは独自の履歴を持つため、そのままになります。",
   "Files that will be uploaded ({count})": "アップロードするファイル（{count}）",
@@ -1346,6 +1355,7 @@ export default {
   "Fixes: {task}": "修正：{task}",
   "Fixing a shader error…": "シェーダーのエラーを直しています…",
   Flare: "フレア",
+  "Folder for Genex’s files": "Genexのファイル用フォルダー",
   "Folder for new games": "新しいゲームのフォルダー",
   Folders: "フォルダー",
   "Folders Genex made to run and show builds.": "Genexがビルドの実行と表示のために作ったフォルダーです。",
@@ -1426,6 +1436,7 @@ export default {
   "Genex account": "Genexアカウント",
   "Genex adds the starter's missing files and keeps every file that is there":
     "Genexはスターターに足りないファイルを追加し、既存のファイルはすべて残します",
+  "Genex already keeps its files there.": "Genexはすでにそこにファイルを保存しています。",
   "Genex answered with something Studio can’t read.": "GenexからStudioが読み取れない応答が返ってきました。",
   "Genex authorization expired. Reconnect the Genex plugin before uploading.":
     "Genexの認証が期限切れです。アップロードする前にGenexプラグインを再接続してください。",
@@ -1444,6 +1455,9 @@ export default {
     "Genexはまだアプリのウィンドウを見られません。システム設定で、Genexに{panes}を許可してください。",
   "Genex can't take back this project's set-up here, so the link stays.":
     "Genexはここではこのプロジェクトのセットアップを取り消せないため、リンクはそのまま残ります。",
+  "Genex can’t find its files": "Genexのファイルが見つかりません",
+  "Genex closes, moves its files and opens again; on another drive this takes a few minutes. Close other apps using its build copies first.":
+    "Genexはいったん閉じてファイルを移動し、もう一度開きます。別のドライブへの移動には数分かかります。先に、Genexのビルドのコピーを使っているほかのアプリを閉じてください。",
   "Genex color tokens or VS Code UI colors": "GenexのカラートークンかVS CodeのUIカラー",
   "Genex connects to servers on this computer or your local network. For a hosted API, use OpenRouter or OpenCode.":
     "Genexが接続できるのは、このコンピューターかローカルネットワーク上のサーバーです。ホスティングされたAPIには、OpenRouterかOpenCodeを使ってください。",
@@ -1457,6 +1471,8 @@ export default {
     "Genexは{app}が空いているか確認できなかったため、何も巻き戻していません。少ししてからもう一度巻き戻してください。",
   "Genex couldn't tell whether {app} was free, so the newer version didn't come back. Try again in a moment.":
     "Genexは{app}が空いているか確認できなかったため、新しいバージョンは戻りませんでした。少ししてからもう一度試してください。",
+  "Genex couldn’t finish moving its files": "Genexのファイルを最後まで移動できませんでした",
+  "Genex couldn’t make that folder private to you.": "Genexはそのフォルダーをあなた専用にできませんでした。",
   "Genex couldn’t read that picture. Try another.": "Genexはその画像を読み込めませんでした。別の画像を試してください。",
   "Genex couldn’t start": "Genexを起動できませんでした",
   "Genex couldn’t take the deletion right now. Nothing was deleted; try again later.":
@@ -1494,6 +1510,8 @@ export default {
   "Genex installs Unity Hub on a Mac only: get it from Unity's page.":
     "GenexがUnity HubをインストールできるのはMacだけです。Unityのページから入手してください。",
   "Genex is already getting Roblox Studio.": "GenexはすでにRoblox Studioを入手中です。",
+  "Genex is already open, or its data folder is locked.":
+    "Genexがすでに開いているか、データフォルダーがロックされています。",
   "Genex is connected": "Genexに接続しました",
   "Genex is connected to OpenRouter": "GenexはOpenRouterに接続されました",
   "Genex is doing this. You'll only be asked to sign in.": "Genexが進めておきます。サインインだけお願いします。",
@@ -1897,6 +1915,7 @@ export default {
   "Keep building where you left off.": "中断したところから続きをつくってください。",
   "Keep building: fix what’s left.": "続きをつくる：残りを直してください。",
   "Keep going from where we left off.": "前回の続きから進めてください。",
+  "Keep here": "ここに残す",
   "Keep planning: what should change?": "プランを練り直す：何を変えますか？",
   "Keep running": "実行を続ける",
   "Keep this cover": "このカバーにする",
@@ -2167,9 +2186,13 @@ export default {
   "More options": "その他のオプション",
   "More workers": "ワーカーを増やす",
   Move: "ステップ",
+  "Move and restart": "移動して再起動",
+  "Move {size} to {folder}?": "{size}を{folder}に移動しますか？",
   Moved: "マウスを動かしました",
   "Moved {actor}": "{actor}を移動しました",
+  "Moving Genex’s files isn’t available here.": "ここではGenexのファイルを移動できません。",
   "Moving the mouse": "マウスを動かしています",
+  "Moving your Genex files": "Genexのファイルを移動しています",
   "Moving {actor}": "{actor}を移動しています",
   "Multi-agent workflows. Custom plugins. Assets for games.":
     "マルチエージェントのワークフロー。カスタムプラグイン。ゲーム用アセット。",
@@ -2403,6 +2426,8 @@ export default {
   "Older models": "以前のモデル",
   "Ollama is not running at {host}. Install or start Ollama, then download again.":
     "{host}でOllamaが動いていません。Ollamaをインストールまたは起動してから、もう一度ダウンロードしてください。",
+  "Ollama keeps its models in its own folder: move them in Ollama → Settings → Model location.":
+    "Ollamaはモデルを独自のフォルダーに保存しています。Ollama → Settings → Model locationで移動してください。",
   "Ollama library ↗": "Ollamaライブラリ ↗",
   "Ollama {version} is running but has no models installed":
     "Ollama {version}は動いていますが、モデルがインストールされていません",
@@ -2646,9 +2671,17 @@ export default {
   Phosphor: "蛍光体",
   Photo: "写真",
   Physics: "物理",
+  "Pick a drive inside this computer, not a USB stick.":
+    "USBメモリではなく、このコンピューターの内蔵ドライブを選んでください。",
+  "Pick a folder on this computer, not on a network drive.":
+    "ネットワークドライブではなく、このコンピューター上のフォルダーを選んでください。",
+  "Pick a folder outside Genex’s files, your games and Genex’s install.":
+    "Genexのファイル、ゲーム、Genexのインストール先の外にあるフォルダーを選んでください。",
   "Pick a picture under 40 MB.": "40 MB未満の画像を選んでください。",
   "Pick a picture. It’s cropped to 16:9, like every cover.":
     "画像を選んでください。ほかのカバーと同じく16:9に切り抜かれます。",
+  "Pick an empty folder or a drive. Genex makes a Genex folder in one that has files.":
+    "空のフォルダーかドライブを選んでください。ファイルがある場合は、その中にGenexがGenexフォルダーを作ります。",
   "Pick the build up where it left off": "中断したところからビルドを再開",
   Picture: "画像",
   "Pictures show here once a Loop takes them.": "Loopが撮影すると、ここに画像が表示されます。",
@@ -3380,6 +3413,8 @@ export default {
   "Smallest dot": "最小ドット",
   Smarter: "賢い",
   "Snapshot: {snapshot}": "スナップショット：{snapshot}",
+  "Some are already in {folder}. Try again to finish moving them.":
+    "一部はすでに{folder}にあります。「もう一度試す」で残りを移動してください。",
   "Some of them may have changed outside this chat.": "一部はこのチャットの外で変更されている可能性があります。",
   "Some skill folders exceeded the discovery limit.": "一部のスキルフォルダーが検出の上限を超えました。",
   "Some surfaces cannot share readable text. Choose backgrounds with similar brightness.":
@@ -3395,6 +3430,7 @@ export default {
   "Something else is working in {app} now, so the newer version didn't come back. Try again once it's done.":
     "今{app}でほかの作業が進んでいるため、新しいバージョンは戻りませんでした。終わったらもう一度試してください。",
   "Something went wrong": "問題が発生しました",
+  "Something went wrong. Try again.": "問題が発生しました。もう一度試してください。",
   "Sonar returns painting the scene in sweeps": "ソナーの反響が掃くように描くシーン",
   Sound: "サウンド",
   "Sound effect": "効果音",
@@ -3457,6 +3493,7 @@ export default {
   "Stop this terminal before closing its session.": "セッションを閉じる前に、このターミナルを停止してください。",
   "Stop watching folder": "フォルダーの監視を停止",
   "Stop watching folder for {name}": "{name}のフォルダーの監視を停止",
+  "Stop your builds and replies first, then move.": "先にビルドと返信を止めてから移動してください。",
   Stopped: "停止",
   "Stopped adding the Luau checks. Nothing was kept.": "Luauチェックの追加を停止しました。何も保存されていません。",
   "Stopped by the lead": "メインエージェントが停止",
@@ -3598,6 +3635,8 @@ export default {
     "キーの形式ではないようです。スペースを入れずに、キー全体を貼り付けてください。",
   "That doesn't look like the code from the sign-in page. Copy it again.":
     "サインインページのコードではないようです。もう一度コピーしてください。",
+  "That drive can’t keep files private to you (FAT32 or exFAT). Pick an NTFS drive.":
+    "そのドライブ（FAT32またはexFAT）では、ファイルをあなた専用にできません。NTFSのドライブを選んでください。",
   "That file could not be read as a picture. Choose a JPG, PNG or WebP.":
     "このファイルは画像として読み込めませんでした。JPG、PNG、WebPのいずれかを選んでください。",
   "That file is too large to add.": "そのファイルは大きすぎて追加できません。",
@@ -3606,8 +3645,11 @@ export default {
   "That file isn’t a picture the app can read.": "そのファイルはアプリが読める画像ではありません。",
   "That file isn’t in the build any more.": "そのファイルはもうビルドにありません。",
   "That file isn’t on this computer any more.": "そのファイルはもうこのコンピューターにありません。",
+  "That folder already has files. Pick an empty one.":
+    "そのフォルダーにはすでにファイルがあります。空のフォルダーを選んでください。",
   "That folder is no longer there. Choose another one.":
     "そのフォルダーはもうありません。別のフォルダーを選んでください。",
+  "That folder was gone when Genex restarted.": "Genexの再起動時に、そのフォルダーがなくなっていました。",
   "That isn't a server address. Enter one like http://127.0.0.1:5000/v1.":
     "サーバーのアドレスではありません。http://127.0.0.1:5000/v1のように入力してください。",
   "That isn’t a link to a GitHub repository.": "GitHubリポジトリへのリンクではありません。",
@@ -3837,6 +3879,7 @@ export default {
   "The studio could not start": "Studioを起動できませんでした",
   "The studio couldn't start the sign-in. Try again.": "サインインを開始できませんでした。もう一度試してください。",
   "The studio is working out what to build": "Studioが何をつくるか考えています",
+  "The studio window is not open.": "Studioのウィンドウが開いていません。",
   "The studio window keeps crashing": "Studioのウィンドウがクラッシュを繰り返しています",
   "The terminal could not start. Try opening it again.":
     "ターミナルを起動できませんでした。もう一度開いてみてください。",
@@ -3857,6 +3900,7 @@ export default {
     "このメッセージより前のゲームファイルの保存コピーはありません。",
   "There is nothing to set up: the protected workspace is not waiting on an install.":
     "セットアップするものはありません。保護されたワークスペースはインストールを待っていません。",
+  "There isn’t enough free space there.": "そこには十分な空き容量がありません。",
   "There was nothing to free.": "空けられる容量はありませんでした。",
   "There's already something called {name} in {place}. Choose another name.":
     "{place}にはすでに{name}という名前のものがあります。別の名前を選んでください。",
@@ -3881,6 +3925,8 @@ export default {
   "They preferred this build to the one before it.": "前のビルドよりこちらのほうが良いと判断しました。",
   "They run in Genex’s sandbox and can’t change your other games.":
     "Genexのサンドボックスで実行されるので、ほかのゲームは変更できません。",
+  "They’re in {folder}. Connect that drive, then try again.":
+    "ファイルは{folder}にあります。そのドライブを接続してから、もう一度試してください。",
   Thinking: "考え中",
   "Thinking details": "思考の詳細",
   "This .uproject file isn't valid JSON, so Genex won't change it.":
@@ -4096,6 +4142,7 @@ export default {
     "この{name}にはNode.jsが必要ですが、インストールされていません。代わりにネイティブ版をインストールしてください。",
   "Three version": "Threeのバージョン",
   Threshold: "しきい値",
+  "To {folder}. Genex reopens when it’s done.": "移動先：{folder}。終わるとGenexがもう一度開きます。",
   Today: "今日",
   "Toggle Developer Tools": "デベロッパーツール",
   "Toggle Full Screen": "フルスクリーン",
@@ -4451,6 +4498,7 @@ export default {
     "セッションの上限がリセットされたとき、モデルプロバイダーの障害からしばらくたったとき、またはStudioのループが再起動したときに、一時停止中のビルドが中断したところから再開します（1つのビルドにつき最大2回）。自分で止めたビルドは止まったままで、サインイン待ちで止まったビルドはあなたを待ちます。",
   "When off, Harness stops learning from your builds. What it already learned stays until you undo it.":
     "オフにすると、Harnessはビルドから学ばなくなります。すでに学んだ内容は、元に戻すまで残ります。",
+  "Where Genex keeps its files": "Genexがファイルを保存する場所",
   "Where the server runs": "サーバーの実行場所",
   "Where this game is saved": "このゲームの保存場所",
   "Where this game is saved: {folder}": "このゲームの保存場所：{folder}",
@@ -5414,6 +5462,7 @@ export default {
   "{first}, and {next}": "{first}、さらに{next}",
   "{folder} is a link, so Genex writes no place there.":
     "{folder}はリンクなので、Genexはそこにプレイスを書き込みません。",
+  "{folder} is still not there.": "{folder}がまだ見つかりません。",
   "{folder} isn't a Godot project folder (it has no project.godot).":
     "{folder}はGodotプロジェクトのフォルダーではありません（project.godotがありません）。",
   "{folder} isn't a folder.": "{folder}はフォルダーではありません。",

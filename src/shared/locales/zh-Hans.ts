@@ -82,6 +82,9 @@ export default {
   "A dungeon where you play the monster defending its treasure from heroes": "你扮演怪物、守护宝藏抵御勇者的地牢游戏",
   "A farming sim on a floating island that drifts between seasons": "在随季节漂流的浮空岛上经营农场的模拟游戏",
   "A file picker is already open": "文件选择器已经打开",
+  "A file was in use, or the drive refused it. Close other apps, then try again.":
+    "有文件正在使用，或驱动器拒绝了写入。请关闭其他应用，然后重试。",
+  "A file was in use. Close other programs and try again.": "有文件正在使用。请关闭其他程序后重试。",
   "A firefly-catching game in a summer meadow at dusk": "黄昏时在夏日草地上捉萤火虫的游戏",
   "A frog hopping across lily pads that sink when you stay too long": "在睡莲叶上跳跃的青蛙，停留太久叶子就会下沉",
   "A full path, such as /Users/you/server.": "完整路径，例如 /Users/you/server。",
@@ -484,6 +487,8 @@ export default {
   "Build again": "重新构建",
   "Build cancelled": "构建已取消",
   "Build copies": "构建副本",
+  "Build copies, pictures, chats and sign-ins. Your games stay where they are.":
+    "构建副本、图片、对话和登录信息。你的游戏会留在原处。",
   "Build delivered · Checks need attention": "构建已交付 · 检查需要关注",
   "Build delivered · Verification incomplete": "构建已交付 · 验证未完成",
   "Build failed": "构建失败",
@@ -976,6 +981,7 @@ export default {
   "Couldn’t load your stats.": "无法加载你的统计数据。",
   "Couldn’t load {title}": "无法加载 {title}",
   "Couldn’t make a copy of that game.": "无法复制这款游戏。",
+  "Couldn’t move to {folder}. {problem}": "无法移动到 {folder}。{problem}",
   "Couldn’t play this sound.": "无法播放这个声音。",
   "Couldn’t post your comment": "无法发布你的评论",
   "Couldn’t prepare the plan": "无法准备计划",
@@ -996,6 +1002,7 @@ export default {
   "Couldn’t stop signing in. Try again in a moment.": "无法停止登录。请稍后再试。",
   "Couldn’t unpublish the game.": "无法取消发布这个游戏。",
   "Couldn’t use that picture. Try a PNG or JPEG.": "无法使用这张图片。请试试 PNG 或 JPEG。",
+  "Counting files": "正在统计文件",
   "Cover changed": "封面已更换",
   "Cover for {title}": "{title} 的封面",
   "Cover images must be at most {pixels} pixels across.": "封面图片宽度不能超过 {pixels} 像素。",
@@ -1225,6 +1232,7 @@ export default {
   Fighting: "格斗",
   File: "文件",
   Files: "文件",
+  "Files changed after the move stay in {folder}.": "移动后被修改的文件会留在 {folder}。",
   "Files inside {folders} keep their own history and stay as they are.":
     "{folders} 中的文件有自己的历史记录，将保持原样。",
   "Files that will be uploaded ({count})": "将上传的文件（{count}）",
@@ -1272,6 +1280,7 @@ export default {
   "Fixes: {task}": "修复：{task}",
   "Fixing a shader error…": "正在修复着色器错误…",
   Flare: "光晕",
+  "Folder for Genex’s files": "存放 Genex 文件的文件夹",
   "Folder for new games": "新游戏的文件夹",
   Folders: "文件夹",
   "Folders Genex made to run and show builds.": "Genex 为运行和展示构建而创建的文件夹。",
@@ -1347,6 +1356,7 @@ export default {
   "Genex account": "Genex 账号",
   "Genex adds the starter's missing files and keeps every file that is there":
     "Genex 会补上初始模板缺少的文件，并保留已有的所有文件",
+  "Genex already keeps its files there.": "Genex 已经把文件存放在那里了。",
   "Genex answered with something Studio can’t read.": "Genex 返回了 Studio 无法读取的内容。",
   "Genex authorization expired. Reconnect the Genex plugin before uploading.":
     "Genex 授权已过期。上传前请重新连接 Genex 插件。",
@@ -1365,6 +1375,9 @@ export default {
     "Genex 还看不到应用窗口：请在系统设置中允许 Genex 使用{panes}。",
   "Genex can't take back this project's set-up here, so the link stays.":
     "Genex 无法在这里撤回此项目的设置，所以关联会保留。",
+  "Genex can’t find its files": "Genex 找不到它的文件",
+  "Genex closes, moves its files and opens again; on another drive this takes a few minutes. Close other apps using its build copies first.":
+    "Genex 会先关闭，移动文件后再重新打开；移到另一个驱动器需要几分钟。请先关闭正在使用其构建副本的其他应用。",
   "Genex color tokens or VS Code UI colors": "Genex 颜色令牌或 VS Code 界面颜色",
   "Genex connects to servers on this computer or your local network. For a hosted API, use OpenRouter or OpenCode.":
     "Genex 可连接这台电脑或你局域网中的服务器。如需托管的 API，请使用 OpenRouter 或 OpenCode。",
@@ -1378,6 +1391,8 @@ export default {
     "Genex 无法判断 {app} 是否空闲，因此没有回退任何内容。请稍后再回退。",
   "Genex couldn't tell whether {app} was free, so the newer version didn't come back. Try again in a moment.":
     "Genex 无法判断 {app} 是否空闲，因此较新的版本没有恢复。请稍后重试。",
+  "Genex couldn’t finish moving its files": "Genex 未能完成文件移动",
+  "Genex couldn’t make that folder private to you.": "Genex 无法将该文件夹设为仅你可访问。",
   "Genex couldn’t read that picture. Try another.": "Genex 无法读取这张图片。换一张试试。",
   "Genex couldn’t start": "Genex 无法启动",
   "Genex couldn’t take the deletion right now. Nothing was deleted; try again later.":
@@ -1412,6 +1427,7 @@ export default {
   "Genex installs Unity Hub on a Mac only: get it from Unity's page.":
     "Genex 只在 Mac 上安装 Unity Hub：请从 Unity 的页面获取。",
   "Genex is already getting Roblox Studio.": "Genex 已经在获取 Roblox Studio。",
+  "Genex is already open, or its data folder is locked.": "Genex 已经打开，或它的数据文件夹已被锁定。",
   "Genex is connected": "Genex 已连接",
   "Genex is connected to OpenRouter": "Genex 已连接到 OpenRouter",
   "Genex is doing this. You'll only be asked to sign in.": "Genex 会搞定这些，你只需要登录。",
@@ -1785,6 +1801,7 @@ export default {
   "Keep building where you left off.": "从上次停下的地方继续制作。",
   "Keep building: fix what’s left.": "继续制作：修复剩下的问题。",
   "Keep going from where we left off.": "从上次停下的地方继续。",
+  "Keep here": "保留在这里",
   "Keep planning: what should change?": "继续规划：需要改什么？",
   "Keep running": "继续运行",
   "Keep this cover": "保留此封面",
@@ -2049,9 +2066,13 @@ export default {
   "More options": "更多选项",
   "More workers": "增加助手",
   Move: "步骤",
+  "Move and restart": "移动并重启",
+  "Move {size} to {folder}?": "要将 {size} 移动到 {folder} 吗？",
   Moved: "已移动鼠标",
   "Moved {actor}": "已移动 {actor}",
+  "Moving Genex’s files isn’t available here.": "此处无法移动 Genex 的文件。",
   "Moving the mouse": "正在移动鼠标",
+  "Moving your Genex files": "正在移动你的 Genex 文件",
   "Moving {actor}": "正在移动 {actor}",
   "Multi-agent workflows. Custom plugins. Assets for games.": "多智能体工作流。自定义插件。游戏素材。",
   Multiplayer: "多人游戏",
@@ -2266,6 +2287,8 @@ export default {
   "Older models": "旧模型",
   "Ollama is not running at {host}. Install or start Ollama, then download again.":
     "{host} 上的 Ollama 没有运行。请安装或启动 Ollama，然后重新下载。",
+  "Ollama keeps its models in its own folder: move them in Ollama → Settings → Model location.":
+    "Ollama 将模型存放在它自己的文件夹中：请在 Ollama → Settings → Model location 中移动。",
   "Ollama library ↗": "Ollama 库 ↗",
   "Ollama {version} is running but has no models installed": "Ollama {version} 正在运行，但没有安装任何模型",
   "Ollama {version}, {count, plural, other {# model(s)}} installed":
@@ -2496,8 +2519,14 @@ export default {
   Phosphor: "荧光屏",
   Photo: "照片",
   Physics: "物理",
+  "Pick a drive inside this computer, not a USB stick.": "请选择这台电脑内置的驱动器，而不是 USB 闪存盘。",
+  "Pick a folder on this computer, not on a network drive.": "请选择这台电脑上的文件夹，而不是网络驱动器上的。",
+  "Pick a folder outside Genex’s files, your games and Genex’s install.":
+    "请选择 Genex 文件、你的游戏和 Genex 安装位置以外的文件夹。",
   "Pick a picture under 40 MB.": "请选择小于 40 MB 的图片。",
   "Pick a picture. It’s cropped to 16:9, like every cover.": "选一张图片。和所有封面一样，它会裁成 16:9。",
+  "Pick an empty folder or a drive. Genex makes a Genex folder in one that has files.":
+    "请选择一个空文件夹或驱动器。如果里面已有文件，Genex 会在其中新建一个 Genex 文件夹。",
   "Pick the build up where it left off": "从中断处继续构建",
   Picture: "图片",
   "Pictures show here once a Loop takes them.": "Loop 拍下画面后会显示在这里。",
@@ -3202,6 +3231,8 @@ export default {
   "Smallest dot": "最小点",
   Smarter: "更聪明",
   "Snapshot: {snapshot}": "快照：{snapshot}",
+  "Some are already in {folder}. Try again to finish moving them.":
+    "部分文件已在 {folder} 中。点“重试”完成剩余的移动。",
   "Some of them may have changed outside this chat.": "其中一些可能在此对话之外被修改过。",
   "Some skill folders exceeded the discovery limit.": "部分技能文件夹超出了发现上限。",
   "Some surfaces cannot share readable text. Choose backgrounds with similar brightness.":
@@ -3216,6 +3247,7 @@ export default {
   "Something else is working in {app} now, so the newer version didn't come back. Try again once it's done.":
     "{app} 中正在进行其他工作，因此较新的版本没有恢复。请等它完成后重试。",
   "Something went wrong": "出了点问题",
+  "Something went wrong. Try again.": "出了点问题。请重试。",
   "Sonar returns painting the scene in sweeps": "声呐回波一圈圈描绘出画面",
   Sound: "声音",
   "Sound effect": "音效",
@@ -3278,6 +3310,7 @@ export default {
   "Stop this terminal before closing its session.": "请先停止此终端，再关闭其会话。",
   "Stop watching folder": "停止监视文件夹",
   "Stop watching folder for {name}": "停止监视 {name} 的文件夹",
+  "Stop your builds and replies first, then move.": "请先停止你的构建和回复，再进行移动。",
   Stopped: "已停止",
   "Stopped adding the Luau checks. Nothing was kept.": "已停止添加 Luau 检查。未保留任何内容。",
   "Stopped by the lead": "已被主智能体停止",
@@ -3412,6 +3445,8 @@ export default {
     "这看起来不像密钥。请粘贴完整的密钥，不要带空格。",
   "That doesn't look like the code from the sign-in page. Copy it again.":
     "这看起来不像登录页面上的验证码。请重新复制。",
+  "That drive can’t keep files private to you (FAT32 or exFAT). Pick an NTFS drive.":
+    "该驱动器（FAT32 或 exFAT）无法让文件仅你可访问。请选择 NTFS 驱动器。",
   "That file could not be read as a picture. Choose a JPG, PNG or WebP.":
     "无法将该文件读取为图片。请选择 JPG、PNG 或 WebP。",
   "That file is too large to add.": "该文件太大，无法添加。",
@@ -3420,7 +3455,9 @@ export default {
   "That file isn’t a picture the app can read.": "这个文件不是应用能读取的图片。",
   "That file isn’t in the build any more.": "该文件已不在构建中。",
   "That file isn’t on this computer any more.": "该文件已不在这台电脑上。",
+  "That folder already has files. Pick an empty one.": "该文件夹中已有文件。请选择一个空文件夹。",
   "That folder is no longer there. Choose another one.": "那个文件夹已经不在了。请换一个。",
+  "That folder was gone when Genex restarted.": "Genex 重启时，该文件夹已不存在。",
   "That isn't a server address. Enter one like http://127.0.0.1:5000/v1.":
     "这不是服务器地址。请输入类似 http://127.0.0.1:5000/v1 的地址。",
   "That isn’t a link to a GitHub repository.": "这不是 GitHub 仓库的链接。",
@@ -3624,6 +3661,7 @@ export default {
   "The studio could not start": "Studio 无法启动",
   "The studio couldn't start the sign-in. Try again.": "无法开始登录。请重试。",
   "The studio is working out what to build": "Studio 正在确定要制作什么",
+  "The studio window is not open.": "Studio 窗口未打开。",
   "The studio window keeps crashing": "Studio 窗口反复崩溃",
   "The terminal could not start. Try opening it again.": "终端无法启动。请尝试重新打开。",
   "The weakest thing: {thing}.": "最弱的一点：{thing}。",
@@ -3641,6 +3679,7 @@ export default {
   "There is no saved copy of the game files from before this message.": "没有保存这条消息之前的游戏文件副本。",
   "There is nothing to set up: the protected workspace is not waiting on an install.":
     "无需设置：受保护的工作区没有在等待安装。",
+  "There isn’t enough free space there.": "那里的可用空间不足。",
   "There was nothing to free.": "没有可释放的空间。",
   "There's already something called {name} in {place}. Choose another name.":
     "{place} 中已经有名为 {name} 的内容。请换一个名称。",
@@ -3662,6 +3701,7 @@ export default {
   "They preferred the build before it.": "他们认为上一个构建更好。",
   "They preferred this build to the one before it.": "他们认为这个构建比上一个更好。",
   "They run in Genex’s sandbox and can’t change your other games.": "它们在 Genex 的沙盒中运行，无法更改你的其他游戏。",
+  "They’re in {folder}. Connect that drive, then try again.": "文件在 {folder} 中。请连接该驱动器，然后重试。",
   Thinking: "思考中",
   "Thinking details": "思考详情",
   "This .uproject file isn't valid JSON, so Genex won't change it.":
@@ -3856,6 +3896,7 @@ export default {
     "此 {name} 安装需要 Node.js，但尚未安装。请改为安装原生版本。",
   "Three version": "Three 版本",
   Threshold: "阈值",
+  "To {folder}. Genex reopens when it’s done.": "目标：{folder}。完成后 Genex 会重新打开。",
   Today: "今天",
   "Toggle Developer Tools": "开发者工具",
   "Toggle Full Screen": "全屏",
@@ -4194,6 +4235,7 @@ export default {
     "当会话额度重置、模型提供方故障一段时间后，或 Studio 循环重启时，暂停的构建会从中断处继续，每个构建最多两次。你手动停止的构建会保持停止，因登录而暂停的构建会等你处理。",
   "When off, Harness stops learning from your builds. What it already learned stays until you undo it.":
     "关闭后，Harness 将不再从你的构建中学习。已学到的内容会保留，直到你撤销。",
+  "Where Genex keeps its files": "Genex 的文件存放位置",
   "Where the server runs": "服务器运行位置",
   "Where this game is saved": "这个游戏的保存位置",
   "Where this game is saved: {folder}": "这个游戏的保存位置：{folder}",
@@ -5128,6 +5170,7 @@ export default {
   "{first} {second}": "{first}{second}",
   "{first}, and {next}": "{first}，以及{next}",
   "{folder} is a link, so Genex writes no place there.": "{folder} 是一个链接，因此 Genex 不会在那里写入地点。",
+  "{folder} is still not there.": "仍找不到 {folder}。",
   "{folder} isn't a Godot project folder (it has no project.godot).":
     "{folder} 不是 Godot 项目文件夹（其中没有 project.godot）。",
   "{folder} isn't a folder.": "{folder} 不是文件夹。",

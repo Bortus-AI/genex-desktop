@@ -84,6 +84,10 @@ export default {
     "몬스터가 되어 영웅들로부터 보물을 지키는 던전",
   "A farming sim on a floating island that drifts between seasons": "계절 사이를 떠다니는 공중 섬의 농장 시뮬레이션",
   "A file picker is already open": "파일 선택 창이 이미 열려 있어요",
+  "A file was in use, or the drive refused it. Close other apps, then try again.":
+    "파일이 사용 중이었거나 드라이브가 거부했어요. 다른 앱을 닫은 다음 다시 시도하세요.",
+  "A file was in use. Close other programs and try again.":
+    "파일이 사용 중이었어요. 다른 프로그램을 닫고 다시 시도하세요.",
   "A firefly-catching game in a summer meadow at dusk": "해 질 녘 여름 들판에서 반딧불이를 잡는 게임",
   "A frog hopping across lily pads that sink when you stay too long":
     "오래 머물면 가라앉는 연잎 위를 뛰어다니는 개구리",
@@ -505,6 +509,8 @@ export default {
   "Build again": "다시 빌드",
   "Build cancelled": "빌드 취소됨",
   "Build copies": "빌드 사본",
+  "Build copies, pictures, chats and sign-ins. Your games stay where they are.":
+    "빌드 사본, 이미지, 채팅, 로그인 정보예요. 게임은 지금 위치에 그대로 있어요.",
   "Build delivered · Checks need attention": "빌드 반영됨 · 검사 확인 필요",
   "Build delivered · Verification incomplete": "빌드 반영됨 · 검증 미완료",
   "Build failed": "빌드 실패",
@@ -1015,6 +1021,7 @@ export default {
   "Couldn’t load your stats.": "통계를 불러오지 못했어요.",
   "Couldn’t load {title}": "{title} 게임을 불러오지 못했어요",
   "Couldn’t make a copy of that game.": "그 게임을 복사하지 못했어요.",
+  "Couldn’t move to {folder}. {problem}": "{folder} 폴더로 옮기지 못했어요. {problem}",
   "Couldn’t play this sound.": "이 사운드를 재생하지 못했어요.",
   "Couldn’t post your comment": "댓글을 등록하지 못했어요",
   "Couldn’t prepare the plan": "계획을 준비하지 못했어요",
@@ -1037,6 +1044,7 @@ export default {
   "Couldn’t stop signing in. Try again in a moment.": "로그인을 멈추지 못했어요. 잠시 후 다시 시도해 주세요.",
   "Couldn’t unpublish the game.": "게임 게시를 취소하지 못했어요.",
   "Couldn’t use that picture. Try a PNG or JPEG.": "그 사진은 쓸 수 없어요. PNG나 JPEG로 해 보세요.",
+  "Counting files": "파일 세는 중",
   "Cover changed": "커버 변경됨",
   "Cover for {title}": "{title} 커버",
   "Cover images must be at most {pixels} pixels across.": "커버 이미지는 가로 {pixels}픽셀 이하여야 해요.",
@@ -1273,6 +1281,7 @@ export default {
   Fighting: "격투",
   File: "파일",
   Files: "파일",
+  "Files changed after the move stay in {folder}.": "이동 후에 바뀐 파일은 {folder} 폴더에 남아 있어요.",
   "Files inside {folders} keep their own history and stay as they are.":
     "{folders} 안의 파일은 자체 기록이 있어서 그대로 둬요.",
   "Files that will be uploaded ({count})": "업로드할 파일 ({count})",
@@ -1320,6 +1329,7 @@ export default {
   "Fixes: {task}": "수정: {task}",
   "Fixing a shader error…": "셰이더 오류를 고치는 중…",
   Flare: "플레어",
+  "Folder for Genex’s files": "Genex 파일용 폴더",
   "Folder for new games": "새 게임 폴더",
   Folders: "폴더",
   "Folders Genex made to run and show builds.": "Genex가 빌드를 실행하고 보여 주려고 만든 폴더예요.",
@@ -1398,6 +1408,7 @@ export default {
   "Genex account": "Genex 계정",
   "Genex adds the starter's missing files and keeps every file that is there":
     "Genex가 스타터에 빠진 파일을 추가하고 기존 파일은 모두 그대로 둬요",
+  "Genex already keeps its files there.": "Genex가 이미 그곳에 파일을 보관하고 있어요.",
   "Genex answered with something Studio can’t read.": "Genex가 Studio가 읽을 수 없는 응답을 보냈어요.",
   "Genex authorization expired. Reconnect the Genex plugin before uploading.":
     "Genex 인증이 만료됐어요. 업로드하기 전에 Genex 플러그인을 다시 연결하세요.",
@@ -1416,6 +1427,9 @@ export default {
     "Genex가 아직 앱 창을 볼 수 없어요. 시스템 설정에서 Genex에 {panes} 권한을 허용하세요.",
   "Genex can't take back this project's set-up here, so the link stays.":
     "Genex가 여기서 이 프로젝트의 설정을 되돌릴 수 없어서 링크는 그대로 남아요.",
+  "Genex can’t find its files": "Genex 파일을 찾을 수 없어요",
+  "Genex closes, moves its files and opens again; on another drive this takes a few minutes. Close other apps using its build copies first.":
+    "Genex가 닫히고, 파일을 옮긴 뒤 다시 열려요. 다른 드라이브로 옮기면 몇 분 걸려요. 먼저 Genex 빌드 사본을 쓰는 다른 앱을 닫으세요.",
   "Genex color tokens or VS Code UI colors": "Genex 색상 토큰 또는 VS Code UI 색상",
   "Genex connects to servers on this computer or your local network. For a hosted API, use OpenRouter or OpenCode.":
     "Genex는 이 컴퓨터나 로컬 네트워크의 서버에 연결해요. 호스팅된 API는 OpenRouter나 OpenCode를 쓰세요.",
@@ -1429,6 +1443,8 @@ export default {
     "Genex가 {app}의 사용 가능 여부를 확인하지 못해서 아무것도 되감지 않았어요. 잠시 후 다시 되감아 주세요.",
   "Genex couldn't tell whether {app} was free, so the newer version didn't come back. Try again in a moment.":
     "Genex가 {app}의 사용 가능 여부를 확인하지 못해서 새 버전이 돌아오지 않았어요. 잠시 후 다시 시도해 주세요.",
+  "Genex couldn’t finish moving its files": "Genex 파일을 끝까지 옮기지 못했어요",
+  "Genex couldn’t make that folder private to you.": "Genex가 그 폴더를 나만 쓸 수 있게 만들지 못했어요.",
   "Genex couldn’t read that picture. Try another.": "Genex가 그 사진을 읽지 못했어요. 다른 사진을 써 보세요.",
   "Genex couldn’t start": "Genex를 시작하지 못했어요",
   "Genex couldn’t take the deletion right now. Nothing was deleted; try again later.":
@@ -1465,6 +1481,7 @@ export default {
   "Genex installs Unity Hub on a Mac only: get it from Unity's page.":
     "Genex는 Mac에서만 Unity Hub를 설치해요. Unity 페이지에서 받으세요.",
   "Genex is already getting Roblox Studio.": "Genex가 이미 Roblox Studio를 받고 있어요.",
+  "Genex is already open, or its data folder is locked.": "Genex가 이미 열려 있거나 데이터 폴더가 잠겨 있어요.",
   "Genex is connected": "Genex가 연결됐어요",
   "Genex is connected to OpenRouter": "Genex가 OpenRouter에 연결됐어요",
   "Genex is doing this. You'll only be asked to sign in.": "Genex가 알아서 해요. 로그인만 하면 돼요.",
@@ -1856,6 +1873,7 @@ export default {
   "Keep building where you left off.": "멈춘 곳부터 계속 만들어 주세요.",
   "Keep building: fix what’s left.": "계속 만들기: 남은 걸 고쳐 주세요.",
   "Keep going from where we left off.": "지난번에 멈춘 곳부터 계속해 주세요.",
+  "Keep here": "여기에 두기",
   "Keep planning: what should change?": "계속 계획하기: 무엇을 바꿀까요?",
   "Keep running": "계속 실행",
   "Keep this cover": "이 커버 유지",
@@ -2122,9 +2140,13 @@ export default {
   "More options": "옵션 더 보기",
   "More workers": "작업자 늘리기",
   Move: "단계",
+  "Move and restart": "옮기고 다시 시작",
+  "Move {size} to {folder}?": "{folder} 폴더로 {size} 옮길까요?",
   Moved: "마우스를 움직였어요",
   "Moved {actor}": "{actor} 옮겼어요",
+  "Moving Genex’s files isn’t available here.": "여기서는 Genex 파일을 옮길 수 없어요.",
   "Moving the mouse": "마우스 움직이는 중",
+  "Moving your Genex files": "Genex 파일 옮기는 중",
   "Moving {actor}": "{actor} 옮기는 중",
   "Multi-agent workflows. Custom plugins. Assets for games.": "멀티 에이전트 워크플로. 맞춤 플러그인. 게임용 에셋.",
   Multiplayer: "멀티플레이",
@@ -2349,6 +2371,8 @@ export default {
   "Older models": "이전 모델",
   "Ollama is not running at {host}. Install or start Ollama, then download again.":
     "{host}에서 Ollama가 실행 중이 아니에요. Ollama를 설치하거나 시작한 뒤 다시 다운로드해 주세요.",
+  "Ollama keeps its models in its own folder: move them in Ollama → Settings → Model location.":
+    "Ollama는 모델을 자체 폴더에 보관해요. Ollama → Settings → Model location에서 옮기세요.",
   "Ollama library ↗": "Ollama 라이브러리 ↗",
   "Ollama {version} is running but has no models installed": "Ollama {version} 실행 중이지만 설치된 모델이 없어요",
   "Ollama {version}, {count, plural, other {# model(s)}} installed":
@@ -2585,8 +2609,14 @@ export default {
   Phosphor: "형광체",
   Photo: "사진",
   Physics: "물리",
+  "Pick a drive inside this computer, not a USB stick.": "USB 메모리 말고 이 컴퓨터 안에 있는 드라이브를 고르세요.",
+  "Pick a folder on this computer, not on a network drive.": "네트워크 드라이브 말고 이 컴퓨터에 있는 폴더를 고르세요.",
+  "Pick a folder outside Genex’s files, your games and Genex’s install.":
+    "Genex 파일, 게임, Genex 설치 위치 밖에 있는 폴더를 고르세요.",
   "Pick a picture under 40 MB.": "40MB 미만의 사진을 골라 주세요.",
   "Pick a picture. It’s cropped to 16:9, like every cover.": "사진을 골라 주세요. 다른 커버처럼 16:9로 잘려요.",
+  "Pick an empty folder or a drive. Genex makes a Genex folder in one that has files.":
+    "빈 폴더나 드라이브를 고르세요. 파일이 있는 곳이면 Genex가 그 안에 Genex 폴더를 만들어요.",
   "Pick the build up where it left off": "멈춘 곳부터 빌드 이어가기",
   Picture: "이미지",
   "Pictures show here once a Loop takes them.": "Loop가 사진을 찍으면 여기에 표시돼요.",
@@ -3307,6 +3337,8 @@ export default {
   "Smallest dot": "최소 도트",
   Smarter: "더 똑똑하게",
   "Snapshot: {snapshot}": "스냅샷: {snapshot}",
+  "Some are already in {folder}. Try again to finish moving them.":
+    "일부는 이미 {folder} 폴더에 있어요. ‘다시 시도’를 눌러 마저 옮기세요.",
   "Some of them may have changed outside this chat.": "일부는 이 채팅 밖에서 바뀌었을 수 있어요.",
   "Some skill folders exceeded the discovery limit.": "일부 스킬 폴더가 검색 한도를 넘었어요.",
   "Some surfaces cannot share readable text. Choose backgrounds with similar brightness.":
@@ -3321,6 +3353,7 @@ export default {
   "Something else is working in {app} now, so the newer version didn't come back. Try again once it's done.":
     "지금 {app}에서 다른 작업이 진행 중이라 새 버전이 돌아오지 않았어요. 끝나면 다시 시도해 주세요.",
   "Something went wrong": "문제가 생겼어요",
+  "Something went wrong. Try again.": "문제가 생겼어요. 다시 시도하세요.",
   "Sonar returns painting the scene in sweeps": "장면을 훑으며 그려 나가는 소나 반향",
   Sound: "사운드",
   "Sound effect": "효과음",
@@ -3383,6 +3416,7 @@ export default {
   "Stop this terminal before closing its session.": "세션을 닫기 전에 이 터미널을 중지하세요.",
   "Stop watching folder": "폴더 감시 중지",
   "Stop watching folder for {name}": "{name} 폴더 감시 중지",
+  "Stop your builds and replies first, then move.": "먼저 빌드와 답변을 멈춘 다음 옮기세요.",
   Stopped: "중지됨",
   "Stopped adding the Luau checks. Nothing was kept.": "Luau 검사 추가를 중지했어요. 아무것도 보관하지 않았어요.",
   "Stopped by the lead": "메인 에이전트가 멈춤",
@@ -3522,6 +3556,8 @@ export default {
     "키 형식이 아닌 것 같아요. 공백 없이 키 전체를 붙여 넣으세요.",
   "That doesn't look like the code from the sign-in page. Copy it again.":
     "로그인 페이지의 코드가 아닌 것 같아요. 다시 복사해 주세요.",
+  "That drive can’t keep files private to you (FAT32 or exFAT). Pick an NTFS drive.":
+    "그 드라이브(FAT32 또는 exFAT)는 파일을 나만 쓸 수 있게 보관할 수 없어요. NTFS 드라이브를 고르세요.",
   "That file could not be read as a picture. Choose a JPG, PNG or WebP.":
     "이 파일은 이미지로 읽을 수 없어요. JPG, PNG, WebP 중에서 골라 주세요.",
   "That file is too large to add.": "그 파일은 너무 커서 추가할 수 없어요.",
@@ -3530,7 +3566,9 @@ export default {
   "That file isn’t a picture the app can read.": "앱이 읽을 수 있는 이미지 파일이 아니에요.",
   "That file isn’t in the build any more.": "그 파일은 이제 빌드에 없어요.",
   "That file isn’t on this computer any more.": "그 파일은 이제 이 컴퓨터에 없어요.",
+  "That folder already has files. Pick an empty one.": "그 폴더에는 이미 파일이 있어요. 빈 폴더를 고르세요.",
   "That folder is no longer there. Choose another one.": "그 폴더가 더 이상 없어요. 다른 폴더를 고르세요.",
+  "That folder was gone when Genex restarted.": "Genex가 다시 시작됐을 때 그 폴더가 없었어요.",
   "That isn't a server address. Enter one like http://127.0.0.1:5000/v1.":
     "서버 주소가 아니에요. http://127.0.0.1:5000/v1처럼 입력하세요.",
   "That isn’t a link to a GitHub repository.": "GitHub 저장소 링크가 아니에요.",
@@ -3753,6 +3791,7 @@ export default {
   "The studio could not start": "Studio를 시작하지 못했어요",
   "The studio couldn't start the sign-in. Try again.": "로그인을 시작하지 못했어요. 다시 시도해 주세요.",
   "The studio is working out what to build": "Studio가 무엇을 만들지 정하고 있어요",
+  "The studio window is not open.": "Studio 창이 열려 있지 않아요.",
   "The studio window keeps crashing": "Studio 창이 계속 비정상 종료돼요",
   "The terminal could not start. Try opening it again.": "터미널을 시작하지 못했어요. 다시 열어 보세요.",
   "The weakest thing: {thing}.": "가장 약한 점: {thing}.",
@@ -3772,6 +3811,7 @@ export default {
     "이 메시지 이전의 게임 파일 사본이 저장돼 있지 않아요.",
   "There is nothing to set up: the protected workspace is not waiting on an install.":
     "설정할 게 없어요. 보호된 작업 공간이 설치를 기다리고 있지 않아요.",
+  "There isn’t enough free space there.": "그곳에 빈 공간이 부족해요.",
   "There was nothing to free.": "확보할 공간이 없었어요.",
   "There's already something called {name} in {place}. Choose another name.":
     "{place}에 이름이 {name}인 항목이 이미 있어요. 다른 이름을 고르세요.",
@@ -3795,6 +3835,8 @@ export default {
   "They preferred this build to the one before it.": "이전 빌드보다 이 빌드가 더 낫다고 봤어요.",
   "They run in Genex’s sandbox and can’t change your other games.":
     "Genex 샌드박스에서 실행되며 다른 게임은 바꿀 수 없어요.",
+  "They’re in {folder}. Connect that drive, then try again.":
+    "파일은 {folder} 폴더에 있어요. 그 드라이브를 연결한 다음 다시 시도하세요.",
   Thinking: "생각 중",
   "Thinking details": "생각 세부 정보",
   "This .uproject file isn't valid JSON, so Genex won't change it.":
@@ -3997,6 +4039,7 @@ export default {
     "이 {name} 설치에는 Node.js가 필요한데 설치되어 있지 않아요. 대신 네이티브 버전을 설치하세요.",
   "Three version": "Three 버전",
   Threshold: "임계값",
+  "To {folder}. Genex reopens when it’s done.": "{folder} 폴더로 옮기고 있어요. 끝나면 Genex가 다시 열려요.",
   Today: "오늘",
   "Toggle Developer Tools": "개발자 도구",
   "Toggle Full Screen": "전체 화면",
@@ -4346,6 +4389,7 @@ export default {
     "세션 한도가 초기화되거나, 모델 제공자 장애 후 잠시 지나거나, Studio 루프가 다시 시작되면 일시 정지된 빌드가 멈춘 곳부터 다시 이어가요(빌드당 최대 두 번). 직접 멈춘 빌드는 그대로 멈춰 있고, 로그인 때문에 멈춘 빌드는 내가 로그인할 때까지 기다려요.",
   "When off, Harness stops learning from your builds. What it already learned stays until you undo it.":
     "끄면 Harness가 빌드에서 더 이상 배우지 않아요. 이미 배운 내용은 되돌리기 전까지 남아요.",
+  "Where Genex keeps its files": "Genex가 파일을 보관하는 곳",
   "Where the server runs": "서버 실행 위치",
   "Where this game is saved": "이 게임이 저장된 곳",
   "Where this game is saved: {folder}": "이 게임이 저장된 곳: {folder}",
@@ -5296,6 +5340,7 @@ export default {
   "{first} {second}": "{first} {second}",
   "{first}, and {next}": "{first}, {next}",
   "{folder} is a link, so Genex writes no place there.": "{folder}: 링크라서 Genex가 그곳에 플레이스를 쓰지 않아요.",
+  "{folder} is still not there.": "{folder} 폴더가 아직 없어요.",
   "{folder} isn't a Godot project folder (it has no project.godot).":
     "{folder}: Godot 프로젝트 폴더가 아니에요(project.godot 파일이 없어요).",
   "{folder} isn't a folder.": "{folder}: 폴더가 아니에요.",

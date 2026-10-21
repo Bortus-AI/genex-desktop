@@ -93,6 +93,9 @@ export default {
   "A farming sim on a floating island that drifts between seasons":
     "Ферма на летающем острове, который плывёт от сезона к сезону",
   "A file picker is already open": "Окно выбора файла уже открыто",
+  "A file was in use, or the drive refused it. Close other apps, then try again.":
+    "Файл был занят, или диск его не принял. Закрой другие приложения и попробуй снова.",
+  "A file was in use. Close other programs and try again.": "Файл был занят. Закрой другие программы и попробуй снова.",
   "A firefly-catching game in a summer meadow at dusk": "Ловля светлячков на летнем лугу в сумерках",
   "A frog hopping across lily pads that sink when you stay too long":
     "Лягушка прыгает по кувшинкам, которые тонут, если задержаться",
@@ -536,6 +539,8 @@ export default {
   "Build again": "Собрать заново",
   "Build cancelled": "Сборка отменена",
   "Build copies": "Копии сборок",
+  "Build copies, pictures, chats and sign-ins. Your games stay where they are.":
+    "Копии сборок, картинки, чаты и данные входа. Твои игры остаются на месте.",
   "Build delivered · Checks need attention": "Сборка в игре · проверки требуют внимания",
   "Build delivered · Verification incomplete": "Сборка в игре · проверка не завершена",
   "Build failed": "Сборка не удалась",
@@ -1052,6 +1057,7 @@ export default {
   "Couldn’t load your stats.": "Не удалось загрузить статистику.",
   "Couldn’t load {title}": "Не удалось загрузить «{title}»",
   "Couldn’t make a copy of that game.": "Не удалось скопировать эту игру.",
+  "Couldn’t move to {folder}. {problem}": "Не удалось перенести в {folder}. {problem}",
   "Couldn’t play this sound.": "Не удалось воспроизвести звук.",
   "Couldn’t post your comment": "Не удалось отправить комментарий",
   "Couldn’t prepare the plan": "Не получилось подготовить план",
@@ -1076,6 +1082,7 @@ export default {
   "Couldn’t stop signing in. Try again in a moment.": "Не удалось остановить вход. Попробуй чуть позже.",
   "Couldn’t unpublish the game.": "Не удалось снять игру с публикации.",
   "Couldn’t use that picture. Try a PNG or JPEG.": "Не получилось использовать эту картинку. Попробуй PNG или JPEG.",
+  "Counting files": "Считаем файлы",
   "Cover changed": "Обложка изменена",
   "Cover for {title}": "Обложка для «{title}»",
   "Cover images must be at most {pixels} pixels across.": "Обложка должна быть не шире {pixels} px.",
@@ -1318,6 +1325,7 @@ export default {
   Fighting: "Файтинги",
   File: "Файл",
   Files: "Файлы",
+  "Files changed after the move stay in {folder}.": "Файлы, изменённые после переноса, остаются в {folder}.",
   "Files inside {folders} keep their own history and stay as they are.":
     "Файлы внутри {folders} хранят свою историю и останутся как есть.",
   "Files that will be uploaded ({count})": "Файлы для загрузки ({count})",
@@ -1365,6 +1373,7 @@ export default {
   "Fixes: {task}": "Исправления: {task}",
   "Fixing a shader error…": "Исправляет ошибку шейдера…",
   Flare: "Блик",
+  "Folder for Genex’s files": "Папка для файлов Genex",
   "Folder for new games": "Папка для новых игр",
   Folders: "Папки",
   "Folders Genex made to run and show builds.": "Папки, которые Genex создаёт, чтобы запускать и показывать сборки.",
@@ -1445,6 +1454,7 @@ export default {
   "Genex account": "Аккаунт Genex",
   "Genex adds the starter's missing files and keeps every file that is there":
     "Genex добавит недостающие файлы стартового шаблона и сохранит всё, что уже есть",
+  "Genex already keeps its files there.": "Genex уже хранит свои файлы там.",
   "Genex answered with something Studio can’t read.": "Genex прислал ответ, который Studio не может прочитать.",
   "Genex authorization expired. Reconnect the Genex plugin before uploading.":
     "Авторизация Genex истекла. Подключи плагин Genex заново перед загрузкой.",
@@ -1463,6 +1473,9 @@ export default {
     "Genex пока не видит окна приложений: в «Системных настройках» включи для Genex {panes}.",
   "Genex can't take back this project's set-up here, so the link stays.":
     "Genex не может отменить здесь настройку этого проекта, поэтому связь остаётся.",
+  "Genex can’t find its files": "Genex не может найти свои файлы",
+  "Genex closes, moves its files and opens again; on another drive this takes a few minutes. Close other apps using its build copies first.":
+    "Genex закроется, перенесёт свои файлы и откроется снова; на другой диск это займёт несколько минут. Сначала закрой другие приложения, которые используют копии его сборок.",
   "Genex color tokens or VS Code UI colors": "Цветовые токены Genex или цвета интерфейса VS Code",
   "Genex connects to servers on this computer or your local network. For a hosted API, use OpenRouter or OpenCode.":
     "Genex подключается к серверам на этом компьютере или в твоей локальной сети. Для облачного API используй OpenRouter или OpenCode.",
@@ -1476,6 +1489,8 @@ export default {
     "{app}: Genex не удалось понять, свободно ли приложение, поэтому ничего не откатилось. Откати ещё раз чуть позже.",
   "Genex couldn't tell whether {app} was free, so the newer version didn't come back. Try again in a moment.":
     "{app}: Genex не удалось понять, свободно ли приложение, поэтому новая версия не вернулась. Попробуй снова чуть позже.",
+  "Genex couldn’t finish moving its files": "Не удалось до конца перенести файлы Genex",
+  "Genex couldn’t make that folder private to you.": "Genex не удалось сделать эту папку доступной только тебе.",
   "Genex couldn’t read that picture. Try another.": "Genex не может прочитать эту картинку. Попробуй другую.",
   "Genex couldn’t start": "Не удалось запустить Genex",
   "Genex couldn’t take the deletion right now. Nothing was deleted; try again later.":
@@ -1511,6 +1526,7 @@ export default {
   "Genex installs Unity Hub on a Mac only: get it from Unity's page.":
     "Genex устанавливает Unity Hub только на Mac: скачай его на сайте Unity.",
   "Genex is already getting Roblox Studio.": "Genex уже устанавливает Roblox Studio.",
+  "Genex is already open, or its data folder is locked.": "Genex уже открыт, или его папка с данными заблокирована.",
   "Genex is connected": "Genex подключён",
   "Genex is connected to OpenRouter": "Genex подключён к OpenRouter",
   "Genex is doing this. You'll only be asked to sign in.":
@@ -1910,6 +1926,7 @@ export default {
   "Keep building where you left off.": "Собирай дальше с того же места.",
   "Keep building: fix what’s left.": "Собирай дальше: исправь то, что осталось.",
   "Keep going from where we left off.": "Продолжай с того места, где мы остановились.",
+  "Keep here": "Оставить здесь",
   "Keep planning: what should change?": "Продолжаем планировать: что поменять?",
   "Keep running": "Продолжить работу",
   "Keep this cover": "Оставить эту обложку",
@@ -2180,9 +2197,13 @@ export default {
   "More options": "Ещё настройки",
   "More workers": "Больше помощников",
   Move: "Шаг",
+  "Move and restart": "Перенести и перезапустить",
+  "Move {size} to {folder}?": "Перенести {size} в {folder}?",
   Moved: "Движение мыши",
   "Moved {actor}": "Перемещён {actor}",
+  "Moving Genex’s files isn’t available here.": "Перенос файлов Genex здесь недоступен.",
   "Moving the mouse": "Двигает мышь",
+  "Moving your Genex files": "Переносим файлы Genex",
   "Moving {actor}": "Перемещает {actor}",
   "Multi-agent workflows. Custom plugins. Assets for games.": "Мультиагентные процессы. Свои плагины. Ассеты для игр.",
   Multiplayer: "Мультиплеер",
@@ -2405,6 +2426,8 @@ export default {
   "Older models": "Старые модели",
   "Ollama is not running at {host}. Install or start Ollama, then download again.":
     "Ollama не запущена на {host}. Установи или запусти Ollama и скачай снова.",
+  "Ollama keeps its models in its own folder: move them in Ollama → Settings → Model location.":
+    "Ollama хранит модели в своей папке: перенеси их в «Ollama → Settings → Model location».",
   "Ollama library ↗": "библиотека Ollama ↗",
   "Ollama {version} is running but has no models installed": "Ollama {version} работает, но модели не установлены",
   "Ollama {version}, {count, plural, other {# model(s)}} installed":
@@ -2645,8 +2668,14 @@ export default {
   Phosphor: "Люминофор",
   Photo: "Фото",
   Physics: "Физика",
+  "Pick a drive inside this computer, not a USB stick.": "Выбери диск внутри этого компьютера, а не USB-флешку.",
+  "Pick a folder on this computer, not on a network drive.": "Выбери папку на этом компьютере, а не на сетевом диске.",
+  "Pick a folder outside Genex’s files, your games and Genex’s install.":
+    "Выбери папку вне файлов Genex, твоих игр и папки установки Genex.",
   "Pick a picture under 40 MB.": "Выбери картинку меньше 40 МБ.",
   "Pick a picture. It’s cropped to 16:9, like every cover.": "Выбери картинку. Её обрежут до 16:9, как и все обложки.",
+  "Pick an empty folder or a drive. Genex makes a Genex folder in one that has files.":
+    "Выбери пустую папку или диск. Если там уже есть файлы, Genex создаст внутри папку Genex.",
   "Pick the build up where it left off": "Продолжить сборку с того места, где она остановилась",
   Picture: "Картинка",
   "Pictures show here once a Loop takes them.": "Здесь появятся снимки, когда Loop их сделает.",
@@ -3375,6 +3404,8 @@ export default {
   "Smallest dot": "Мин. точка",
   Smarter: "Умнее",
   "Snapshot: {snapshot}": "Снимок: {snapshot}",
+  "Some are already in {folder}. Try again to finish moving them.":
+    "Часть уже в {folder}. Нажми «Попробовать снова», чтобы перенести остальное.",
   "Some of them may have changed outside this chat.": "Некоторые из них могли измениться вне этого чата.",
   "Some skill folders exceeded the discovery limit.": "Некоторые папки навыков превысили лимит поиска.",
   "Some surfaces cannot share readable text. Choose backgrounds with similar brightness.":
@@ -3390,6 +3421,7 @@ export default {
   "Something else is working in {app} now, so the newer version didn't come back. Try again once it's done.":
     "{app}: там сейчас идёт другая работа, поэтому новая версия не вернулась. Попробуй снова, когда работа закончится.",
   "Something went wrong": "Что-то пошло не так",
+  "Something went wrong. Try again.": "Что-то пошло не так. Попробуй снова.",
   "Sonar returns painting the scene in sweeps": "Сонар прорисовывает сцену волнами отражений",
   Sound: "Звук",
   "Sound effect": "Звуковой эффект",
@@ -3452,6 +3484,7 @@ export default {
   "Stop this terminal before closing its session.": "Останови этот терминал, прежде чем закрывать его сессию.",
   "Stop watching folder": "Перестать следить за папкой",
   "Stop watching folder for {name}": "Перестать следить за папкой {name}",
+  "Stop your builds and replies first, then move.": "Сначала останови сборки и ответы, потом переноси.",
   Stopped: "Остановлено",
   "Stopped adding the Luau checks. Nothing was kept.": "Добавление проверок Luau остановлено. Ничего не сохранено.",
   "Stopped by the lead": "Остановлено главным агентом",
@@ -3592,6 +3625,8 @@ export default {
     "Это не похоже на ключ. Вставь ключ целиком, без пробелов.",
   "That doesn't look like the code from the sign-in page. Copy it again.":
     "Это не похоже на код со страницы входа. Скопируй его ещё раз.",
+  "That drive can’t keep files private to you (FAT32 or exFAT). Pick an NTFS drive.":
+    "На этом диске файлы нельзя сделать доступными только тебе (FAT32 или exFAT). Выбери диск с NTFS.",
   "That file could not be read as a picture. Choose a JPG, PNG or WebP.":
     "Этот файл не читается как картинка. Выбери JPG, PNG или WebP.",
   "That file is too large to add.": "Файл слишком большой, его не добавить.",
@@ -3600,7 +3635,9 @@ export default {
   "That file isn’t a picture the app can read.": "Приложение не может прочитать этот файл как картинку.",
   "That file isn’t in the build any more.": "Этого файла больше нет в сборке.",
   "That file isn’t on this computer any more.": "Этого файла больше нет на компьютере.",
+  "That folder already has files. Pick an empty one.": "В этой папке уже есть файлы. Выбери пустую.",
   "That folder is no longer there. Choose another one.": "Этой папки больше нет. Выбери другую.",
+  "That folder was gone when Genex restarted.": "Когда Genex перезапустился, этой папки уже не было.",
   "That isn't a server address. Enter one like http://127.0.0.1:5000/v1.":
     "Это не адрес сервера. Введи что-то вроде http://127.0.0.1:5000/v1.",
   "That isn’t a link to a GitHub repository.": "Это не ссылка на репозиторий GitHub.",
@@ -3831,6 +3868,7 @@ export default {
   "The studio could not start": "Не удалось запустить Studio",
   "The studio couldn't start the sign-in. Try again.": "Не удалось начать вход. Попробуй снова.",
   "The studio is working out what to build": "Studio решает, что собирать",
+  "The studio window is not open.": "Окно Studio не открыто.",
   "The studio window keeps crashing": "Окно Studio постоянно падает",
   "The terminal could not start. Try opening it again.": "Терминал не запустился. Попробуй открыть его снова.",
   "The weakest thing: {thing}.": "Слабее всего: {thing}.",
@@ -3850,6 +3888,7 @@ export default {
     "Нет сохранённой копии файлов игры до этого сообщения.",
   "There is nothing to set up: the protected workspace is not waiting on an install.":
     "Настраивать нечего: защищённое рабочее пространство не ждёт установки.",
+  "There isn’t enough free space there.": "Там не хватает свободного места.",
   "There was nothing to free.": "Освобождать было нечего.",
   "There's already something called {name} in {place}. Choose another name.":
     "В {place} уже есть что-то с именем {name}. Выбери другое имя.",
@@ -3873,6 +3912,8 @@ export default {
   "They preferred this build to the one before it.": "Эта сборка понравилась им больше предыдущей.",
   "They run in Genex’s sandbox and can’t change your other games.":
     "Они выполняются в песочнице Genex и не могут изменить другие твои игры.",
+  "They’re in {folder}. Connect that drive, then try again.":
+    "Файлы лежат в {folder}. Подключи этот диск и попробуй снова.",
   Thinking: "Думает",
   "Thinking details": "Ход мыслей",
   "This .uproject file isn't valid JSON, so Genex won't change it.":
@@ -4078,6 +4119,7 @@ export default {
     "Этой установке {name} нужен Node.js, а он не установлен. Лучше установи нативную версию.",
   "Three version": "версия Three",
   Threshold: "Порог",
+  "To {folder}. Genex reopens when it’s done.": "В {folder}. Genex снова откроется, когда закончит.",
   Today: "Сегодня",
   "Toggle Developer Tools": "Инструменты разработчика",
   "Toggle Full Screen": "Полноэкранный режим",
@@ -4430,6 +4472,7 @@ export default {
     "Когда сбрасывается лимит сессии, через какое-то время после сбоя провайдера моделей или когда перезапускается цикл Studio, приостановленная сборка продолжается с того же места — до двух раз за сборку. Остановленная тобой сборка так и останется остановленной, а сборка, которой нужен вход, дождётся тебя.",
   "When off, Harness stops learning from your builds. What it already learned stays until you undo it.":
     "Когда выключено, Harness перестаёт учиться на твоих сборках. Уже выученное остаётся, пока ты его не отменишь.",
+  "Where Genex keeps its files": "Где Genex хранит свои файлы",
   "Where the server runs": "Где работает сервер",
   "Where this game is saved": "Где хранится эта игра",
   "Where this game is saved: {folder}": "Где хранится эта игра: {folder}",
@@ -5461,6 +5504,7 @@ export default {
   "{first} {second}": "{first} {second}",
   "{first}, and {next}": "{first}, а также {next}",
   "{folder} is a link, so Genex writes no place there.": "{folder} — это ссылка, поэтому Genex не создаёт там плейс.",
+  "{folder} is still not there.": "Папки {folder} всё ещё нет.",
   "{folder} isn't a Godot project folder (it has no project.godot).":
     "{folder} — не папка проекта Godot (в ней нет project.godot).",
   "{folder} isn't a folder.": "{folder} — не папка.",
