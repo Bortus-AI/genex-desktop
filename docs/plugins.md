@@ -3331,7 +3331,12 @@ sandbox (`runNativeProcess` in `godot-run.ts`) rather than `native.run`, because
 still needs the whole project, not staged inputs: each job reads Genex's shipped GDScript, writes
 only the project (Godot's `.godot/` cache) and the job's own folder, gets a private home (a game's
 `user://` and Godot's caches) and a deadline, and a still is drawn in a window off every screen
-(`gpu`). Its observer is a `card` whose `stage-status` says where the game stands (get Godot, set
+(`gpu`). On Windows each job is a host sandbox job instead (`sandbox.run`, `windowsRunner`):
+ProcessSandbox as the sandbox user, reading Godot's folder and Genex's scripts, writing the project
+(one inside the game: a project linked from elsewhere is refused there);
+a folder it writes outside the game (a capture's stills, the class reference) waits in the
+project's `.godot/genex-jobs/` and is copied out, and its CRLF, coloured output is read as a Mac's.
+Its observer is a `card` whose `stage-status` says where the game stands (get Godot, set
 it up for Genex's play, open it, or open in the person's Godot) and its manifest has no lock: it never drives the person's editor.
 On a Mac without Godot 4.3 or newer, `show-steps` (and the refusals of `new-game` and the engine
 question's note, which point to it) puts the Godot setup card in the chat (`godot-setup.ts`): one
@@ -3341,7 +3346,13 @@ GitHub releases, unpacked in the plugin's storage, `Godot.app` copied into Appli
 Gatekeeper accepts it; an older `Godot.app` there goes to the person's Trash, and the download is
 removed whether the install ends well or not), Stop (`stop-install`: it ends the download, the
 unpacking or the copy) and Don't use Godot (`skip`) in Hide's place, and `doneSays` once Godot is
-found.
+found. On Windows Do it for me (and the panel's Get Godot) is `download-godot`, which the person
+confirms: the host installs the manifest's pinned Godot (the 4.7.2 x64 or arm64 zip, its sha256
+checked) into `native-runtimes`, which the sandbox reads from its start, and the card follows the
+host's install record; Stop cancels it. Windows finds Godot there (`runtime.detect`), in Program
+Files (Steam's too) and on the PATH, never elsewhere in the person's profile, which the sandbox user
+can't read. The editor opens as a window of its own and is found by its command line
+(`windows-processes.ts`).
 Set up (and New Godot game) also turns on the addon's editor plugin (`addons/genex/editor_bridge.gd`,
 `[editor_plugins]` in `project.godot`). Its hooks reach the person's open editor through files in the
 project's `.godot/genex/` (`editor-bridge.ts`; no port): the editor writes a heartbeat each second
@@ -3366,8 +3377,9 @@ session, leads, workers and Genex's play engine reach that folder.
 at the game's root (`web-export.ts`): Genex's own `Genex Web` preset (no threads) added to
 `export_presets.cfg` beside the person's, `web/.gdignore`, and the person's Web template for that
 version (`export_templates/<version>.<status>[.mono]/web_nothreads_release.zip`, installed by
-Godot's Export Template Manager) linked read-only into the job's private home; without it the tool
-is refused before Godot runs. `keep-web-build` at `turn.end` and `restore.after` makes it again
+Godot's Export Template Manager in Godot's data folder, a Mac's Application Support or Windows's
+`%APPDATA%`) linked read-only into a Mac job's private home, copied into a Windows job's own data
+folder (`XDG_DATA_HOME`); without it the tool is refused before Godot runs. `keep-web-build` at `turn.end` and `restore.after` makes it again
 whenever the project changed since the last build (its `.pck` older than the project's newest file,
 `.godot/` left out), so Live's Web game tab and Publish follow the game; with no Web template it does
 nothing, and a failure is a note. The plugin's `detect` names the folder `godot-web-export` (a folder

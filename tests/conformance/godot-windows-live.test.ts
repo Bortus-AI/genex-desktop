@@ -3,7 +3,8 @@
  * host whose `runtime.*` calls go to `PluginNativeServices` and whose `sandbox.*` calls go to
  * `PluginSandboxJobs` on a real `ProcessSandbox` (srt-win). The setup card's Do it for me gets
  * Godot (the manifest's pinned download, about 86 MB), the agent is offered Godot, a new game is
- * made, imported, checked, run and photographed in the sandbox, the class reference is made, and
+ * made, imported, checked, run and photographed in the sandbox, the class reference is made, the
+ * game's own launcher (`bin/play`) starts it for Genex's play under Git Bash in the sandbox, and
  * the person's editor opens the project and is found by its command line. Windows only, on a
  * machine whose sandbox is provisioned (the Windows CI job sets GENEX_WINDOWS_SANDBOX=ready), and
  * opt-in (`STUDIO_NETWORK_TESTS=1`): it reaches GitHub for Godot.
@@ -32,6 +33,8 @@ const SKIP =
   "Windows with a provisioned sandbox and STUDIO_NETWORK_TESTS=1 only";
 const PACKAGE = fileURLToPath(new URL("../../src/plugins/godot/", import.meta.url));
 const PLUGIN = "godot";
+/** How long the launcher's game runs before it is stopped: long enough to say it is ready. */
+const PLAY_MS = 45_000;
 /** How long the editor may take to show up in the process list, and how often it is looked for. */
 const EDITOR_WAIT_MS = 60_000;
 const EDITOR_POLL_MS = 1_000;
@@ -85,10 +88,20 @@ before(async () => {
   };
 });
 
+/** Ends every Godot this test started (the person's editor among them) and waits until none runs. */
+async function endGodots(): Promise<void> {
+  const ends = Date.now() + EDITOR_WAIT_MS;
+  for (let rows = await windowsProcesses(["Godot%"]); rows?.length && Date.now() < ends; ) {
+    for (const row of rows) await killProcessTree(row.pid);
+    await sleep(EDITOR_POLL_MS);
+    rows = await windowsProcesses(["Godot%"]);
+  }
+}
+
 after(async () => {
   if (SKIP) return;
   await jobs?.stopAll();
-  for (const row of (await windowsProcesses(["Godot%"])) ?? []) await killProcessTree(row.pid);
+  await endGodots();
   await sandbox?.dispose();
 });
 
@@ -133,13 +146,23 @@ describe("Godot on Windows, for real", { skip: SKIP }, () => {
     assert.match(String(answer), /class Node3D extends Node/);
   });
 
+  it("starts the game for Genex's play with its launcher in the sandbox", async () => {
+    const played = await sandbox.run({ command: "sh bin/play", cwd: game, timeoutMs: PLAY_MS });
+    assert.match(played.stdout, /"event":\s*"ready"/, `${played.stdout}\n${played.stderr}`.slice(-3000));
+  });
+
   it("opens the project in the person's Godot editor and finds it open", async () => {
     await call("action", "open-editor");
     const ends = Date.now() + EDITOR_WAIT_MS;
     let open = false;
-    while (!open && Date.now() < ends) {
-      open = (await call("action", "status")).editorOpen === true;
-      if (!open) await sleep(EDITOR_POLL_MS);
+    try {
+      while (!open && Date.now() < ends) {
+        open = (await call("action", "status")).editorOpen === true;
+        if (!open) await sleep(EDITOR_POLL_MS);
+      }
+    } finally {
+      // The editor holds the project folder open, which the test's folder removal waits on.
+      await endGodots();
     }
     assert.equal(open, true);
   });

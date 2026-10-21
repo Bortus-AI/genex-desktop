@@ -76,6 +76,8 @@ const COLOUR = /\x1b\[[0-9;]*m/g;
 const MESSAGE = {
   Unsupported: "Genex runs Godot on a Mac and on Windows.",
   NeedsProject: "On Windows Genex runs Godot inside the game's Godot project: make one first (godot__new-game).",
+  OutsideGame:
+    "On Windows Genex runs Godot only on a project inside the game's folder; this game's project is linked from elsewhere.",
   NotStarted: (reason: string) => `Genex's sandbox didn't start Godot (${reason}).`,
   Lost: "Genex's sandbox lost Godot's job before it ended.",
 } as const;
@@ -302,7 +304,7 @@ async function windowsFolders(call: GodotCall, job: GodotJobScope) {
   if (!job.project || !job.game) throw new Error(MESSAGE.NeedsProject);
   const game = await realpath(job.game);
   const project = await realpath(job.project);
-  if (!writableInGame(game, project)) throw new Error(MESSAGE.NeedsProject);
+  if (!writableInGame(game, project)) throw new Error(MESSAGE.OutsideGame);
   const root = path.join(project, ...STAGING, randomUUID());
   const writes: string[] = [];
   const staged: Staged[] = [];

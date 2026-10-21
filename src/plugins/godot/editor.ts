@@ -114,7 +114,7 @@ export function isEditorOf(line: string, project: string, platform: NodeJS.Platf
   const words = text.split(/\s+/);
   if (!/godot/i.test(words[0] ?? "") || words.includes("--headless")) return false;
   const opensFolder = namesFolder(text, folder) && words.some((word) => EDITOR_FLAGS.has(word));
-  const file = (windows ? path.win32 : path).join(folder, PROJECT_FILE);
+  const file = (windows ? path.win32 : path.posix).join(folder, PROJECT_FILE);
   return opensFolder || text.includes(file);
 }
 

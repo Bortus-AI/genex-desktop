@@ -133,7 +133,8 @@ const shellString = (text: string) => `'${text.replaceAll("'", `'\\''`)}'`;
 /**
  * The launcher: Godot from `GENEX_GODOT`, the install Genex found, the usual places or the PATH,
  * starting the project with Genex's play on, at a fixed 60 ticks a second in a window off every
- * screen (a headless Godot draws nothing to show).
+ * screen (a headless Godot draws nothing to show). Under Windows's Git Bash the game's root is
+ * named as Windows names it (`pwd -W`: `C:/…`), since Godot is a Windows program; elsewhere `pwd`.
  */
 export function launcherText(projectFromGame: string, godot: string | null): string {
   // The folder's own name is quoted whole, so nothing in it (a quote, `$`, a backtick) is read as shell.
@@ -144,7 +145,7 @@ export function launcherText(projectFromGame: string, godot: string | null): str
     "#!/bin/sh",
     "# Starts this game for Genex's computer tool, playtesters and judges (Genex Play Protocol).",
     "# Made by Genex's Godot plugin; set GENEX_GODOT to use another Godot.",
-    'root=$(cd "$(dirname "$0")/.." && pwd)',
+    'root=$(cd "$(dirname "$0")/.." && { pwd -W 2>/dev/null || pwd; })',
     `for godot in "$GENEX_GODOT" ${godot ? `${shellString(godot)} ` : ""}/Applications/Godot.app/Contents/MacOS/Godot "$HOME/Applications/Godot.app/Contents/MacOS/Godot" "$(command -v godot)"; do`,
     '  if [ -n "$godot" ] && [ -x "$godot" ]; then',
     `    exec "$godot" --path ${project} --no-header --fixed-fps 60 --max-fps 60 --position ${OFF_SCREEN} -- ${PLAY_FLAG} "$@"`,
