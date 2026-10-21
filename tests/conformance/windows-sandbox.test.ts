@@ -877,11 +877,15 @@ foreach ($p in $paths) { [GenexTestOwner]::Own($p, $env:GENEX_OWNER_SID) }
     });
   }
 
-  it("still stops where Windows refuses a deny on a folder the sandbox user may open", async () => {
+  it("still stops where Windows refuses a deny on a folder the sandbox user may list", async () => {
+    // Users may list the folder itself, though nothing under it: the walk can wait, so the deny is
+    // written on the folder alone (SetFileSecurityW), which Windows refuses. An entry passed down,
+    // or one deeper, makes the deny walk now through SetNamedSecurityInfoW, which the elevated
+    // runner's privileges let through where a person's would not.
     const root = realpathSync.native(await tmpDir("folder-deny-refused-open-"));
     const secret = path.join(root, "above", "User Data");
     await mkdir(path.join(secret, "Default"), { recursive: true });
-    refusesChanges(secret, `*${USERS}:(OI)(CI)(RX)`);
+    refusesChanges(secret, `*${USERS}:(RX)`);
     const start = startDenying(root, secret, []);
     try {
       await assert.rejects(start.sync(), /could not set the sandbox user's entries on .*User Data/);
