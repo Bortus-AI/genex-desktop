@@ -483,6 +483,58 @@ describe("codex engine", () => {
     assert.notEqual(seen.at(-1)!.cwd, game, "a reader in place starts elsewhere too");
   });
 
+  it("on Windows names the bridge's request folder as a root of its own, so a .studio the harness made still lets the session call its tools (#351)", async () => {
+    // Codex's Windows sandbox grants a root by rewriting its ACL down the tree, which stops at a
+    // `.studio` the sandboxed harness created (another owner): every bridge call failed EPERM.
+    // The request folder is the host's, made just before the session, so it is granted directly.
+    const writable = (argv: string[]) => {
+      const roots = argv.find((arg) => arg.startsWith("sandbox_workspace_write.writable_roots="));
+      return roots ? (JSON.parse(roots.slice(roots.indexOf("=") + 1)) as string[]) : null;
+    };
+    const sessions = async (platform: NodeJS.Platform) => {
+      const { fn, seen } = fakeExec(successRun);
+      const { engine, root } = await signedInEngine(fn, platform);
+      const game = path.join(root, "game");
+      const refs = path.join(root, "refs");
+      for (const dir of [game, refs]) await mkdir(dir, { recursive: true });
+      const worker: WorkerSeat = {
+        id: "w1",
+        title: "Scene builder",
+        mode: PermissionMode.Auto,
+        writeRoots: [game, refs],
+        neverTouch: { roots: [], open: [] },
+        research: false,
+      };
+      const bypass: DelegatePermissions = {
+        mode: PermissionMode.Bypass,
+        allow: [],
+        directories: [],
+        protectWrites: [],
+        ask: async () => ({ decision: "deny" }),
+      };
+      await engine.delegate({ prompt: "build the scene", cwd: game, worker });
+      await engine.delegate({ prompt: "build pong", cwd: game });
+      await engine.delegate({ prompt: "test the build", cwd: game, readOnly: true, onCapture: async () => "" });
+      await engine.delegate({ prompt: "build pong", cwd: game, permissions: bypass });
+      return { game, refs, calls: seen.map((call) => ({ cwd: call.cwd, roots: writable(call.argv) })) };
+    };
+    const requests = (cwd: string) => path.join(cwd, ".studio", "bridge", "req");
+
+    const windows = await sessions("win32");
+    const [worker, builder, reader, bypass] = windows.calls;
+    assert.deepEqual(worker!.roots, [windows.game, requests(windows.game), windows.refs], "a worker");
+    assert.deepEqual(builder!.roots, [windows.game, requests(windows.game)], "a builder");
+    assert.deepEqual(reader!.roots, [reader!.cwd, requests(reader!.cwd)], "a reader, in its own folder");
+    assert.equal(bypass!.roots, null, "Bypass has no box to widen");
+
+    const mac = await sessions("darwin");
+    assert.deepEqual(
+      mac.calls.map((call) => call.roots),
+      [[mac.game, mac.refs], [mac.game], [mac.calls[2]!.cwd], null],
+      "elsewhere the workspace grant reaches the bridge already",
+    );
+  });
+
   it("a Codex worker searches the web as a writer or a research worker, and never otherwise", async () => {
     // The same rule as a Claude Code worker's (`researches`): its lead's research grant, or writing.
     const { fn, seen } = fakeExec(successRun);
