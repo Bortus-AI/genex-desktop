@@ -85,13 +85,20 @@ async function acceptance() {
     const win = BrowserWindow.getAllWindows()[0];
     wc = win.webContents;
     win.setPosition(0, 0);
+    // It opens at the narrowest width, as on a small screen, before it ever measures a strip.
+    win.setContentSize(WIDTHS.at(-1), HEIGHT);
     win.show();
     const up = await until(ready);
+    steps.push({ name: "start", ...(await js(MEASURE).catch(() => null)), size: win.getContentSize() });
     check("a game's strip is on the stage", up);
     if (!up) return;
-    for (const theme of ["light", "dark"]) {
+    // Light narrows from the widest; dark widens from the narrowest, so each width is reached both ways.
+    for (const [theme, widths] of [
+      ["light", WIDTHS],
+      ["dark", [...WIDTHS].reverse()],
+    ]) {
       nativeTheme.themeSource = theme;
-      for (const width of WIDTHS) {
+      for (const width of widths) {
         win.setContentSize(width, HEIGHT);
         await wait(SETTLE_MS);
         const measured = await js(MEASURE);
@@ -109,6 +116,22 @@ async function acceptance() {
           underControls(measured),
         );
       }
+    }
+    // Diagnostic only: how wide the window must grow before each step undoes.
+    const growth = [];
+    for (let width = 1440; width <= 2400; width += 40) {
+      win.setContentSize(width, HEIGHT);
+      await wait(SETTLE_MS);
+      const measured = await js(MEASURE);
+      growth.push({ width, fold: measured.fold, titlebar: measured.titlebar, window: measured.window });
+    }
+    steps.push({ name: "growth", growth });
+    win.setContentSize(WIDTHS[0], HEIGHT);
+    for (const width of WIDTHS) {
+      const [light, dark] = ["light", "dark"].map(
+        (theme) => steps.find((step) => step.name === `${theme}-${width}`)?.fold,
+      );
+      check(`${width}: the same step narrowing and widening (${light}, ${dark})`, light === dark, { light, dark });
     }
   } catch (error) {
     check("stage strip fit completed", false, String(error.stack));

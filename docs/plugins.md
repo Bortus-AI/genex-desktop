@@ -309,8 +309,8 @@ clears the old game's words at once. It returns a
 (green, amber, red, grey) whose word leads the tooltip. The title shows in the strip's own tooltip.
 A button is drawn in the prompt bar's quiet pill fill, or in the accent while its status sets
 `attention` (the action is due) and the game is not empty; Genex's Publish uses only `title` and
-`attention`, in Play's blue (its tint, filled once due). While the strip is too narrow for the
-labels, every button folds into its icon, the label in its tooltip and a dot on its corner. An offered update's Update badge is always a word in the quiet tone. A backend can also
+`attention`, in Play's blue (its tint, filled once due). Buttons keep their labels at every width:
+while the strip is too narrow for them, they move to a second row under it. An offered update's Update badge is always a word in the quiet tone. A backend can also
 push a status without being asked through `events.emit` with
 `{kind: "toolbar", item, badge, tone, title, attention, dot}`; the renderer applies it to that item,
 or re-asks the status action when the item is not named.
