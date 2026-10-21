@@ -10,14 +10,14 @@
  * opt-in (`STUDIO_NETWORK_TESTS=1`): it reaches GitHub for Godot.
  */
 import assert from "node:assert/strict";
-import { mkdir, readFile, stat } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { after, before, describe, it } from "node:test";
 import type { PluginContext, PluginScalar, PluginSetupCard } from "../../src/plugin-sdk/index.d.ts";
 import { activate } from "../../src/plugins/godot/backend.ts";
-import type { PluginBinding } from "../../src/shared/plugins.ts";
+import { type PluginBinding, type PluginSandboxJob, SandboxJobState } from "../../src/shared/plugins.ts";
 import { validateManifest } from "../../src/substrate/plugins/manifest.ts";
 import { PluginNativeServices } from "../../src/substrate/plugins/native.ts";
 import { PluginSandboxJobs } from "../../src/substrate/plugins/sandbox-jobs.ts";
@@ -45,6 +45,10 @@ let sandbox: ProcessSandbox;
 let jobs: PluginSandboxJobs;
 let call: (kind: "action" | "tool", name: string, args?: Record<string, PluginScalar>) => Promise<Answer>;
 let game: string;
+const binding: PluginBinding = { project: "valley", directory: "" };
+/** A script that prints the data folder Godot reads (export templates live under it). */
+const DATA_DIR_SCRIPT =
+  'extends SceneTree\n\nfunc _init() -> void:\n\tprint("GENEX_DATA ", OS.get_data_dir())\n\tquit()\n';
 
 before(async () => {
   if (SKIP) return;
@@ -68,7 +72,7 @@ before(async () => {
     windows: { sandbox: () => sandbox, work, runtimes },
   });
   const backend = await activate({} as never);
-  const binding: PluginBinding = { project: "valley", directory: game };
+  binding.directory = game;
   call = async (kind, name, args = {}) => {
     const signal = new AbortController().signal;
     const invocation = { method: kind, name, signal };
@@ -144,6 +148,31 @@ describe("Godot on Windows, for real", { skip: SKIP }, () => {
   it("answers the installed Godot's class reference", async () => {
     const answer = await call("tool", "class-reference", { query: "Node3D" });
     assert.match(String(answer), /class Node3D extends Node/);
+  });
+
+  it("reads Godot's data folder from XDG_DATA_HOME in the sandbox, where a web export finds its template", async () => {
+    const godot = (await call("action", "status")).godot as { binary: string };
+    const project = path.join(game, "godot");
+    const data = path.join(project, ".godot", "genex-data-probe");
+    await mkdir(data, { recursive: true });
+    await writeFile(path.join(project, "genex_data_probe.gd"), DATA_DIR_SCRIPT);
+    const request = {
+      program: godot.binary,
+      args: ["--headless", "--path", project, "-s", "res://genex_data_probe.gd"],
+      reads: [path.dirname(godot.binary)],
+      writes: [project],
+      env: { XDG_DATA_HOME: data },
+      timeoutMs: PLAY_MS,
+    };
+    const { id } = (await jobs.call(PLUGIN, "sandbox.run", request, binding)) as { id: string };
+    let job: PluginSandboxJob | null = null;
+    while (!job || job.state === SandboxJobState.Running) {
+      await sleep(EDITOR_POLL_MS);
+      job = (await jobs.call(PLUGIN, "sandbox.result", { id }, binding)) as PluginSandboxJob | null;
+    }
+    const said = /GENEX_DATA (.+)/.exec(job.stdout ?? "")?.[1]?.trim() ?? "";
+    const key = (folder: string) => folder.replaceAll("\\", "/").toLowerCase();
+    assert.ok(key(said).startsWith(key(data)), JSON.stringify(job));
   });
 
   it("starts the game for Genex's play with its launcher in the sandbox", async () => {
