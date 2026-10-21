@@ -96,14 +96,12 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
 
 ## Playing a game
 
-- A game plays across the whole window in a sandboxed view (`persist:genex-play`). The app's bar
-  lies over its top edge as glass, in a transparent view of its own above the game's
-  (`renderer/play-bar.html`, `main/play/bar-reveal.ts`): back, the name and facts, Like, Comments,
-  Share (its icon), Invite a friend (multiplayer games), Remix, Exit. It is up while the game loads, for 3 seconds
-  after play starts and again when the pointer reaches the top edge or Esc is pressed in the game;
-  then it fades up and out, and macOS's window buttons go with it (on Windows and Linux it stays up,
-  since their window controls can't). A game holding the mouse doesn't bring it back. A held Esc
-  gives the bar the keyboard. Only Studio's own page and the bar's may post or delete a comment. A single-use ticket in the address's fragment signs the player in; a guest is offered
+- A game plays in a sandboxed view (`persist:genex-play`) filling the window below the app's bar, a
+  48px strip of its own across the top that never covers the game and never fades, as on the
+  genex.games game page. The bar is drawn in a transparent view of its own above the game's
+  (`renderer/play-bar.html`, `main/play/bar-layout.ts`): back, the name and facts, Like, Comments,
+  Share (its icon), Invite a friend (multiplayer games), Remix, Exit. Only the game's own full screen
+  gives it the whole window; the bar comes back when it ends. A held Esc gives the bar the keyboard. Only Studio's own page and the bar's may post or delete a comment. A single-use ticket in the address's fragment signs the player in; a guest is offered
   sign-in. The rest of the app is inert until the game closes. Closing the window closes it; another
   window over the studio's, another desktop or minimizing leaves it playing (`view-drop.ts`).
 - Comments (the count, or the icon alone) opens a modal over the dimmed game: its count as the
@@ -191,10 +189,21 @@ is.
 - Playing (`main/play/native-launch.ts`): one copy per game, in the game sandbox (`spawnNativeGame`:
   the app read-only, `saves/` its HOME and `CFFIXED_USER_HOME`, its own preference domain, its
   `NSIRD_` atomic-save folder, window, GPU and sound, no network). Genex finds its window by pid and
-  brings it forward (macOS does not); the page's Quit asks it to quit, then ends its process tree;
+  brings it forward (macOS does not). A game opens full screen with its engine's own argument
+  (`launchArgs`: Unity `-screen-fullscreen 1`, Godot `--fullscreen`, Unreal `-fullscreen`; the
+  engine is the catalog's, kept in the install record), unless its app sets `GenexWindowed` in its
+  Info.plist (read at unpack, `WINDOWED_KEY`); the page's Quit asks it to quit, then ends its process tree;
   quitting Genex ends every game, and the next start ends a leftover only while it is the same
   process. A web game's Mac app is offered in the viewer's bar (install, progress, play: the viewer
   gives way), and opening a game whose app runs brings the app forward.
+- Links (`main/play/game-links.ts`): the website's Open in Genex sends `genex://game/<slug>`.
+  The packaged app declares the scheme (`protocols` in `forge.config.cjs`, the Linux packages'
+  `x-scheme-handler/genex`) and registers it at start; macOS hands a link over `open-url`, Windows
+  and Linux start Genex with it (`second-instance`, or the first start's arguments). Only that exact
+  shape with a Play slug is taken. Main shows the window and keeps the newest link until the page
+  takes it once (`studio:play.take-game-link`, announced by `play.game-link`); the page then opens
+  the game's own page in Play (`use-game-links.ts`), which shows its own error when the game
+  cannot be read. Developer and test launches register nothing.
 - Notices: an install finished or failed, and a newer build of an installed game (checked at start
   and every six hours, once per version), are written to the log (`play_install_finished`,
   `play_install_failed`, `play_update_available`); the feed shows them as Play rows that open the

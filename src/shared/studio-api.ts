@@ -532,9 +532,11 @@ export interface StudioApi {
   playLike(slug: string, liked: boolean): Promise<{ liked: boolean; likes: number }>;
   /** Play: close the viewer. */
   playClose(): Promise<void>;
+  /** Play: the game a `genex://game/<slug>` link asked to open, once; null when none waits. */
+  playTakeGameLink(): Promise<string | null>;
   /** Play: one of the viewer header's controls (Like, Share, Exit…); main answers with `UiEvent.PlayViewer`. */
   playControl(control: PlayControl, at?: PlayPoint): Promise<void>;
-  /** Play: what holds the viewer's bar up (the pointer or the keyboard on it, its Comments open). */
+  /** Play: whether the viewer bar's Comments is open (main lays its layer over the whole window). */
   playBar(hold: PlayBarHold): Promise<void>;
   /** Play: a page of the viewed game's comments, newest first: the first, or the one after `cursor`. */
   playComments(cursor: string | null): Promise<PlayCommentsPage>;

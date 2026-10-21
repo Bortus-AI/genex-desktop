@@ -171,6 +171,7 @@ const METHODS = [
   "playRevealInstall",
   "playLike",
   "playClose",
+  "playTakeGameLink",
   "playControl",
   "playBar",
   "playComments",

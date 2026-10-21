@@ -40,7 +40,7 @@ import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { PluginStillProblemCode } from "../../shared/plugins.ts";
 import { GenexCliStopped, runGenexCli, genexCliPath } from "./cli.ts";
-import { listingOf, type NativeUpload, pinnedCliSendsApps, sendNativeBuild } from "./native-publish.ts";
+import { appClipCommit, listingOf, type NativeUpload, pinnedCliSendsApps, sendNativeBuild } from "./native-publish.ts";
 import {
   adviceLines,
   type CoverAnswer,
@@ -69,6 +69,8 @@ import {
   pickCandidate,
   PROBLEM_GUIDANCE,
   PUBLISH_SHOT_TIMEOUT_MS,
+  noteAgentTook,
+  readAgentTook,
   readCandidates,
   readSent,
   readShot,
@@ -794,9 +796,16 @@ export class GenexTools {
   /**
    * Publish a game that has only apps, no web build: send each with `genex native publish` and list
    * the game in the gallery under `title` with the first that goes, creating its hosted project the
-   * first time. Runs as a publish job, so the dialog shows it like one.
+   * first time. Runs as a publish job, so the dialog shows it like one. `camera` takes the cover
+   * again first (an engine game's is the one its agent rendered); once the apps are recorded, that
+   * cover is sent as a gallery publish's is.
    */
-  async publishAppsOnly(project: string, apps: readonly NativeUpload[], title?: unknown): Promise<GenexPublishState> {
+  async publishAppsOnly(
+    project: string,
+    apps: readonly NativeUpload[],
+    title?: unknown,
+    camera?: CoverCamera,
+  ): Promise<GenexPublishState> {
     return this.#account(async () => {
       if (!this.#sendsApps || apps.length === 0) throw new Error(PUBLISH_MESSAGE.NoApps);
       const state = await this.publishStatus(project);
@@ -805,6 +814,7 @@ export class GenexTools {
       const busy =
         state.job?.state === GenexPublishJobState.Running || state.job?.state === GenexPublishJobState.Unresolved;
       if (busy) return state;
+      await this.#stopCoverStep(project);
       await this.#stopNativeStep(project);
       const dir = await this.#publishWorkspace(project);
       const meta = await readJsonOr<HostedMeta>(metaFile(dir));
@@ -816,8 +826,11 @@ export class GenexTools {
         startedAt: new Date().toISOString(),
         title: cleanGenexTitle(title) ?? state.title ?? defaultGenexTitle(project),
       };
+      // The shot is taken here, inside the invocation: a detached send gets no answer from host services.
+      const shotLines = camera ? await this.#reshoot(project, camera) : [];
       state.job = job;
       delete state.warnings;
+      if (shotLines.length) state.warnings = shotLines;
       delete state.lastError;
       await this.#savePublishState(project, state);
       const done = this.#runAppsJob(project, job, apps);
@@ -842,6 +855,8 @@ export class GenexTools {
       step.done = sending.then(() => {});
       this.#nativeSteps.set(project, step);
       await this.#recordApps(project, job, meta, await sending);
+      // The cover goes once the game is on Genex, as a gallery publish's does: never instead of an app.
+      if (job.state === GenexPublishJobState.Done) this.#startCoverStep(project, job.id);
     } catch (error) {
       finishJob(job, GenexPublishJobState.Failed, new Date().toISOString());
       job.error = errorMessage(error).slice(-PUBLISH_ERROR_TAIL_CHARS);
@@ -1323,16 +1338,17 @@ export class GenexTools {
   /** A publish state with the game's cover, and the cover lines of its own job among its warnings. */
   async #withCover(project: string, state: GenexPublishState): Promise<GenexPublishState> {
     const dir = this.#coverDir(project);
-    const [shot, last, candidates, clip, clipLast] = await Promise.all([
+    const [shot, last, candidates, clip, clipLast, agentTook] = await Promise.all([
       readShot(dir),
       readSent(dir),
       readCandidates(dir),
       readClip(dir),
       readClipSent(dir),
+      readAgentTook(dir),
     ]);
     const own = last?.jobId !== undefined && last.jobId === state.job?.id;
     const warnings = [...(state.warnings ?? []), ...(own ? (last.lines ?? []) : [])];
-    const cover = { shot, last, sending: this.#coverSteps.has(project), candidates, clip, clipLast };
+    const cover = { shot, last, sending: this.#coverSteps.has(project), candidates, clip, clipLast, agentTook };
     const native = await this.#nativeRecord(project);
     return { ...state, ...(warnings.length ? { warnings } : {}), cover, native };
   }
@@ -1356,7 +1372,11 @@ export class GenexTools {
       };
     }
     const takenAt = new Date(this.#now()).toISOString();
-    const shot = await this.#coverWrite(project, () => saveShot(dir, reading.still, takenAt));
+    const shot = await this.#coverWrite(project, async () => {
+      const kept = await saveShot(dir, reading.still, takenAt);
+      await noteAgentTook(dir, { shot: takenAt });
+      return kept;
+    });
     const delivery = coverDelivery(await this.#pages(project));
     return {
       operation: CoverOperation.Shoot,
@@ -1431,6 +1451,8 @@ export class GenexTools {
         kept: await readClip(this.#coverDir(project)),
         guidance: clipProblemGuidance(taken.problem),
       };
+    const dir = this.#coverDir(project);
+    await this.#coverWrite(project, () => noteAgentTook(dir, { clip: taken.clip.takenAt }));
     return {
       operation: CoverOperation.Clip,
       clip: taken.clip,
@@ -1691,8 +1713,9 @@ export class GenexTools {
   }
   /**
    * Send the kept clip unless Genex settled these bytes, with the build it was recorded from (the
-   * revision the last upload shipped): Genex keeps a clip only of a build the game ships. What goes
-   * out is a copy taken when the send began; a stopped send writes nothing.
+   * revision the last upload shipped, else for a game with only apps its app's archive hash): Genex
+   * keeps a clip only of a build the game ships. What goes out is a copy taken when the send began;
+   * a stopped send writes nothing.
    */
   async #sendClip(project: string, signal: AbortSignal, jobId?: string): Promise<void> {
     const dir = this.#coverDir(project);
@@ -1704,7 +1727,7 @@ export class GenexTools {
     });
     if (!planned) return;
     try {
-      const revision = (await readJsonOr<HostedMeta>(metaFile(this.#publishDir(project))))?.stagingCommit;
+      const revision = await this.#clipBuild(project);
       if (!revision || signal.aborted) return;
       const { out } = (await this.#spawnCli(
         this.#publishDir(project),
@@ -1722,6 +1745,13 @@ export class GenexTools {
     } finally {
       await rm(planned.copy, { force: true });
     }
+  }
+  /** The build a clip names: the staging revision the last upload shipped, else a sent app's archive hash. */
+  async #clipBuild(project: string): Promise<string | undefined> {
+    const dir = this.#publishDir(project);
+    const revision = (await readJsonOr<HostedMeta>(metaFile(dir)))?.stagingCommit;
+    if (revision) return revision;
+    return appClipCommit(readNativeSaved(await readJsonOr(path.join(dir, NATIVE_FILE))).sent);
   }
   /** Write a send's outcome, unless the send was stopped. */
   async #keepSent(dir: string, signal: AbortSignal, record: GenexCoverSent): Promise<GenexCoverSent | null> {

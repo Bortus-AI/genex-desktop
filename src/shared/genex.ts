@@ -63,7 +63,7 @@ export const GENEX_ACCOUNT_ACTIONS: readonly GenexAction[] = [
  * a package; the version always comes from here. Multiplayer's card asks for `^0.16.0`.
  */
 export const GENEX_GAME_PACKAGES = {
-  "@genex-ai/multiplayer": "0.17.0",
+  "@genex-ai/multiplayer": "0.17.1",
   "@genex-ai/embed-sdk": "0.33.0",
 } as const;
 /** A Genex SDK package a game may add. */
@@ -543,6 +543,18 @@ export interface GenexCoverRecord {
   clip?: GenexCoverClip | null;
   /** How the last clip send went; null before any. */
   clipLast?: GenexCoverSent | null;
+  /** When the agent itself last kept a shot and a clip; absent from a plugin older than this. */
+  agentTook?: GenexCoverAgentTook;
+}
+
+/**
+ * When the agent itself last kept the game's cover shot and clip (`genex__cover` shoot and clip),
+ * ISO; a kind it never took is absent. Studio's own takes and a publish's shot leave it, so Publish
+ * knows a frame the person asked the agent for has come (`covers/<project>/agent.json`).
+ */
+export interface GenexCoverAgentTook {
+  shot?: string;
+  clip?: string;
 }
 
 /** The game's kept cover clip (`covers/<project>/clip.json`), beside its video: five seconds of real play. */
@@ -598,6 +610,8 @@ export interface GenexNativeSent {
   arch: string;
   version: string;
   sizeBytes: number;
+  /** The archive's sha256 as Genex keeps it: the build a clip of a game with only apps names. */
+  sha256?: string;
   publishedAt: string;
 }
 

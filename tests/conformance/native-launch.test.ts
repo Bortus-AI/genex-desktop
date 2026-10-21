@@ -42,6 +42,8 @@ const record = (slug: string): InstallRecord => ({
   executable: "Contents/MacOS/FixtureGame",
   bundleId: `games.genex.play.${slug}`,
   bundleName: "Dust Runners",
+  engine: "unity",
+  windowed: false,
 });
 
 /** A started game the test ends: its exit, its output and the signals it gets. */
@@ -92,7 +94,9 @@ async function until(done: () => boolean): Promise<void> {
 }
 
 /** A launcher over a temporary folder with fakes for every outside call. */
-async function rig(options: { installed?: string[]; windowAfter?: number; spawnFails?: boolean } = {}) {
+async function rig(
+  options: { installed?: string[]; windowAfter?: number; spawnFails?: boolean; record?: Partial<InstallRecord> } = {},
+) {
   const root = await realpath(await tmpDir("native-launch-"));
   const games: FakeGame[] = [];
   const shown: number[] = [];
@@ -103,13 +107,16 @@ async function rig(options: { installed?: string[]; windowAfter?: number; spawnF
   const logs: string[] = [];
   const pushes: NativeSession[][] = [];
   const starts = new Map<number, string>();
+  const requests: NativeGameRequest[] = [];
   let looks = 0;
   const clock = heldClock();
   const sessions = nativeSessions({
     root,
-    record: async (slug) => ((options.installed ?? ["dust-runners"]).includes(slug) ? record(slug) : null),
+    record: async (slug) =>
+      (options.installed ?? ["dust-runners"]).includes(slug) ? { ...record(slug), ...options.record } : null,
     spawn: async (request: NativeGameRequest) => {
       if (options.spawnFails) throw new Error("sandbox-exec refused the profile");
+      requests.push(request);
       assert.ok(request.binary.startsWith(path.join(root, "dust-runners", "1.3", "Dust Runners.app")));
       assert.equal(request.saves, path.join(root, "dust-runners", "saves"));
       const game = new FakeGame(4000 + games.length);
@@ -141,7 +148,7 @@ async function rig(options: { installed?: string[]; windowAfter?: number; spawnF
     },
     log: (line) => logs.push(line),
   });
-  return { sessions, root, games, shown, signals, killed, played, ended, logs, pushes, clock, starts };
+  return { sessions, root, games, shown, signals, killed, played, ended, logs, pushes, clock, starts, requests };
 }
 
 describe("native game sessions", () => {
@@ -159,6 +166,22 @@ describe("native game sessions", () => {
     assert.deepEqual(shown, [games[0]?.pid]);
     assert.deepEqual(played, ["dust-runners"]);
     assert.ok(pushes.some((state) => state[0]?.phase === NativeSessionPhase.Running));
+  });
+
+  it("opens a game full screen with its engine's own argument, and in a window when its app asks for one", async () => {
+    const cases: Array<[Partial<InstallRecord>, string[]]> = [
+      [{ engine: "unity" }, ["-screen-fullscreen", "1"]],
+      [{ engine: "godot" }, ["--fullscreen"]],
+      [{ engine: "unreal" }, ["-fullscreen"]],
+      [{ engine: "unity", windowed: true }, []],
+      [{ engine: null }, []],
+      [{ engine: "gamemaker" }, []],
+    ];
+    for (const [over, args] of cases) {
+      const { sessions, requests } = await rig({ record: over });
+      await sessions.launch("dust-runners");
+      assert.deepEqual(requests[0]?.args, args, JSON.stringify(over));
+    }
   });
 
   it("runs one copy of a game: a second launch brings the first forward", async () => {

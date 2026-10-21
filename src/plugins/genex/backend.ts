@@ -285,10 +285,10 @@ const ACTIONS: Record<string, Action> = {
     const exportStage = () => service(PluginService.ExportStage, {});
     return genex.publishGallery(ctx.project, exportStage, args.title, coverCamera(ctx, service, invokedAt), apps);
   },
-  [GenexAction.PublishApps]: async (genex, args, ctx) => {
+  [GenexAction.PublishApps]: async (genex, args, ctx, service, invokedAt) => {
     if (!ctx.project) throw new Error(MESSAGE.OpenProject);
     const apps = ctx.directory ? await nativeUploads(ctx.directory, args.native) : [];
-    return genex.publishAppsOnly(ctx.project, apps, args.title);
+    return genex.publishAppsOnly(ctx.project, apps, args.title, coverCamera(ctx, service, invokedAt));
   },
   [GenexAction.PublishAllowUpload]: withProject((genex, project, args) =>
     genex.publishAllowNewUpload(project, String(args.jobId ?? "")),
