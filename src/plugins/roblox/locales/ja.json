@@ -63,7 +63,7 @@
   "Setup steps": "セットアップ手順",
   "Split a mesh into parts with Roblox's AI? The mesh and the part names go to Roblox, and it runs on your Roblox account. The parts are added to this game's place next to the mesh.": "RobloxのAIでメッシュをパーツに分けますか？メッシュとパーツ名がRobloxに送られ、あなたのRobloxアカウントで実行されます。パーツは、このゲームのプレイスでメッシュの隣に追加されます。",
   "Stop getting Roblox Studio": "Roblox Studioの入手を中止",
-  "Take back what Genex set up in Roblox Studio: the Genex helper in its Plugins folder (and that folder, if Genex made it) and the MCP server switch Genex turned on. Anything changed since stays as it is.": "GenexがRoblox Studioにセットアップしたものを元に戻します：PluginsフォルダーのGenexヘルパー（Genexがつくったならそのフォルダーも）と、GenexがオンにしたMCPサーバーのスイッチです。その後に変わったものはそのままです。",
+  "Take back what Genex set up in Roblox Studio: the Genex helper in its Plugins folder (and that folder, if Genex made it) and the MCP server switch Genex turned on. Anything changed since stays as it is.": "GenexがRoblox Studioにセットアップしたものを元に戻します：PluginsフォルダーのGenexヘルパー（Genexが作ったならそのフォルダーも）と、GenexがオンにしたMCPサーバーのスイッチです。その後に変わったものはそのままです。",
   "This game builds here": "このゲームをここでつくっています",
   "Undo Set up": "セットアップを元に戻す",
   "Upload pictures to your Roblox account? The pictures go to Roblox as your assets, and Roblox moderates them: a refused picture counts against your Roblox account. Each comes back as an asset id this game can use.": "あなたのRobloxアカウントに画像をアップロードしますか？画像はあなたのアセットとしてRobloxに送られ、Robloxのモデレーションを受けます。却下された画像は、あなたのRobloxアカウントにとってマイナスになります。それぞれ、このゲームで使えるアセットIDとして戻ってきます。",

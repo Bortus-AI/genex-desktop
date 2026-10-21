@@ -4,7 +4,7 @@
   "Agents": "Агенты",
   "Agents build your game in the Unity editor on this computer, through Unity's Pipeline package: Genex makes or sets up the game's Unity project and opens it in your Unity 6. The project lives in the game's own folder. Unity is a trademark or registered trademark of Unity Technologies or its affiliates.": "Агенты собирают твою игру в редакторе Unity на этом компьютере через пакет Pipeline от Unity: Genex создаёт или настраивает проект Unity для игры и открывает его в твоём Unity 6. Проект хранится в папке самой игры. Unity — товарный знак или зарегистрированный товарный знак Unity Technologies или её аффилированных компаний.",
   "Agents can work in it.": "Агенты могут в нём работать.",
-  "Agents may use Unity while you play": "Агенты могут работать в Unity, пока ты играешь",
+  "Agents may use Unity while you play": "Агенты могут пользоваться Unity, пока ты играешь",
   "Agents reach the editor through Unity's Pipeline package. Set up adds it to Packages/manifest.json and keeps a copy of the file first.": "Агенты работают с редактором через пакет Pipeline от Unity. «Настроить» добавит его в Packages/manifest.json, а перед этим сохранит копию файла.",
   "Ask for a Unity game in the chat and Genex makes its project here. To work on a project you already have, choose Open a folder… on Home.": "Попроси в чате игру на Unity, и Genex создаст её проект здесь. Чтобы работать с проектом, который у тебя уже есть, выбери «Открыть папку…» на экране «Главная».",
   "Checking Unity…": "Проверяем Unity…",
@@ -22,7 +22,7 @@
   "It is playing the game.": "Сейчас в нём запущена игра.",
   "It was saved with Unity an older version, and Genex works with Unity 6 or later. Upgrade the project in Unity Hub.": "Он сохранён в более старой версии Unity, а Genex работает с Unity 6 и новее. Обнови проект в Unity Hub.",
   "It was saved with Unity {version}, and Genex works with Unity 6 or later. Upgrade the project in Unity Hub.": "Он сохранён в Unity {version}, а Genex работает с Unity 6 и новее. Обнови проект в Unity Hub.",
-  "Let agents use Unity while you play": "Разрешить агентам работать в Unity, пока ты играешь",
+  "Let agents use Unity while you play": "Пусть агенты пользуются Unity, пока ты играешь",
   "No Unity project in this game": "У этой игры нет проекта Unity",
   "No game open": "Игра не открыта",
   "Not open": "Не открыто",
@@ -73,5 +73,5 @@
   "Unity setup": "Настройка Unity",
   "Unity {version} isn't installed": "Unity {version} не установлен",
   "Unity {version} isn't installed, so the project was not opened.": "Unity {version} не установлен, поэтому проект не открыт.",
-  "Whether agents may use Unity while you play": "Могут ли агенты работать в Unity, пока ты играешь"
+  "Whether agents may use Unity while you play": "Могут ли агенты пользоваться Unity, пока ты играешь"
 }

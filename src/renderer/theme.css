@@ -5111,6 +5111,11 @@ a:focus-visible {
   height: 36px;
   font-size: 12px;
 }
+/* A language's own name can be long ("System (Português (Brasil))"): the language menu grows to it. */
+[data-language-setting] .appearance-choice {
+  width: auto;
+  min-width: 200px;
+}
 .appearance-menu {
   max-height: min(380px, var(--radix-dropdown-menu-content-available-height));
   overflow-y: auto;

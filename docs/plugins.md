@@ -1935,8 +1935,9 @@ by such a record (not by its plugin's `detect`, so the plugin may be off) as one
 are: it looks for the plugin first. With no question card, a folder with no kind yet is told each
 scaffold by its label, beside its own tool. A record that doesn't parse in full
 (`parseScaffoldRecord`) adds nothing. The sidebar shows a project that isn't a game by its kind
-beside its name: the scaffold's label while a fact its rules found is there, else `Unreal plugin`
-or `Blender assets` for a folder holding no game (`renderer/project-kind.ts`). The Unreal plugin
+beside its name: while a fact its scaffold's rules found is there, the app's word for that fact in
+the app's language (`Unreal plugin`) or else the scaffold's label; otherwise `Unreal plugin` or
+`Blender assets` for a folder holding no game (`renderer/project-kind.ts`). The Unreal plugin
 declares `game` (`Unreal game`, `new-game`) and `plugin` (`Unreal plugin`, `new-plugin`, a rule
 finding `**/*.uplugin` but not under the Genex editor helper's folder, so a host project's plugin
 in `Plugins/` is an `unreal-plugin` fact).

@@ -285,6 +285,18 @@ describe("a plugin's scaffolds", () => {
         "Unreal plugin",
       ],
       [
+        "a scaffold fact the app has a word for: the app's word, in the app's language, not the stored label",
+        game([fact("unreal-plugin", FactSource.Scaffold, "unreal/Plugins/X")], {
+          scaffold: { ...scaffold, label: "Host plugin" },
+        }),
+        "Unreal plugin",
+      ],
+      [
+        "a scaffold fact no word names keeps the scaffold's label",
+        game([fact("toy-project", FactSource.Scaffold, "toy")], { scaffold: { ...scaffold, label: "Toy addon" } }),
+        "Toy addon",
+      ],
+      [
         "a record whose rules no longer find anything",
         game([fact("unreal-project", FactSource.Core, "unreal")], { scaffold }),
         null,

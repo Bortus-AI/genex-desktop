@@ -19,6 +19,7 @@ import { createRoot } from "react-dom/client";
 import { labelAppLoader } from "./app-loader.ts";
 import { ErrorBoundary } from "./ErrorBoundary.tsx";
 import { initializeAppearance } from "./appearance/store.ts";
+import { shareLanguage } from "./language.ts";
 import { installMotionRest } from "./motion-rest.ts";
 import { BootRoot } from "./SandboxSetup.tsx";
 import { createBoot } from "./state/boot.ts";
@@ -36,7 +37,14 @@ installMotionRest();
 if (process.env.NODE_ENV !== "production") setInterval(() => performance.clearMeasures(), MINUTE_MS);
 // The stores subscribe and bootstrap once, when main says the core is ready and before the studio
 // mounts: StrictMode's replayed effects can then neither subscribe twice nor drop a reply.
-const boot = createBoot(window.studio, { onReady: startStudio });
+// Main learns a language chosen while it kept none (its menus and notifications); it is told
+// again on the next switch, so a failed call costs nothing.
+const boot = createBoot(window.studio, {
+  onReady: () => {
+    startStudio();
+    shareLanguage(window.studio).catch(() => undefined);
+  },
+});
 const unsubscribe = boot.store.subscribe(({ platform }) => {
   if (platform === null) return;
   unsubscribe();

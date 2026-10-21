@@ -9,7 +9,7 @@ export default {
   "(done)": "(feito)",
   "(named {count, plural, one {# time} other {# times}} now)":
     "(apontado {count, plural, one {# vez} other {# vezes}} até agora)",
-  "**Build to start:** {ask}": "**Build a iniciar:** {ask}",
+  "**Build to start:** {ask}": "**Build a ser iniciado:** {ask}",
   "15 minutes less": "15 minutos a menos",
   "15 minutes more": "15 minutos a mais",
   "1 credit ≈ 1¢": "1 crédito ≈ 1¢",
@@ -154,7 +154,7 @@ export default {
     "Um jogo de vigia noturno de museu onde as peças ganham vida",
   "A neon arcade shooter where your bullets bounce off the walls":
     "Um jogo de tiro arcade neon onde suas balas ricocheteiam nas paredes",
-  "A new build is ready to play.": "Uma nova build está pronta para jogar.",
+  "A new build is ready to play.": "Um novo build está pronto para jogar.",
   "A new build is ready — reload to play it": "Um build novo está pronto — recarregue para jogar",
   "A new version is downloading. Genex offers the relaunch when it's ready.":
     "Uma nova versão está sendo baixada. O Genex vai oferecer reiniciar quando ela estiver pronta.",
@@ -335,7 +335,7 @@ export default {
   "Added from Ollama": "Adicionado do Ollama",
   "Added picture {number}": "Imagem adicionada {number}",
   "Added to the game as {path}": "Adicionado ao jogo como {path}",
-  "Added to your build": "Adicionado à sua build",
+  "Added to your build": "Adicionado ao seu build",
   "Added to your game": "Adicionado ao seu jogo",
   "Added to your game.": "Adicionado ao seu jogo.",
   "Added to {game}": "Adicionado a {game}",
@@ -347,9 +347,9 @@ export default {
   Admin: "Admin",
   After: "Depois",
   "After a run it finds what went wrong or took extra work, and drafts an edit to its own instructions.":
-    "Depois de uma execução, ele encontra o que deu errado ou deu trabalho extra, e escreve uma edição nas próprias instruções.",
+    "Depois de um build, ele encontra o que deu errado ou deu trabalho extra e escreve uma edição nas próprias instruções.",
   "After each finished build, send anonymous numbers: times, token counts, the model and whether it worked. Never your prompts, code, files or game names.":
-    "Depois de cada build concluído, envia números anônimos: tempos, quantidade de tokens, o modelo e se funcionou. Nunca seus prompts, código, arquivos ou nomes de jogos.",
+    "Depois de cada build concluído, envia números anônimos: tempos, quantidade de tokens, o modelo e se funcionou. Nunca seus pedidos, código, arquivos ou nomes de jogos.",
   "After the current work finishes": "Depois que o trabalho atual terminar",
   "Agent is working. The first preview appears after it saves a screenshot.":
     "O agente está trabalhando. A primeira prévia aparece quando ele salvar uma captura de tela.",
@@ -360,7 +360,7 @@ export default {
     "Sem isso, os agentes podem ver a janela de um app, mas nunca gerenciadores de senhas, Ajustes do Sistema, pedidos de senha nem o Genex.",
   "Agents didn’t start": "Os agentes não iniciaram",
   "Agents only run in a protected space that Windows has to allow once. If you aren’t an administrator of this PC, ask one to enter their password when Windows asks, then press Set up.":
-    "Os agentes só rodam em um espaço protegido que o Windows precisa permitir uma vez. Se você não for administrador deste PC, peça para um digitar a senha quando o Windows pedir e depois clique em Configurar.",
+    "Os agentes só rodam em um espaço protegido que o Windows precisa permitir uma vez. Se você não for administrador deste PC, peça para um digitar a senha quando o Windows pedir e depois clique em “Configurar”.",
   "Agents run their commands in Git Bash, which comes with Git for Windows. Install it from git-scm.com, then retry.":
     "Os agentes rodam os comandos no Git Bash, que vem com o Git for Windows. Instale pelo git-scm.com e tente de novo.",
   "Agents see its tools as {id}__…": "Os agentes veem as ferramentas dele como {id}__…",
@@ -433,7 +433,7 @@ export default {
   "Another app is using the port Genex gave {project}. Set it up again to move it to a free one.":
     "Outro app está usando a porta que o Genex deu para {project}. Configure de novo para mudar para uma livre.",
   "Another app, such as OneDrive or an antivirus, is still reading the new project's files. Try Create and open again in a moment.":
-    "Outro app, como o OneDrive ou um antivírus, ainda está lendo os arquivos do projeto novo. Tente Criar e abrir de novo daqui a pouco.",
+    "Outro app, como o OneDrive ou um antivírus, ainda está lendo os arquivos do projeto novo. Tente “Criar e abrir” de novo daqui a pouco.",
   "Another clip": "Outro clipe",
   "Another cover": "Outra capa",
   "Another folder…": "Outra pasta…",
@@ -467,7 +467,7 @@ export default {
     "Autorize o Genex no OpenRouter. Esta tela avança sozinha.",
   "Approve candidate {candidate} for your character’s 3D preview?":
     "Aprovar a opção {candidate} para a prévia 3D do seu personagem?",
-  "Approve candidate {index}": "Aprovar candidato {index}",
+  "Approve candidate {index}": "Aprovar opção {index}",
   "Approve plan": "Aprovar plano",
   "Approve the remesh": "Aprovar o remesh",
   "Approve this plan?": "Aprovar este plano?",
@@ -480,12 +480,12 @@ export default {
   "Ask again next time.": "Perguntar de novo na próxima vez.",
   "Ask agent": "Pedir ao agente",
   "Ask every time": "Perguntar sempre",
-  "Ask for a change to this build": "Peça uma mudança nesta build",
+  "Ask for a change to this build": "Peça uma mudança neste build",
   "Ask for a change…": "Peça uma mudança…",
   "Ask for a model, a sound or a texture in any game chat.":
     "Peça um modelo, um som ou uma textura no chat de qualquer jogo.",
   "Ask in any game chat. Genex picks the tool, runs it on your balance and saves the file in your game. No accounts or keys of your own.":
-    "Peça no chat de qualquer jogo. O Genex escolhe a ferramenta, usa o seu saldo e salva o arquivo no seu jogo. Sem contas nem chaves próprias.",
+    "Peça no chat de qualquer jogo. O Genex escolhe a ferramenta, usa o seu saldo e salva o arquivo no seu jogo. Você não precisa de conta nem chave própria.",
   "Asked the agent": "Pedido ao agente",
   "Asked:": "Pergunta:",
   "Asks before every change": "Pergunta antes de cada mudança",
@@ -510,7 +510,7 @@ export default {
     "O Auto não está disponível para este modelo, então o Claude pergunta antes",
   "Auto permissions": "Permissões Auto",
   "Auto would choose Desktop only: crash reports flagged it.":
-    "O Auto escolheria Só computador: há relatórios de falhas.",
+    "O Auto escolheria “Só computador”: há relatórios de falhas.",
   "Auto would let phones play: no crash reports flagged it.":
     "O Auto deixaria jogar no celular: não há relatórios de falhas.",
   "Auto · desktop only": "Auto · só computador",
@@ -518,13 +518,13 @@ export default {
   "Available revision: {revision}": "Versão disponível: {revision}",
   Avatar: "Avatar",
   Back: "Voltar",
-  "Back to Play": "Voltar ao Jogar",
+  "Back to Play": "Voltar para Jogar",
   "Back to game": "Voltar ao jogo",
   "Back to workspace": "Voltar ao espaço de trabalho",
   Background: "Fundo",
   Backgrounds: "Fundos",
   Before: "Antes",
-  "Before a build can be reviewed": "Antes de revisar uma build",
+  "Before a build can be reviewed": "Antes de revisar um build",
   "Before the Loop calls it done, a second AI looks at your game.":
     "Antes de o Loop dar como concluído, uma segunda IA olha o seu jogo.",
   "Being checked": "Em revisão",
@@ -532,7 +532,7 @@ export default {
   "Best fit": "Melhor opção",
   Better: "Melhoria",
   "Between builds": "Entre builds",
-  "Billed by each provider you use": "Cobrado por cada provedor que você usa",
+  "Billed by each provider you use": "Cobrado por cada provedor que você usar",
   "Billed by each provider you use.": "Cobrado por cada provedor que você usar.",
   "Billed by each provider you use. Free models stay in the model menu too.":
     "Cobrado por cada provedor que você usar. Os modelos grátis continuam no menu de modelos.",
@@ -545,8 +545,8 @@ export default {
   "Blender assets": "Recursos do Blender",
   "Blender couldn’t start": "O Blender não conseguiu iniciar",
   "Blender isn’t installed": "O Blender não está instalado",
-  "Blender {version} is ready": "Blender {version} está pronto",
-  "Blender {version} is too old": "Blender {version} é antigo demais",
+  "Blender {version} is ready": "O Blender {version} está pronto",
+  "Blender {version} is too old": "O Blender {version} é antigo demais",
   Blocks: "Blocos",
   Blur: "Desfoque",
   "Bonsai currently requires an Apple Silicon Mac": "Por enquanto, o Bonsai precisa de um Mac com Apple Silicon",
@@ -569,9 +569,9 @@ export default {
   "Build copies": "Cópias de builds",
   "Build delivered · Checks need attention": "Build no jogo · As verificações precisam de atenção",
   "Build delivered · Verification incomplete": "Build no jogo · Verificação incompleta",
-  "Build failed": "A build falhou",
+  "Build failed": "O build falhou",
   "Build failed.": "O build falhou.",
-  "Build finished": "Build concluída",
+  "Build finished": "Build concluído",
   "Build finished without a new version.": "Build concluído sem uma nova versão.",
   "Build finished. Changes are kept in your project.": "Build concluído. As mudanças ficaram no seu projeto.",
   "Build finished. Changes are live.": "Build concluído. As mudanças já estão no jogo.",
@@ -581,9 +581,9 @@ export default {
   "Build plan": "Plano do build",
   "Build running": "Build em andamento",
   "Build status unavailable": "Status do build indisponível",
-  "Build stopped": "Build parada",
-  "Build stopped. Everything built so far is kept.": "Build interrompido. Tudo o que foi criado até agora foi mantido.",
-  "Build the current game successfully before exporting": "Crie o jogo atual sem erros antes de exportar",
+  "Build stopped": "Build parado",
+  "Build stopped. Everything built so far is kept.": "Build parado. Tudo o que foi criado até agora foi mantido.",
+  "Build the current game successfully before exporting": "Faça o build do jogo atual sem erros antes de exportar",
   "Build the game again": "Criar o jogo de novo",
   "Build the {app} again with the agent": "{app}: criar de novo com o agente",
   "Build the {players} app of {title} again so I can publish it.":
@@ -600,9 +600,9 @@ export default {
   "Building: show or hide its parts": "Criando: mostrar ou ocultar as partes",
   Builds: "Builds",
   "Built before your last change": "Criado antes da sua última alteração",
-  "Built in one session and merged into your build.": "Criado em uma sessão e adicionado à sua build.",
+  "Built in one session and merged into your build.": "Criado em uma sessão e adicionado ao seu build.",
   "Built in one session. Its work wasn't merged into your build.":
-    "Criado em uma sessão. O trabalho não foi adicionado à sua build.",
+    "Criado em uma sessão. O trabalho não foi adicionado ao seu build.",
   Bundled: "Incluído",
   "Buy credits": "Comprar créditos",
   "Buy credits on genex.games": "Comprar créditos no genex.games",
@@ -610,7 +610,7 @@ export default {
   "By {author}": "Por {author}",
   "Bypass permissions": "Ignorar permissões",
   "Bypass permissions?": "Ignorar permissões?",
-  "CLI default": "Padrão do CLI",
+  "CLI default": "Padrão da CLI",
   "CRT dither": "Pontilhado CRT",
   Camera: "Câmera",
   "Camera high above; click where to go.": "Câmera lá de cima; clique para onde ir.",
@@ -620,13 +620,13 @@ export default {
   "Cancel downloading {model}": "Cancelar download de {model}",
   "Cancel downloading {name}": "Cancelar o download de {name}",
   "Cancel sign-in": "Cancelar login",
-  "Cancel signing in": "Cancelar entrada",
+  "Cancel signing in": "Cancelar login",
   "Cancel the connector form": "Cancelar o formulário do conector",
   "Cancel your request to {name}": "Cancelar seu pedido para {name}",
   "Candidate kept.": "Versão candidata mantida.",
   "Candidate not kept.": "Versão candidata não mantida.",
-  "Candidate {index}": "Candidato {index}",
-  Candidates: "Candidatos",
+  "Candidate {index}": "Opção {index}",
+  Candidates: "Opções",
   "Cannot read model installation status.": "Não foi possível ler o status da instalação do modelo.",
   "Capture unavailable": "Captura indisponível",
   "Capturing the game": "Capturando o jogo",
@@ -637,7 +637,7 @@ export default {
   "Change a model": "Mudar um modelo",
   "Change address…": "Mudar endereço…",
   "Change cover": "Trocar capa",
-  "Change image": "Alterar imagem",
+  "Change image": "Trocar imagem",
   "Change image…": "Trocar imagem…",
   "Change it": "Mudar",
   "Change the plan: ": "Mude o plano: ",
@@ -646,9 +646,9 @@ export default {
   "Changed {skill}": "Alteração: {skill}",
   "Changes apply immediately and save on this Mac.": "As mudanças valem na hora e ficam salvas neste Mac.",
   "Changes are kept in your project": "As mudanças ficam guardadas no seu projeto",
-  "Changes are live": "As mudanças já estão no jogo",
-  "Changes are live · Checks incomplete": "Mudanças no jogo · Verificações incompletas",
-  "Changes are live · Checks need attention": "Mudanças no jogo · As verificações precisam de atenção",
+  "Changes are live": "Já no jogo",
+  "Changes are live · Checks incomplete": "Já no jogo · Verificações incompletas",
+  "Changes are live · Checks need attention": "Já no jogo · As verificações precisam de atenção",
   "Changes are visible, but could not be saved. Free some disk space and try again.":
     "As mudanças estão visíveis, mas não puderam ser salvas. Libere espaço em disco e tente de novo.",
   "Changes show in the app and on genex.games right away.": "As mudanças aparecem no app e no genex.games na hora.",
@@ -671,8 +671,8 @@ export default {
   "ChatGPT is not connected. Sign in to start building.": "O ChatGPT não está conectado. Entre para começar a criar.",
   "ChatGPT models": "Modelos do ChatGPT",
   Check: "Verificar",
-  "Check Claude Code again": "Verificar o Claude Code de novo",
-  "Check Codex again": "Verificar o Codex de novo",
+  "Check Claude Code again": "Verificar Claude Code de novo",
+  "Check Codex again": "Verificar Codex de novo",
   "Check again": "Verificar de novo",
   "Check connection": "Verificar conexão",
   "Check for Updates": "Verificar atualizações",
@@ -684,10 +684,10 @@ export default {
   "Check your connection and try again.": "Verifique sua conexão e tente de novo.",
   "Check your connection, then try again.": "Verifique sua conexão e tente de novo.",
   Checked: "Verificado",
-  "Checked the project": "Verificou o projeto",
+  "Checked the project": "Projeto verificado",
   "Checked whether play runs": "Verificado se a partida está rodando",
   "Checked: it loads and its cameras see it. Gameplay is reviewed step by step.":
-    "Verificado: carrega e as câmeras o veem. A jogabilidade é revisada etapa por etapa.",
+    "Verificado: carrega e as câmeras o veem. A jogabilidade é revisada passo a passo.",
   Checking: "Verificando",
   "Checking Blender…": "Verificando o Blender…",
   "Checking it starts…": "Verificando se inicia…",
@@ -700,11 +700,11 @@ export default {
   "Checking the game files…": "Verificando os arquivos do jogo…",
   "Checking the key…": "Verificando a chave…",
   "Checking the new build starts. Its picture comes next.":
-    "Verificando se a nova build inicia. A imagem vem em seguida.",
+    "Verificando se o novo build inicia. A imagem vem em seguida.",
   "Checking the project": "Verificando o projeto",
   "Checking the sign-in…": "Verificando o login…",
   "Checking your ChatGPT connection…": "Verificando sua conexão com o ChatGPT…",
-  "Checking your Genex account…": "Verificando sua conta Genex…",
+  "Checking your Genex account…": "Verificando sua conta do Genex…",
   "Checking {what} in the preview": "Verificando {what} na prévia",
   "Checking…": "Verificando…",
   Checkpoint: "Checkpoint",
@@ -734,7 +734,7 @@ export default {
   "Choose a theme smaller than 128 KB.": "Escolha um tema menor que 128 KB.",
   "Choose an answer": "Escolha uma resposta",
   "Choose an auto-compaction threshold between 5% and 95%.":
-    "Escolha um limite de compactação automática entre 5% e 95%.",
+    "Escolha um limiar de compactação automática entre 5% e 95%.",
   "Choose an empty folder, or create one. Games you already have stay where they are.":
     "Escolha uma pasta vazia ou crie uma. Os jogos que você já tem ficam onde estão.",
   "Choose an empty folder. This one already has other folders in it.":
@@ -753,7 +753,7 @@ export default {
   "Choose file…": "Escolher arquivo…",
   "Choose game image": "Escolher imagem do jogo",
   "Choose image…": "Escolher imagem…",
-  "Choose it with the Roblox Studio button.": "Escolha pelo botão do Roblox Studio.",
+  "Choose it with the Roblox Studio button.": "Escolha pelo botão Roblox Studio.",
   "Choose microphone": "Escolher microfone",
   "Choose model": "Escolher modelo",
   "Choose one of the templates Genex shows.": "Escolha um dos modelos que o Genex mostra.",
@@ -840,7 +840,7 @@ export default {
   "Codex skill discovery timed out. Refresh to retry.":
     "A busca de habilidades do Codex demorou demais. Atualize para tentar de novo.",
   "Coin lives in your Genex account. Sign in once, then pay here.":
-    "As moedas ficam na sua conta Genex. Entre uma vez e pague aqui.",
+    "As moedas ficam na sua conta do Genex. Entre uma vez e pague aqui.",
   Color: "Cor",
   Colors: "Cores",
   Columns: "Colunas",
@@ -927,7 +927,7 @@ export default {
   Continue: "Continuar",
   "Continue on this Mac": "Continuar neste Mac",
   "Continue to confirmation": "Continuar para a confirmação",
-  Contractor: "Prestador",
+  Contractor: "Agente",
   Contrast: "Contraste",
   "Control borders": "Bordas dos controles",
   Conversation: "Conversa",
@@ -981,7 +981,7 @@ export default {
   "Could not start or communicate with the terminal. Open a new session.":
     "Não foi possível iniciar o terminal ou se comunicar com ele. Abra uma sessão nova.",
   "Could not unlock the saved connection. Retry Connect.":
-    "Não foi possível desbloquear a conexão salva. Clique em Conectar de novo.",
+    "Não foi possível desbloquear a conexão salva. Clique em “Conectar” de novo.",
   "Could not update this installation. Open the installation guide or use its package manager, then check again.":
     "Não foi possível atualizar esta instalação. Abra o guia de instalação ou use o gerenciador de pacotes dela e verifique de novo.",
   "Couldn't add a {shape}": "Não foi possível adicionar {shape}",
@@ -1052,8 +1052,8 @@ export default {
   "Couldn't take a motion strip": "Não foi possível capturar uma sequência de movimento",
   "Couldn't take a picture of {asset}": "Não foi possível tirar uma foto de {asset}",
   "Couldn't take a play-view shot": "Não foi possível capturar a visão do jogo",
-  "Couldn't take a screenshot": "Não foi possível fazer uma captura de tela",
-  "Couldn't take a screenshot of the level": "Não foi possível fazer uma captura de tela do nível",
+  "Couldn't take a screenshot": "Não foi possível tirar uma captura de tela",
+  "Couldn't take a screenshot of the level": "Não foi possível tirar uma captura de tela do nível",
   "Couldn't take a still from {camera}": "Não foi possível tirar uma imagem de {camera}",
   "Couldn't write a Blueprint": "Não foi possível escrever um Blueprint",
   "Couldn't write {blueprint}": "Não foi possível escrever {blueprint}",
@@ -1065,7 +1065,7 @@ export default {
   "Couldn’t change your name.": "Não deu para mudar seu nome.",
   "Couldn’t check this nickname. Check your connection.":
     "Não foi possível verificar este apelido. Confira sua conexão.",
-  "Couldn’t check your Genex account": "Não foi possível verificar sua conta Genex",
+  "Couldn’t check your Genex account": "Não foi possível verificar sua conta do Genex",
   "Couldn’t copy the link.": "Não foi possível copiar o link.",
   "Couldn’t delete the game.": "Não foi possível excluir o jogo.",
   "Couldn’t delete your comment": "Não foi possível excluir seu comentário",
@@ -1096,7 +1096,7 @@ export default {
   "Couldn’t post your comment": "Não foi possível publicar seu comentário",
   "Couldn’t prepare the plan": "Não foi possível preparar o plano",
   "Couldn’t reach Genex. Nothing was deleted; try again later.":
-    "Não deu para falar com o Genex. Nada foi apagado; tente de novo mais tarde.",
+    "Não deu para falar com o Genex. Nada foi excluído; tente de novo mais tarde.",
   "Couldn’t read your credits.": "Não foi possível ler seus créditos.",
   "Couldn’t regenerate your avatar.": "Não foi possível gerar seu avatar de novo.",
   "Couldn’t remove the game. Quit it first if it’s running.":
@@ -1113,8 +1113,8 @@ export default {
   "Couldn’t sign out. Try again in a moment.": "Não deu para sair. Tente de novo daqui a pouco.",
   "Couldn’t start": "Não conseguiu iniciar",
   "Couldn’t start signing in. Check your connection and try again.":
-    "Não deu para começar a entrar. Verifique sua conexão e tente de novo.",
-  "Couldn’t stop signing in. Try again in a moment.": "Não deu para cancelar a entrada. Tente de novo daqui a pouco.",
+    "Não deu para iniciar o login. Verifique sua conexão e tente de novo.",
+  "Couldn’t stop signing in. Try again in a moment.": "Não deu para cancelar o login. Tente de novo daqui a pouco.",
   "Couldn’t unpublish the game.": "Não foi possível despublicar o jogo.",
   "Couldn’t use that picture. Try a PNG or JPEG.": "Não deu para usar essa imagem. Tente um PNG ou JPEG.",
   "Cover changed": "Capa alterada",
@@ -1140,7 +1140,7 @@ export default {
   "Customize theme": "Personalizar tema",
   Cut: "Recortar",
   "Daily stats arrive with the next genex.games update. Until then, your games’ plays in total.":
-    "As estatísticas diárias chegam com a próxima atualização do genex.games. Até lá, você vê o total de jogadas dos seus jogos.",
+    "As estatísticas diárias chegam com a próxima atualização do genex.games. Até lá, você vê o total de partidas dos seus jogos.",
   Dark: "Escuro",
   "Dark theme": "Tema escuro",
   Datamosh: "Datamosh",
@@ -1156,18 +1156,18 @@ export default {
   "Default model": "Modelo padrão",
   "Default view": "Visão padrão",
   Delete: "Excluir",
-  "Delete every row shared from this computer?": "Apagar todas as linhas compartilhadas deste computador?",
+  "Delete every row shared from this computer?": "Excluir todas as linhas compartilhadas deste computador?",
   "Delete game": "Excluir jogo",
   "Delete it from this Mac? You can download it again.": "Excluir deste Mac? Você pode baixá-lo de novo.",
-  "Delete what I shared": "Apagar o que compartilhei",
+  "Delete what I shared": "Excluir o que compartilhei",
   "Delete your comment": "Excluir seu comentário",
   "Delete {model}": "Excluir {model}",
   "Delete {title}?": "Excluir {title}?",
   "Delete “{game}”?": "Excluir “{game}”?",
   "Deleted {count, plural, one {# row} other {# rows}}, but Genex couldn’t finish. Try again later to remove the rest.":
-    "{count, plural, one {# linha apagada} other {# linhas apagadas}}, mas o Genex não conseguiu terminar. Tente de novo mais tarde para remover o resto.",
+    "{count, plural, one {# linha excluída} other {# linhas excluídas}}, mas o Genex não conseguiu terminar. Tente de novo mais tarde para remover o resto.",
   "Deleted {count, plural, one {# row} other {# rows}}.":
-    "{count, plural, one {# linha apagada} other {# linhas apagadas}}.",
+    "{count, plural, one {# linha excluída} other {# linhas excluídas}}.",
   "Delete…": "Excluir…",
   "Deleting…": "Excluindo…",
   Delivered: "Entregue",
@@ -1200,7 +1200,7 @@ export default {
   "Didn't publish": "Falha ao publicar",
   "Didn't start": "Não iniciou",
   "Didn’t finish": "Não terminou",
-  Disabled: "Desativado",
+  Disabled: "Desativada",
   "Disabled in the provider configuration.": "Desativada na configuração do provedor.",
   Discard: "Descartar",
   Disconnect: "Desconectar",
@@ -1208,14 +1208,14 @@ export default {
   Dismiss: "Dispensar",
   "Dismiss remaining imports": "Descartar importações restantes",
   Dividers: "Divisórias",
-  "Do it for me": "Faça por mim",
+  "Do it for me": "Fazer por mim",
   "Does it feel alive? {score} of {max}": "Parece vivo? {score} de {max}",
   "Does what you ask, then stops.": "Faz o que você pede e para.",
   "Don't allow": "Não permitir",
   "Don't ask again for this action in {source}.": "Não perguntar de novo sobre esta ação em {source}.",
   "Don't use Godot": "Não usar Godot",
-  "Don't use Unity": "Não usar o Unity",
-  "Don't use Unreal": "Não usar o Unreal",
+  "Don't use Unity": "Não usar Unity",
+  "Don't use Unreal": "Não usar Unreal",
   Done: "Concluído",
   Dots: "Pontos",
   Download: "Baixar",
@@ -1242,8 +1242,8 @@ export default {
   "Downloaded for the agent to read": "Baixado para o agente ler",
   "Downloaded part of {model}": "Parte baixada de {model}",
   "Downloaded · runs on this Mac": "Baixado · roda neste Mac",
-  "Downloading Blender {version}": "Baixando Blender {version}",
-  "Downloading Godot {version}": "Baixando Godot {version}",
+  "Downloading Blender {version}": "Baixando o Blender {version}",
+  "Downloading Godot {version}": "Baixando o Godot {version}",
   "Downloading Roblox's installer.": "Baixando o instalador do Roblox.",
   "Downloading Unity Hub": "Baixando o Unity Hub",
   "Downloading models": "Baixando modelos",
@@ -1261,9 +1261,9 @@ export default {
     "Solte para adicionar {count, plural, one {# arquivo} other {# arquivos}}",
   "Drop to add {count, plural, one {# picture} other {# pictures}}":
     "Solte para adicionar {count, plural, one {# imagem} other {# imagens}}",
-  "Drove the route": "Percorreu a rota",
+  "Drove the route": "Rota percorrida",
   "Each chat session asks you first, and {keys} stops it.": "Cada sessão de chat pergunta antes, e {keys} interrompe.",
-  Earlier: "Antes",
+  Earlier: "Anteriores",
   "Earlier builds": "Builds anteriores",
   "Earlier conversation · no folder": "Conversa anterior · sem pasta",
   Edit: "Editar",
@@ -1299,7 +1299,7 @@ export default {
   Error: "Erro",
   "Error copied.": "Erro copiado.",
   "Every game chat and Loop run is recorded under Recent runs.":
-    "Cada chat de jogo e cada execução do Loop fica registrado em Builds recentes.",
+    "Cada chat de jogo e cada build do Loop fica registrado em Builds recentes.",
   "Every game dev tool": "Todas as ferramentas para criar jogos",
   "Every part": "Todas as partes",
   "Every part can reach for it when a shape needs real modelling.":
@@ -1379,7 +1379,7 @@ export default {
     "Termine o login na janela do navegador que abriu. Este cartão some sozinho quando você entrar.",
   "Finish signing in in the terminal below.": "Termine o login no terminal abaixo.",
   "Finish signing in in your browser": "Termine de entrar no navegador",
-  "Finish signing in to Genex in your browser": "Concluir a entrada no Genex no navegador",
+  "Finish signing in to Genex in your browser": "Concluir o login no Genex pelo navegador",
   "Finish signing in with ChatGPT in your browser. Codex handles your credentials on this Mac.":
     "Termine o login com o ChatGPT no navegador. O Codex cuida das suas credenciais neste Mac.",
   Finished: "Concluído",
@@ -1389,8 +1389,8 @@ export default {
   "Finishing the build": "Finalizando o build",
   "Finishing up": "Finalizando",
   "Finishing up · {working} working": "Finalizando · {working} em andamento",
-  "First build": "Primeira build",
-  "First build: {task}": "Primeira build: {task}",
+  "First build": "Primeiro build",
+  "First build: {task}": "Primeiro build: {task}",
   "First saved capture (this session)": "Primeira captura salva (nesta sessão)",
   Fit: "Ajustar",
   "Fit every asset": "Ajustar todos os recursos",
@@ -1398,7 +1398,7 @@ export default {
   "Fit everything (0)": "Ajustar tudo (0)",
   "Fit the picture": "Ajustar a imagem",
   Fix: "Correção",
-  "Fix the build error, then try again.": "Corrija o erro da build e tente de novo.",
+  "Fix the build error, then try again.": "Corrija o erro do build e tente de novo.",
   "Fix: {fix}": "Correção: {fix}",
   "Fixes: {task}": "Correções: {task}",
   "Fixing a shader error…": "Corrigindo um erro do shader…",
@@ -1479,7 +1479,7 @@ export default {
   Generating: "Gerando",
   Generation: "Geração",
   "Genex (built in)": "Genex (integrado)",
-  "Genex account": "Conta Genex",
+  "Genex account": "Conta do Genex",
   "Genex adds the starter's missing files and keeps every file that is there":
     "O Genex adiciona os arquivos que faltam do modelo inicial e mantém todos os que já estão lá",
   "Genex answered with something Studio can’t read.": "O Genex respondeu algo que o Studio não consegue ler.",
@@ -1505,10 +1505,10 @@ export default {
     "O Genex se conecta a servidores neste computador ou na sua rede local. Para uma API hospedada, use OpenRouter ou OpenCode.",
   "Genex couldn't check for updates.": "O Genex não conseguiu verificar atualizações.",
   "Genex couldn't download Roblox's installer. Check the connection and press Get Roblox Studio again.":
-    "O Genex não conseguiu baixar o instalador do Roblox. Verifique a conexão e clique em “Obter Roblox Studio” de novo.",
+    "O Genex não conseguiu baixar o instalador do Roblox. Verifique a conexão e clique em “Baixar Roblox Studio” de novo.",
   "Genex couldn't download the Luau checks. Check the connection and press Add Luau checks again.":
-    "O Genex não conseguiu baixar as verificações de Luau. Confira a conexão e clique de novo em Adicionar verificações de Luau.",
-  "Genex couldn't get Roblox Studio.": "O Genex não conseguiu obter o Roblox Studio.",
+    "O Genex não conseguiu baixar as verificações de Luau. Confira a conexão e clique de novo em “Adicionar verificações de Luau”.",
+  "Genex couldn't get Roblox Studio.": "O Genex não conseguiu baixar o Roblox Studio.",
   "Genex couldn't tell whether {app} was free, so nothing was rewound. Rewind again in a moment.":
     "O Genex não conseguiu saber se {app} estava livre, então não deu para voltar. Tente de novo daqui a pouco.",
   "Genex couldn't tell whether {app} was free, so the newer version didn't come back. Try again in a moment.":
@@ -1516,7 +1516,7 @@ export default {
   "Genex couldn’t read that picture. Try another.": "O Genex não conseguiu ler essa imagem. Tente outra.",
   "Genex couldn’t start": "O Genex não conseguiu iniciar",
   "Genex couldn’t take the deletion right now. Nothing was deleted; try again later.":
-    "O Genex não conseguiu processar a exclusão agora. Nada foi apagado; tente de novo mais tarde.",
+    "O Genex não conseguiu processar a exclusão agora. Nada foi excluído; tente de novo mais tarde.",
   "Genex cover": "Capa Genex",
   "Genex credits": "Créditos do Genex",
   "Genex decides from crash reports": "O Genex decide pelos relatórios de falhas",
@@ -1548,7 +1548,7 @@ export default {
     "O Genex ainda não confirmou. {game} conclui a compra assim que isso acontecer. Você não será cobrado duas vezes.",
   "Genex installs Unity Hub on a Mac only: get it from Unity's page.":
     "O Genex só instala o Unity Hub no Mac: baixe na página da Unity.",
-  "Genex is already getting Roblox Studio.": "O Genex já está obtendo o Roblox Studio.",
+  "Genex is already getting Roblox Studio.": "O Genex já está baixando o Roblox Studio.",
   "Genex is connected": "O Genex está conectado",
   "Genex is connected to OpenRouter": "O Genex está conectado ao OpenRouter",
   "Genex is doing this. You'll only be asked to sign in.":
@@ -1559,13 +1559,13 @@ export default {
     "O Genex é de código aberto sob a Licença MIT. Ele também inclui software de outros projetos, cada um com sua própria licença.",
   "Genex is reviewing the game before it shows in the gallery.":
     "O Genex está revisando o jogo antes de ele aparecer na galeria.",
-  "Genex isn't getting Roblox Studio right now.": "O Genex não está obtendo o Roblox Studio agora.",
+  "Genex isn't getting Roblox Studio right now.": "O Genex não está baixando o Roblox Studio agora.",
   "Genex keeps a copy of each file first, and Undo setup takes these changes back. A Genex editor helper file you changed is kept beside it as a .mine copy.":
-    "O Genex guarda antes uma cópia de cada arquivo, e Desfazer configuração reverte essas mudanças. Um arquivo do módulo do Genex para o editor que você alterou fica ao lado do novo como cópia .mine.",
+    "O Genex guarda antes uma cópia de cada arquivo, e “Desfazer configuração” reverte essas mudanças. Um arquivo do módulo do Genex para o editor que você alterou fica ao lado do novo como cópia .mine.",
   "Genex keeps every file as it is and writes no starter game":
     "O Genex mantém todos os arquivos como estão e não cria nenhum jogo inicial",
   "Genex keeps it empty; your first message decides what it becomes":
-    "O Genex a deixa vazia; sua primeira mensagem decide o que ela vai virar",
+    "O Genex mantém a pasta vazia; sua primeira mensagem decide o que ela vai virar",
   "Genex keeps what was there first, and Undo Set up takes these changes back.":
     "O Genex guarda o que havia antes, e “Desfazer configuração” reverte essas mudanças.",
   "Genex kept the current cover: it outranks an uploaded one.":
@@ -1606,7 +1606,7 @@ export default {
     "O Genex vai adicionar o addon dele ao projeto ({where}/addons/genex: um script que fica parado a menos que o Genex inicie o jogo, e um plugin de editor que salva suas cenas abertas antes de um ponto de salvamento e recarrega depois de voltar), registrar tudo no project.godot, criar bin/play (inicia o jogo para o Genex) e marcar o jogo no studio.json, para que a ferramenta de controle do computador, os testadores e os juízes do Genex possam jogar. Um arquivo do Genex que você mudou fica guardado ao lado do novo como .mine.",
   "Genex will change {name} ({file}):": "O Genex vai alterar {name} ({file}):",
   "Genex will set r.RayTracing=False in {name}'s Config/DefaultEngine.ini. On a Mac, Unreal 5.8 can crash while it renders a ray-traced game behind another app. Lumen keeps lighting the level in software, and you can turn ray tracing back on in Project Settings. Unreal uses the change from its next start.":
-    "O Genex vai definir r.RayTracing=False no Config/DefaultEngine.ini de {name}. No Mac, o Unreal 5.8 pode fechar sozinho enquanto renderiza um jogo com ray tracing atrás de outro app. O Lumen continua iluminando o nível por software, e você pode reativar o ray tracing em Project Settings. O Unreal aplica a mudança na próxima vez que abrir.",
+    "O Genex vai definir r.RayTracing=False no Config/DefaultEngine.ini de {name}. No Mac, o Unreal 5.8 pode travar enquanto renderiza um jogo com ray tracing atrás de outro app. O Lumen continua iluminando o nível por software, e você pode reativar o ray tracing em Project Settings. O Unreal aplica a mudança na próxima vez que abrir.",
   "Genex will take back what it added to {name}: its plugin entries, the MCP server start-up lines and the Genex editor helper. Anything else you changed stays.":
     "O Genex vai remover o que adicionou a {name}: as entradas de plugins, as linhas de inicialização do servidor MCP e o módulo do Genex para o editor. Todo o resto que você mudou continua.",
   "Genex {version} is available": "Genex {version} disponível",
@@ -1618,21 +1618,21 @@ export default {
   "Genex {version} is the latest version.": "O Genex {version} é a versão mais recente.",
   "Genex's folder for the Luau checks isn't a plain folder, so Genex wrote nothing.":
     "A pasta do Genex para as verificações de Luau não é uma pasta comum, então o Genex não gravou nada.",
-  "Get Godot": "Instalar Godot",
-  "Get Godot 4": "Instalar Godot 4",
-  "Get Roblox Studio": "Obter Roblox Studio",
-  "Get Unity Hub": "Baixar o Unity Hub",
+  "Get Godot": "Baixar Godot",
+  "Get Godot 4": "Baixar Godot 4",
+  "Get Roblox Studio": "Baixar Roblox Studio",
+  "Get Unity Hub": "Baixar Unity Hub",
   "Get Unity Hub first.": "Baixe o Unity Hub primeiro.",
-  "Get Unreal Engine": "Baixar o Unreal Engine",
+  "Get Unreal Engine": "Baixar Unreal Engine",
   "Get Unreal Engine {version} to make games in Unreal.": "Baixe o Unreal Engine {version} para criar jogos no Unreal.",
   "Get Xcode": "Baixar Xcode",
   "Get a key": "Obter uma chave",
   "Get coin": "Obter moedas",
   "Get credits": "Obter créditos",
-  "Get the Epic Games Launcher": "Baixar o Epic Games Launcher",
-  "Getting Roblox Studio": "Obtendo o Roblox Studio",
+  "Get the Epic Games Launcher": "Baixar Epic Games Launcher",
+  "Getting Roblox Studio": "Baixando o Roblox Studio",
   "Getting Roblox Studio. Studio asks you to sign in when it opens.":
-    "Obtendo o Roblox Studio. O Studio pede para você entrar quando abrir.",
+    "Baixando o Roblox Studio. O Studio pede para você entrar quando abrir.",
   "Getting started": "Começando",
   "Getting your games and the protected workspace ready.": "Preparando seus jogos e o espaço de trabalho protegido.",
   "GitHub answered with a commit Studio can’t read": "O GitHub respondeu com um commit que o Studio não consegue ler",
@@ -1644,17 +1644,17 @@ export default {
   "GitHub lookup failed ({status})": "A consulta ao GitHub falhou ({status})",
   Glitch: "Glitch",
   Glow: "Brilho",
-  "Go live": "Publicar",
+  "Go live": "Colocar no ar",
   "Godot setup": "Configuração do Godot",
   "Godot {version} has this game's project open": "O Godot {version} está com o projeto deste jogo aberto",
   "Godot {version} is installed": "Godot {version} instalado",
   "Godot {version} is older than the 4.3 Genex builds with":
-    "O Godot {version} é mais antigo que o 4.3, com o qual o Genex trabalha",
+    "O Godot {version} é mais antigo que o 4.3, que o Genex usa",
   "Godot {version} is older than the 4.3 Genex builds with.":
-    "O Godot {version} é mais antigo que o 4.3, com o qual o Genex trabalha.",
+    "O Godot {version} é mais antigo que o 4.3, que o Genex usa.",
   "Godot's releases list no Mac build of Godot 4 right now.":
     "Os lançamentos do Godot não têm nenhuma versão do Godot 4 para Mac agora.",
-  "Going live": "Publicando",
+  "Going live": "Colocando no ar",
   Grain: "Granulação",
   Grid: "Grade",
   "Grid size": "Tamanho da grade",
@@ -1668,7 +1668,7 @@ export default {
   "Harness can run up to this many workers at the same time.":
     "O Harness pode rodar até esse número de ajudantes ao mesmo tempo.",
   "Harness changed one of its own files.": "O Harness alterou um dos próprios arquivos.",
-  "Harness could not read how this run ended.": "O Harness não conseguiu ler como esta build terminou.",
+  "Harness could not read how this run ended.": "O Harness não conseguiu ler como este build terminou.",
   "Harness couldn’t find this change.": "O Harness não encontrou esta alteração.",
   "Harness couldn’t restore itself after a failed update":
     "O Harness não conseguiu se restaurar após uma atualização com falha",
@@ -1681,15 +1681,15 @@ export default {
     "O Harness é o conjunto de instruções que os agentes seguem ao criar seus jogos. Ele aprende com cada build e sugere jeitos melhores de trabalhar. Você decide o que muda.",
   "Harness learned to {skill}.": "O Harness aprendeu algo novo: {skill}.",
   "Harness looks at your finished builds for better ways to build.":
-    "O Harness analisa suas builds prontas em busca de jeitos melhores de criar.",
+    "O Harness analisa seus builds prontos em busca de jeitos melhores de criar.",
   "Harness looks back.": "O Harness olha para trás.",
   "Harness no longer has the version from before this change, so it can’t undo it.":
     "O Harness não tem mais a versão de antes desta alteração, então não consegue desfazê-la.",
   "Harness rewrote {skill}": "O Harness reescreveu {skill}",
   "Harness settings": "Configurações do Harness",
-  "Harness updated how it leads a build.": "O Harness atualizou como lidera um build.",
+  "Harness updated how it leads a build.": "O Harness atualizou como conduz um build.",
   "Harness updated how it plans a build.": "O Harness atualizou como planeja um build.",
-  "Harness updated {skill}.": "O Harness atualizou: {skill}.",
+  "Harness updated {skill}.": "O Harness atualizou {skill}.",
   "Harness's instructions": "as instruções do Harness",
   "Harness's {skill} instructions": "as instruções de {skill} do Harness",
   "Have a code?": "Tem um código?",
@@ -1736,8 +1736,7 @@ export default {
   "I'm signed in": "Já entrei",
   Ideas: "Ideias",
   Idle: "Ocioso",
-  "If Studio shows its sign-in screen, sign in there first.":
-    "Se o Studio mostrar a tela de entrada, entre lá primeiro.",
+  "If Studio shows its sign-in screen, sign in there first.": "Se o Studio mostrar a tela de login, entre lá primeiro.",
   "If the plugin is in a folder, open that folder on GitHub and paste its link.":
     "Se o plugin estiver em uma pasta, abra essa pasta no GitHub e cole o link dela.",
   "If the server needs an account, you'll sign in in your browser.":
@@ -1757,8 +1756,8 @@ export default {
   "Import…": "Importar…",
   "Improved its own code": "Melhorou o próprio código",
   Improving: "Aprimorando",
-  "Improving its own craft": "Aprimorando as próprias habilidades",
-  "Improving its own craft · {detail}": "Aprimorando as próprias habilidades · {detail}",
+  "Improving its own craft": "Aprimorando o próprio trabalho",
+  "Improving its own craft · {detail}": "Aprimorando o próprio trabalho · {detail}",
   "In Unity Hub, sign in and add a Unity license (Personal is free if Unity's terms allow it for you). Unity's own terms cover its apps and your account. Only you type your password.":
     "No Unity Hub, entre na sua conta e adicione uma licença do Unity (a Personal é grátis se os termos da Unity permitirem para você). Os próprios termos da Unity cobrem os apps dela e a sua conta. Só você digita a sua senha.",
   "In every game": "Em todos os jogos",
@@ -1773,7 +1772,7 @@ export default {
   "In this game’s folder. Workers load them from there.": "Na pasta deste jogo. Os ajudantes carregam de lá.",
   "In total": "No total",
   "In use": "Em uso",
-  "In your build": "Na sua build",
+  "In your build": "No seu build",
   "In your game": "No seu jogo",
   "In {folder}": "Em {folder}",
   "In-game economy": "Economia no jogo",
@@ -1798,8 +1797,8 @@ export default {
   "Install Claude Code, then check again.": "Instale o Claude Code e verifique de novo.",
   "Install Codex": "Instalar Codex",
   "Install Codex, then check again.": "Instale o Codex e verifique de novo.",
-  "Install Genex plugin": "Instalar o plugin Genex",
-  "Install Ollama": "Instalar o Ollama",
+  "Install Genex plugin": "Instalar o plugin do Genex",
+  "Install Ollama": "Instalar Ollama",
   "Install OpenCode": "Instalar OpenCode",
   "Install OpenCode from Settings › Model Providers.": "Instale o OpenCode em Configurações › Provedores de modelos.",
   "Install Unity 6": "Instalar Unity 6",
@@ -1834,8 +1833,8 @@ export default {
   "Installed plugins can include skills. They’ll appear here.":
     "Plugins instalados podem incluir habilidades. Elas vão aparecer aqui.",
   "Installed.": "Instalado.",
-  "Installing Blender {version}": "Instalando Blender {version}",
-  "Installing Godot {version}": "Instalando Godot {version}",
+  "Installing Blender {version}": "Instalando o Blender {version}",
+  "Installing Godot {version}": "Instalando o Godot {version}",
   "Installing OpenCode. This can take a minute.": "Instalando o OpenCode. Isso pode levar um minuto.",
   "Installing Unity Hub": "Instalando o Unity Hub",
   "Installing Unity {version}": "Instalando o Unity {version}",
@@ -1868,7 +1867,7 @@ export default {
     "Especificação de plugin inválida; use owner/repo[/subdir]@<sha do commit com 40 caracteres>",
   "Invalid public path: {path}": "Caminho público inválido: {path}",
   "Invalid repository": "Repositório inválido",
-  "Inventory unavailable. Refresh to retry.": "Inventário indisponível. Atualize para tentar de novo.",
+  "Inventory unavailable. Refresh to retry.": "Lista indisponível. Atualize para tentar de novo.",
   "Invite a friend": "Convidar um amigo",
   "Invite friends": "Convidar amigos",
   "Invite link copied": "Link de convite copiado",
@@ -1889,21 +1888,21 @@ export default {
   "It kept getting this wrong, so it stopped to save your credits.":
     "Continuou errando nisso, então parou para poupar seus créditos.",
   "It leaves Play and genex.games and goes back to drafts. The direct link still works, and plays and likes stay if it’s published again.":
-    "Ele sai de Jogar e do genex.games e volta para os rascunhos. O link direto continua funcionando, e as jogadas e curtidas ficam se ele for publicado de novo.",
+    "O jogo sai de Jogar e do genex.games e volta para os rascunhos. O link direto continua funcionando, e as partidas e curtidas são mantidas se ele for publicado de novo.",
   "It may need the setup scripts its packages came with, which didn’t run.":
     "Ele pode precisar dos scripts de instalação que vieram com os pacotes, que não foram executados.",
   "It merged this part's work without a reviewer's verdict. The reviewers score parts that build in steps; this one was built in one session.":
-    "Integrou o trabalho desta parte sem o veredito de um revisor. Os revisores avaliam partes criadas em etapas; esta foi criada em uma única sessão.",
+    "Integrou o trabalho desta parte sem o veredito de um revisor. Os revisores avaliam partes criadas passo a passo; esta foi criada em uma única sessão.",
   "It merges into your build when the lead integrates this part.":
-    "Vai para a sua build quando o agente principal integrar esta parte.",
+    "Vai para o seu build quando o agente principal integrar esta parte.",
   "It needs macOS {version} or later.": "Precisa do macOS {version} ou mais recente.",
   "It never uses password managers, Windows Settings, password prompts or Genex.":
     "Ele nunca usa gerenciadores de senhas, as Configurações do Windows, pedidos de senha nem o Genex.",
   "It ran into an error": "Deu erro",
   "It runs at Genex's moments: {steps}; those steps don't ask you first.":
-    "Ele roda em momentos do Genex: {steps}; essas etapas não perguntam a você antes.",
+    "Ele roda em momentos do Genex: {steps}; esses passos não perguntam a você antes.",
   "It runs with your access: Genex doesn't sandbox its code.":
-    "Ele roda com o seu acesso: o Genex não isola o código dele.",
+    "Ele roda com o seu acesso: o Genex não coloca o código dele em sandbox.",
   "It runs, but no reviewer compared it with the game you had.":
     "Funciona, mas nenhum revisor comparou com o jogo que você tinha.",
   "It shows up here as soon as it runs.": "Ele aparece aqui assim que rodar.",
@@ -1913,7 +1912,7 @@ export default {
   "It treats this as a {kind} game — that decides the controls it drives before every look, and who reviews it.":
     "Ele trata isto como um jogo do tipo “{kind}” — isso define os controles que usa antes de cada olhada e quem revisa.",
   "It turns on when installed: agents in all your games can use it from your next message.":
-    "Ele liga ao ser instalado: os agentes de todos os seus jogos podem usá-lo a partir da sua próxima mensagem.",
+    "Ele é ativado ao ser instalado: os agentes de todos os seus jogos podem usá-lo a partir da sua próxima mensagem.",
   "It was paused before it could write up the build.": "Foi pausado antes de escrever o resumo do build.",
   "It's no longer there.": "Não está mais disponível.",
   "It's switched on in Studio's settings. Studio answers once a place is open: open one in Studio, or press New Roblox game.":
@@ -1933,7 +1932,7 @@ export default {
   "Its source is your own repository: run genex make-remixable in the game’s folder to allow remixing.":
     "O código-fonte está no seu próprio repositório: execute genex make-remixable na pasta do jogo para permitir remixes.",
   "Its steps at Genex's moments changed (hooks, observers, locks, folders or harness tools), so it wasn't reloaded: load it again with Load local plugin… to review them":
-    "Os passos dele nos momentos do Genex mudaram (hooks, observadores, bloqueios, pastas ou ferramentas do Harness), então ele não foi recarregado: carregue-o de novo com Carregar plugin local… para revisá-los",
+    "Os passos dele nos momentos do Genex mudaram (hooks, observadores, bloqueios, pastas ou ferramentas do Harness), então ele não foi recarregado: carregue-o de novo com “Carregar plugin local…” para revisá-los",
   "Its time ran out before a final look at your game.": "O tempo acabou antes de uma última olhada no seu jogo.",
   "Its time ran out before this was fixed.": "O tempo acabou antes de corrigir isto.",
   "Its tools become available to the agents in your games.":
@@ -1978,14 +1977,14 @@ export default {
   "Laid the terrain": "Terreno criado",
   Language: "Idioma",
   "Large audio plays without a waveform": "Áudio grande toca sem forma de onda",
-  "Largest dot": "Ponto máximo",
+  "Largest dot": "Maior ponto",
   "Last check couldn’t run: {reason}": "A última verificação não pôde rodar: {reason}",
   "Last update": "Última atualização",
   "Last {days} days": "Últimos {days} dias",
   Later: "Depois",
   "Later recheck incomplete: {note}": "Nova verificação incompleta: {note}",
   "Later recheck unknown: {note}": "Nova verificação sem resultado claro: {note}",
-  "Latest build": "Última build",
+  "Latest build": "Último build",
   "Latin only": "Só letras latinas",
   "Laying the terrain": "Criando o terreno",
   "Lead's last look": "Última olhada do agente principal",
@@ -1996,7 +1995,7 @@ export default {
   "Leave the user name and password out of the address. Put a key under API key.":
     "Deixe o usuário e a senha fora do endereço. Coloque a chave em Chave de API.",
   "Left out": "Ficou de fora",
-  "Left out of your build": "Fora da sua build",
+  "Left out of your build": "Fora do seu build",
   "Left {count, plural, one {# game} other {# games}} alone while they work.":
     "{count, plural, one {# jogo ficou de fora porque ainda está em andamento} other {# jogos ficaram de fora porque ainda estão em andamento}}.",
   "Left {game} alone while it works.": "{game} ficou de fora porque ainda está em andamento.",
@@ -2008,7 +2007,7 @@ export default {
   "Let this chat's agent do this for you with computer control? {plugin} asks: {task}":
     "Deixar o agente deste chat fazer isso por você com o controle do computador? {plugin} pede: {task}",
   "Let this chat's agent see your screen and use your computer during this session? Each app it reaches asks you first. Stop it any time with Stop, or {shortcut}.":
-    "Deixar o agente deste chat ver sua tela e usar seu computador durante esta sessão? Cada app que ele acessar pergunta a você antes. Pare quando quiser com Parar ou {shortcut}.",
+    "Deixar o agente deste chat ver sua tela e usar seu computador durante esta sessão? Cada app que ele acessar pergunta a você antes. Pare quando quiser com “Parar” ou {shortcut}.",
   "Let this chat's agent use this app? It can click, type and read what this app shows.":
     "Deixar o agente deste chat usar este app? Ele pode clicar, digitar e ler o que este app mostra.",
   "Let this chat's agent use {app}? It can click, type and read what {app} shows.":
@@ -2026,9 +2025,9 @@ export default {
   "Like, {count} likes": "Curtir, {count} curtidas",
   Lines: "Linhas",
   "Link copied": "Link copiado",
-  "Linked files cannot be previewed.": "Arquivos vinculados não têm pré-visualização.",
+  "Linked files cannot be previewed.": "Arquivos vinculados não têm prévia.",
   "Listed the hero cameras": "Câmeras de destaque listadas",
-  "Listed the toolsets": "Listou os conjuntos de ferramentas",
+  "Listed the toolsets": "Conjuntos de ferramentas listados",
   "Listing the hero cameras": "Listando as câmeras de destaque",
   "Listing the toolsets": "Listando os conjuntos de ferramentas",
   Live: "Live",
@@ -2046,7 +2045,7 @@ export default {
   "Loaded from a folder on this Mac. It runs with your access, and each of its tools asks you before an agent runs it; its own steps at Genex's moments don't ask.":
     "Carregado de uma pasta neste Mac. Ele roda com o seu acesso, e cada ferramenta dele pergunta a você antes de um agente usá-la; os passos próprios dele nos momentos do Genex não perguntam.",
   "Loaded from a folder on this Mac. It runs with your access: its code isn't sandboxed. Each of its tools asks you before an agent runs it; its own steps at Genex's moments don't ask.":
-    "Carregado de uma pasta neste Mac. Ele roda com o seu acesso: o código dele não fica isolado. Cada ferramenta dele pergunta a você antes de um agente usá-la; os passos próprios dele nos momentos do Genex não perguntam.",
+    "Carregado de uma pasta neste Mac. Ele roda com o seu acesso: o código dele não fica em sandbox. Cada ferramenta dele pergunta a você antes de um agente usá-la; os passos próprios dele nos momentos do Genex não perguntam.",
   "Loading Genex games and assets…": "Carregando jogos e recursos do Genex…",
   "Loading MCP servers…": "Carregando servidores MCP…",
   "Loading activity…": "Carregando atividade…",
@@ -2060,7 +2059,7 @@ export default {
   "Loading preview…": "Carregando prévia…",
   "Loading terminal…": "Carregando terminal…",
   "Loading versions…": "Carregando versões…",
-  "Loading your Genex account…": "Carregando sua conta Genex…",
+  "Loading your Genex account…": "Carregando sua conta do Genex…",
   "Loading {title}…": "Carregando {title}…",
   "Loading…": "Carregando…",
   "Local Models": "Modelos locais",
@@ -2073,7 +2072,7 @@ export default {
     "Trabalho longo que o agente principal ou um ajudante iniciou, como um build. Ele continua rodando enquanto os agentes seguem trabalhando.",
   "Look and move from the player's eyes.": "Olhe e se mova pelos olhos do jogador.",
   "Look for improvements": "Buscar melhorias",
-  "Look for improvements in recent builds": "Buscar melhorias nas builds recentes",
+  "Look for improvements in recent builds": "Buscar melhorias nos builds recentes",
   Looked: "Olhou",
   "Looked at the level": "Nível visualizado",
   "Looked through the assets": "Recursos explorados",
@@ -2096,7 +2095,7 @@ export default {
   "Loop can't start: the studio's own loop code predates the composer's Loop feature, so it doesn't know how to run a timed build. To fix it, ask the studio in chat to merge the seed's Loop handling (harness-seed/loop) into its own loop code and restart itself — or restore the seed copies so the next launch upgrades them. Your brief is saved above; send it again once the loop code is current.":
     "O Loop não pode começar: o código de loop do Studio é anterior ao recurso Loop da caixa de texto, então ele não sabe fazer um build com tempo. Para corrigir, peça ao Studio no chat para mesclar o tratamento do Loop da base (harness-seed/loop) no próprio código de loop e reiniciar — ou restaure as cópias da base para que a próxima abertura as atualize. Seu briefing está salvo acima; envie de novo quando o código de loop estiver atualizado.",
   "Loop can’t run in this game yet, so Keep building can’t start it.":
-    "O Loop ainda não roda neste jogo, então Continuar criando não consegue iniciá-lo.",
+    "O Loop ainda não roda neste jogo, então “Continuar criando” não consegue iniciá-lo.",
   "Loop finished · Changes kept in your project": "Loop terminado · Mudanças guardadas no seu projeto",
   "Loop from {day}": "Loop, {day}",
   "Loop mode": "Modo Loop",
@@ -2135,7 +2134,7 @@ export default {
   "Make a web version or a Mac or Windows app first, then publish it here.":
     "Primeiro crie uma versão web ou um app para Mac ou Windows e depois publique aqui.",
   "Make a {players} app of {title} so I can publish it for {players} players.":
-    "Faça um app de {title} para {players} para eu poder publicar para jogadores de {players}.",
+    "Faça um app de {title} para {players}, assim posso publicar para quem joga no {players}.",
   "Make another Genex clip for this game: a different moment.":
     "Faça outro clipe Genex para este jogo: um momento diferente.",
   "Make another Genex clip for this game: {want}": "Faça outro clipe Genex para este jogo: {want}",
@@ -2147,7 +2146,7 @@ export default {
   "Make changes": "Fazer alterações",
   "Make it": "Criar",
   "Make it live": "Levar ao jogo",
-  "Make it multiplayer": "Deixe multijogador",
+  "Make it multiplayer": "Torne seu jogo multijogador",
   "Make multiplayer": "Tornar multijogador",
   "Make the web version with the agent": "Criar a versão web com o agente",
   "Make the {app} with the agent": "{app}: criar com o agente",
@@ -2177,7 +2176,7 @@ export default {
   "Maximum concurrent workers": "Máximo de ajudantes ao mesmo tempo",
   "Measured in a plugin": "Medido em um plugin",
   "Measured in {plugin}": "Medido em {plugin}",
-  "Measured the route": "Mediu a rota",
+  "Measured the route": "Rota medida",
   Measurement: "Medida",
   "Measurement has not completed": "A medição não terminou",
   "Measuring before": "Medindo o antes",
@@ -2221,7 +2220,7 @@ export default {
   "More models": "Mais modelos",
   "More options": "Mais opções",
   "More workers": "Mais ajudantes",
-  Move: "Passo",
+  Move: "Jogada",
   Moved: "Moveu",
   "Moved {actor}": "{actor} movido",
   "Moving the mouse": "Movendo o mouse",
@@ -2246,7 +2245,7 @@ export default {
   "Naming your game…": "Dando nome ao seu jogo…",
   "Naming…": "Dando nome…",
   "Needs Node.js": "Precisa do Node.js",
-  "Needs Studio ≥ {version}": "Requer Studio ≥ {version}",
+  "Needs Studio ≥ {version}": "Precisa do Studio ≥ {version}",
   "Needs a key": "Precisa de chave",
   "Needs a {ram} GB Mac": "Precisa de um Mac com {ram} GB",
   "Needs setup": "Precisa configurar",
@@ -2255,7 +2254,7 @@ export default {
   "Never asks, works anywhere": "Nunca pergunta, funciona em qualquer lugar",
   "Never marked desktop only": "Nunca marcado como só computador",
   New: "Novo",
-  "New build": "Nova build",
+  "New build": "Novo build",
   "New chat": "Novo chat",
   "New chats start in": "Modo dos novos chats",
   "New cover": "Nova capa",
@@ -2281,7 +2280,7 @@ export default {
     "Em seguida, o Studio verifica o código e mostra o que o plugin pode fazer. Nada é instalado até você concordar.",
   Nickname: "Apelido",
   'No "mcpServers" section in that JSON.': "Esse JSON não tem uma seção “mcpServers”.",
-  "No Godot project in this game's folder yet.": "Ainda não há projeto Godot na pasta deste jogo.",
+  "No Godot project in this game's folder yet.": "Ainda não há projeto do Godot na pasta deste jogo.",
   "No MCP servers match your search.": "Nenhum servidor MCP corresponde à sua busca.",
   "No OpenRouter API key is saved.": "Nenhuma chave de API do OpenRouter está salva.",
   "No [mcp_servers.<name>] sections found in that snippet.":
@@ -2312,9 +2311,9 @@ export default {
   "No microphone": "Sem microfone",
   "No models": "Sem modelos",
   "No models match “{query}”": "Nenhum modelo corresponde a “{query}”",
-  "No new build": "Nenhuma build nova",
+  "No new build": "Nenhum build novo",
   "No new build was delivered. Your game is as you left it.":
-    "Nenhuma build nova foi entregue. Seu jogo está como você deixou.",
+    "Nenhum build novo foi entregue. Seu jogo está como você deixou.",
   "No objection to the new build.": "Nenhuma objeção ao novo build.",
   "No part is working right now. The lead is deciding what comes next, or changing the game itself; a new part shows up here when it starts one.":
     "Nenhuma parte está em andamento agora. O agente principal está decidindo o que vem depois ou mudando o jogo ele mesmo; uma nova parte aparece aqui quando ele começar uma.",
@@ -2323,7 +2322,7 @@ export default {
   "No plugins installed yet. Add one from the Add menu.":
     "Nenhum plugin instalado ainda. Adicione um pelo menu Adicionar.",
   "No prompt recorded": "Nenhum pedido registrado",
-  "No prompt was recorded.": "Nenhum prompt foi registrado.",
+  "No prompt was recorded.": "Nenhum pedido foi registrado.",
   "No provider signed in. OpenCode's free models run without an account.":
     "Nenhum provedor conectado. Os modelos grátis do OpenCode rodam sem conta.",
   "No published games yet.": "Nenhum jogo publicado ainda.",
@@ -2331,7 +2330,7 @@ export default {
     "Nenhum modelo recomendado cabe neste Mac. Em Mais modelos você vê o que Macs maiores conseguem rodar.",
   "No reviewer compared it": "Nenhum revisor comparou",
   "No reviewer saw it; the lead merged the part's work into your build.":
-    "Nenhum revisor viu; o agente principal adicionou o trabalho da parte à sua build.",
+    "Nenhum revisor viu; o agente principal adicionou o trabalho da parte ao seu build.",
   "No screenshot was saved for this stage.": "Nenhuma captura de tela foi salva nesta etapa.",
   "No servers found in that snippet.": "Nenhum servidor encontrado nesse trecho.",
   "No sign-in is waiting for a code. Start sign-in again.":
@@ -2390,7 +2389,7 @@ export default {
     "Não revisado — o agente principal salvou depois de ver as próprias capturas.",
   "Not reviewed — the lead stopped this round.": "Não revisado — o agente principal parou esta rodada.",
   "Not running": "Não está rodando",
-  "Not scanned.": "Não verificado.",
+  "Not scanned.": "Não analisado.",
   "Not sent": "Não enviado",
   "Not set up": "Não configurado",
   "Not set up for the web": "Não está pronto para a web",
@@ -2424,7 +2423,7 @@ export default {
     "Nada foi publicado. Para publicar você mesmo no Studio: {clicks}.",
   "Nothing yet": "Nada ainda",
   "Nothing yet. Choosing Always allow in a chat adds an action here.":
-    "Nada ainda. Escolher Sempre permitir em um chat adiciona a ação aqui.",
+    "Nada ainda. Escolher “Sempre permitir” em um chat adiciona a ação aqui.",
   "Nothing yet. Finish a build and its row appears here.": "Nada ainda. Conclua um build e a linha dele aparece aqui.",
   "Nothing — this part has stopped ({reason}).": "Nada — esta parte parou ({reason}).",
   "Nothing — this part is done.": "Nada — esta parte está pronta.",
@@ -2442,7 +2441,7 @@ export default {
     "A criptografia do sistema não está disponível; o armazenamento de segredos continua bloqueado.",
   Off: "Desligado",
   "Off — one build pass in this chat, shown as it goes. Set hours for a reviewed build that runs on its own: ∞ until what you asked for is checked working, or a number of hours.":
-    "Desligado — uma passada de build neste chat, mostrada enquanto acontece. Defina horas para um build revisado que roda sozinho: ∞ até confirmar que o que você pediu funciona, ou um número de horas.",
+    "Desligado — uma rodada de build neste chat, mostrada enquanto acontece. Defina horas para um build revisado que roda sozinho: ∞ até confirmar que o que você pediu funciona, ou um número de horas.",
   "Off. Your agent can't use Genex tools.": "Desligado. Seu agente não pode usar as ferramentas do Genex.",
   "Off: friends see your name only.": "Desativado: os amigos veem só seu nome.",
   Offline: "Offline",
@@ -2458,7 +2457,7 @@ export default {
     "O Ollama não está rodando em {host}. Instale ou inicie o Ollama e baixe de novo.",
   "Ollama library ↗": "biblioteca do Ollama ↗",
   "Ollama {version} is running but has no models installed":
-    "Ollama {version} está rodando, mas não tem modelos instalados",
+    "O Ollama {version} está rodando, mas não tem modelos instalados",
   "Ollama {version}, {count, plural, other {# model(s)}} installed":
     "Ollama {version}, {count, plural, one {# modelo instalado} other {# modelos instalados}}",
   On: "Ativado",
@@ -2467,7 +2466,7 @@ export default {
   "On this Mac": "Neste Mac",
   "On this Mac · {size}": "Neste Mac · {size}",
   "Once on, it runs at Genex's moments: {steps}; those steps don't ask you first.":
-    "Depois de ativado, ele roda em momentos do Genex: {steps}; essas etapas não perguntam a você antes.",
+    "Depois de ativado, ele roda em momentos do Genex: {steps}; esses passos não perguntam a você antes.",
   "Once you've signed in, that Studio closes by itself. Genex then adds its helper, turns on Studio's MCP server, and opens Studio again.":
     "Assim que você entrar, esse Studio fecha sozinho. Então o Genex adiciona o plugin dele, ativa o servidor MCP do Studio e abre o Studio de novo.",
   "One account for hundreds of models. You pay OpenRouter for what you use.":
@@ -2478,7 +2477,7 @@ export default {
   "Online rooms": "Salas online",
   "Only Genex assets share": "Só recursos do Genex podem ser compartilhados",
   "Only a game chat can be rewound.": "Só dá para voltar o chat de um jogo.",
-  "Only asset files can be previewed.": "Só dá para pré-visualizar arquivos de recursos.",
+  "Only asset files can be previewed.": "Só arquivos de recursos têm prévia.",
   "Only in this game": "Só neste jogo",
   "Only on {platform}": "Só no {platform}",
   "Only plugins loaded from a local folder can be watched":
@@ -2497,9 +2496,9 @@ export default {
   "Only the conversation rewinds: this message joined an answer already under way, so there’s no saved copy from just before it.":
     "Só a conversa volta: esta mensagem entrou numa resposta que já estava em andamento, então não há uma cópia salva de logo antes dela.",
   "Only the latest rewind can bring the newer version back.":
-    "Só o retorno mais recente pode trazer a versão mais nova de volta.",
+    "Só a volta mais recente pode recuperar a versão mais nova.",
   "Only you can remix {title} now": "Agora só você pode fazer remix de {title}",
-  "Only {players} players can play it.": "Só jogadores de {players} podem jogar.",
+  "Only {players} players can play it.": "Só quem joga no {players} pode jogar.",
   Open: "Abrir",
   "Open App Store": "Abrir App Store",
   "Open Apple's downloads": "Abrir downloads da Apple",
@@ -2507,10 +2506,10 @@ export default {
   "Open Plugins": "Abrir Plugins",
   "Open Privacy settings": "Abrir ajustes de Privacidade",
   "Open Studio": "Abrir Studio",
-  "Open Studio Activity": "Abrir atividade do Studio",
+  "Open Studio Activity": "Abrir Atividade do Studio",
   "Open Unity Hub": "Abrir Unity Hub",
   "Open Xcode": "Abrir Xcode",
-  "Open Xcode once": "Abrir o Xcode uma vez",
+  "Open Xcode once": "Abrir Xcode uma vez",
   "Open a folder…": "Abrir uma pasta…",
   "Open a game before starting its terminal.": "Abra um jogo antes de iniciar o terminal dele.",
   "Open a game first, so its chat can click it for you, or turn it on yourself: {clicks}.":
@@ -2521,9 +2520,9 @@ export default {
     "Abra um jogo primeiro: o Unity trabalha no projeto do jogo aberto.",
   "Open a game folder": "Abrir pasta de jogo",
   "Open a game in Genex first: a Godot project is a game's.":
-    "Primeiro abra um jogo no Genex: um projeto Godot pertence a um jogo.",
+    "Primeiro abra um jogo no Genex: um projeto do Godot pertence a um jogo.",
   "Open a game in Genex first: a Godot project is made in a game's folder.":
-    "Primeiro abra um jogo no Genex: o projeto Godot é criado na pasta de um jogo.",
+    "Primeiro abra um jogo no Genex: o projeto do Godot é criado na pasta de um jogo.",
   "Open a game in Genex first: an Unreal project is used by a game.":
     "Abra um jogo no Genex primeiro: todo projeto do Unreal pertence a um jogo.",
   "Open a game to publish it": "Abra um jogo para publicá-lo",
@@ -2552,8 +2551,8 @@ export default {
   "Open sign-in again": "Abrir o login de novo",
   "Open sign-in page": "Abrir página de login",
   "Open source AI harness for game development": "Harness de IA de código aberto para criar jogos",
-  "Open the Epic Games Launcher": "Abrir o Epic Games Launcher",
-  "Open the Genex plugin page": "Abrir a página do plugin Genex",
+  "Open the Epic Games Launcher": "Abrir Epic Games Launcher",
+  "Open the Genex plugin page": "Abrir a página do plugin do Genex",
   "Open the Unreal panel": "Abrir o painel do Unreal",
   "Open the game on Genex": "Abrir o jogo no Genex",
   "Open the page again": "Abrir a página de novo",
@@ -2619,7 +2618,7 @@ export default {
   "Opening in its own window…": "Abrindo em uma janela própria…",
   "Opening sign-in…": "Abrindo o login…",
   "Opening the game": "Abrindo o jogo",
-  "Opening the studio": "Abrindo o estúdio",
+  "Opening the studio": "Abrindo o Studio",
   "Opening your game…": "Abrindo seu jogo…",
   "Opening {level}": "Abrindo {level}",
   "Opening {name}": "Abrindo {name}",
@@ -2718,18 +2717,18 @@ export default {
   "Plan usage isn’t available right now.": "O uso do plano não está disponível agora.",
   "Plan your game": "Planeje seu jogo",
   Planning: "Planejando",
-  "Planning the build": "Planejando a build",
+  "Planning the build": "Planejando o build",
   "Planning the next step": "Planejando o próximo passo",
   "Planning the parts": "Planejando as partes",
   "Plans first, asks to proceed": "Planeja primeiro, pede para seguir",
   Platforms: "Plataformas",
   Play: "Jogar",
-  "Play build": "Jogar a build",
+  "Play build": "Jogar o build",
   "Play game": "Jogar",
-  "Play latest": "Jogar a última",
+  "Play latest": "Jogar o último build",
   "Play previews": "Reproduzir prévias",
   "Play the celebration again": "Repetir a comemoração",
-  "Play this build": "Jogar esta build",
+  "Play this build": "Jogar este build",
   "Play version {version} instead": "Jogar a versão {version}",
   "Play view {index}": "Visão do jogo {index}",
   "Play {clip}": "Reproduzir {clip}",
@@ -2755,8 +2754,8 @@ export default {
     "Roda no Godot. Configure para que os testadores e juízes do Genex também possam jogar.",
   "Plays in the Unreal editor.": "Roda no editor do Unreal.",
   "Plays in {plugin}.": "Roda no {plugin}.",
-  "Plays per day": "Jogadas por dia",
-  "Plays per day over the last {days} days": "Jogadas por dia nos últimos {days} dias",
+  "Plays per day": "Partidas por dia",
+  "Plays per day over the last {days} days": "Partidas por dia nos últimos {days} dias",
   "Plays right away": "Dá para jogar na hora",
   "Playtesting a build": "Testando um build",
   Plugin: "Plugin",
@@ -2777,7 +2776,7 @@ export default {
   "Plugin · the agent will use it": "Plugin · o agente vai usá-lo",
   Plugins: "Plugins",
   "Polish: {task}": "Polimento: {task}",
-  Post: "Publicar",
+  Post: "Comentar",
   "Post on X": "Postar no X",
   Prepare: "Preparar",
   Preparing: "Preparando",
@@ -2837,9 +2836,9 @@ export default {
   "Publishing Mac and Windows apps comes with the next Genex update.":
     "Publicar apps para Mac e Windows chega na próxima atualização do Genex.",
   "Publishing needs git and git-lfs on this Mac (brew install git-lfs). Studio will not let the Genex CLI install software.":
-    "Publicar precisa do git e do git-lfs neste Mac (brew install git-lfs). O Studio não vai deixar a CLI do Genex instalar programas.",
+    "Para publicar, você precisa do git e do git-lfs neste Mac (brew install git-lfs). O Studio não vai deixar a CLI do Genex instalar programas.",
   "Publishing needs git on this Mac. Install git (Xcode command line tools or Homebrew) and try again.":
-    "Publicar precisa do git neste Mac. Instale o git (Xcode command line tools ou Homebrew) e tente de novo.",
+    "Para publicar, você precisa do git neste Mac. Instale o git (Xcode command line tools ou Homebrew) e tente de novo.",
   "Publishing needs the Genex plugin, which isn't installed":
     "Para publicar, é preciso o plugin do Genex, que não está instalado",
   "Publishing this game ({phase})": "Publicando este jogo ({phase})",
@@ -2848,17 +2847,17 @@ export default {
   "Put it together and check": "Juntar tudo e verificar",
   "Put question aside": "Deixar a pergunta para depois",
   "Put the game files back as they were before this rewind; the chat stays rewound":
-    "Devolver os arquivos do jogo ao estado de antes desta volta; o chat continua voltado",
+    "Restaurar os arquivos do jogo como estavam antes de voltar; o chat fica onde está",
   "Put this suggestion away": "Dispensar esta sugestão",
-  "Put your game on Play": "Coloque seu jogo no Jogar",
+  "Put your game on Play": "Coloque seu jogo em Jogar",
   "Putting the parts together": "Juntando as partes",
   "Questions, plans and finished builds from your games show up here.":
-    "Perguntas, planos e builds prontas dos seus jogos aparecem aqui.",
+    "Perguntas, planos e builds prontos dos seus jogos aparecem aqui.",
   "Queue editing needs the updated conversation harness. Your message is still queued.":
-    "Editar a fila precisa do Harness de chat atualizado. Sua mensagem continua na fila.",
+    "Para editar a fila, é preciso atualizar o Harness do chat. Sua mensagem continua na fila.",
   Queued: "Na fila",
   Quit: "Sair",
-  "Quit Unreal": "Fechar o Unreal",
+  "Quit Unreal": "Fechar Unreal",
   "Quit Unreal Editor first. It rewrites the project's settings when it closes.":
     "Feche o Unreal Editor primeiro. Ele reescreve as configurações do projeto ao fechar.",
   "Quit and reopen the app so it can repair itself.": "Feche e abra o app de novo para que ele se repare.",
@@ -2869,7 +2868,7 @@ export default {
   "Radar sweep over a sleeping city grid": "Varredura de radar sobre a grade de uma cidade adormecida",
   "Ran {script}": "{script} executado",
   "Read Blueprint {blueprint}": "Blueprint {blueprint} lido",
-  "Read a toolset": "Leu um conjunto de ferramentas",
+  "Read a toolset": "Conjunto de ferramentas lido",
   "Read all": "Ler tudo",
   "Read by agents on demand": "Os agentes leem quando precisam",
   "Read files in {path}": "Ler arquivos em {path}",
@@ -2878,7 +2877,7 @@ export default {
   "Read the editor log": "Log do editor lido",
   "Read the guide": "Ler o guia",
   "Read the player's state": "Estado do jogador lido",
-  "Read the {toolset} toolset": "Leu o conjunto de ferramentas {toolset}",
+  "Read the {toolset} toolset": "Conjunto de ferramentas {toolset} lido",
   Reading: "Lendo",
   "Reading a toolset": "Lendo um conjunto de ferramentas",
   "Reading provider skills…": "Lendo habilidades dos provedores…",
@@ -2908,7 +2907,7 @@ export default {
   "Recommended. Lets the agent add C++ to this game; without it, it builds in Blueprints. Free from the App Store.":
     "Recomendado. Permite que o agente adicione C++ a este jogo; sem ele, o agente cria com Blueprints. Grátis na App Store.",
   Reconnect: "Reconectar",
-  "Reconnect your Genex account": "Reconecte sua conta Genex",
+  "Reconnect your Genex account": "Reconecte sua conta do Genex",
   "Reconnect your model": "Reconecte seu modelo",
   "Reconnect {name}": "Reconectar {name}",
   "Recorded asset is unavailable.": "O recurso gravado não está disponível.",
@@ -2996,15 +2995,15 @@ export default {
   Reset: "Redefinir",
   "Reset {scheme, select, light {light} other {dark}} theme":
     "Redefinir o tema {scheme, select, light {claro} other {escuro}}",
-  "Resets in {time}": "Reinicia em {time}",
-  "Resets {when}": "Reinicia: {when}",
+  "Resets in {time}": "Renova em {time}",
+  "Resets {when}": "Renova {when}",
   "Reshape or clean up a GLB already in your game. The original stays.":
-    "Remodelar ou limpar um GLB que já está no seu jogo. O original continua.",
+    "Remodelar ou limpar um GLB que já está no seu jogo. O original é mantido.",
   "Response completed": "Resposta concluída",
   "Response failed": "A resposta falhou",
   "Response interrupted": "Resposta interrompida",
   "Restart Studio": "Reiniciar Studio",
-  "Restart Unreal": "Reiniciar o Unreal",
+  "Restart Unreal": "Reiniciar Unreal",
   Restarted: "Reiniciado",
   "Restore default appearance": "Restaurar aparência padrão",
   "Restore game files": "Restaurar arquivos do jogo",
@@ -3014,7 +3013,7 @@ export default {
   Resumed: "Retomado",
   "Resumed automatically": "Retomado automaticamente",
   "Resumed automatically after Studio’s loop restarted":
-    "Retomado automaticamente depois que o ciclo do Studio reiniciou",
+    "Retomado automaticamente depois que o loop do Studio reiniciou",
   "Resumed automatically after the limit reset": "Retomado automaticamente depois que o limite foi renovado",
   "Resumed automatically to try the model provider again after its outage":
     "Retomado automaticamente para tentar de novo o provedor de modelos depois da falha",
@@ -3025,7 +3024,7 @@ export default {
   "Return to Studio to see connection status.": "Volte ao Studio para ver o status da conexão.",
   "Reveal in Finder": "Mostrar no Finder",
   Review: "Revisar",
-  "Review Genex terms": "Ver os termos do Genex",
+  "Review Genex terms": "Revisar os termos do Genex",
   "Review Genex terms on genex.games": "Revisar os termos do Genex em genex.games",
   "Review all views. Approve a separate 10,000-face rigging copy.":
     "Revise todas as vistas. Aprove uma cópia separada de 10.000 faces para o rigging.",
@@ -3041,7 +3040,7 @@ export default {
     "Revise os arquivos que serão enviados. Aprove só se esta cópia preparada estiver pronta para compartilhar.",
   "Review the purchase, then pay.": "Revise a compra e pague.",
   "Review the updated Genex terms in your browser before publishing.":
-    "Veja os termos atualizados do Genex no navegador antes de publicar.",
+    "Revise os termos atualizados do Genex no navegador antes de publicar.",
   "Review them in your browser to keep generating.": "Revise-os no navegador para continuar gerando.",
   Reviewer: "Revisor",
   Reviewers: "Revisores",
@@ -3064,7 +3063,7 @@ export default {
   "Reviewers: {model}": "Revisores: {model}",
   Reviewing: "Revisando",
   "Reviewing a build": "Revisando um build",
-  "Reviewing the merged build": "Revisando o build combinado",
+  "Reviewing the merged build": "Revisando o build integrado",
   "Reviewing {part}": "Revisando {part}",
   Rewind: "Voltar",
   "Rewind chat": "Voltar o chat",
@@ -3098,16 +3097,16 @@ export default {
     "O Roblox Studio está abrindo de novo com o plugin do Genex.",
   "Roblox Studio is set up but not open.": "O Roblox Studio está configurado, mas não está aberto.",
   "Roblox Studio is still open. If it asked to save your place, answer it, then press Quit Studio again.":
-    "O Roblox Studio ainda está aberto. Se ele perguntou se quer salvar seu lugar, responda e clique em “Fechar Studio” de novo.",
+    "O Roblox Studio ainda está aberto. Se ele pediu para salvar seu lugar, responda e clique em “Fechar Studio” de novo.",
   "Roblox Studio is still open. If it asked to save your place, answer it, then press Restart Studio again.":
-    "O Roblox Studio ainda está aberto. Se ele perguntou se quer salvar seu lugar, responda e clique em “Reiniciar Studio” de novo.",
+    "O Roblox Studio ainda está aberto. Se ele pediu para salvar seu lugar, responda e clique em “Reiniciar Studio” de novo.",
   "Roblox Studio is still open. Sign in there; once it has closed by itself, press Set up so Genex can finish.":
     "O Roblox Studio ainda está aberto. Entre nele; quando ele fechar sozinho, clique em “Configurar” para o Genex terminar.",
   "Roblox Studio isn't on this computer.": "O Roblox Studio não está neste computador.",
   "Roblox Studio isn't on this computer. Open this to get it.":
-    "O Roblox Studio não está neste computador. Abra aqui para obtê-lo.",
+    "O Roblox Studio não está neste computador. Abra aqui para baixá-lo.",
   "Roblox Studio isn't on this computer. Press Get Roblox Studio first.":
-    "O Roblox Studio não está neste computador. Clique em “Obter Roblox Studio” primeiro.",
+    "O Roblox Studio não está neste computador. Clique em “Baixar Roblox Studio” primeiro.",
   "Roblox Studio isn't open.": "O Roblox Studio não está aberto.",
   "Roblox Studio runs on a Mac or on Windows only.": "O Roblox Studio só funciona no Mac ou no Windows.",
   "Roblox Studio setup": "Configuração do Roblox Studio",
@@ -3117,10 +3116,10 @@ export default {
   "Roblox's download didn't hold its installer, so Genex didn't run anything.":
     "O download do Roblox não tinha o instalador, então o Genex não executou nada.",
   "Roblox's installer finished, but Roblox Studio didn't appear. Press Get Roblox Studio to try again.":
-    "O instalador do Roblox terminou, mas o Roblox Studio não apareceu. Clique em “Obter Roblox Studio” para tentar de novo.",
+    "O instalador do Roblox terminou, mas o Roblox Studio não apareceu. Clique em “Baixar Roblox Studio” para tentar de novo.",
   "Roblox's installer is installing Studio.": "O instalador do Roblox está instalando o Studio.",
   "Roblox's installer stopped before it finished. Press Get Roblox Studio to try again.":
-    "O instalador do Roblox parou antes de terminar. Clique em “Obter Roblox Studio” para tentar de novo.",
+    "O instalador do Roblox parou antes de terminar. Clique em “Baixar Roblox Studio” para tentar de novo.",
   "Roblox's installer then installs Studio and opens it. Studio asks you to sign in: Genex never sees your password.":
     "Depois, o instalador do Roblox instala o Studio e o abre. O Studio pede para você entrar: o Genex nunca vê sua senha.",
   "Rojo keeps your scripts in step, so Genex leaves them to it.":
@@ -3140,8 +3139,8 @@ export default {
   "Run cancelled": "Build cancelado",
   "Run failed": "O build falhou",
   "Run finished · Newer integrated build not delivered":
-    "Build terminado · O build integrado mais novo não entrou no jogo",
-  "Run finished · No build delivered": "Build terminado · Nenhum build entrou no jogo",
+    "Build concluído · O build integrado mais novo não entrou no jogo",
+  "Run finished · No build delivered": "Build concluído · Nenhum build entrou no jogo",
   "Run in terminal": "Executar no terminal",
   "Run paused": "Build pausado",
   "Run setup scripts": "Executar scripts de instalação",
@@ -3174,7 +3173,7 @@ export default {
   "Save tags": "Salvar tags",
   "Save the new game in": "Salvar o novo jogo em",
   "Save to your library": "Salvar na sua biblioteca",
-  "Save your progress with a Genex account": "Salve seu progresso com uma conta Genex",
+  "Save your progress with a Genex account": "Salve seu progresso com uma conta do Genex",
   Saved: "Salvo",
   "Saved account could not be unlocked. Automatic retries are paused; retry only when you want to allow credential access.":
     "Não foi possível desbloquear a conta salva. As novas tentativas automáticas estão pausadas; tente de novo só quando quiser permitir o acesso às credenciais.",
@@ -3188,7 +3187,7 @@ export default {
   "Saved {count, plural, one {# asset} other {# assets}}":
     "{count, plural, one {# recurso salvo} other {# recursos salvos}}",
   "Saves stay when you remove a game. Getting it again starts where you left off.":
-    "Seus saves continuam quando você remove um jogo. Se baixar de novo, continua de onde parou.",
+    "Seus saves ficam guardados quando você remove um jogo. Se baixar de novo, você continua de onde parou.",
   "Saving the assets": "Salvando os recursos",
   "Saving {count, plural, one {# asset} other {# assets}}":
     "Salvando {count, plural, one {# recurso} other {# recursos}}",
@@ -3199,7 +3198,7 @@ export default {
   "Say what to change and the workers will hear it.": "Diga o que mudar e os ajudantes vão ouvir.",
   "Scan: {verdict, select, safe {safe} caution {caution} dangerous {dangerous} other {{verdict}}}":
     "Análise: {verdict, select, safe {seguro} caution {atenção} dangerous {perigoso} other {{verdict}}}",
-  "Scan: {verdict}, {found}.": "Verificação: {verdict}, {found}.",
+  "Scan: {verdict}, {found}.": "Análise: {verdict}, {found}.",
   Scar: "Cicatriz",
   "Scenes · blockouts": "Cenas · blockouts",
   "Screen Recording": "Gravação de Tela",
@@ -3208,7 +3207,7 @@ export default {
   "Scroll to zoom · Double-click to reset": "Role para dar zoom · Clique duas vezes para redefinir",
   Scrolled: "Rolou",
   Scrolling: "Rolando",
-  "Search Play": "Buscar no Jogar",
+  "Search Play": "Buscar em Jogar",
   "Search anything…": "Busque qualquer coisa…",
   "Search assets": "Buscar recursos",
   "Search games": "Buscar jogos",
@@ -3222,7 +3221,7 @@ export default {
   "Search {provider} models": "Buscar modelos de {provider}",
   "Searching…": "Procurando…",
   "Secondary Logon is turned off on this PC. Set up turns it back on, since agents start through it.":
-    "O Logon Secundário está desativado neste PC. Configurar o ativa de novo, porque os agentes iniciam por ele.",
+    "O Logon Secundário está desativado neste PC. “Configurar” reativa esse serviço, porque os agentes iniciam por ele.",
   "Secondary text": "Texto secundário",
   "Secrets cannot be stored in this profile: OS credential access is off.":
     "Não dá para guardar segredos neste perfil: o acesso às credenciais do sistema está desligado.",
@@ -3243,12 +3242,12 @@ export default {
   "Selected part": "Parte selecionada",
   "Selected public path is missing or unreadable: {path}":
     "O caminho público selecionado não existe ou não pode ser lido: {path}",
-  "Selected step": "Etapa selecionada",
+  "Selected step": "Passo selecionado",
   "Self-improvement": "Autoaprimoramento",
   "Self-improvement is off in Harness, so there is nothing to apply.":
-    "O autoaperfeiçoamento está desligado no Harness, então não há nada para aplicar.",
+    "O autoaprimoramento está desligado no Harness, então não há nada para aplicar.",
   "Self-improvement is off. Harness isn’t learning from new builds.":
-    "O autoaprimoramento está desligado. O Harness não está aprendendo com novas builds.",
+    "O autoaprimoramento está desligado. O Harness não está aprendendo com novos builds.",
   "Self-improvement is off. Turn it on at the top of Studio to look for improvements.":
     "O autoaprimoramento está desligado. Ligue-o no topo do Studio para procurar melhorias.",
   Send: "Enviar",
@@ -3267,18 +3266,18 @@ export default {
   Sent: "Enviado",
   "Sent — every part gets it with its next round": "Enviado — cada parte recebe na próxima rodada",
   "Sent — it goes into this part's next round": "Enviado — entra na próxima rodada desta parte",
-  "Sent — it will steer the next run on this game": "Enviado — vai guiar a próxima build deste jogo",
+  "Sent — it will steer the next run on this game": "Enviado — vai guiar o próximo build deste jogo",
   Server: "Servidor",
   "Server address": "Endereço do servidor",
   Services: "Serviços",
   'Set "{setting}" in this plugin\'s settings first.': "Primeiro defina “{setting}” nas configurações deste plugin.",
   "Set by {variable}": "Definido por {variable}",
   "Set the route": "Rota definida",
-  "Set this Godot game up for Genex's play": "Preparar este jogo Godot para o Genex poder jogar",
-  "Set this Godot game up for Genex's play?": "Preparar este jogo Godot para o Genex poder jogar?",
+  "Set this Godot game up for Genex's play": "Preparar este jogo do Godot para o Genex poder jogar",
+  "Set this Godot game up for Genex's play?": "Preparar este jogo do Godot para o Genex poder jogar?",
   "Set this project up first.": "Configure este projeto primeiro.",
   "Set up": "Configurar",
-  "Set up Claude Code": "Configurar Claude Code",
+  "Set up Claude Code": "Instalar Claude Code",
   "Set up Codex": "Instalar Codex",
   "Set up OpenCode": "Instalar OpenCode",
   "Set up adds it to Studio's Plugins folder and turns on Studio's MCP server while Studio is closed.":
@@ -3297,7 +3296,7 @@ export default {
   "Set {setting}": "Definir {setting}",
   "Setting Roblox Studio up for Genex.": "Configurando o Roblox Studio para o Genex.",
   "Setting the route": "Definindo a rota",
-  "Setting up Claude Code…": "Configurando o Claude Code…",
+  "Setting up Claude Code…": "Instalando o Claude Code…",
   "Setting up Codex…": "Instalando o Codex…",
   "Setting up Genex": "Configurando o Genex",
   "Setting up OpenCode…": "Instalando o OpenCode…",
@@ -3329,7 +3328,7 @@ export default {
   "Sharing {count, plural, one {# asset} other {# assets}} on Play…":
     "Compartilhando {count, plural, one {# recurso} other {# recursos}} em Jogar…",
   "Sharing…": "Compartilhando…",
-  Shelf: "Prateleira",
+  Shelf: "Seção",
   Shelves: "Seções",
   Shooter: "Tiro",
   Show: "Mostrar",
@@ -3351,24 +3350,24 @@ export default {
   "Show more": "Mostrar mais",
   "Show more assets": "Mostrar mais recursos",
   "Show sidebar": "Mostrar barra lateral",
-  "Show step {step} of {total}": "Mostrar etapa {step} de {total}",
+  "Show step {step} of {total}": "Mostrar passo {step} de {total}",
   "Show terminal": "Mostrar terminal",
   "Show {count, plural, other {# earlier tools}}":
     "Mostrar {count, plural, one {# ferramenta anterior} other {# ferramentas anteriores}}",
   "Showing saved models. The list didn't refresh.": "Mostrando modelos salvos. A lista não foi atualizada.",
   "Showing the last working build. The newest changes aren’t included.":
-    "Mostrando a última build que funcionava. As mudanças mais recentes não estão nela.",
+    "Mostrando o último build que funcionava. As mudanças mais recentes não estão nele.",
   "Shows in Explorer": "Mostra no Explorador",
   "Shows in Finder": "Mostra no Finder",
   "Shows in its folder": "Mostra na pasta",
-  "Shows on Play under {shelf} · {tags}.": "Aparece em Jogar, na prateleira {shelf} · {tags}.",
-  "Shows on Play under {shelf}.": "Aparece em Jogar, na prateleira {shelf}.",
+  "Shows on Play under {shelf} · {tags}.": "Aparece em Jogar, na seção {shelf} · {tags}.",
+  "Shows on Play under {shelf}.": "Aparece em Jogar, na seção {shelf}.",
   "Side by side with the build before": "Lado a lado com o build anterior",
   Sidebar: "Barra lateral",
   Sigil: "Selo",
   "Sign in": "Entrar",
   "Sign in again": "Entrar de novo",
-  "Sign in in browser": "Entrar no navegador",
+  "Sign in in browser": "Entrar pelo navegador",
   "Sign in to Genex": "Entrar no Genex",
   "Sign in to Genex again": "Entrar no Genex de novo",
   "Sign in to Genex in your browser": "Entrar no Genex pelo navegador",
@@ -3410,15 +3409,15 @@ export default {
   "Sign-in was not completed. Return to Studio.": "O login não foi concluído. Volte ao Studio.",
   "Signed in for Studio only": "Conectado só para o Studio",
   "Signed in to Claude Code.": "Você entrou no Claude Code.",
-  "Signed in to Roblox": "Conectado ao Roblox",
+  "Signed in to Roblox": "Você entrou no Roblox",
   "Signed in to Unity": "Você entrou no Unity",
   "Signed out. Sign in again to keep building.": "Você saiu da conta. Entre de novo para continuar criando.",
   "Signing in…": "Entrando…",
   "Single player": "Um jogador",
   "Six things the critic looks for; the weakest here is {thing}.":
-    "O crítico olha seis coisas; a mais fraca aqui é {thing}.",
+    "O crítico avalia seis coisas; aqui, a mais fraca é “{thing}”.",
   Size: "Tamanho",
-  "Skill details": "Detalhes da skill",
+  "Skill details": "Detalhes da habilidade",
   Skills: "Habilidades",
   "Skip for now": "Pular por enquanto",
   Skipped: "Pulado",
@@ -3434,7 +3433,7 @@ export default {
     "“{name}” ignorado: não indica nem um comando nem uma url.",
   "Small fixes": "Pequenas correções",
   "Small fixes across the part, no named step.": "Pequenas correções em toda a parte, sem um passo específico.",
-  "Smallest dot": "Ponto mínimo",
+  "Smallest dot": "Menor ponto",
   Smarter: "Mais inteligente",
   "Snapshot: {snapshot}": "Snapshot: {snapshot}",
   "Some of them may have changed outside this chat.": "Alguns podem ter mudado fora deste chat.",
@@ -3496,13 +3495,13 @@ export default {
     "Inicia {count, plural, one {# programa} other {# programas}} para os agentes:",
   Stats: "Estatísticas",
   "Status unavailable": "Status indisponível",
-  Steps: "Etapas",
+  Steps: "Passos",
   "Still checking the payment": "Ainda verificando o pagamento",
   "Still failing": "Ainda falhando",
   "Still open": "Pendente",
   "Still testing": "Ainda testando",
   "Still to fix": "Falta corrigir",
-  "Still working — Studio hasn’t answered yet.": "Ainda trabalhando — o Studio ainda não respondeu.",
+  "Still working — Studio hasn’t answered yet.": "Continua trabalhando — o Studio ainda não respondeu.",
   Stop: "Parar",
   "Stop Speaking": "Parar fala",
   "Stop allowing in {game}": "Parar de permitir em {game}",
@@ -3518,9 +3517,9 @@ export default {
   "Stopped adding the Luau checks. Nothing was kept.":
     "A adição das verificações de Luau foi interrompida. Nada foi guardado.",
   "Stopped by the lead": "Parado pelo agente principal",
-  "Stopped getting Roblox Studio.": "O Genex parou de obter o Roblox Studio.",
+  "Stopped getting Roblox Studio.": "O Genex parou de baixar o Roblox Studio.",
   "Stopped getting Roblox Studio. Anything Roblox's installer already put on this computer stays.":
-    "O Genex parou de obter o Roblox Studio. O que o instalador do Roblox já colocou neste computador continua aqui.",
+    "O Genex parou de baixar o Roblox Studio. O que o instalador do Roblox já colocou neste computador continua aqui.",
   "Stopped play": "Partida parada",
   "Stopped. Everything built so far is kept.": "Parado. Tudo o que foi criado até agora foi mantido.",
   "Stopped. What it built is in your game now.": "Parado. O que foi criado já está no seu jogo.",
@@ -3538,7 +3537,7 @@ export default {
   "Studio account": "Conta do Studio",
   "Studio answers Genex once it's open.": "O Studio responde ao Genex quando estiver aberto.",
   "Studio asks you to sign in when it opens. No Roblox account yet? Choose {signUp} on Studio's sign-in screen. Genex never sees your password.":
-    "O Studio pede para você entrar quando abre. Ainda não tem conta do Roblox? Escolha {signUp} na tela de entrada do Studio. O Genex nunca vê sua senha.",
+    "O Studio pede para você entrar quando abre. Ainda não tem conta do Roblox? Escolha {signUp} na tela de login do Studio. O Genex nunca vê sua senha.",
   "Studio can reach this game's live saved data, so play tests here read and write what real players saved. To test without it, turn this off in Studio:":
     "O Studio acessa os dados salvos reais deste jogo, então os testes aqui leem e gravam o que jogadores de verdade salvaram. Para testar sem eles, desative isto no Studio:",
   "Studio can't create games there. Choose another folder.": "O Studio não pode criar jogos aí. Escolha outra pasta.",
@@ -3604,8 +3603,8 @@ export default {
   "Taking a motion strip": "Capturando uma sequência de movimento",
   "Taking a picture of {asset}": "Tirando uma foto de {asset}",
   "Taking a play-view shot": "Capturando a visão do jogo",
-  "Taking a screenshot": "Fazendo uma captura de tela",
-  "Taking a screenshot of the level": "Fazendo uma captura de tela do nível",
+  "Taking a screenshot": "Tirando uma captura de tela",
+  "Taking a screenshot of the level": "Tirando uma captura de tela do nível",
   "Taking a still from {camera}": "Tirando uma imagem de {camera}",
   "Taking longer than usual.": "Está demorando mais que o normal.",
   "Talk to the lead while it builds…": "Fale com o agente principal enquanto ele cria…",
@@ -3644,7 +3643,7 @@ export default {
     "Esse build e a pasta do seu jogo mudaram as mesmas coisas, então nada foi alterado.",
   "That build is not in this game's history any more.": "Esse build não está mais no histórico deste jogo.",
   "That build turned out not to run — Reload puts your game folder back on the stage.":
-    "Esse build acabou não rodando — Recarregar volta a mostrar o jogo da sua pasta.",
+    "Esse build acabou não rodando — “Recarregar” volta a mostrar o jogo da sua pasta.",
   "That command ends with a backslash.": "Esse comando termina com uma barra invertida.",
   "That command has a quote that is never closed.": "Esse comando tem uma aspa que nunca é fechada.",
   "That cover is no longer among this game's recent frames.":
@@ -3676,7 +3675,7 @@ export default {
   "That message is no longer in this chat.": "Essa mensagem não está mais neste chat.",
   "That message is not in this chat.": "Essa mensagem não está neste chat.",
   "That picture is nearly one colour. Try one with more in it.":
-    "Essa imagem é quase de uma cor só. Tente uma com mais coisas.",
+    "Essa imagem é quase de uma cor só. Tente uma com mais detalhes.",
   "That picture is too dark for a cover. Try a brighter one.":
     "Essa imagem é escura demais para uma capa. Tente uma mais clara.",
   "That plugin doesn't link games to an engine.": "Esse plugin não vincula jogos a um motor.",
@@ -3705,7 +3704,7 @@ export default {
   "The OS secret store is locked, so the OpenRouter key cannot be read. {detail}":
     "O armazenamento de segredos do sistema está bloqueado, então não dá para ler a chave do OpenRouter. {detail}",
   "The OS secret store is locked, so the server's API key cannot be read. {detail}":
-    "O cofre de segredos do sistema está bloqueado, então a chave de API do servidor não pode ser lida. {detail}",
+    "O armazenamento de segredos do sistema está bloqueado, então não dá para ler a chave de API do servidor. {detail}",
   "The Ollama library answered {status}.": "A biblioteca do Ollama respondeu {status}.",
   "The Ollama library did not answer in time.": "A biblioteca do Ollama não respondeu a tempo.",
   "The Ollama library returned an unreadable manifest.": "A biblioteca do Ollama retornou um manifesto ilegível.",
@@ -3715,7 +3714,7 @@ export default {
   "The agent carries on without it.": "O agente continua sem isso.",
   "The agent is making it in the chat. It shows here when it’s ready.":
     "O agente está criando no chat. Aparece aqui quando estiver pronto.",
-  "The approved plan is starting. Please wait.": "O plano aprovado está começando. Aguarde.",
+  "The approved plan is starting. Please wait.": "O plano aprovado está começando. Espere um pouco.",
   "The apps are on Genex, but the game isn’t in the gallery yet. Publish again to list it.":
     "Os apps já estão no Genex, mas o jogo ainda não está na galeria. Publique de novo para ele aparecer.",
   "The assembled game is being measured and checked for safe improvements.":
@@ -3728,9 +3727,9 @@ export default {
   "The build is running": "O build está rodando",
   "The build is still stopping. Try again in a moment.": "O build ainda está parando. Tente de novo em um instante.",
   "The build paused before the reviewers saw it. Its work is kept, and the lead can still add it.":
-    "A build pausou antes que os revisores vissem. O trabalho fica guardado, e o agente principal ainda pode adicioná-lo.",
+    "O build pausou antes que os revisores vissem. O trabalho fica guardado, e o agente principal ainda pode adicioná-lo.",
   "The build plan is ready. Say go, or change it before it starts.":
-    "O plano do build está pronto. Diga “vai” ou mude antes que comece.",
+    "O plano do build está pronto. Diga “go” ou mude antes que comece.",
   "The build stopped. Everything built so far is kept.": "O build parou. Tudo o que foi criado até agora está salvo.",
   "The chat is in Plan mode, so nothing was rewound.": "O chat está no modo Plano, então não deu para voltar.",
   "The chat is in Plan mode, so the newer version didn't come back.":
@@ -3748,12 +3747,12 @@ export default {
   "The exact row a finished build becomes, anonymous id included.":
     "A linha exata em que um build concluído se transforma, com o ID anônimo.",
   "The first build of this part — everything the plan asks for, in one pass.":
-    "A primeira build desta parte — tudo o que o plano pede, de uma vez só.",
+    "O primeiro build desta parte — tudo o que o plano pede, de uma vez só.",
   "The first start can take several minutes.": "A primeira abertura pode levar alguns minutos.",
   "The folder this plugin was loaded from is gone; load it again":
     "A pasta de onde este plugin foi carregado não existe mais; carregue-o de novo",
   "The game changed — reload to see it": "O jogo mudou — recarregue para ver",
-  "The game didn’t build": "A build do jogo falhou",
+  "The game didn’t build": "O build do jogo falhou",
   "The game files changed through a commit or a landed build since this message, so they stay as they are.":
     "Os arquivos do jogo mudaram por um commit ou um build aplicado depois desta mensagem, então continuam como estão.",
   "The game files could not be saved before rewinding.": "Não foi possível salvar os arquivos do jogo antes de voltar.",
@@ -3761,11 +3760,11 @@ export default {
   "The game gets a new folder of its own inside the folder you choose.":
     "O jogo ganha uma pasta nova só dele dentro da pasta que você escolher.",
   "The game is back as it was before the rewind. The chat stays rewound.":
-    "O jogo voltou a ser como era antes da volta. O chat continua voltado.",
+    "O jogo está de novo como antes de voltar. O chat fica onde está.",
   "The game stays as it is. You can run them later from here.":
     "O jogo fica como está. Você pode executá-los depois por aqui.",
   "The game, its save points, paused builds and latest build stay.":
-    "O jogo, seus pontos de salvamento, builds pausados e o último build continuam.",
+    "O jogo, seus pontos de salvamento, builds pausados e o último build são mantidos.",
   "The game’s history changed since the rewind, so the newer version can’t come back now.":
     "O histórico do jogo mudou desde que você voltou, então a versão mais nova não pode mais voltar.",
   "The install finished, but Windows still reports the protected workspace as not set up.":
@@ -3783,11 +3782,11 @@ export default {
     "A chave é verificada com o OpenRouter e depois guardada neste Mac.",
   "The last publish failed. Open Publish to read why.": "A última publicação falhou. Abra Publicar para ver o motivo.",
   "The last version is still live.": "A última versão continua no ar.",
-  "The latest build is ready to play.": "A build mais recente está pronta para jogar.",
+  "The latest build is ready to play.": "O build mais recente está pronto para jogar.",
   "The lead": "Agente principal",
   "The lead asked": "O agente principal pediu",
   "The lead didn't merge it, so it isn't in your build.":
-    "O agente principal não adicionou, então não está na sua build.",
+    "O agente principal não adicionou, então não está no seu build.",
   "The lead is building in your project": "O agente principal está criando direto no seu projeto",
   "The lead is done.": "O agente principal terminou.",
   "The lead is finishing the build": "O agente principal está finalizando o build",
@@ -3860,10 +3859,10 @@ export default {
     "Os revisores mantiveram a tentativa {tryNumber} depois de desfazer {count} antes dela.",
   "The reviewers undid all {count} tries.": "Os revisores desfizeram todas as {count} tentativas.",
   "The reviewers undid it.": "Os revisores desfizeram.",
-  "The run ended before the reviewers saw it.": "A build terminou antes que os revisores vissem.",
+  "The run ended before the reviewers saw it.": "O build terminou antes que os revisores vissem.",
   "The run stopped because of an error. Your game is as you left it.":
-    "A build parou por causa de um erro. Seu jogo está como você deixou.",
-  "The run was stopped before it finished.": "A build foi parada antes de terminar.",
+    "O build parou por causa de um erro. Seu jogo está como você deixou.",
+  "The run was stopped before it finished.": "O build foi parado antes de terminar.",
   "The running reply could not switch to {mode}. Your next message will use it.":
     "A resposta em andamento não conseguiu mudar para {mode}. Sua próxima mensagem vai usar esse modo.",
   "The selected preview changed while this build was preparing. Open the build again when ready.":
@@ -3888,10 +3887,10 @@ export default {
   "The starting point was rejected; the parts carry on from an empty game.":
     "O ponto de partida foi rejeitado; as partes continuam a partir de um jogo vazio.",
   "The studio could not see the game — looking again in {seconds}s":
-    "O estúdio não conseguiu ver o jogo — olhando de novo em {seconds} s",
+    "O Studio não conseguiu ver o jogo — olhando de novo em {seconds} s",
   "The studio could not start": "O Studio não conseguiu iniciar",
   "The studio couldn't start the sign-in. Try again.": "Não foi possível iniciar o login. Tente de novo.",
-  "The studio is working out what to build": "O estúdio está definindo o que criar",
+  "The studio is working out what to build": "O Studio está definindo o que criar",
   "The studio window keeps crashing": "A janela do Studio continua travando",
   "The terminal could not start. Try opening it again.": "O terminal não conseguiu iniciar. Tente abrir de novo.",
   "The weakest thing: {thing}.": "O ponto mais fraco: {thing}.",
@@ -3899,7 +3898,7 @@ export default {
   "The worker tried something outside the rules of its workspace.":
     "O ajudante tentou algo fora das regras do espaço de trabalho dele.",
   "The {app} is older than your last change: build it again, then publish.":
-    "{app}: é anterior à sua última alteração. Crie de novo e depois publique.",
+    "{app}: é de antes da sua última alteração. Crie de novo e depois publique.",
   "The {plugin} plugin {version} is ready. Press to update it in Plugins.":
     "O plugin {plugin} {version} está pronto. Clique para atualizar em Plugins.",
   Theme: "Tema",
@@ -3931,8 +3930,8 @@ export default {
     "A pessoa recebe a página de download do Genex com um cartão seu.",
   "They get the Genex download page with a card from you. You get {count} credits when they make their first game.":
     "A pessoa recebe a página de download do Genex com um cartão seu. Você ganha {count} créditos quando ela criar o primeiro jogo.",
-  "They preferred the build before it.": "Preferiram a build anterior.",
-  "They preferred this build to the one before it.": "Preferiram esta build à anterior.",
+  "They preferred the build before it.": "Preferiram o build anterior.",
+  "They preferred this build to the one before it.": "Preferiram este build ao anterior.",
   "They run in Genex’s sandbox and can’t change your other games.":
     "Eles rodam no sandbox do Genex e não podem mudar seus outros jogos.",
   Thinking: "Pensando",
@@ -3974,7 +3973,7 @@ export default {
   "This build turned out not to run — reload to go back to your game":
     "Este build não roda — recarregue para voltar ao seu jogo",
   "This build's workers or reviewers run on a local model, which the studio's own loop code doesn't support yet — your brief is saved above. Pick every job on one kind of engine and send it again, or ask the studio to merge the seed's harness-seed/loop into its own loop code (or restore the seed copies) so the next launch upgrades them.":
-    "Os ajudantes ou revisores deste build rodam em um modelo local, que o código de loop do Studio ainda não suporta — seu briefing está salvo acima. Escolha o mesmo tipo de motor para todas as tarefas e envie de novo, ou peça ao Studio para mesclar o harness-seed/loop da base no próprio código de loop (ou restaurar as cópias da base) para que a próxima abertura as atualize.",
+    "Os ajudantes ou revisores deste build rodam em um modelo local, que o código de loop do Studio ainda não suporta — seu briefing está salvo acima. Escolha o mesmo tipo de agente para todas as tarefas e envie de novo, ou peça ao Studio para mesclar o harness-seed/loop da base no próprio código de loop (ou restaurar as cópias da base) para que a próxima abertura as atualize.",
   "This change no longer differs from what Harness has now.":
     "Esta alteração não difere mais do que o Harness tem agora.",
   "This change was already undone.": "Esta alteração já foi desfeita.",
@@ -3991,26 +3990,26 @@ export default {
     "Este conector pertence a um plugin; remova o plugin em vez disso",
   "This connector has no browser sign-in": "Este conector não tem login pelo navegador",
   "This connector has not been trusted to start on this Mac.":
-    "Este conector ainda não recebeu confiança para iniciar neste Mac.",
+    "Você ainda não autorizou este conector a iniciar neste Mac.",
   "This connector is not enabled for the selected project": "Este conector não está ativado para o projeto selecionado",
   "This connector starts a different program than the one you approved — open Edit and approve it again.":
-    "Este conector inicia um programa diferente do que você aprovou: abra Editar e aprove de novo.",
+    "Este conector inicia um programa diferente do que você aprovou: clique em “Editar” e aprove de novo.",
   "This file can’t be shown here.": "Este arquivo não pode ser exibido aqui.",
   "This file exceeds the 100 MiB in-app preview memory limit. The original is unchanged; open it in its authoring app.":
-    "Este arquivo passa do limite de memória de 100 MiB da pré-visualização no app. O original não mudou; abra-o no app em que foi criado.",
+    "Este arquivo passa do limite de memória de 100 MiB da prévia no app. O original não mudou; abra-o no app em que foi criado.",
   "This file isn’t in the game folder yet.": "Este arquivo ainda não está na pasta do jogo.",
   "This file was too large to save, so the rewind left it as it is: {files}.":
     "Este arquivo era grande demais para salvar, então ficou como estava ao voltar: {files}.",
   "This folder": "Esta pasta",
   "This format has no in-app preview. Use {button} to open it in its authoring app.":
-    "Este formato não tem pré-visualização no app. Use “{button}” para abri-lo no app em que foi criado.",
+    "Este formato não tem prévia no app. Use “{button}” para abri-lo no app em que foi criado.",
   "This format needs its authoring app. For a 3D preview with materials and animation, export GLB; for a sprite animation, export animated GIF/WebP or video.":
     "Este formato precisa do app em que foi criado. Para uma prévia 3D com materiais e animação, exporte em GLB; para uma animação de sprite, exporte GIF/WebP animado ou vídeo.",
   "This game": "Este jogo",
   "This game already builds in a Roblox place. Choose another place from the list instead.":
     "Este jogo já é criado em um lugar do Roblox. Escolha outro lugar da lista.",
   "This game already has an unreal folder, so New game can't make its project there.":
-    "Este jogo já tem uma pasta unreal, então Novo jogo não pode criar o projeto lá.",
+    "Este jogo já tem uma pasta unreal, então “Novo jogo” não pode criar o projeto lá.",
   "This game builds in a Roblox place": "Este jogo é criado em um lugar do Roblox",
   "This game builds in {name}": "Este jogo é criado em {name}",
   "This game builds in {name} now.": "Agora este jogo é criado em {name}.",
@@ -4020,7 +4019,7 @@ export default {
     "Este jogo ainda não é criado em um lugar do Roblox. Escolha um primeiro com “Escolher seu lugar”.",
   "This game folder is no longer available.": "Esta pasta de jogo não está mais disponível.",
   "This game has an unlisted draft page": "Este jogo tem uma página de rascunho não listada",
-  "This game has more files than the canvas lists.": "Este jogo tem mais arquivos do que o canvas mostra.",
+  "This game has more files than the canvas lists.": "Este jogo tem mais arquivos do que a tela de recursos mostra.",
   "This game has no Mac or Windows app ready to publish":
     "Este jogo não tem um app para Mac ou Windows pronto para publicar",
   "This game has no Mac or Windows app ready to publish.":
@@ -4062,7 +4061,7 @@ export default {
   "This is not a single command the terminal can run.": "Isto não é um único comando que o terminal possa executar.",
   "This link already changed, so there is nothing to undo.": "Este vínculo já mudou, então não há nada para desfazer.",
   "This login uses an API key. Connect your ChatGPT subscription instead.":
-    "Este login usa uma chave de API. Conecte sua assinatura do ChatGPT no lugar.",
+    "Este login usa uma chave de API. Conecte sua assinatura do ChatGPT em vez disso.",
   "This message and everything after it leave the chat. The message goes back in the composer so you can change it.":
     "Esta mensagem e tudo depois dela saem do chat. A mensagem volta para a caixa de texto para você poder mudá-la.",
   "This model cannot be deleted here": "Este modelo não pode ser excluído aqui",
@@ -4116,10 +4115,10 @@ export default {
   "This repository has {count} plugins. Choose one.": "Este repositório tem {count} plugins. Escolha um.",
   "This server asks for an API key. Paste it under API key.":
     "Este servidor pede uma chave de API. Cole-a em Chave de API.",
-  "This shelf has no tags.": "Esta prateleira não tem tags.",
+  "This shelf has no tags.": "Esta seção não tem tags.",
   "This sign-in is already finishing in Genex.": "Este login já está terminando no Genex.",
   "This sound could not be played": "Não foi possível tocar este som",
-  "This step": "Esta etapa",
+  "This step": "Este passo",
   "This step's plugin isn't installed any more.": "O plugin deste passo não está mais instalado.",
   "This suggestion is damaged, so Studio did not apply it. Discard it.":
     "Esta sugestão está corrompida, então o Studio não a aplicou. Descarte-a.",
@@ -4142,7 +4141,7 @@ export default {
   "This video codec could not be played. Try an MP4 (H.264) or WebM export.":
     "Não foi possível reproduzir este codec de vídeo. Tente exportar em MP4 (H.264) ou WebM.",
   "This {name} install needs Node.js, which isn't installed. Install the native version instead.":
-    "Esta instalação de {name} precisa do Node.js, que não está instalado. Instale a versão nativa no lugar.",
+    "Esta instalação de {name} precisa do Node.js, que não está instalado. Instale a versão nativa em vez disso.",
   "Three version": "versão do Three",
   Threshold: "Limiar",
   Today: "Hoje",
@@ -4162,8 +4161,8 @@ export default {
   "Took a motion strip": "Sequência de movimento capturada",
   "Took a picture of {asset}": "Foto de {asset} tirada",
   "Took a play-view shot": "Visão do jogo capturada",
-  "Took a screenshot": "Captura de tela feita",
-  "Took a screenshot of the level": "Captura de tela do nível feita",
+  "Took a screenshot": "Captura de tela tirada",
+  "Took a screenshot of the level": "Captura de tela do nível tirada",
   "Took a still from {camera}": "Imagem tirada de {camera}",
   Tool: "Ferramenta",
   "Tool result": "Resultado da ferramenta",
@@ -4188,7 +4187,7 @@ export default {
   "Try again in the game. The coin went back to your balance.":
     "Tente de novo no jogo. As moedas voltaram para o seu saldo.",
   "Try again, or choose another model.": "Tente de novo ou escolha outro modelo.",
-  "Try the build again": "Tentar a build de novo",
+  "Try the build again": "Tentar o build de novo",
   "Try your changes before you update.": "Teste suas mudanças antes de atualizar.",
   "Try {count}": "Tentativa {count}",
   "Try {count} · the worker is done": "Tentativa {count} · o ajudante terminou",
@@ -4201,7 +4200,7 @@ export default {
   "Turn off ray tracing in {name}?": "Desativar o ray tracing em {name}?",
   "Turn off remixing": "Desativar remixes",
   "Turn on": "Ativar",
-  "Turn on Genex plugin": "Ativar o plugin Genex",
+  "Turn on Genex plugin": "Ativar o plugin do Genex",
   "Turn on Secondary Logon in Windows Services (Startup type: Manual), then try again.":
     "Ative o Logon Secundário em Serviços do Windows (Tipo de inicialização: Manual) e tente de novo.",
   "Turn on Studio's MCP server": "Ativar o servidor MCP do Studio",
@@ -4253,7 +4252,7 @@ export default {
     "Desfeito. {game} volta a ser um jogo web, e {project} não está mais configurado para o Genex.",
   "Undone. {game} is a web game again.": "Desfeito. {game} volta a ser um jogo web.",
   "Unexpected authorization URL": "URL de autorização inesperada",
-  "Unity 6 isn't installed: see how to get it": "O Unity 6 não está instalado: veja como obtê-lo",
+  "Unity 6 isn't installed: see how to get it": "O Unity 6 não está instalado: veja como baixá-lo",
   "Unity 6 needs about {size} GB; {free} GB is free. Free up space, then try again.":
     "O Unity 6 precisa de cerca de {size} GB, e há {free} GB livres. Libere espaço e tente de novo.",
   "Unity Hub couldn't list the Unity versions to install ({why}).":
@@ -4299,23 +4298,23 @@ export default {
   "Unreal couldn’t use the port Genex gave {project}.":
     "O Unreal não conseguiu usar a porta que o Genex deu para {project}.",
   "Unreal crashed. Close its crash report window, then open {project} again.":
-    "O Unreal travou. Feche a janela de relatório de erro e abra {project} de novo.",
+    "O Unreal travou. Feche a janela de relatório de falha e abra {project} de novo.",
   "Unreal didn't close. Quit it from its own window.": "O Unreal não fechou. Feche pela própria janela dele.",
-  "Unreal games don’t run in a browser": "Jogos Unreal não rodam no navegador",
+  "Unreal games don’t run in a browser": "Jogos do Unreal não rodam no navegador",
   "Unreal has another project open.": "O Unreal está com outro projeto aberto.",
   "Unreal has {project} open.": "O Unreal está com {project} aberto.",
   "Unreal is open, but {name} isn't answering.": "O Unreal está aberto, mas {name} não responde.",
   "Unreal plugin": "Plugin do Unreal",
   "Unreal setup": "Configuração do Unreal",
-  "Unreal {engine} builds with Xcode {min} to {max}.": "O Unreal {engine} compila com o Xcode {min} até o {max}.",
+  "Unreal {engine} builds with Xcode {min} to {max}.": "O Unreal {engine} compila com o Xcode de {min} a {max}.",
   "Unreal {engine} builds with Xcode {min} to {max}. Keep Xcode {version} and add Xcode {wanted} from Apple's downloads: put it in Applications beside Xcode {current}; this card then shows the one command to select it.":
-    "O Unreal {engine} compila com o Xcode {min} até o {max}. Mantenha o Xcode {version} e adicione o Xcode {wanted} pelos downloads da Apple: coloque-o em Aplicativos ao lado do Xcode {current}; depois este cartão mostra o comando para selecioná-lo.",
+    "O Unreal {engine} compila com o Xcode de {min} a {max}. Mantenha o Xcode {version} e adicione o Xcode {wanted} pelos downloads da Apple: coloque-o em Aplicativos ao lado do Xcode {current}; depois este cartão mostra o comando para selecioná-lo.",
   "Unreal {engine} is set up for {project}": "Unreal {engine} configurado para {project}",
   "Unreal {version} is installed": "Unreal {version} instalado",
   "Unreal {version}'s editor isn't where Epic's launcher says. Verify the install in the Epic Games Launcher.":
     "O editor do Unreal {version} não está onde o launcher da Epic diz. Verifique a instalação no Epic Games Launcher.",
   "Unrecognized Genex page link": "Link de página do Genex não reconhecido",
-  "Unsafe runtime archive": "Arquivo do runtime não seguro",
+  "Unsafe runtime archive": "Arquivo do runtime inseguro",
   "Unsupported TOML value. Use quoted strings, booleans or arrays of strings.":
     "Valor TOML não suportado. Use strings entre aspas, booleanos ou arrays de strings.",
   "Untitled conversation": "Conversa sem título",
@@ -4358,7 +4357,7 @@ export default {
   "Usage not reported": "Sem dados de uso",
   Use: "Usar",
   "Use #RGB or #RRGGBB.": "Use #RGB ou #RRGGBB.",
-  "Use Xcode for builds": "Usar o Xcode para compilar",
+  "Use Xcode for builds": "Usar Xcode para compilar",
   "Use a device code": "Usar um código de dispositivo",
   "Use a hex color for {key}.": "Use uma cor hex para {key}.",
   "Use a model you run in LM Studio, llama.cpp, TabbyAPI, vLLM or KoboldCpp.":
@@ -4388,7 +4387,7 @@ export default {
   "Used in this game": "Usados neste jogo",
   "Uses the CLI default under Genex settings.": "Usa o padrão da CLI com as configurações do Genex.",
   "Uses whatever model your Codex is configured for.": "Usa o modelo que estiver configurado no seu Codex.",
-  "Uses your Genex account.": "Usa sua conta Genex.",
+  "Uses your Genex account.": "Usa sua conta do Genex.",
   "Uses your existing Codex allowance. No API key required.":
     "Usa a cota que você já tem no Codex. Não precisa de chave de API.",
   "Uses your saved sign-in, or opens your browser": "Usa seu login salvo ou abre o navegador",
@@ -4433,9 +4432,9 @@ export default {
   "Wait for the rewind to finish, then send it again.": "Espere terminar de voltar e envie de novo.",
   "Wait for the rewind to finish, then try again.": "Espere terminar de voltar e tente de novo.",
   "Wait for this chat to finish, or press Stop, before bringing the newer version back.":
-    "Espere este chat terminar, ou clique em Parar, antes de trazer a versão mais nova de volta.",
+    "Espere este chat terminar, ou clique em “Parar”, antes de trazer a versão mais nova de volta.",
   "Wait for this chat to finish, or press Stop, before rewinding.":
-    "Espere este chat terminar, ou clique em Parar, antes de voltar.",
+    "Espere este chat terminar, ou clique em “Parar”, antes de voltar.",
   "Wait for this game's work to finish before removing it.":
     "Espere o trabalho deste jogo terminar antes de removê-lo.",
   "Wait for this game's work to finish, then free its space.":
@@ -4461,7 +4460,7 @@ export default {
   "Watch folder": "Observar a pasta",
   "Watch folder for {name}": "Observar a pasta de {name}",
   "Watch folder is off for a plugin in a folder agents write in (a game's folder, a worker's copy): load it again with Load local plugin… after each change instead":
-    "Observar a pasta fica desligado para um plugin numa pasta em que os agentes escrevem (a pasta de um jogo, a cópia de um ajudante): em vez disso, carregue-o de novo com Carregar plugin local… após cada mudança",
+    "A opção Observar a pasta fica desativada para um plugin numa pasta em que os agentes escrevem (a pasta de um jogo, a cópia de um ajudante): em vez disso, carregue-o de novo com “Carregar plugin local…” após cada mudança",
   "Watch progress": "Ver progresso",
   Watched: "Observou",
   Watching: "Observando",
@@ -4474,7 +4473,7 @@ export default {
   "Weekly · {model}": "Semanal · {model}",
   "Welcome to Genex": "Boas-vindas ao Genex",
   "What Claude does without asking. Choosing Always allow in a chat adds an action here, for that game.":
-    "O que o Claude faz sem perguntar. Escolher Sempre permitir em um chat adiciona a ação aqui, para aquele jogo.",
+    "O que o Claude faz sem perguntar. Escolher “Sempre permitir” em um chat adiciona a ação aqui, para aquele jogo.",
   "What Harness has learned": "O que o Harness aprendeu",
   "What changes": "O que muda",
   "What credits pay for": "Para que servem os créditos",
@@ -4496,7 +4495,7 @@ export default {
   "What you asked": "O que você pediu",
   "What's missing: {task}": "O que falta: {task}",
   "When a session limit resets, a while after a model provider’s outage, or when Studio’s loop restarts, a paused build picks up where it left off, up to twice per build. A build you stop stays stopped, and one paused on a sign-in waits for you.":
-    "Quando um limite de sessão é renovado, um tempo depois de uma falha do provedor de modelos ou quando o ciclo do Studio reinicia, um build pausado continua de onde parou, até duas vezes por build. Um build que você para continua parado, e um pausado por causa de login espera por você.",
+    "Quando um limite de sessão é renovado, um tempo depois de uma falha do provedor de modelos ou quando o loop do Studio reinicia, um build pausado continua de onde parou, até duas vezes por build. Um build que você para continua parado, e um pausado por causa de login espera por você.",
   "When off, Harness stops learning from your builds. What it already learned stays until you undo it.":
     "Quando desligado, o Harness para de aprender com seus builds. O que ele já aprendeu fica até você desfazer.",
   "Where the server runs": "Onde o servidor roda",
@@ -4518,13 +4517,13 @@ export default {
   "Windows will ask you to allow this once. If it asks for a password, an administrator of this PC can enter theirs. Agents work in their own protected space, away from your files.":
     "O Windows vai pedir sua permissão uma vez. Se pedir uma senha, um administrador deste PC pode digitar a dele. Os agentes trabalham no próprio espaço protegido, longe dos seus arquivos.",
   "Windows wouldn’t start Genex’s protected space.": "O Windows não iniciou o espaço protegido do Genex.",
-  "Wireframe terrain flying by at dusk": "Terreno em wireframe passando voando ao entardecer",
+  "Wireframe terrain flying by at dusk": "Voo rasante sobre um terreno em wireframe ao entardecer",
   "With this on, an agent can click and type in the apps you allow.":
     "Com isso ativado, um agente pode clicar e digitar nos apps que você permitir.",
   "Withdrawn by a restart": "Retirado por uma reinicialização",
-  "Withdrawn when the studio restarted": "Retirado quando o app reiniciou",
-  "Withdrawn when the turn ended": "Retirado quando a resposta terminou",
-  "Withdrawn when the turn stopped": "Retirado quando a resposta parou",
+  "Withdrawn when the studio restarted": "Retirado quando o Studio reiniciou",
+  "Withdrawn when the turn ended": "Retirado quando o turno terminou",
+  "Withdrawn when the turn stopped": "Retirado quando o turno parou",
   "Withdrawn when the work stopped": "Retirado quando o trabalho parou",
   "Withdrawn: nobody answered": "Retirado: ninguém respondeu",
   "Work details": "Detalhes do trabalho",
@@ -4542,7 +4541,7 @@ export default {
   "Working in {where}": "Trabalhando em {where}",
   "Working on the build": "Trabalhando no build",
   "Working on the game": "Trabalhando no jogo",
-  "Working on the merged build": "Trabalhando no build combinado",
+  "Working on the merged build": "Trabalhando no build integrado",
   "Working on the next step": "Trabalhando no próximo passo",
   "Working · round {round}": "Trabalhando · rodada {round}",
   "Working · ~{minutes} min": "Trabalhando · ~{minutes} min",
@@ -4614,14 +4613,14 @@ export default {
   "Your assets": "Seus recursos",
   "Your balance": "Seu saldo",
   "Your browser should show": "Seu navegador deve mostrar",
-  "Your build": "Sua build",
+  "Your build": "Seu build",
   "Your coding provider": "Seu provedor de modelos",
   "Your coin arrived. Review the purchase, then pay.": "Suas moedas chegaram. Revise a compra e pague.",
   "Your files": "Seus arquivos",
   "Your game appears here": "Seu jogo aparece aqui",
-  "Your game as it was when the run started.": "Seu jogo como estava quando a execução começou.",
+  "Your game as it was when the run started.": "Seu jogo como estava quando o build começou.",
   "Your game folder has edits of its own, and the studio will not write over them — save or undo them, then try again.":
-    "A pasta do seu jogo tem edições próprias, e o estúdio não vai sobrescrevê-las — salve ou desfaça essas edições e tente de novo.",
+    "A pasta do seu jogo tem edições próprias, e o Studio não vai sobrescrevê-las — salve ou desfaça essas edições e tente de novo.",
   "Your game is as you left it — {why}": "Seu jogo está como você deixou — {why}",
   "Your game · the agent can read it": "Seu jogo · o agente pode lê-lo",
   "Your games": "Seus jogos",
@@ -4631,7 +4630,7 @@ export default {
     "Seus jogos ficam no seu perfil do Genex. Entre para publicar.",
   "Your games will appear here.": "Seus jogos vão aparecer aqui.",
   "Your games, save points, paused builds and each game’s latest build stay.":
-    "Seus jogos, pontos de salvamento, builds pausados e o último build de cada jogo continuam.",
+    "Seus jogos, pontos de salvamento, builds pausados e o último build de cada jogo são mantidos.",
   "Your invite link": "Seu link de convite",
   "Your latest generations and refunds": "Suas últimas gerações e reembolsos",
   "Your microphones are listed once the mic is on": "Seus microfones aparecem quando o microfone estiver ligado",
@@ -4642,15 +4641,15 @@ export default {
   "Your notes": "Suas notas",
   "Your one-time code": "Seu código de uso único",
   "Your open Unity editor, where agents build Unity games.":
-    "Seu editor do Unity aberto, onde os agentes criam jogos de Unity.",
+    "Seu editor do Unity aberto, onde os agentes criam jogos do Unity.",
   "Your open Unreal Editor, where agents build Unreal games.":
-    "Seu Unreal Editor aberto, onde os agentes criam jogos de Unreal.",
+    "Seu Unreal Editor aberto, onde os agentes criam jogos do Unreal.",
   "Your own answer": "Sua própria resposta",
   "Your profile link": "Link do seu perfil",
   "Your profile link.": "O link do seu perfil.",
-  "Your profile, friends and Publish stay.": "Seu perfil, amigos e Publicar continuam.",
+  "Your profile, friends and Publish stay.": "Seu perfil, seus amigos e Publicar continuam funcionando.",
   "Your profile, friends and Publish wait until you sign in again, and the Genex plugin’s tools stop.":
-    "Seu perfil, os amigos e o Publicar esperam até você entrar de novo, e as ferramentas do plugin Genex param.",
+    "Seu perfil, seus amigos e Publicar ficam em espera até você entrar de novo, e as ferramentas do plugin do Genex param.",
   "Your reference": "Sua referência",
   "Your references": "Suas referências",
   "Your saved sign-in couldn’t be opened on this Mac. Sign in again in your browser.":
@@ -4668,8 +4667,8 @@ export default {
   "You’ve changed your nickname too often lately. Try again later.":
     "Você mudou de apelido vezes demais nos últimos tempos. Tente mais tarde.",
   Zoom: "Zoom",
-  "Zoom In": "Ampliar",
-  "Zoom Out": "Reduzir",
+  "Zoom In": "Aumentar zoom",
+  "Zoom Out": "Diminuir zoom",
   "Zoom in": "Aumentar zoom",
   "Zoom into the assets canvas": "Aumentar o zoom da tela de recursos",
   "Zoom out": "Diminuir zoom",
@@ -4699,7 +4698,7 @@ export default {
   "a local folder": "uma pasta local",
   "a material": "um material",
   "a model": "um modelo",
-  "a newer build wasn't made live": "uma build mais nova não foi para o jogo",
+  "a newer build wasn't made live": "um build mais novo não foi para o jogo",
   "a part": "uma parte",
   "a plugin": "um plugin",
   "a script": "um script",
@@ -4715,9 +4714,8 @@ export default {
   "all but {steps} landed": "tudo chegou ao jogo, menos {steps}",
   "an actor": "um objeto",
   "an asset": "um recurso",
-  "an earlier build is ready to play": "uma build anterior está pronta para jogar",
-  "an earlier build is ready to play · resume from chat":
-    "uma build anterior está pronta para jogar · retome pelo chat",
+  "an earlier build is ready to play": "um build anterior está pronto para jogar",
+  "an earlier build is ready to play · resume from chat": "um build anterior está pronto para jogar · retome pelo chat",
   "an empty folder": "uma pasta vazia",
   "an input": "um controle",
   "and approve each build": "e aprovam cada build",
@@ -4759,7 +4757,7 @@ export default {
     "o build {commit} muda a pasta .claude do jogo ({files}), as configurações do próprio Claude Code, então não foi aplicado",
   building: "criando",
   "building the starting point": "criando o ponto de partida",
-  "building · move: {move}": "criando · passo: {move}",
+  "building · move: {move}": "criando · jogada: {move}",
   "built just now": "criado agora mesmo",
   "built with {build}, then shown from the folder": "faz o build com {build} e mostra a partir da pasta",
   "built with {build}, then shown from {folder}": "faz o build com {build} e mostra a partir de {folder}",
@@ -4783,7 +4781,7 @@ export default {
   "checked on the build": "conferiu como está o build",
   "checked one of its own files": "verificou um dos próprios arquivos",
   "checked the game": "verificou o jogo",
-  "checking the new build starts": "verificando se a nova build inicia",
+  "checking the new build starts": "verificando se o novo build inicia",
   "checks need attention": "verificações precisam de atenção",
   clicked: "clicou",
   close: "fechar",
@@ -4892,7 +4890,7 @@ export default {
   "it ran out of time": "o tempo acabou",
   "it used up the time it was given": "usou todo o tempo que tinha",
   "it was not clearly better than the round before": "não ficou claramente melhor que a rodada anterior",
-  "its own craft": "seu próprio ofício",
+  "its own craft": "seu próprio trabalho",
   "its work was kept": "o trabalho foi mantido",
   jobs: "tarefas",
   "just now": "agora mesmo",
@@ -4927,7 +4925,7 @@ export default {
     "mcp add: {option} não é importado. Revise o servidor antes de salvar.",
   menace: "ameaça",
   "menu\u0004Edit": "Editar",
-  merged: "mesclado",
+  merged: "integrado",
   "merged a worker's work": "integrou o trabalho de um ajudante",
   "mobile support\u0004Auto": "Auto",
   model: "modelo",
@@ -5081,7 +5079,7 @@ export default {
   "stopped by the lead — {why}": "parado pelo agente principal — {why}",
   "stopped when Genex closed": "parado quando o Genex fechou",
   "stopped when its work ended": "parado quando o trabalho dele acabou",
-  "stopped when the build paused or ended": "parado quando a build pausou ou terminou",
+  "stopped when the build paused or ended": "parado quando o build pausou ou terminou",
   "stopped — reason unavailable": "parado — motivo indisponível",
   "stopped — {because}": "parado — {because}",
   subscription: "assinatura",
@@ -5101,15 +5099,15 @@ export default {
   "the build finished": "o build terminou",
   "the build finished but its output could not be kept": "o build terminou, mas o resultado não pôde ser guardado",
   "the build finished but wrote nothing to {folder}/": "o build terminou, mas não gravou nada em {folder}/",
-  "the build is ready to play": "a build está pronta para jogar",
+  "the build is ready to play": "o build está pronto para jogar",
   "the build was broken": "o build estava quebrado",
   "the checks it was given now pass, and no reviewer objected":
     "as verificações definidas agora passam, e nenhum revisor se opôs",
   "the checks it was given pass and the reviewer agrees": "as verificações definidas passam e o revisor concorda",
   "the contract reviewers read": "o contrato que os revisores leem",
   "the engine hit its limit — the build can pick up again when it resets":
-    "o motor atingiu o limite — o build pode continuar quando ele for renovado",
-  "the engine's session ended early": "a sessão do motor terminou antes da hora",
+    "o agente atingiu o limite — o build pode continuar quando o limite renovar",
+  "the engine's session ended early": "a sessão do agente terminou antes da hora",
   "the folder {folder}": "a pasta {folder}",
   "the game had not finished loading when it was looked at":
     "o jogo ainda não tinha terminado de carregar quando foi verificado",
@@ -5126,13 +5124,13 @@ export default {
   "the lead is working on the next step": "o agente principal está no próximo passo",
   "the lead looked at its own captures and saved it": "o agente principal viu as próprias capturas e salvou",
   "the lead offered one worker's work on Live's Reload":
-    "o agente principal ofereceu o trabalho de um ajudante no Recarregar do Live",
+    "o agente principal ofereceu o trabalho de um ajudante no “Recarregar” do Live",
   "the lead offered one worker's work on Live's Reload ({target})":
-    "o agente principal ofereceu o trabalho de um ajudante no Recarregar do Live ({target})",
+    "o agente principal ofereceu o trabalho de um ajudante no “Recarregar” do Live ({target})",
   "the lead offered the merged build on Live's Reload":
-    "o agente principal ofereceu o build combinado no Recarregar do Live",
+    "o agente principal ofereceu o build integrado no “Recarregar” do Live",
   "the lead offered your game folder on Live's Reload":
-    "o agente principal ofereceu a pasta do seu jogo no Recarregar do Live",
+    "o agente principal ofereceu a pasta do seu jogo no “Recarregar” do Live",
   'the lead put a worker on "{task}"': "o agente principal colocou um ajudante em “{task}”",
   'the lead put a worker on "{task}" for {minutes}': "o agente principal colocou um ajudante em “{task}” por {minutes}",
   "the model could not be reached": "não foi possível acessar o modelo",
@@ -5140,14 +5138,14 @@ export default {
   "the model provider hit your plan's usage cap": "o provedor de modelos atingiu o limite de uso do seu plano",
   "the model provider is down": "o provedor de modelos está fora do ar",
   "the model provider stayed down — Resume picks the build up":
-    "o provedor de modelos continuou fora do ar — Retomar continua o build",
+    "o provedor de modelos continuou fora do ar — “Retomar” continua o build",
   "the model provider stayed down — Resume picks the build up where it stopped":
-    "o provedor de modelos continuou fora do ar — Retomar continua o build de onde parou",
+    "o provedor de modelos continuou fora do ar — “Retomar” continua o build de onde parou",
   "the model provider stopped accepting the account": "o provedor de modelos parou de aceitar a conta",
   "the model provider stopped accepting the account — sign in again, then Resume":
-    "o provedor de modelos parou de aceitar a conta — entre de novo e depois clique em Retomar",
+    "o provedor de modelos parou de aceitar a conta — entre de novo e depois clique em “Retomar”",
   "the model provider stopped accepting this account — sign in again (or ask your admin to turn access back on), then press Resume":
-    "o provedor de modelos parou de aceitar esta conta — entre de novo (ou peça ao seu administrador para reativar o acesso) e depois clique em Retomar",
+    "o provedor de modelos parou de aceitar esta conta — entre de novo (ou peça ao seu administrador para reativar o acesso) e depois clique em “Retomar”",
   "the model provider stopped us — waiting for the limit to reset":
     "o provedor de modelos parou a gente — esperando o limite renovar",
   "the modeller": "o modelador",
@@ -5161,7 +5159,7 @@ export default {
   "the reviewer preferred the round before": "o revisor preferiu a rodada anterior",
   "the reviewers are looking at try {tryNumber} of {step}":
     "os revisores estão vendo a tentativa {tryNumber} de {step}",
-  "the run's record is incomplete": "o registro da build está incompleto",
+  "the run's record is incomplete": "o registro do build está incompleto",
   "the server": "seu servidor",
   "the starting point failed": "o ponto de partida falhou",
   "the starting point failed: {error}": "o ponto de partida falhou: {error}",
@@ -5174,7 +5172,7 @@ export default {
   "the studio got better at {what} (rewrote {file} while idle)":
     "o Studio melhorou em {what} (reescreveu {file} enquanto estava ocioso)",
   "the studio re-aimed one of its checks at another camera": "o Studio apontou uma das verificações para outra câmera",
-  "the studio restarted": "o estúdio reiniciou",
+  "the studio restarted": "o Studio reiniciou",
   "the studio's own": "a do próprio Studio",
   "the web": "navegador",
   'there is no "{child}" folder in {where}': "não existe a pasta “{child}” em {where}",
@@ -5316,7 +5314,7 @@ export default {
   "{count, plural, one {# file} other {# files}} left out, {max} at most":
     "{count, plural, one {# arquivo ficou de fora} other {# arquivos ficaram de fora}}, máximo de {max}",
   "{count, plural, one {# finding} other {# findings}}: {findings}":
-    "{count, plural, one {# ocorrência} other {# ocorrências}}: {findings}",
+    "{count, plural, one {# achado} other {# achados}}: {findings}",
   "{count, plural, one {# game} other {# games}}": "{count, plural, one {# jogo} other {# jogos}}",
   "{count, plural, one {# game} other {# games}} · {size}": "{count, plural, one {# jogo} other {# jogos}} · {size}",
   "{count, plural, one {# hour ago} other {# hours ago}}": "{count, plural, one {há # hora} other {há # horas}}",
@@ -5350,8 +5348,8 @@ export default {
   "{count, plural, one {# self-edited file} other {# self-edited files}} kept":
     "{count, plural, one {# arquivo editado pelo agente mantido} other {# arquivos editados pelo agente mantidos}}",
   "{count, plural, one {# skill improvement to review} other {# skill improvements to review}}":
-    "{count, plural, one {# melhoria de skill para revisar} other {# melhorias de skills para revisar}}",
-  "{count, plural, one {# step} other {# steps}}": "{count, plural, one {# etapa} other {# etapas}}",
+    "{count, plural, one {# melhoria de habilidade para revisar} other {# melhorias de habilidades para revisar}}",
+  "{count, plural, one {# step} other {# steps}}": "{count, plural, one {# passo} other {# passos}}",
   "{count, plural, one {# structural check} other {# structural checks}} passed.":
     "{count, plural, one {# verificação estrutural passou} other {# verificações estruturais passaram}}.",
   "{count, plural, one {# thing} other {# things}} left":
@@ -5403,7 +5401,7 @@ export default {
   "{count, plural, one {player} other {players}}": "{count, plural, one {jogador} other {jogadores}}",
   "{count, plural, one {play} other {plays}}": "{count, plural, one {partida} other {partidas}}",
   "{count, plural, one {{names} is a repository of its own — Genex adds its files to this folder's history the first time a build goes live, so work inside it is not lost.} other {{names} are repositories of their own — Genex adds their files to this folder's history the first time a build goes live, so work inside them is not lost.}}":
-    "{count, plural, one {{names} é um repositório próprio — o Genex adiciona os arquivos dele ao histórico desta pasta na primeira vez que um build vai para o Live, para que o trabalho feito dentro dele não se perca.} other {{names} são repositórios próprios — o Genex adiciona os arquivos deles ao histórico desta pasta na primeira vez que um build vai para o Live, para que o trabalho feito dentro deles não se perca.}}",
+    "{count, plural, one {{names} é um repositório próprio — o Genex adiciona os arquivos dele ao histórico desta pasta na primeira vez que um build vai para o jogo, para que o trabalho feito dentro dele não se perca.} other {{names} são repositórios próprios — o Genex adiciona os arquivos deles ao histórico desta pasta na primeira vez que um build vai para o jogo, para que o trabalho feito dentro deles não se perca.}}",
   "{count, plural, other {# added by the reviewers}}":
     "{count, plural, one {# adicionada pelos revisores} other {# adicionadas pelos revisores}}",
   "{count, plural, other {# added so far}}":
@@ -5454,7 +5452,7 @@ export default {
   "{count} of {total} in game": "{count} de {total} no jogo",
   "{count} playing": "{count} jogando",
   "{count} playing now": "{count} jogando agora",
-  "{count} plays": "{count} jogadas",
+  "{count} plays": "{count} partidas",
   "{count} running": "{count} em andamento",
   "{count} selected": "{count, plural, one {# selecionado} other {# selecionados}}",
   "{cpu} · {memory} GB memory · about {usable} GB available for models":
@@ -5499,7 +5497,7 @@ export default {
   "{folder} is a link, so Genex writes no place there.":
     "{folder} é um link, então o Genex não grava nenhum lugar ali.",
   "{folder} isn't a Godot project folder (it has no project.godot).":
-    "{folder} não é uma pasta de projeto Godot (não tem project.godot).",
+    "{folder} não é uma pasta de projeto do Godot (não tem project.godot).",
   "{folder} isn't a folder.": "{folder} não é uma pasta.",
   "{folder} isn't there yet. Open Roblox Studio once, then press Set up again.":
     "{folder} ainda não existe. Abra o Roblox Studio uma vez e clique em “Configurar” de novo.",
@@ -5513,7 +5511,7 @@ export default {
     "{games, plural, one {# jogo} other {# jogos}} · {hours} h",
   "{game} cover preview": "Prévia da capa de {game}",
   "{game} has your receipt.": "{game} já tem seu recibo.",
-  "{game} in play": "{game} em jogo",
+  "{game} in play": "{game} em ação",
   "{game} now builds in {engine} · {project}": "{game} agora é criado no {engine} · {project}",
   "{game} {number}": "{game} {number}",
   "{game} · started {time}": "{game} · início: {time}",
@@ -5659,7 +5657,7 @@ export default {
   "{platforms} apps": "Apps para {platforms}",
   "{platform} app": "App para {platform}",
   "{platform} app {percent}%": "App para {platform} {percent}%",
-  "{players} players get the web version.": "Jogadores de {players} recebem a versão web.",
+  "{players} players get the web version.": "Quem joga no {players} recebe a versão web.",
   "{plugin} asks for permission.": "{plugin} pede permissão.",
   "{plugin} asks to run {tool}": "{plugin} pede para executar {tool}",
   "{plugin} could not run {tool} — {error}": "{plugin} não conseguiu executar {tool} — {error}",
@@ -5773,7 +5771,7 @@ export default {
     "{title} é criado no Unreal; ainda não dá para publicar jogos do Unreal.",
   "{title} is deleted": "{title} foi excluído",
   "{title} is ready": "{title} está pronto",
-  "{title} is removed from this Mac. Its saves stay.": "{title} foi removido deste Mac. Os saves continuam.",
+  "{title} is removed from this Mac. Its saves stay.": "{title} foi removido deste Mac. Os saves ficam guardados.",
   "{title} is unpublished": "{title} foi despublicado",
   "{title} is {kind} — Genex keeps it as it is and {runs}.":
     "{title} é {kind} — o Genex mantém tudo como está e {runs}.",

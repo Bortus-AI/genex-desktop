@@ -1,10 +1,10 @@
 {
   "A dialog may be waiting in Unity: bring it to the front and answer it. If nothing is there, restart Unity. Work not saved in the editor is lost.": "Unity에서 대화 상자가 기다리고 있을 수 있어요. 앞으로 가져와서 응답해 주세요. 아무것도 없으면 Unity를 다시 시작하세요. 에디터에서 저장하지 않은 작업은 사라져요.",
-  "A first start imports the project and downloads its packages. If it stays here, bring Unity to the front.": "처음 시작할 때는 프로젝트를 가져오고 패키지를 내려받아요. 여기서 멈춰 있으면 Unity를 앞으로 가져와 주세요.",
+  "A first start imports the project and downloads its packages. If it stays here, bring Unity to the front.": "처음 시작할 때는 프로젝트를 가져오고 패키지를 다운로드해요. 여기서 멈춰 있으면 Unity를 앞으로 가져와 주세요.",
   "Agents": "에이전트",
   "Agents build your game in the Unity editor on this computer, through Unity's Pipeline package: Genex makes or sets up the game's Unity project and opens it in your Unity 6. The project lives in the game's own folder. Unity is a trademark or registered trademark of Unity Technologies or its affiliates.": "에이전트가 이 컴퓨터의 Unity 에디터에서 Unity의 Pipeline 패키지를 통해 게임을 만들어요. Genex가 게임의 Unity 프로젝트를 만들거나 설정하고, 내 Unity 6에서 열어요. 프로젝트는 게임 폴더 안에 있어요. Unity는 Unity Technologies 또는 그 계열사의 상표 또는 등록 상표예요.",
   "Agents can work in it.": "에이전트가 작업할 수 있어요.",
-  "Agents may use Unity while you play": "플레이 중에도 에이전트가 Unity를 쓸 수 있음",
+  "Agents may use Unity while you play": "플레이하는 동안 에이전트가 Unity를 쓸 수 있음",
   "Agents reach the editor through Unity's Pipeline package. Set up adds it to Packages/manifest.json and keeps a copy of the file first.": "에이전트는 Unity의 Pipeline 패키지를 통해 에디터에 접근해요. ‘설정하기’는 이 패키지를 Packages/manifest.json에 추가하고, 그 전에 파일 사본을 남겨 둬요.",
   "Ask for a Unity game in the chat and Genex makes its project here. To work on a project you already have, choose Open a folder… on Home.": "채팅에서 Unity 게임을 요청하면 Genex가 여기에 프로젝트를 만들어요. 이미 있는 프로젝트로 작업하려면 홈에서 ‘폴더 열기…’를 선택하세요.",
   "Checking Unity…": "Unity 확인 중…",
@@ -16,13 +16,13 @@
   "Get Unity": "Unity 받기",
   "Get Unity 6": "Unity 6 받기",
   "Get Unity Hub": "Unity Hub 받기",
-  "Have agents wait while you play": "플레이 중에는 에이전트 대기",
+  "Have agents wait while you play": "플레이하는 동안 에이전트 대기",
   "Install Unity 6": "Unity 6 설치",
   "It is compiling scripts.": "스크립트를 컴파일하고 있어요.",
   "It is playing the game.": "게임을 실행하고 있어요.",
   "It was saved with Unity an older version, and Genex works with Unity 6 or later. Upgrade the project in Unity Hub.": "이전 버전의 Unity에서 저장됐어요. Genex는 Unity 6 이상에서 작동해요. Unity Hub에서 프로젝트를 업그레이드하세요.",
   "It was saved with Unity {version}, and Genex works with Unity 6 or later. Upgrade the project in Unity Hub.": "Unity {version}에서 저장됐어요. Genex는 Unity 6 이상에서 작동해요. Unity Hub에서 프로젝트를 업그레이드하세요.",
-  "Let agents use Unity while you play": "플레이 중에도 에이전트의 Unity 사용 허용",
+  "Let agents use Unity while you play": "플레이하는 동안 에이전트의 Unity 사용 허용",
   "No Unity project in this game": "이 게임에는 Unity 프로젝트가 없어요",
   "No game open": "열린 게임이 없어요",
   "Not open": "열리지 않음",
@@ -73,5 +73,5 @@
   "Unity setup": "Unity 설정",
   "Unity {version} isn't installed": "Unity {version} 버전이 설치되어 있지 않아요",
   "Unity {version} isn't installed, so the project was not opened.": "Unity {version} 버전이 설치되어 있지 않아서 프로젝트를 열지 않았어요.",
-  "Whether agents may use Unity while you play": "플레이 중 에이전트의 Unity 사용 여부"
+  "Whether agents may use Unity while you play": "플레이하는 동안 에이전트의 Unity 사용 여부"
 }
