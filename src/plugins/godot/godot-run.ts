@@ -5,9 +5,9 @@
  * Godot's own caches stay out of the person's), no network, writes only to the project and the
  * job's own folders, and its whole process group is stopped at its deadline or the turn's Stop. On
  * Windows the job is the host's sandbox job (`sandbox.run`: ProcessSandbox, as the sandbox user,
- * no network), which writes only inside the game: a folder the job writes outside it (a capture's
- * stills, the class reference) waits in the project's own `.godot` folder and is copied out once
- * the job ends. A deadline is a must: a script that awaits a frame that never draws (a headless
+ * no network), which reads and writes only inside the game: a folder the job writes outside it (a
+ * capture's stills, the class reference) waits in the project's own `.godot` folder and is copied
+ * out once the job ends, and a file it reads outside it (an export template) is copied in first. A deadline is a must: a script that awaits a frame that never draws (a headless
  * capture) would wait forever. Tests hand in their own runner and never start Godot.
  */
 import { randomUUID } from "node:crypto";
@@ -36,16 +36,19 @@ export const GodotJob = {
   Play: "play",
   Reference: "reference",
   Export: "export",
+  /** Windows: a file Genex staged put into Godot's own data folder (an export template). */
+  Data: "data",
 } as const;
 export type GodotJob = (typeof GodotJob)[keyof typeof GodotJob];
 
 /** Genex's own GDScript, shipped beside the backend in `scripts/`. */
-export const GodotScript = { Check: "genex_check.gd", Play: "genex_play.gd" } as const;
+export const GodotScript = { Check: "genex_check.gd", Play: "genex_play.gd", Data: "genex_data.gd" } as const;
 
 /** An import of a big project's assets can take minutes the first time; later ones are quick. */
 const IMPORT_TIMEOUT_MS = 5 * MINUTE_MS;
 const CHECK_TIMEOUT_MS = 2 * MINUTE_MS;
 const REFERENCE_TIMEOUT_MS = 2 * MINUTE_MS;
+const DATA_TIMEOUT_MS = MINUTE_MS;
 /** A run's own seconds play at a fixed 60 frames each, faster than real time headless; this covers its start and a slow game. */
 const RUN_START_MS = 30 * SECOND_MS;
 const RUN_SECOND_BUDGET_MS = 3 * SECOND_MS;
@@ -64,11 +67,9 @@ const SCRATCH_PREFIX = "genex-godot-";
 const HOME_FOLDER = "home";
 /** How often a Windows job's record is read while it runs. */
 const JOB_POLL_MS = SECOND_MS / 4;
-/** Where a Windows job's folders outside the game wait while it runs: the project's own cache folder. */
+/** Where a Windows job's folders and files outside the game wait while it runs: the project's own cache folder. */
 const STAGING = [".godot", "genex-jobs"];
-/** The variable naming the folder Godot reads as its data folder (export templates) on Windows. */
-const DATA_HOME_ENV = "XDG_DATA_HOME";
-const DATA_FOLDER = "data";
+const INPUTS_FOLDER = "in";
 /** A terminal's colour sequence, which Godot's Windows build prints into a file too. */
 // biome-ignore lint/suspicious/noControlCharactersInRegex: the escape character is what this removes
 const COLOUR = /\x1b\[[0-9;]*m/g;
@@ -96,11 +97,8 @@ export type GodotCall = {
   writePrefixes?: string[];
   /** A Mac's: folders linked into the job's private home (`at`, relative to it), read-only: the person's export templates. */
   homeLinks?: ReadonlyArray<{ at: string; to: string }>;
-  /**
-   * Windows's: files copied from `from` into the folder Godot reads as its data folder for this job
-   * (`at`, relative to it): the person's export templates, which the sandbox user can't read.
-   */
-  dataCopies?: ReadonlyArray<{ at: string; from: string; files: readonly string[] }>;
+  /** Windows's: files outside the game the job reads (an export template), copied in before it starts. */
+  stagedInputs?: readonly string[];
 };
 
 /** What a job printed (errors first, then the rest), and how it ended. */
@@ -224,6 +222,32 @@ export function playCall(project: string, scripts: string, request: PlayRequest)
   };
 }
 
+/**
+ * Windows's: the person's file (an export template) put at `to` in Godot's own data folder as the
+ * sandbox user sees it, where an export looks for templates; that user can't read the person's.
+ */
+export function dataCopyCall(project: string, scripts: string, file: string, to: string): GodotCall {
+  return {
+    job: GodotJob.Data,
+    args: [
+      "--headless",
+      "--path",
+      project,
+      "-s",
+      path.join(scripts, GodotScript.Data),
+      "--",
+      `from=${file}`,
+      `to=${to.split(path.sep).join("/")}`,
+    ],
+    cwd: project,
+    reads: [scripts],
+    writes: [project],
+    stagedInputs: [file],
+    timeoutMs: DATA_TIMEOUT_MS,
+    gpu: false,
+  };
+}
+
 /** Godot's class reference as XML (`<folder>/doc/classes/*.xml`, its modules' beside), for one version. */
 export function referenceCall(folder: string): GodotCall {
   return {
@@ -298,7 +322,8 @@ function writableInGame(game: string, folder: string): boolean {
 
 /**
  * A Windows job's folders: those inside the game it names as it writes them, each other one staged
- * in the project's `.godot` (the project named in their place), and the data folder its copies go to.
+ * in the project's `.godot` (the project named in their place), and each file it reads from
+ * outside the game staged there too.
  */
 async function windowsFolders(call: GodotCall, job: GodotJobScope) {
   if (!job.project || !job.game) throw new Error(MESSAGE.NeedsProject);
@@ -313,15 +338,19 @@ async function windowsFolders(call: GodotCall, job: GodotJobScope) {
     if (writableInGame(game, real)) writes.push(real);
     else staged.push({ folder, staged: path.join(root, String(staged.length)) });
   }
-  return { root, writes: writes.length ? writes : [project], staged, data: path.join(root, DATA_FOLDER) };
+  const inputs = (call.stagedInputs ?? []).map((file, index) => ({
+    folder: file,
+    staged: path.join(root, INPUTS_FOLDER, String(index), path.basename(file)),
+  }));
+  return { root, writes: writes.length ? writes : [project], staged, inputs };
 }
 
-/** The data folder's copies (the person's export templates) and each staged folder, made before the job starts. */
-async function stageFolders(call: GodotCall, staged: readonly Staged[], data: string): Promise<void> {
+/** Each staged folder made, and each file read from outside the game copied in, before the job starts. */
+async function stageFolders(staged: readonly Staged[], inputs: readonly Staged[]): Promise<void> {
   for (const { staged: folder } of staged) await mkdir(folder, { recursive: true });
-  for (const { at, from, files } of call.dataCopies ?? []) {
-    await mkdir(path.join(data, at), { recursive: true });
-    for (const file of files) await cp(path.join(from, file), path.join(data, at, file));
+  for (const { folder: file, staged: copy } of inputs) {
+    await mkdir(path.dirname(copy), { recursive: true });
+    await cp(file, copy);
   }
 }
 
@@ -339,11 +368,10 @@ function sandboxRequest(binary: string, call: GodotCall, folders: Awaited<Return
   const reads = [...new Set([path.dirname(binary), ...call.reads])];
   const request: PluginSandboxRunArgs = {
     program: binary,
-    args: call.args.map((arg) => swapFolders(arg, folders.staged, true)),
+    args: call.args.map((arg) => swapFolders(arg, [...folders.inputs, ...folders.staged], true)),
     reads,
     writes: folders.writes,
     timeoutMs: call.timeoutMs,
-    ...(call.dataCopies?.length ? { env: { [DATA_HOME_ENV]: folders.data } } : {}),
   };
   return request;
 }
@@ -384,7 +412,7 @@ export function windowsRunner(wait: (ms: number) => Promise<unknown> = sleep): G
     job.signal.throwIfAborted();
     const folders = await windowsFolders(call, job);
     try {
-      await stageFolders(call, folders.staged, folders.data);
+      await stageFolders(folders.staged, folders.inputs);
       const { id } = await job.host(PluginService.SandboxRun, sandboxRequest(binary, call, folders));
       const result = resultOf(await jobEnd(job, id, wait), folders.staged);
       for (const { folder, staged } of folders.staged) await cp(staged, folder, { recursive: true });

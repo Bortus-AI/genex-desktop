@@ -4,20 +4,22 @@
  * `PluginSandboxJobs` on a real `ProcessSandbox` (srt-win). The setup card's Do it for me gets
  * Godot (the manifest's pinned download, about 86 MB), the agent is offered Godot, a new game is
  * made, imported, checked, run and photographed in the sandbox, the class reference is made, the
- * game's own launcher (`bin/play`) starts it for Genex's play under Git Bash in the sandbox, and
- * the person's editor opens the project and is found by its command line. Windows only, on a
+ * game is exported for the web with the person's Web template (read out of Godot's templates
+ * archive by ranges, 10 MB), its own launcher (`bin/play`) starts it for Genex's play under Git
+ * Bash in the sandbox, and the person's editor opens the project and is found by its command line. Windows only, on a
  * machine whose sandbox is provisioned (the Windows CI job sets GENEX_WINDOWS_SANDBOX=ready), and
  * opt-in (`STUDIO_NETWORK_TESTS=1`): it reaches GitHub for Godot.
  */
 import assert from "node:assert/strict";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { inflateRawSync } from "node:zlib";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { after, before, describe, it } from "node:test";
 import type { PluginContext, PluginScalar, PluginSetupCard } from "../../src/plugin-sdk/index.d.ts";
 import { activate } from "../../src/plugins/godot/backend.ts";
-import { type PluginBinding, type PluginSandboxJob, SandboxJobState } from "../../src/shared/plugins.ts";
+import type { PluginBinding } from "../../src/shared/plugins.ts";
 import { validateManifest } from "../../src/substrate/plugins/manifest.ts";
 import { PluginNativeServices } from "../../src/substrate/plugins/native.ts";
 import { PluginSandboxJobs } from "../../src/substrate/plugins/sandbox-jobs.ts";
@@ -33,6 +35,42 @@ const SKIP =
   "Windows with a provisioned sandbox and STUDIO_NETWORK_TESTS=1 only";
 const PACKAGE = fileURLToPath(new URL("../../src/plugins/godot/", import.meta.url));
 const PLUGIN = "godot";
+/** Godot's export templates for 4.7.2 (1.3 GB), of which the test reads only the Web template (10 MB). */
+const TEMPLATES_TPZ =
+  "https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_export_templates.tpz";
+const WEB_TEMPLATE = "web_nothreads_release.zip";
+/** A zip's end record, by its signature, and how far from the end it is looked for. */
+const ZIP_END = Buffer.from([0x50, 0x4b, 0x05, 0x06]);
+const ZIP_END_SEARCH_BYTES = 70_000;
+const DEFLATE = 8;
+
+/** Bytes `from` to `to` of the templates, as GitHub serves a range. */
+async function templatesRange(from: number, to: number): Promise<Buffer> {
+  const answer = await fetch(TEMPLATES_TPZ, { headers: { Range: `bytes=${from}-${to}` } });
+  return Buffer.from(await answer.arrayBuffer());
+}
+
+/** The Web template out of Godot's templates archive, read by ranges: its central directory, then the one entry. */
+async function webTemplate(): Promise<Buffer> {
+  const size = Number((await fetch(TEMPLATES_TPZ, { method: "HEAD" })).headers.get("content-length"));
+  const tail = await templatesRange(size - ZIP_END_SEARCH_BYTES, size - 1);
+  const end = tail.lastIndexOf(ZIP_END);
+  const offset = tail.readUInt32LE(end + 16);
+  const directory = await templatesRange(offset, offset + tail.readUInt32LE(end + 12) - 1);
+  for (let at = 0; at < directory.length; ) {
+    const named = directory.readUInt16LE(at + 28);
+    if (directory.toString("utf8", at + 46, at + 46 + named) === `templates/${WEB_TEMPLATE}`) {
+      const local = directory.readUInt32LE(at + 42);
+      const header = await templatesRange(local, local + 29);
+      const start = local + 30 + header.readUInt16LE(26) + header.readUInt16LE(28);
+      const data = await templatesRange(start, start + directory.readUInt32LE(at + 20) - 1);
+      return directory.readUInt16LE(at + 10) === DEFLATE ? inflateRawSync(data) : data;
+    }
+    at += 46 + named + directory.readUInt16LE(at + 30) + directory.readUInt16LE(at + 32);
+  }
+  throw new Error("Godot's templates hold no Web template");
+}
+
 /** How long the launcher's game runs before it is stopped: long enough to say it is ready. */
 const PLAY_MS = 45_000;
 /** How long the editor may take to show up in the process list, and how often it is looked for. */
@@ -45,10 +83,6 @@ let sandbox: ProcessSandbox;
 let jobs: PluginSandboxJobs;
 let call: (kind: "action" | "tool", name: string, args?: Record<string, PluginScalar>) => Promise<Answer>;
 let game: string;
-const binding: PluginBinding = { project: "valley", directory: "" };
-/** A script that prints the data folder Godot reads (export templates live under it). */
-const DATA_DIR_SCRIPT =
-  'extends SceneTree\n\nfunc _init() -> void:\n\tprint("GENEX_DATA ", OS.get_data_dir())\n\tquit()\n';
 
 before(async () => {
   if (SKIP) return;
@@ -72,7 +106,7 @@ before(async () => {
     windows: { sandbox: () => sandbox, work, runtimes },
   });
   const backend = await activate({} as never);
-  binding.directory = game;
+  const binding: PluginBinding = { project: "valley", directory: game };
   call = async (kind, name, args = {}) => {
     const signal = new AbortController().signal;
     const invocation = { method: kind, name, signal };
@@ -150,29 +184,13 @@ describe("Godot on Windows, for real", { skip: SKIP }, () => {
     assert.match(String(answer), /class Node3D extends Node/);
   });
 
-  it("reads Godot's data folder from XDG_DATA_HOME in the sandbox, where a web export finds its template", async () => {
-    const godot = (await call("action", "status")).godot as { binary: string };
-    const project = path.join(game, "godot");
-    const data = path.join(project, ".godot", "genex-data-probe");
-    await mkdir(data, { recursive: true });
-    await writeFile(path.join(project, "genex_data_probe.gd"), DATA_DIR_SCRIPT);
-    const request = {
-      program: godot.binary,
-      args: ["--headless", "--path", project, "-s", "res://genex_data_probe.gd"],
-      reads: [path.dirname(godot.binary)],
-      writes: [project],
-      env: { XDG_DATA_HOME: data },
-      timeoutMs: PLAY_MS,
-    };
-    const { id } = (await jobs.call(PLUGIN, "sandbox.run", request, binding)) as { id: string };
-    let job: PluginSandboxJob | null = null;
-    while (!job || job.state === SandboxJobState.Running) {
-      await sleep(EDITOR_POLL_MS);
-      job = (await jobs.call(PLUGIN, "sandbox.result", { id }, binding)) as PluginSandboxJob | null;
-    }
-    const said = /GENEX_DATA (.+)/.exec(job.stdout ?? "")?.[1]?.trim() ?? "";
-    const key = (folder: string) => folder.replaceAll("\\", "/").toLowerCase();
-    assert.ok(key(said).startsWith(key(data)), JSON.stringify(job));
+  it("exports the game for the web in the sandbox with the person's Web template", async () => {
+    const templates = path.join(process.env.APPDATA ?? "", "Godot", "export_templates", "4.7.2.stable");
+    await mkdir(templates, { recursive: true });
+    await writeFile(path.join(templates, WEB_TEMPLATE), await webTemplate());
+    const answer = await call("tool", "web-export");
+    assert.match(String(answer), /Exported the game for the web/);
+    assert.ok((await stat(path.join(game, "web", "index.pck"))).size > 0);
   });
 
   it("starts the game for Genex's play with its launcher in the sandbox", async () => {

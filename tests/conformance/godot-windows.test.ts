@@ -194,15 +194,13 @@ describe("Godot on Windows: jobs in Genex's sandbox", () => {
     assert.ok((await readdir(path.join(fixture.storage, "reference"))).length > 0);
   });
 
-  it("copies the person's Web template into the job's own data folder for a web export", async () => {
-    let request: PluginSandboxRunArgs | undefined;
+  it("puts the person's Web template in the sandbox user's own Godot data folder before a web export", async () => {
+    const seen: string[] = [];
     const fixture = await windowsProject({
       sandbox: async (asked) => {
+        const copy = asked.args.find((arg) => arg.startsWith("from="));
+        if (copy) seen.push(await readFile(copy.slice("from=".length), "utf8"));
         if (!asked.args.includes("--export-release")) return {};
-        request = asked;
-        const data = asked.env?.XDG_DATA_HOME ?? "";
-        const template = path.join(data, "Godot", "export_templates", "4.7.2.stable", "web_nothreads_release.zip");
-        assert.equal(await readFile(template, "utf8"), "zip");
         const page = asked.args.at(-1) ?? "";
         for (const name of ["index.html", "index.pck"]) await writeFile(path.join(path.dirname(page), name), name);
         return {};
@@ -212,7 +210,18 @@ describe("Godot on Windows: jobs in Genex's sandbox", () => {
     await mkdir(templates, { recursive: true });
     await writeFile(path.join(templates, "web_nothreads_release.zip"), "zip");
     assert.match(String(await tool(fixture, GodotTool.WebExport)), /Exported the game for the web/);
-    assert.deepEqual(request?.writes, [fixture.project, path.join(fixture.gameDir, "web")]);
+    const copy = fixture.requests.find((request) => request.args.some((arg) => arg.startsWith("from=")));
+    const exported = fixture.requests.find((request) => request.args.includes("--export-release"));
+    assert.deepEqual(seen, ["zip"], "the template was in the project's stage while the copy ran");
+    assert.equal(copy?.args.at(-1), "to=Godot/export_templates/4.7.2.stable/web_nothreads_release.zip");
+    assert.equal(copy?.args[copy.args.indexOf("-s") + 1], path.join(SCRIPTS, "genex_data.gd"));
+    assert.equal(
+      fixture.requests.indexOf(copy as PluginSandboxRunArgs) <
+        fixture.requests.indexOf(exported as PluginSandboxRunArgs),
+      true,
+    );
+    assert.deepEqual(exported?.writes, [fixture.project, path.join(fixture.gameDir, "web")]);
+    assert.deepEqual(await readdir(path.join(fixture.project, ".godot", "genex-jobs")), []);
   });
 
   it("passes a Stop on to the sandbox and starts nothing after it", async () => {

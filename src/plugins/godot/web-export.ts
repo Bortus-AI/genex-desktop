@@ -12,7 +12,7 @@ import path from "node:path";
 import { MINUTE_MS } from "../../shared/duration.ts";
 import { writeFileNoFollow } from "../../substrate/fsx.ts";
 import { type GodotInstall, type GodotVersion, versionName } from "./find-godot.ts";
-import { type GodotCall, GodotJob } from "./godot-run.ts";
+import { dataCopyCall, type GodotCall, GodotJob } from "./godot-run.ts";
 import { BRIDGE_LICENSES_FILE, BRIDGE_PAGE_FILE, COLYSEUS_FOLDER, godotString } from "./multiplayer.ts";
 
 /** The game's folder the export goes into, at the game's root. */
@@ -175,9 +175,9 @@ export async function prepareWebFolder(game: string, linkMessage: string): Promi
 
 /**
  * The export: Godot imports the project and writes Genex's Web preset's page and files into
- * `folder`, with the person's Web template linked into a Mac job's private home (copied into a
- * Windows job's own data folder, which the sandbox user reads), and the one file Godot writes on a
- * Mac (under names of its own) in the user's own temporary folder.
+ * `folder`, with the person's Web template linked into a Mac job's private home (on Windows a job
+ * of its own puts it in the sandbox user's data folder first: `templateCopyCall`), and the one file
+ * Godot writes on a Mac (under names of its own) in the user's own temporary folder.
  */
 export function webExportCall(
   project: string,
@@ -196,8 +196,14 @@ export function webExportCall(
     timeoutMs: EXPORT_TIMEOUT_MS,
     gpu: false,
     homeLinks: [{ at: path.join(TEMPLATES_HOME, templates.version), to: templates.folder }],
-    dataCopies: [
-      { at: path.join(TEMPLATES_IN_DATA, templates.version), from: templates.folder, files: [WEB_TEMPLATE] },
-    ],
   };
+}
+
+/**
+ * Windows's: the person's Web template for a Godot put where the sandbox user's Godot looks for it,
+ * in that user's own data folder, by a Godot job of Genex's (`dataCopyCall`), before the export.
+ */
+export function templateCopyCall(project: string, scripts: string, dataHome: string, install: GodotInstall): GodotCall {
+  const to = path.join(TEMPLATES_IN_DATA, templateVersion(install.version), WEB_TEMPLATE);
+  return dataCopyCall(project, scripts, webTemplates(dataHome, install).template, to);
 }

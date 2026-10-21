@@ -22,6 +22,7 @@ import { answerQuery, createReference } from "./class-reference.ts";
 import {
   addWebPreset,
   copyBridge,
+  templateCopyCall,
   hasWebTemplate,
   prepareWebFolder,
   templateVersion,
@@ -473,8 +474,12 @@ async function webExport(deps: GodotBackendDeps, context: PluginContext): Promis
     version: templateVersion(install.version),
     userTemp,
   });
+  const job = jobOf(context, project);
+  // Windows: the sandbox user's Godot reads templates in its own data folder, so the person's goes there first.
+  if (deps.env.platform === "win32")
+    await deps.run(install.binary, templateCopyCall(project, deps.scripts, deps.env.dataHome, install), job);
   const started = Date.now();
-  const result = await deps.run(install.binary, call, jobOf(context, project));
+  const result = await deps.run(install.binary, call, job);
   if (result.timedOut) throw new Error(MESSAGE.Web.TimedOut);
   const pack = await stat(path.join(folder, WEB_PACK)).catch(() => null);
   const written = pack !== null && pack.mtimeMs >= started - EXPORT_CLOCK_SLACK_MS;

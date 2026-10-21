@@ -3379,7 +3379,8 @@ only the project (Godot's `.godot/` cache) and the job's own folder, gets a priv
 ProcessSandbox as the sandbox user, reading Godot's folder and Genex's scripts, writing the project
 (one inside the game: a project linked from elsewhere is refused there);
 a folder it writes outside the game (a capture's stills, the class reference) waits in the
-project's `.godot/genex-jobs/` and is copied out, and its CRLF, coloured output is read as a Mac's.
+project's `.godot/genex-jobs/` and is copied out (a file it reads from outside, copied in), and its
+CRLF, coloured output is read as a Mac's.
 Its observer is a `card` whose `stage-status` says where the game stands (get Godot, set
 it up for Genex's play, open it, or open in the person's Godot) and its manifest has no lock: it never drives the person's editor.
 On a Mac without Godot 4.3 or newer, `show-steps` (and the refusals of `new-game` and the engine
@@ -3422,8 +3423,9 @@ at the game's root (`web-export.ts`): Genex's own `Genex Web` preset (no threads
 `export_presets.cfg` beside the person's, `web/.gdignore`, and the person's Web template for that
 version (`export_templates/<version>.<status>[.mono]/web_nothreads_release.zip`, installed by
 Godot's Export Template Manager in Godot's data folder, a Mac's Application Support or Windows's
-`%APPDATA%`) linked read-only into a Mac job's private home, copied into a Windows job's own data
-folder (`XDG_DATA_HOME`); without it the tool is refused before Godot runs. `keep-web-build` at `turn.end` and `restore.after` makes it again
+`%APPDATA%`) linked read-only into a Mac job's private home; on Windows a Godot job of Genex's
+(`genex_data.gd`) first copies it into the sandbox user's own data folder, where that user's Godot
+looks; without it the tool is refused before Godot runs. `keep-web-build` at `turn.end` and `restore.after` makes it again
 whenever the project changed since the last build (its `.pck` older than the project's newest file,
 `.godot/` left out), so Live's Web game tab and Publish follow the game; with no Web template it does
 nothing, and a failure is a note. The plugin's `detect` names the folder `godot-web-export` (a folder
