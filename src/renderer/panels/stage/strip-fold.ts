@@ -1,37 +1,95 @@
 /**
- * The stage strip stays one row. When its labelled buttons (a plugin's, Make multiplayer, Publish)
- * would push it past its width, they all fold into 32px icons at once, their names moving to their
- * tooltips; they unfold only once the strip is as wide as the labelled row needed. `nextFold` is
- * the rule, `useStripFold` feeds it the strip's own widths.
+ * The stage strip makes room in steps, never by hiding a control. Its first row holds the views,
+ * Play/Stop, Reload, Sound and Full screen, then the plugin buttons (a plugin's, Make multiplayer,
+ * Publish) at its end, always with their names. When that row would overflow, the views fold into
+ * one button that names the current one; when it still would, the plugin buttons move to a second
+ * row; and when even that is not enough, Sound and Full screen join them there. A step undoes only
+ * once the first row is as wide as it needed to be before taking it. `nextFold` is the rule,
+ * `useStripFold` feeds it the first row's widths, and theme.css lays each step out (`data-fold`).
  */
 import { type RefObject, useLayoutEffect, useState } from "react";
 import { flushSync } from "react-dom";
 
-/** Whether the strip's labels are folded, and how wide the labelled row needed the strip to be. */
-export type StripFold = { folded: boolean; needed: number };
+/** The strip's steps, in the order it takes them (`data-fold` on the strip). */
+export const StripFoldStep = {
+  /** Everything on one row, each view a tab of its own. */
+  Full: "full",
+  /** The views folded into one button that names the current one. */
+  Views: "views",
+  /** The plugin buttons on a second row. */
+  Plugins: "plugins",
+  /** Sound and Full screen on the second row too. */
+  Game: "game",
+} as const;
+export type StripFoldStep = (typeof StripFoldStep)[keyof typeof StripFoldStep];
 
-/** Labels shown. */
-export const UNFOLDED: StripFold = { folded: false, needed: 0 };
+const STEPS: readonly StripFoldStep[] = [
+  StripFoldStep.Full,
+  StripFoldStep.Views,
+  StripFoldStep.Plugins,
+  StripFoldStep.Game,
+];
 
-/** The strip's widths: its content's (`scrollWidth`) and its own (`clientWidth`). */
-export type StripWidths = { scroll: number; client: number };
+/** A first row this much past its room is rounding, not overflow: the free space between its ends is a fraction. */
+const ROUNDING_PX = 1;
 
-/** The fold after a measure: fold once the labelled row overflows; unfold once it would fit again. */
-export function nextFold(fold: StripFold, { scroll, client }: StripWidths): StripFold {
-  if (!fold.folded) return scroll > client ? { folded: true, needed: scroll } : fold;
-  return client >= fold.needed ? UNFOLDED : fold;
+/** The first row's height in px (`h-12` less its border): a group whose top is below it sits on the second row. */
+const FIRST_ROW_PX = 47;
+
+/** How far the strip has folded, and how wide its first row needed to be before each step taken. */
+export type StripFold = { step: number; needed: readonly number[] };
+
+/** Nothing folded. */
+export const UNFOLDED: StripFold = { step: 0, needed: [] };
+
+/** The step a fold is at. */
+export const foldStep = (fold: StripFold): StripFoldStep => STEPS[fold.step] ?? StripFoldStep.Full;
+
+/** The first row's widths: how far its controls reach (`row`) and how much it may take (`room`). */
+export type StripWidths = { row: number; room: number };
+
+/**
+ * The fold after a measure: one step further once the first row overflows (remembering how wide it
+ * needed to be), one step back once the room is as wide as the row needed before the last step.
+ */
+export function nextFold(fold: StripFold, { row, room }: StripWidths): StripFold {
+  if (row - room >= ROUNDING_PX) {
+    if (fold.step >= STEPS.length - 1) return fold;
+    return { step: fold.step + 1, needed: [...fold.needed, row] };
+  }
+  const needed = fold.needed.at(-1);
+  if (needed === undefined || room < needed) return fold;
+  return { step: fold.step - 1, needed: fold.needed.slice(0, -1) };
+}
+
+/** How far the first row's groups reach from its start, and how wide it may be. */
+function firstRow(strip: HTMLElement, groups: readonly HTMLElement[]): StripWidths {
+  const style = getComputedStyle(strip);
+  const padStart = Number.parseFloat(style.paddingInlineStart) || 0;
+  const padEnd = Number.parseFloat(style.paddingInlineEnd) || 0;
+  const box = strip.getBoundingClientRect();
+  const start = box.left + strip.clientLeft + padStart;
+  const reach = groups
+    .map((group) => group.getBoundingClientRect())
+    .filter((rect) => rect.top - box.top < FIRST_ROW_PX)
+    .map((rect) => rect.right - start);
+  return { row: Math.max(0, ...reach), room: strip.clientWidth - padStart - padEnd };
 }
 
 /**
- * Whether the strip's labels are folded. One observer watches the strip (a window or pane resize)
- * and the groups inside it (a button coming or going, a label changing). A group that changed size
- * on its own (not by a fold this hook made) measures afresh from the labelled row; otherwise only
- * the strip's width is compared. A fold lands one frame after the resize that called for it:
- * folding inside the observer resizes the groups it watches in the same frame, which Chromium reports
- * as a renderer error ("ResizeObserver loop completed with undelivered notifications").
+ * The strip's step. One observer watches the strip (a window or pane resize) and the groups inside
+ * it (a button coming or going, a label changing). A group that changed size on its own (not by a
+ * step this hook took) measures afresh from the full row; otherwise only the room is compared. Each
+ * step is drawn at once (`flushSync`) so the next measure sees it, so a resize settles in one frame,
+ * and it lands one frame after the resize that called for it: stepping inside the observer resizes
+ * the groups it watches in the same frame, which Chromium reports as a renderer error
+ * ("ResizeObserver loop completed with undelivered notifications").
  */
-export function useStripFold(strip: RefObject<HTMLElement | null>, groups: RefObject<HTMLElement | null>[]): boolean {
-  const [folded, setFolded] = useState(false);
+export function useStripFold(
+  strip: RefObject<HTMLElement | null>,
+  groups: RefObject<HTMLElement | null>[],
+): StripFoldStep {
+  const [step, setStep] = useState<StripFoldStep>(StripFoldStep.Full);
   // biome-ignore lint/correctness/useExhaustiveDependencies: the refs are stable; their elements are read once mounted
   useLayoutEffect(() => {
     const row = strip.current;
@@ -40,11 +98,18 @@ export function useStripFold(strip: RefObject<HTMLElement | null>, groups: RefOb
     let fold = UNFOLDED;
     const widths = new Map<Element, number>();
     const apply = (next: StripFold) => {
-      const flips = next.folded !== fold.folded;
+      const moves = foldStep(next) !== foldStep(fold);
       fold = next;
-      if (flips) flushSync(() => setFolded(next.folded));
+      if (moves) flushSync(() => setStep(foldStep(next)));
     };
-    const measure = () => apply(nextFold(fold, { scroll: row.scrollWidth, client: row.clientWidth }));
+    // Each step changes the first row, so a resize may take or undo several; one per measure, at most both ways.
+    const measure = () => {
+      for (let turn = 0; turn < STEPS.length * 2; turn++) {
+        const next = nextFold(fold, firstRow(row, parts));
+        if (next === fold) return;
+        apply(next);
+      }
+    };
     const remember = () => {
       for (const part of parts) widths.set(part, part.offsetWidth);
     };
@@ -71,5 +136,5 @@ export function useStripFold(strip: RefObject<HTMLElement | null>, groups: RefOb
       observer.disconnect();
     };
   }, []);
-  return folded;
+  return step;
 }

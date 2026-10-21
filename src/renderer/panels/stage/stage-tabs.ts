@@ -35,11 +35,15 @@ export type StageTabKey =
   | `${typeof StageView.Live}-${ObserverLive}`
   | `${typeof StageView.Live}-${typeof ObserverLive.Stills | typeof ObserverLive.Card}-${string}`;
 
-/** One tab of the strip's view switcher: its key, its name and, for a file opened beside, its glyph. */
+/**
+ * One tab of the strip's view switcher: its key, its name, for a file opened beside its glyph, and
+ * for a Live tab the view it shows.
+ */
 export interface StageTab {
   key: StageTabKey;
   label: string;
   icon?: IconName;
+  view?: LiveView;
 }
 
 /** What a tab press means: the stage view, and for a Live tab the observer key of its view (null for the pictures). */
@@ -67,8 +71,9 @@ const sameView = (a: LiveView, b: LiveView): boolean => a.live === b.live && a.o
 
 /** Live's tabs: one named Live for a folder with one view, else one per view named by what it shows. */
 function liveTabs(views: readonly LiveView[], plugins: readonly LivePlugin[]): StageTab[] {
-  if (views.length < 2) return [{ key: StageView.Live, label: STAGE_WORDS.tabs.live }];
-  return views.map((view, index) => ({ key: liveTabKey(view, index), label: liveViewLabel(view, plugins) }));
+  const [only] = views;
+  if (views.length < 2) return [{ key: StageView.Live, label: STAGE_WORDS.tabs.live, ...(only ? { view: only } : {}) }];
+  return views.map((view, index) => ({ key: liveTabKey(view, index), label: liveViewLabel(view, plugins), view }));
 }
 
 /** The view switcher's tabs: Live's (one per view), Builds once there is a build to draw, Assets, and a file opened beside. */
@@ -92,6 +97,28 @@ export function stageTabs({
     ? [{ key: StageView.File, label: shortName(besideName(beside)), icon: beside.kind === "image" ? "image" : "file" }]
     : [];
   return [...liveTabs(views, plugins), ...builds, { key: StageView.Assets, label: STAGE_WORDS.tabs.assets }, ...file];
+}
+
+/** The glyph of each kind of Live view, where the folded views name it; a plugin's pictures or card shows the plugin's own picture instead. */
+const LIVE_GLYPH = {
+  [ObserverLive.Preview]: "window",
+  [ObserverLive.UnrealCard]: "unreal",
+  [ObserverLive.Stills]: "image",
+  [ObserverLive.Card]: "computer",
+} as const satisfies Record<ObserverLive, IconName>;
+
+/** A tab's glyph where the folded views list it (`StageStrip`): a file's own, the view's kind, Builds' graph, Assets' box. */
+export function tabGlyph(tab: StageTab): IconName {
+  if (tab.icon) return tab.icon;
+  if (tab.key === StageView.Builds) return "graph";
+  if (tab.key === StageView.Assets) return "assets";
+  return tab.view ? LIVE_GLYPH[tab.view.live] : LIVE_GLYPH[ObserverLive.Preview];
+}
+
+/** The plugin whose observer a tab's view is (`<plugin>/<observer>`), for its picture; null for Genex's own preview. */
+export function tabPluginId(tab: StageTab): string | null {
+  if (!tab.view?.observer || tab.view.live === ObserverLive.Preview) return null;
+  return tab.view.observer.split("/")[0] || null;
 }
 
 /** The tab drawn as current: the chosen Live view's while Live is on the stage, else the stage view's. */

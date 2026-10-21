@@ -425,6 +425,14 @@ const glyphs = {
       <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.8" />
     </>
   ),
+  // The Builds tab: two steps joined, as the run's graph draws them.
+  graph: (
+    <>
+      <rect x="3.5" y="3.5" width="7" height="7" rx="1.8" />
+      <rect x="13.5" y="13.5" width="7" height="7" rx="1.8" />
+      <path d="M7 10.5V14a3 3 0 0 0 3 3h3.5" />
+    </>
+  ),
   // A heart: it beats once. A liked one is filled (`fill` on the glyph's path).
   heart: <path className="a-pulse" d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" />,
   // A pad: it bobs once, the way a hand picks it up.
