@@ -3,7 +3,8 @@
  * SHA-256 and size); the game's own repository on Genex's git says where each object is (the Git
  * LFS batch API), each is downloaded once, and it takes its pointers' places only once its bytes
  * match. No git-lfs has to be installed, or found: an app opened from the Dock or the Start menu
- * never looks where Homebrew puts one.
+ * never looks where Homebrew puts one. Only files the clone's attributes route through Git LFS
+ * count, as git-lfs counts them, and every request is https, redirects included.
  */
 import { createHash } from "node:crypto";
 import { copyFile, lstat, mkdir, open, readdir, readFile, rename, rm } from "node:fs/promises";
@@ -20,6 +21,10 @@ const POINTER_MAX_BYTES = 1024;
 const PROGRESS_STEP_BYTES = 1024 * 1024;
 /** The Git LFS API's media type. */
 const LFS_MEDIA_TYPE = "application/vnd.git-lfs+json";
+/** The HTTP statuses that redirect. */
+const REDIRECT_STATUSES: ReadonlySet<number> = new Set([301, 302, 303, 307, 308]);
+/** The most redirects one download follows. */
+const MAX_REDIRECTS = 5;
 /** Where a download is written until its bytes match: inside the clone's `.git`, which the copy drops. */
 const PARTS_DIR = "genex-lfs";
 /** A pointer as Git LFS writes it: the spec's version, a SHA-256 and a size, one per line. */
@@ -29,6 +34,7 @@ const POINTER =
 const MESSAGE = {
   BatchFailed: (status: number) => `Genex’s git answered ${status} when asked for this game’s files`,
   BatchUnreadable: "Genex’s git’s answer about this game’s files couldn’t be read",
+  BatchStalled: "Genex’s git stopped answering about this game’s files",
   ModelsMissing: (files: number) => `${files} of this game’s files didn’t download from Git LFS`,
   DownloadRefused: "A download address for this game’s files was refused",
   DownloadFailed: (status: number) => `A file of this game didn’t download (${status})`,
@@ -50,6 +56,8 @@ export interface LfsPointer extends LfsObject {
 /** How the files are fetched: the network, who hears the bytes, and a guard against a stalled download. */
 export interface LfsDownloadDeps {
   fetch(input: string, init?: RequestInit): Promise<Response>;
+  /** Which of these files (paths in the clone) its attributes route through Git LFS (`filter=lfs`). */
+  routed(files: string[]): Promise<Set<string>>;
   /** Hears the bytes downloaded so far, of the total. */
   models(done: number, total: number): void;
   /** A guard whose signal aborts once its download has not `moved` for a while. */
@@ -70,8 +78,11 @@ export function parseLfsPointer(text: string): LfsObject | null {
   return Number.isSafeInteger(size) ? { oid: match[1], size } : null;
 }
 
-/** Every file of the clone in `dir` that is a pointer. Its `.git` and its links are never read. */
-export async function findLfsPointers(dir: string): Promise<LfsPointer[]> {
+/**
+ * Every file of the clone in `dir` that is a pointer and that its attributes route through Git LFS
+ * (`routed`), as git-lfs finds them. Its `.git` and its links are never read.
+ */
+export async function findLfsPointers(dir: string, routed: LfsDownloadDeps["routed"]): Promise<LfsPointer[]> {
   const pointers: LfsPointer[] = [];
   for (const file of await filesOf(dir)) {
     const full = path.join(dir, file);
@@ -79,7 +90,9 @@ export async function findLfsPointers(dir: string): Promise<LfsPointer[]> {
     const object = parseLfsPointer(await readFile(full, "utf8"));
     if (object) pointers.push({ file, ...object });
   }
-  return pointers;
+  if (pointers.length === 0) return pointers;
+  const inLfs = await routed(pointers.map((pointer) => pointer.file));
+  return pointers.filter((pointer) => inLfs.has(pointer.file));
 }
 
 /** The plain files under `dir`, by their paths in it: no `.git`, and no link is followed. */
@@ -99,10 +112,10 @@ async function filesOf(dir: string, under = ""): Promise<string[]> {
  * A download that fails leaves every pointer as it was; downloads under way stop before it is told.
  */
 export async function downloadLfsFiles(dir: string, repository: string, deps: LfsDownloadDeps): Promise<void> {
-  const pointers = await findLfsPointers(dir);
+  const pointers = await findLfsPointers(dir, deps.routed);
   if (pointers.length === 0) return;
   const objects = [...new Map(pointers.map(({ oid, size }) => [oid, { oid, size }])).values()];
-  const actions = await locate(repository, objects, deps.fetch);
+  const actions = await locate(repository, objects, deps);
   const missing = pointers.filter((pointer) => !actions.has(pointer.oid)).length;
   if (missing) throw new Error(MESSAGE.ModelsMissing(missing));
   const parts = path.join(dir, ".git", PARTS_DIR);
@@ -115,30 +128,69 @@ export async function downloadLfsFiles(dir: string, repository: string, deps: Lf
   }
 }
 
-/** Where each object downloads from, asked of the repository's batch API a hundred at a time. */
+/**
+ * Where each object downloads from, asked of the repository's batch API a hundred at a time. Only
+ * the objects asked for are kept, by the ids the pointers gave, never one the answer made up.
+ */
 async function locate(
   repository: string,
   objects: LfsObject[],
-  fetch: LfsDownloadDeps["fetch"],
+  deps: LfsDownloadDeps,
 ): Promise<Map<string, LfsAction>> {
   const actions = new Map<string, LfsAction>();
   for (let start = 0; start < objects.length; start += BATCH_MAX_OBJECTS) {
     const asked = objects.slice(start, start + BATCH_MAX_OBJECTS);
-    const response = await fetch(`${repository}/info/lfs/objects/batch`, {
-      method: "POST",
-      headers: { Accept: LFS_MEDIA_TYPE, "Content-Type": LFS_MEDIA_TYPE },
-      body: JSON.stringify({ operation: "download", transfers: ["basic"], objects: asked, hash_algo: "sha256" }),
-    });
-    if (!response.ok) throw new Error(MESSAGE.BatchFailed(response.status));
-    const answered = await response.json().catch(() => null);
-    if (!isRecord(answered) || !Array.isArray(answered.objects)) throw new Error(MESSAGE.BatchUnreadable);
+    const answered = await askBatch(repository, asked, deps);
     const wanted = new Set(asked.map((object) => object.oid));
-    for (const item of answered.objects) {
+    for (const item of answered) {
       const found = answerOf(item);
       if (found && wanted.has(found.oid)) actions.set(found.oid, found.action);
     }
   }
   return actions;
+}
+
+/** One batch request's answered objects. A server that stops answering is given up, as a stalled download is. */
+async function askBatch(repository: string, asked: LfsObject[], deps: LfsDownloadDeps): Promise<unknown[]> {
+  const guard = deps.guard();
+  try {
+    const response = await fetchHttps(deps.fetch, `${repository}/info/lfs/objects/batch`, {
+      method: "POST",
+      headers: { Accept: LFS_MEDIA_TYPE, "Content-Type": LFS_MEDIA_TYPE },
+      body: JSON.stringify({ operation: "download", transfers: ["basic"], objects: asked, hash_algo: "sha256" }),
+      signal: guard.signal,
+    });
+    if (!response.ok) throw new Error(MESSAGE.BatchFailed(response.status));
+    const answered = await response.json().catch((error: unknown) => {
+      if (guard.signal.aborted) throw error;
+      return null;
+    });
+    if (!isRecord(answered) || !Array.isArray(answered.objects)) throw new Error(MESSAGE.BatchUnreadable);
+    return answered.objects;
+  } catch (error) {
+    throw guard.signal.aborted ? new Error(MESSAGE.BatchStalled) : error;
+  } finally {
+    guard.stop();
+  }
+}
+
+/**
+ * Fetch `href`, following a redirect only to another https address with no user or password in
+ * it: each hop is checked before it is requested, so a downgrade to plain http never is. A request
+ * with a body (the batch) follows none.
+ */
+async function fetchHttps(fetch: LfsDownloadDeps["fetch"], href: string, init: RequestInit): Promise<Response> {
+  let at = href;
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
+    const response = await fetch(at, { ...init, redirect: "manual" });
+    if (!REDIRECT_STATUSES.has(response.status)) return response;
+    await response.body?.cancel();
+    const location = response.headers.get("location");
+    const followable = init.body === undefined && location !== null && URL.canParse(location, at);
+    if (!followable) throw new Error(MESSAGE.DownloadRefused);
+    at = safeHref(new URL(location, at).href);
+  }
+  throw new Error(MESSAGE.DownloadRefused);
 }
 
 /** One answered object's download, or null when the server has none for it. A hostile address throws. */
@@ -218,7 +270,7 @@ async function downloadObject(
   const file = await open(part, "w");
   try {
     const signal = AbortSignal.any([guard.signal, deps.stop]);
-    const response = await deps.fetch(action.href, { headers: action.header, signal });
+    const response = await fetchHttps(deps.fetch, action.href, { headers: action.header, signal });
     if (!response.ok || !response.body) throw new Error(MESSAGE.DownloadFailed(response.status));
     const hash = createHash("sha256");
     let size = 0;

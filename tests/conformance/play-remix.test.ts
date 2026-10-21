@@ -14,6 +14,7 @@ import {
   cloneArgs,
   isRemixSource,
   DOWNLOAD_STALL_MS,
+  lfsRoutedFiles,
   type RemixDeps,
   remixGame,
   type StallClock,
@@ -21,6 +22,7 @@ import {
   tracksLfs,
 } from "../../src/main/play/remix.ts";
 import { type RemixProgress, RemixStep } from "../../src/shared/play.ts";
+import { gitFile } from "../helpers/git.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
 const WORLD: PlayWorld = {
@@ -130,6 +132,25 @@ describe("Play remix", () => {
     assert.equal(await tracksLfs(dir), false, "a comment turns nothing on");
     await writeFile(path.join(dir, ".gitattributes"), "*.txt text\n*.glb filter=lfs diff=lfs merge=lfs -text\n");
     assert.equal(await tracksLfs(dir), true);
+  });
+
+  it("routes through Git LFS only the files the clone's own attributes name, nested ones included", async () => {
+    const dir = await tmpDir("studio-remix-routed-");
+    await gitFile(["init", "-q"], { cwd: dir });
+    await mkdir(path.join(dir, "art", "ui"), { recursive: true });
+    await writeFile(path.join(dir, ".gitattributes"), "*.glb filter=lfs diff=lfs merge=lfs -text\n");
+    await writeFile(path.join(dir, "art", ".gitattributes"), "*.png filter=lfs -text\nui/*.png -filter\n");
+    const files = ["hero.glb", "notes.txt", "logo.png", "art/sky.png", "art/ui/button.png", "art/tree model.glb"].map(
+      (file) => file.split("/").join(path.sep),
+    );
+    for (const file of files) await writeFile(path.join(dir, file), "x");
+    const routed = await lfsRoutedFiles(dir, files);
+    assert.deepEqual([...routed].map((file) => file.split(path.sep).join("/")).sort(), [
+      "art/sky.png",
+      "art/tree model.glb",
+      "hero.glb",
+    ]);
+    assert.deepEqual(await lfsRoutedFiles(dir, []), new Set());
   });
 
   it("claims the first free remix folder by making it, so two remixes never share one", async () => {

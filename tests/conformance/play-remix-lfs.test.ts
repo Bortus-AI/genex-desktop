@@ -31,8 +31,14 @@ interface Seen {
 /** What the fake batch API answers for one asked object; `undefined` leaves it out. */
 type Answer = (object: { oid: string; size: number }) => unknown;
 
-/** Genex's git and its storage: the batch API answers with `answer`, storage serves `store`. */
-function fakeNetwork(store: Map<string, Buffer>, answer?: Answer) {
+/** Where a storage address redirects to, or undefined to serve it. */
+type Redirect = (url: string) => string | undefined;
+
+/**
+ * Genex's git and its storage: the batch API answers with `answer`, storage serves `store`, and an
+ * address `redirect` names answers 302 there.
+ */
+function fakeNetwork(store: Map<string, Buffer>, answer?: Answer, redirect?: Redirect) {
   const seen: Seen[] = [];
   const located: Answer = (object) =>
     store.has(object.oid)
@@ -44,6 +50,8 @@ function fakeNetwork(store: Map<string, Buffer>, answer?: Answer) {
     const objects = url === BATCH ? (JSON.parse(String(init?.body)) as { objects: Seen["objects"] }).objects : [];
     seen.push({ url, method, objects });
     if (url === BATCH) return Response.json({ objects: objects.map(answer ?? located).filter(Boolean) });
+    const location = redirect?.(url);
+    if (location) return new Response(null, { status: 302, headers: { location } });
     const bytes = store.get(new URL(url).pathname.slice(1));
     return bytes ? new Response(new Uint8Array(bytes)) : new Response("no", { status: 404 });
   };
@@ -70,6 +78,7 @@ function depsOn(fetch: LfsDownloadDeps["fetch"]) {
       heard.push([done, total]);
     },
     guard: () => stallGuard({ setTimeout: () => null, clearTimeout: () => {} }),
+    routed: async (files) => new Set(files),
   };
   return { deps, heard };
 }
@@ -108,7 +117,7 @@ describe("Remix's Git LFS files over https", () => {
     });
     await symlink(path.join(outside, "elsewhere.glb"), path.join(dir, "linked.glb"));
     await symlink(outside, path.join(dir, "linked-folder"));
-    const found = await findLfsPointers(dir);
+    const found = await findLfsPointers(dir, async (files) => new Set(files));
     assert.deepEqual(found.map((pointer) => pointer.file.split(path.sep).join("/")).sort(), [
       "public/models/player.glb",
       "public/sounds/step 1.mp3",
@@ -188,6 +197,7 @@ describe("Remix's Git LFS files over https", () => {
       fetch?: LfsDownloadDeps["fetch"];
       store?: Map<string, Buffer>;
       answer?: Answer;
+      redirect?: Redirect;
       refused: RegExp;
     }> = [
       { name: "bytes that are not the model", store: wrongBytes, refused: /didn’t match/ },
@@ -202,6 +212,34 @@ describe("Remix's Git LFS files over https", () => {
       },
       { name: "a download that is not a link", answer: located("ext::sh -c touch"), refused: /refused/ },
       { name: "a header that is not text", answer: located(`${STORAGE}/x`, { Authorization: 1 }), refused: /refused/ },
+      {
+        name: "a download redirected to plain http",
+        redirect: (url) => (url.startsWith(STORAGE) ? "http://storage.genex.example/x" : undefined),
+        refused: /refused/,
+      },
+      {
+        name: "a download redirected to an address with a password",
+        redirect: (url) => (url.startsWith(STORAGE) ? "https://u:p@storage.genex.example/x" : undefined),
+        refused: /refused/,
+      },
+      {
+        name: "a download redirected with no address",
+        fetch: async (input) =>
+          String(input) === BATCH
+            ? fakeNetwork(new Map([[oidOf(MODEL), MODEL]])).fetch(input, { method: "POST", body: batchBody() })
+            : new Response(null, { status: 302 }),
+        refused: /refused/,
+      },
+      {
+        name: "a batch redirected elsewhere",
+        fetch: async () => new Response(null, { status: 307, headers: { location: `${REPO}/elsewhere` } }),
+        refused: /refused/,
+      },
+      {
+        name: "an answer naming a path for an object",
+        answer: (object) => ({ ...object, oid: "../../x", actions: { download: { href: `${STORAGE}/x` } } }),
+        refused: /2 of this game’s files/,
+      },
       {
         name: "a batch that fails",
         fetch: async () => new Response("down", { status: 503 }),
@@ -218,17 +256,62 @@ describe("Remix's Git LFS files over https", () => {
         refused: /couldn’t be read/,
       },
     ];
-    for (const { name, fetch, store, answer, refused } of cases) {
+    for (const { name, fetch, store, answer, redirect, refused } of cases) {
       const dir = await cloneWith({ "a.glb": pointerOf(MODEL), "b/c.glb": pointerOf(MODEL) });
-      const network = fakeNetwork(store ?? new Map([[oidOf(MODEL), MODEL]]), answer);
+      const network = fakeNetwork(store ?? new Map([[oidOf(MODEL), MODEL]]), answer, redirect);
       await assert.rejects(downloadLfsFiles(dir, REPO, depsOn(fetch ?? network.fetch).deps), refused, name);
       assert.equal(await readFile(path.join(dir, "a.glb"), "utf8"), pointerOf(MODEL), name);
       assert.equal(await readFile(path.join(dir, "b/c.glb"), "utf8"), pointerOf(MODEL), name);
+      assert.deepEqual((await readdir(dir)).sort(), [".git", "a.glb", "b"], `${name}: nothing written beside them`);
+      assert.deepEqual(await readdir(path.join(dir, ".git")), [], `${name}: no half download kept`);
       const offHost = network.seen.filter(
         (request) => !request.url.startsWith(REPO) && !request.url.startsWith(STORAGE),
       );
       assert.deepEqual(offHost, [], `${name}: nothing requested off Genex's git and storage`);
     }
+  });
+
+  it("follows a storage redirect to another https address", async () => {
+    const dir = await cloneWith({ "a.glb": pointerOf(MODEL) });
+    const moved = (url: string) => (url.startsWith(`${STORAGE}/`) ? `${STORAGE}/moved/${oidOf(MODEL)}` : undefined);
+    const store = new Map([
+      [oidOf(MODEL), MODEL],
+      [`moved/${oidOf(MODEL)}`, MODEL],
+    ]);
+    const { fetch, seen } = fakeNetwork(store, undefined, (url) => (url.includes("/moved/") ? undefined : moved(url)));
+    await downloadLfsFiles(dir, REPO, depsOn(fetch).deps);
+    assert.deepEqual(await readFile(path.join(dir, "a.glb")), MODEL);
+    assert.equal(seen.at(-1)?.url, `${STORAGE}/moved/${oidOf(MODEL)}`);
+  });
+
+  it("downloads only the pointers the clone's attributes route through Git LFS", async () => {
+    const dir = await cloneWith({ "models/a.glb": pointerOf(MODEL), "docs/pointer-example.txt": pointerOf(SOUND) });
+    const { fetch, seen } = fakeNetwork(
+      new Map([
+        [oidOf(MODEL), MODEL],
+        [oidOf(SOUND), SOUND],
+      ]),
+    );
+    const asked: string[][] = [];
+    const deps: LfsDownloadDeps = {
+      ...depsOn(fetch).deps,
+      routed: async (files) => {
+        asked.push(files.map((file) => file.split(path.sep).join("/")).sort());
+        return new Set(files.filter((file) => file.endsWith(".glb")));
+      },
+    };
+    await downloadLfsFiles(dir, REPO, deps);
+    assert.deepEqual(
+      asked,
+      [["docs/pointer-example.txt", "models/a.glb"]],
+      "only pointer-shaped files are asked about",
+    );
+    assert.deepEqual(await readFile(path.join(dir, "models/a.glb")), MODEL);
+    assert.equal(await readFile(path.join(dir, "docs/pointer-example.txt"), "utf8"), pointerOf(SOUND));
+    assert.deepEqual(
+      seen.flatMap((request) => request.objects.map((object) => object.oid)),
+      [oidOf(MODEL)],
+    );
   });
 
   it("asks Genex's git only at the game's own repository", async () => {
@@ -237,6 +320,26 @@ describe("Remix's Git LFS files over https", () => {
     await downloadLfsFiles(dir, REPO, depsOn(fetch).deps);
     const batch = seen.find((request) => request.method === "POST");
     assert.equal(batch?.url, BATCH);
+  });
+
+  it("gives Genex's git up once it stops answering, so a later remix is not held up", async () => {
+    const dir = await cloneWith({ "a.glb": pointerOf(MODEL) });
+    const timers = manualTimers();
+    let asked = () => {};
+    const waiting = new Promise<void>((resolve) => {
+      asked = resolve;
+    });
+    const fetch: LfsDownloadDeps["fetch"] = (_input, init) =>
+      new Promise((_resolve, reject) => {
+        asked();
+        init?.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+      });
+    const deps: LfsDownloadDeps = { ...depsOn(fetch).deps, guard: () => stallGuard(timers.clock) };
+    const download = downloadLfsFiles(dir, REPO, deps);
+    await waiting;
+    timers.advance(DOWNLOAD_STALL_MS);
+    await assert.rejects(download, /stopped answering/);
+    assert.equal(await readFile(path.join(dir, "a.glb"), "utf8"), pointerOf(MODEL));
   });
 
   it("gives a model up once its download stops moving", async () => {
@@ -269,6 +372,9 @@ describe("Remix's Git LFS files over https", () => {
     assert.equal(await readFile(path.join(dir, "a.glb"), "utf8"), pointerOf(MODEL));
   });
 });
+
+/** A batch request's body asking for the model, as `downloadLfsFiles` sends it. */
+const batchBody = (): string => JSON.stringify({ objects: [{ oid: oidOf(MODEL), size: MODEL.length }] });
 
 /** Timers the test moves by hand. */
 function manualTimers(): { clock: StallClock; advance: (ms: number) => void } {

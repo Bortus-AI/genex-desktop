@@ -33,6 +33,10 @@ export const DOWNLOAD_STALL_MS = MINUTE_MS;
 const MAX_FOLDER_TRIES = 50;
 /** The most a clone may print before it is cut off. */
 const CLONE_OUTPUT_MAX_BYTES = 1024 * 1024;
+/** The most git may print when it says which files are in Git LFS: a line per pointer. */
+const CHECK_ATTR_OUTPUT_MAX_BYTES = 16 * 1024 * 1024;
+/** How long git may take to say which files are in Git LFS. */
+const CHECK_ATTR_TIMEOUT_MS = MINUTE_MS;
 /** The only host a remix clones from. */
 const GIT_HOST = "git.genex.games";
 /**
@@ -115,6 +119,48 @@ export async function tracksLfs(dir: string): Promise<boolean> {
   return attributes
     .split("\n")
     .some((line) => !line.trimStart().startsWith("#") && line.split(/\s+/).includes("filter=lfs"));
+}
+
+/**
+ * Which of `files` (paths in the clone at `dir`) the clone's attributes route through Git LFS
+ * (`filter=lfs`), as git-lfs reads them: the host's git answers from the clone's own
+ * `.gitattributes` files, nested ones included, never from the person's git config.
+ */
+export function lfsRoutedFiles(dir: string, files: string[]): Promise<Set<string>> {
+  if (files.length === 0) return Promise.resolve(new Set());
+  // Git names paths with `/` on every system; the answer is mapped back to the caller's own.
+  const byGitPath = new Map(files.map((file) => [file.split(path.sep).join("/"), file]));
+  const options = {
+    cwd: dir,
+    env: hostGitEnv(),
+    windowsHide: true,
+    maxBuffer: CHECK_ATTR_OUTPUT_MAX_BYTES,
+    timeout: CHECK_ATTR_TIMEOUT_MS,
+    encoding: "utf8",
+  } as const;
+  return new Promise((resolve, reject) => {
+    const child = execFile(
+      "git",
+      [...HOST_GIT_CONFIG, "check-attr", "-z", "--stdin", "filter"],
+      options,
+      (error, stdout) => {
+        if (error) reject(error);
+        else resolve(routedIn(stdout, byGitPath));
+      },
+    );
+    child.stdin?.end(`${[...byGitPath.keys()].join("\0")}\0`);
+  });
+}
+
+/** The files a `git check-attr -z filter` listing (path, attribute, value, each NUL-ended) names `lfs`. */
+function routedIn(listing: string, byGitPath: Map<string, string>): Set<string> {
+  const fields = listing.split("\0");
+  const routed = new Set<string>();
+  for (let index = 0; index + 2 < fields.length; index += 3) {
+    const file = byGitPath.get(fields[index] ?? "");
+    if (file && fields[index + 2] === "lfs") routed.add(file);
+  }
+  return routed;
 }
 
 /** Hears a clone's models download: bytes so far, and their total when it is known. */
@@ -306,7 +352,12 @@ export async function gitClone(
   if (!isRemixSource(url)) throw new Error(MESSAGE.NotRemixable);
   await download(cloneArgs(url, dest), { env: hostGitEnv({ GIT_LFS_SKIP_SMUDGE: "1" }) }, clock, onStderr);
   if (!(await tracksLfs(dest))) return;
-  await downloadLfsFiles(dest, url, { fetch, models, guard: () => stallGuard(clock) });
+  await downloadLfsFiles(dest, url, {
+    fetch,
+    models,
+    guard: () => stallGuard(clock),
+    routed: (files) => lfsRoutedFiles(dest, files),
+  });
 }
 
 /**
