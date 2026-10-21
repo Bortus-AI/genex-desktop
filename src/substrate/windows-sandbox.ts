@@ -162,6 +162,9 @@ const MESSAGE = {
     `could not set the sandbox user's entries on ${dir}: ${errorMessage(error)}`,
   SlowOwnEdit: (dir: string, ms: number) =>
     `own entries: ${dir} took ${Math.round(ms / SECOND_MS)} s (once; they stay)`,
+  /** A deny Windows refused where the sandbox user can open nothing anyway ({@link FolderAceOutcome}). */
+  UnneededDeny: (dir: string, refused: string) =>
+    `own entries: left ${dir} as it is: Windows refused the deny (${refused}), and the sandbox user can open nothing in it`,
   /** srt-win's grant and stamp walk each folder again, so a later grant or stamp timeout reads as this. */
   OwnEntriesOff: (count: number) =>
     `own entries off: srt-win sets all ${count} grants and denies (no sandbox users' group, or PowerShell could not set them)`,
@@ -1021,11 +1024,16 @@ function setsEntry(edit: FolderOwnEdit): boolean {
   return edit.deny !== null || edit.guard || edit.grant !== null;
 }
 
-/** The edits of one batch Windows took long over (a first walk of a large folder), for the log. */
-function slowEdits(edits: readonly FolderOwnEdit[], outcomes: readonly FolderAceOutcome[]): string[] {
+/**
+ * What the log says about one batch: each deny Windows refused where none was needed, and each
+ * other edit Windows took long over (a first walk of a large folder).
+ */
+function editNotes(edits: readonly FolderOwnEdit[], outcomes: readonly FolderAceOutcome[]): string[] {
   return edits.flatMap((one, i) => {
     const outcome = outcomes[i];
-    const slow = outcome?.ok && (outcome.ms ?? 0) >= SLOW_OWN_EDIT_MS;
+    if (!outcome?.ok) return [];
+    if (outcome.refused !== undefined) return [MESSAGE.UnneededDeny(one.dir, outcome.refused)];
+    const slow = (outcome.ms ?? 0) >= SLOW_OWN_EDIT_MS;
     return slow ? [MESSAGE.SlowOwnEdit(one.dir, outcome.ms ?? 0)] : [];
   });
 }
@@ -1048,7 +1056,7 @@ async function ownEach(
   for (let attempt = 1; pending.length > 0; attempt++) {
     const outcomes = await edit(pending);
     if (!outcomes) return null;
-    for (const line of slowEdits(pending, outcomes)) log?.(line);
+    for (const line of editNotes(pending, outcomes)) log?.(line);
     deferred.push(...pending.filter((_, i) => outcomes[i]?.ok && outcomes[i]?.deferred).map((one) => one.dir));
     const refused = pending.flatMap((one, i) => {
       const outcome = outcomes[i];
@@ -1099,7 +1107,9 @@ export interface OwnAclEntries {
    * Set `entries`, and take back what this holder or a gone one set before and no running one
    * still needs. False where Genex cannot set them here (no sandbox users' group, PowerShell
    * locked down or refusing): srt-win sets them instead. Throws when Windows refused one or ran
-   * out of time; what it set is kept, and the next sync goes on from there.
+   * out of time; what it set is kept, and the next sync goes on from there. A deny Windows refused
+   * on a path the sandbox user can open nothing at or under anyway is not needed: the log says so,
+   * and the next sync asks for it again.
    */
   sync(entries: readonly OwnAclEntry[]): Promise<boolean>;
   /**
@@ -1175,7 +1185,7 @@ export function ownAclEntries(holders: string, deps: OwnAclDeps): OwnAclEntries 
       const live = otherHolders(holders, self, alive, readOwnRecord).live;
       const edits = ownEdits(walked, [], live).map((one) => ({ ...one, walk: OwnWalk.Again }));
       const outcomes = (await edit(edits)) ?? [];
-      for (const line of slowEdits(edits, outcomes)) deps.log?.(line);
+      for (const line of editNotes(edits, outcomes)) deps.log?.(line);
       const done = new Set(edits.filter((_, i) => outcomes[i]?.ok).map((one) => pathKey(one.dir)));
       // A sync may have run meanwhile: keep what it recorded, less the walks that ran.
       const now = readOwnRecord(recordFile) ?? record;

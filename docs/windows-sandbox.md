@@ -128,11 +128,20 @@ the setup screen opens on `git-missing`. What differs from macOS:
   over 2 s); one that runs out of time keeps what it set, and the next try goes on. Where the
   sandbox user (in BUILTIN\Users) can open nothing under a denied path with or without the walk
   (the path passes no allow down to anyone but its owner, SYSTEM and the Administrators, before or
-  after the edit, and every entry under it, read for its owner and DACL alone, is owned by and
-  allows only them, protected or not), the start writes the path alone, which files made in it
+  after the edit, and every entry under it, read for its owner and DACL alone, is owned by them
+  and allows only them, protected or not), the start writes the path alone, which files made in it
   inherit, and records the walk; the session runs
   it two minutes after the start (`own entries passed down` in the log), and the next start runs
-  one a Genex quit before. A browser profile's walk took 17 s of a Windows 11 first start. A per-command
+  one a Genex quit before. A browser profile's walk took 17 s of a Windows 11 first start. An allow
+  for an app container or a capability SID (`S-1-15-2-*`, `S-1-15-3-*`: Chrome gives its own
+  sandboxes its profile's network folder) counts as theirs: Windows matches those only in an app
+  container's second access check, and an app container gets only what its user is allowed too.
+  Where Windows refuses a deny with ERROR_ACCESS_DENIED (the person may not change that path's
+  entries, as security software or another owner can leave a browser profile; a field PC's Chrome
+  `User Data` refused at every start, so the agents never started) and the same check finds the
+  sandbox user can open nothing at the path or under it, the start goes on without that deny, and
+  the log says so (`left … as it is`). The deny stays recorded, so every start asks for it and
+  checks again; one refused anywhere else still stops the start. A per-command
   deny Genex already sets is not sent again. Without the group, where PowerShell cannot run the
   batch or the running user holds the SID, srt-win sets every grant and deny as before, and the
   log says so (`own entries off`). srt-win keeps a missing deny path (it makes its placeholder), a
