@@ -3,9 +3,10 @@
  * Play/Stop, Reload, Sound and Full screen, then the plugin buttons (a plugin's, Make multiplayer,
  * Publish) at its end, always with their names. When that row would overflow, the views fold into
  * one button that names the current one; when it still would, the plugin buttons move to a second
- * row; and when even that is not enough, Sound and Full screen join them there. A step undoes only
- * once the first row is as wide as it needed to be before taking it. `nextFold` is the rule,
- * `useStripFold` feeds it the first row's widths, and theme.css lays each step out (`data-fold`).
+ * row; and when even that is not enough, Sound and Full screen join them there. The step is always
+ * the first one whose first row fits, however the strip reached its width: a strip that grows
+ * starts again from one row. `nextFold` is the rule, `useStripFold` feeds it the first row's
+ * widths, and theme.css lays each step out (`data-fold`).
  */
 import { type RefObject, useLayoutEffect, useState } from "react";
 import { flushSync } from "react-dom";
@@ -23,7 +24,8 @@ export const StripFoldStep = {
 } as const;
 export type StripFoldStep = (typeof StripFoldStep)[keyof typeof StripFoldStep];
 
-const STEPS: readonly StripFoldStep[] = [
+/** Every step, in the order the strip takes them. */
+export const STRIP_STEPS: readonly StripFoldStep[] = [
   StripFoldStep.Full,
   StripFoldStep.Views,
   StripFoldStep.Plugins,
@@ -36,30 +38,13 @@ const ROUNDING_PX = 1;
 /** The first row's height in px (`h-12` less its border): a group whose top is below it sits on the second row. */
 const FIRST_ROW_PX = 47;
 
-/** How far the strip has folded, and how wide its first row needed to be before each step taken. */
-export type StripFold = { step: number; needed: readonly number[] };
-
-/** Nothing folded. */
-export const UNFOLDED: StripFold = { step: 0, needed: [] };
-
-/** The step a fold is at. */
-export const foldStep = (fold: StripFold): StripFoldStep => STEPS[fold.step] ?? StripFoldStep.Full;
-
 /** The first row's widths: how far its controls reach (`row`) and how much it may take (`room`). */
 export type StripWidths = { row: number; room: number };
 
-/**
- * The fold after a measure: one step further once the first row overflows (remembering how wide it
- * needed to be), one step back once the room is as wide as the row needed before the last step.
- */
-export function nextFold(fold: StripFold, { row, room }: StripWidths): StripFold {
-  if (row - room >= ROUNDING_PX) {
-    if (fold.step >= STEPS.length - 1) return fold;
-    return { step: fold.step + 1, needed: [...fold.needed, row] };
-  }
-  const needed = fold.needed.at(-1);
-  if (needed === undefined || room < needed) return fold;
-  return { step: fold.step - 1, needed: fold.needed.slice(0, -1) };
+/** The step after a measure: the next one while the first row overflows, the same one once it fits or none is left. */
+export function nextFold(step: StripFoldStep, { row, room }: StripWidths): StripFoldStep {
+  if (row - room < ROUNDING_PX) return step;
+  return STRIP_STEPS[STRIP_STEPS.indexOf(step) + 1] ?? step;
 }
 
 /** How far the first row's groups reach from its start, and how wide it may be. */
@@ -78,13 +63,14 @@ function firstRow(strip: HTMLElement, groups: readonly HTMLElement[]): StripWidt
 }
 
 /**
- * The strip's step. One observer watches the strip (a window or pane resize) and the groups inside
- * it (a button coming or going, a label changing). A group that changed size on its own (not by a
- * step this hook took) measures afresh from the full row; otherwise only the room is compared. Each
- * step is drawn at once (`flushSync`) so the next measure sees it, so a resize settles in one frame,
- * and it lands one frame after the resize that called for it: stepping inside the observer resizes
- * the groups it watches in the same frame, which Chromium reports as a renderer error
- * ("ResizeObserver loop completed with undelivered notifications").
+ * The strip's step. One observer watches the strip (a window or pane resize, the room the window's
+ * own controls leave) and the groups inside it (a button coming or going, a label changing). A
+ * strip that narrowed only steps further; one that grew, or a group that changed size on its own
+ * (not by a step this hook took), starts again from one row. Each step is drawn at once
+ * (`flushSync`) so the next measure sees it, so a resize settles in one frame, and it lands one
+ * frame after the resize that called for it: stepping inside the observer resizes the groups it
+ * watches in the same frame, which Chromium reports as a renderer error ("ResizeObserver loop
+ * completed with undelivered notifications").
  */
 export function useStripFold(
   strip: RefObject<HTMLElement | null>,
@@ -96,18 +82,19 @@ export function useStripFold(
     const row = strip.current;
     const parts = groups.map((group) => group.current).filter((part): part is HTMLElement => part !== null);
     if (!row) return;
-    let fold = UNFOLDED;
+    let current: StripFoldStep = StripFoldStep.Full;
+    let room = Number.NEGATIVE_INFINITY;
     const widths = new Map<Element, number>();
-    const apply = (next: StripFold) => {
-      const moves = foldStep(next) !== foldStep(fold);
-      fold = next;
-      if (moves) flushSync(() => setStep(foldStep(next)));
+    const apply = (next: StripFoldStep) => {
+      if (next === current) return;
+      current = next;
+      flushSync(() => setStep(next));
     };
-    // Each step changes the first row, so a resize may take or undo several; one per measure, at most both ways.
+    // Each step changes the first row, so one measure may take several.
     const measure = () => {
-      for (let turn = 0; turn < STEPS.length * 2; turn++) {
-        const next = nextFold(fold, firstRow(row, parts));
-        if (next === fold) return;
+      for (const _ of STRIP_STEPS) {
+        const next = nextFold(current, firstRow(row, parts));
+        if (next === current) return;
         apply(next);
       }
     };
@@ -118,13 +105,22 @@ export function useStripFold(
     let groupChanged = false;
     const trail: unknown[] = [];
     const settle = () => {
-      const reset = groupChanged;
-      if (groupChanged) apply(UNFOLDED);
+      const now = firstRow(row, parts).room;
+      const reset = groupChanged || now > room;
+      if (reset) apply(StripFoldStep.Full);
       groupChanged = false;
-      measure();
+      room = now;
+      const seen: unknown[] = [];
+      for (const _ of STRIP_STEPS) {
+        const w = firstRow(row, parts);
+        seen.push([current, row.dataset.fold, Math.round(w.row), Math.round(w.room), getComputedStyle(row).paddingInlineEnd, getComputedStyle(document.documentElement).getPropertyValue("--window-controls-end"), window.innerWidth]);
+        const next = nextFold(current, w);
+        if (next === current) break;
+        apply(next);
+      }
+      trail.push({ t: Math.round(performance.now()), reset, seen });
+      row.dataset.foldDebug = JSON.stringify(trail.slice(-30));
       remember();
-      trail.push({ t: Math.round(performance.now()), reset, fold, widths: firstRow(row, parts), pad: getComputedStyle(row).paddingInlineEnd, parts: parts.map((p) => [p.offsetWidth, p.scrollWidth, Math.round(p.getBoundingClientRect().top)]) });
-      row.dataset.foldDebug = JSON.stringify(trail.slice(-40));
     };
     const observer = new ResizeObserver((entries) => {
       // A group that changed on its own is kept until the frame settles, so a later resize can't drop it.
