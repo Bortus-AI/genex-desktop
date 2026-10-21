@@ -1269,6 +1269,7 @@ function remixPlayGame(studio: StudioCore, world: PlayWorld): Promise<string> {
       if (game) await studio.builds.ensure({ project: name, dir: game.dir, shape: game.shape, guarded: true });
     },
     progress: (progress) => pushUiEvent({ type: UiEvent.PlayRemix, payload: { slug: world.slug, ...progress } }),
+    log: (message) => studioLog.write("main", message),
   });
 }
 

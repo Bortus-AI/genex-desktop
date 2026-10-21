@@ -139,8 +139,10 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
 - Voice chat: a game that asks for a microphone gets the bar's mic switch, remembered per game.
   Main lets the page open the microphone only right after it asked it to, and only on the game's
   own origin.
-- Remix clones the game's public source from Genex's git (https only, no hooks or filters, its Git
-  LFS files from the same repository; a download fails only once it stalls for a minute) into a
+- Remix clones the game's public source from Genex's git (https only, no hooks or filters; its Git
+  LFS files come from the same repository's batch API over https, with no git-lfs needed, and each
+  replaces its pointer only once its SHA-256 and size match; a download fails only once it stalls
+  for a minute; a failed remix logs why in `studio.log`) into a
   hidden folder, installs its packages with npm without running any of their scripts (a stale or
   another manager's lockfile: from package.json), moves it to `<slug>-remix`, adopts it without trusting its settings and builds it
   once, so it opens playing. One remix at a time. Remix (a card's, or the viewer's, which closes
