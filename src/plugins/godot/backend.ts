@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { errorMessage } from "../../shared/errors.ts";
-import { t } from "../../shared/i18n.ts";
+import { t, tc } from "../../shared/i18n.ts";
 import { writeFileNoFollow } from "../../substrate/fsx.ts";
 import { type HookAnswer, HookEvent, HOOK_RECORDING_MAX } from "../../shared/plugin-hooks.ts";
 import { OBSERVE_CALL_MS } from "../../shared/observers.ts";
@@ -245,7 +245,7 @@ const MESSAGE = {
     /** The button's badge while Godot is missing: the same word Unity's and Unreal's say. */
     GetBadge: () => t("Not installed"),
     /** The button's badge while the game's project isn't set up for Genex's play. */
-    SetUpBadge: () => t("Set up"),
+    SetUpBadge: () => tc("badge", "Set up"),
     Get: () => t("Get Godot 4"),
     Old: (version: string) => t("Godot {version} is older than the 4.3 Genex builds with", { version }),
     /** The product's name and version: never translated. */

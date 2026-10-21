@@ -7,15 +7,6 @@ import { app } from "electron";
 import { currentLocale, setLocale } from "../shared/i18n.ts";
 import { Locale, resolveLanguage } from "../shared/locale.ts";
 import { loadCatalog } from "../shared/locales/index.ts";
-import type { ChromiumSwitch } from "./dev/launch-flags.ts";
-
-/** The language a test or fixture launch pins, so its checks read the English they were written in. */
-const TEST_LANGUAGE = "en-US";
-
-/** `--lang` for a launch whose checks read English words; a normal launch keeps the computer's. */
-export function englishLaunchSwitches(english: boolean): ChromiumSwitch[] {
-  return english ? [["lang", TEST_LANGUAGE]] : [];
-}
 
 /** The computer's languages in order, or the one a launch pinned with `--lang`. */
 export function systemLanguages(): string[] {

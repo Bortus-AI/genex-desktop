@@ -682,7 +682,7 @@ function LanguageSection() {
   const options = [
     {
       value: SYSTEM_LANGUAGE,
-      label: t("Same as Mac ({language})", { language: LOCALE_NAMES[windowLanguage(SYSTEM_LANGUAGE)] }),
+      label: t("System ({language})", { language: LOCALE_NAMES[windowLanguage(SYSTEM_LANGUAGE)] }),
     },
     ...LOCALES.map((locale) => ({ value: locale, label: LOCALE_NAMES[locale] })),
   ];

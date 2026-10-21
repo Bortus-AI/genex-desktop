@@ -6,7 +6,7 @@
  * Names that land in files, on Roblox or in a save point's history stay English too. Plain words;
  * never the Roblox logo or a promise for later.
  */
-import { t } from "../../shared/i18n.ts";
+import { t, tc } from "../../shared/i18n.ts";
 
 /** Studio's version as people read it: its first two parts (0.743 of 0.743.0.7431133). */
 export const shortVersion = (version: string) => version.split(".").slice(0, 2).join(".");
@@ -96,7 +96,7 @@ export const MESSAGE = {
   },
   Badge: {
     Get: () => t("Not installed"),
-    SetUp: () => t("Set up"),
+    SetUp: () => tc("badge", "Set up"),
     NotOpen: () => t("Not open"),
     Starting: () => t("Starting"),
     Ready: () => t("Ready"),

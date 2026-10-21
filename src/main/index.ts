@@ -197,7 +197,7 @@ import { migrateLegacyUserData, userDataMigrationLine } from "./user-data-migrat
 import { confirmPluginInstall, reacquirePlugin } from "./plugin-install-dialog.ts";
 import { PLUGIN_PANEL_CSP } from "./plugin-panel-csp.ts";
 import { HttpStatus, textResponse } from "./page-serve.ts";
-import { applyMainLanguage, englishLaunchSwitches } from "./language.ts";
+import { applyMainLanguage } from "./language.ts";
 import { appMenuTemplate } from "./app-menu.ts";
 import { intlLocale, t } from "../shared/i18n.ts";
 import { SYSTEM_LANGUAGE } from "../shared/locale.ts";
@@ -234,6 +234,7 @@ import {
   linuxSecretStorageSwitches,
   quitsWhenLastWindowCloses,
   StudioFlag,
+  testLanguageSwitches,
   testLaunchChromiumSwitches,
 } from "./dev/launch-flags.ts";
 import { EventKind } from "../shared/event-log.ts";
@@ -456,8 +457,12 @@ configureCodingClis(
     : {},
 );
 const fixtureNativePolicy = fixtureProviders || isSmoke;
-// A test or fixture launch reads the English its checks were written in, whatever the Mac speaks.
-for (const [name, value] of englishLaunchSwitches(fixtureNativePolicy || isSelfTest))
+// A test or fixture launch reads the English its checks were written in, whatever the Mac speaks,
+// unless a fixture asks to be seen in another of the app's languages.
+for (const [name, value] of testLanguageSwitches(
+  fixtureNativePolicy || isSelfTest,
+  fixtureProviders ? process.env.STUDIO_FIXTURE_LANGUAGE : undefined,
+))
   app.commandLine.appendSwitch(name, value);
 /**
  * Where Play talks to genex.games in this launch: genex.games itself, or a local or test copy that a
