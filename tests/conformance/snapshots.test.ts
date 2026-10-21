@@ -265,8 +265,9 @@ describe("snapshot engine", () => {
 
   it("checks a new repository out from another folder's files, names and bytes exactly as they are", async () => {
     const from = await tmpDir();
-    const names = ["plain.ts", "with space.md", 'a "quoted" name.json', "ünïcode/файл.txt", "deep/er/still.ts"];
-    if (process.platform !== "win32") names.push("back\\slash.ts", "line\nbreak.ts");
+    const names = ["plain.ts", "with space.md", "ünïcode/файл.txt", "deep/er/still.ts"];
+    // Windows refuses these characters in a file name.
+    if (process.platform !== "win32") names.push('a "quoted" name.json', "back\\slash.ts", "line\nbreak.ts");
     for (const [index, name] of names.entries()) {
       await mkdir(path.dirname(path.join(from, name)), { recursive: true });
       await writeFile(path.join(from, name), `content ${index}\n`);
