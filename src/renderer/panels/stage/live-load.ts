@@ -6,6 +6,8 @@
 import type { RefObject } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SECOND_MS } from "../../../shared/duration.ts";
+import type { GameKind } from "../../../shared/project-facts.ts";
+import { webFolderOf } from "../../../shared/project-workspace.ts";
 import { gameStartedSince, type StageGameKind, StageView } from "../../stage.ts";
 
 /** While a page loads behind the loader the stage asks often; otherwise once a second is enough. */
@@ -78,6 +80,52 @@ export function useLoadOnceStarted(
     void loadLive(project, () => window.studio.loadPreview(project)).catch(() => {});
   }, [project, pending, noPage, loadLive]);
   return pending;
+}
+
+/**
+ * Whether Live holds this game but not its web game's page: the game's web game sits in a folder
+ * (`webFolderOf`: a Godot or Unity export in `web/`) and Live last loaded another page, as it does for
+ * a game opened before its export existed.
+ */
+export function holdsOtherPage(
+  game: GameKind | null,
+  project: string | null,
+  live: Pick<LivePage, "project" | "entry" | "navigating"> | null,
+): boolean {
+  const folder = game ? webFolderOf(game) : null;
+  const holdsGame = live !== null && project !== null && live.project === project && !live.navigating;
+  if (!folder || !holdsGame) return false;
+  return !live.entry?.startsWith(`${folder}/`);
+}
+
+/**
+ * The Web game tab on the stage shows the game's web game: when Live holds another page of the game
+ * (`holdsOtherPage`), the tab the person chose loads it, once for each game and folder.
+ */
+export function useWebGamePage(
+  stage: { project: string | null; game: GameKind | null; onWebGame: boolean },
+  loadLive: ReturnType<typeof useLiveLoad>["loadLive"],
+): void {
+  const { project, game, onWebGame } = stage;
+  const asked = useRef<string | null>(null);
+  useEffect(() => {
+    const folder = game ? webFolderOf(game) : null;
+    if (!onWebGame || !project || !folder) return;
+    const key = `${project}/${folder}`;
+    if (asked.current === key) return;
+    let cancelled = false;
+    void window.studio
+      .previewLive()
+      .then((live) => {
+        if (cancelled || !holdsOtherPage(game, project, live)) return;
+        asked.current = key;
+        return loadLive(project, () => window.studio.loadPreview(project));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [project, game, onWebGame, loadLive]);
 }
 
 /** How one page load is settling, tracked across probes. */

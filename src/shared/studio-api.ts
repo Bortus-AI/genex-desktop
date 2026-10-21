@@ -710,6 +710,8 @@ export interface StudioApi {
     stopped: boolean;
     loadError: string | null;
     crashed: boolean;
+    /** The page Live last loaded, relative to the game (`web/index.html`); null before any load. */
+    entry: string | null;
     page: { complete: boolean; resources: number; state: Record<string, unknown> | null } | null;
   }>;
   /** Why the stage cannot show this game's own build; null when the last build was fine. */

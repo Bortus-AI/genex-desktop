@@ -140,6 +140,8 @@ export interface PreviewLiveStatus {
   stopped: boolean;
   loadError: string | null;
   crashed: boolean;
+  /** The page Live last loaded, relative to the game (`web/index.html`); null before any load. */
+  entry: string | null;
   page: { complete: boolean; resources: number; state: Record<string, unknown> | null } | null;
 }
 
@@ -1252,6 +1254,7 @@ export class GamePreview {
       loadError: this.#loadError,
       crashed: this.#crashed,
       stopped: this.#stoppedUrl !== null,
+      entry: this.#entryPath,
     };
     if (!wc || wc.isDestroyed()) return { ...base, navigating: false, page: null };
     if (this.#navigating || wc.isLoading()) return { ...base, navigating: true, page: null };
