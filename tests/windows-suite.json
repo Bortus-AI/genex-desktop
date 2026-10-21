@@ -120,6 +120,7 @@
   "tests/conformance/genex-publish-settle.test.ts",
   "tests/conformance/genex.test.ts",
   "tests/conformance/godot-backend.test.ts",
+  "tests/conformance/godot-export-templates.test.ts",
   "tests/conformance/godot-find.test.ts",
   "tests/conformance/godot-multiplayer.test.ts",
   "tests/conformance/godot-setup.test.ts",

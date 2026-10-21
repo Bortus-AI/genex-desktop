@@ -9,7 +9,7 @@
  */
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdir, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { describe, it } from "node:test";
@@ -204,6 +204,23 @@ describe("Godot on Windows: jobs in Genex's sandbox", () => {
     assert.deepEqual(await readdir(path.join(fixture.project, ".godot", "genex-jobs")), []);
   });
 
+  it("names a staged folder as its own folder in what Godot says, in Godot's forward slashes too", async () => {
+    const fixture = await windowsProject({
+      sandbox: (request) => {
+        if (!request.args.includes("--position")) return {};
+        const out = path.dirname(playArg({ args: request.args } as never, "out"));
+        const said = `ERROR: Can't save the still to '${out.replaceAll("\\", "/")}/HeroCamera.png'.\nERROR: Or to '${out}'.`;
+        return { stderr: said };
+      },
+    });
+    const refused = await tool(fixture, GodotTool.Screenshot).then(
+      () => "",
+      (error: Error) => error.message,
+    );
+    assert.match(refused, /Can't save the still/);
+    assert.doesNotMatch(refused, /genex-jobs/, "the stage never reaches the agent");
+  });
+
   it("makes the class reference in a staged folder and keeps it in the plugin's storage", async () => {
     const fixture = await windowsProject({
       sandbox: async (request) => {
@@ -330,6 +347,87 @@ describe("Godot on Windows: jobs in Genex's sandbox", () => {
     await tool(again, GodotTool.Check, {}, { directory: fixture.gameDir });
     assert.equal((await readdir(fixture.gameDir)).includes("genex-godot-job-left"), false);
     assert.deepEqual(await readdir(path.join(fixture.project, ".godot", "genex-jobs")), []);
+  });
+
+  it("never makes, lists, copies out of or removes anything through a link or a junction in a job's stage", async () => {
+    /** A folder outside the game with what a person keeps there, and what it holds now. */
+    const outsideFolder = async () => {
+      const folder = path.join(await realpath(await tmpDir("godot-stage-outside-")), "Documents");
+      await mkdir(path.join(folder, "left"), { recursive: true });
+      await writeFile(path.join(folder, "left", "keep.txt"), "mine");
+      await writeFile(path.join(folder, "notes.txt"), "mine too");
+      return folder;
+    };
+    const holds = async (folder: string) => {
+      const names = (await readdir(folder, { recursive: true })).map(String).sort();
+      return { names, keep: await readFile(path.join(folder, "left", "keep.txt"), "utf8") };
+    };
+    // A junction on Windows (no privilege needed), a link elsewhere: the backend runs as the person either way.
+    const link = (target: string, at: string) => symlink(target, at, process.platform === "win32" ? "junction" : "dir");
+    const rows: Array<
+      [string, (game: { gameDir: string; project: string }, outside: string) => Promise<void>, RegExp | null]
+    > = [
+      [
+        "the project's .godot",
+        async ({ project }, outside) => {
+          await rm(path.join(project, ".godot"), { recursive: true, force: true });
+          await link(outside, path.join(project, ".godot"));
+        },
+        /is a link or a junction/,
+      ],
+      [
+        "its genex-jobs",
+        async ({ project }, outside) => {
+          await rm(path.join(project, ".godot", "genex-jobs"), { recursive: true, force: true });
+          await link(outside, path.join(project, ".godot", "genex-jobs"));
+        },
+        /is a link or a junction/,
+      ],
+      [
+        "a stage left in genex-jobs",
+        ({ project }, outside) => link(outside, path.join(project, ".godot", "genex-jobs", "left")),
+        null,
+      ],
+      [
+        "a job's own folder at the game's root",
+        ({ gameDir }, outside) => link(outside, path.join(gameDir, "genex-godot-job-left")),
+        null,
+      ],
+    ];
+    for (const [what, plant, refused] of rows) {
+      const game = await windowsProject();
+      const outside = await outsideFolder();
+      const before = await holds(outside);
+      await plant(game, outside);
+      // A backend started after the link was put there sweeps the game before its first job.
+      const again = await godotWindowsFixture({ installed: true });
+      const checked = tool(again, GodotTool.Check, {}, { directory: game.gameDir });
+      if (refused) await assert.rejects(checked, refused, what);
+      else await checked;
+      assert.deepEqual(await holds(outside), before, `${what}: nothing outside the game changed`);
+      if (refused) assert.deepEqual(again.requests, [], `${what}: Godot never ran`);
+    }
+    // A link a job leaves in its staged folder is never copied out, nor what it points at.
+    const outside = await outsideFolder();
+    const fixture = await windowsProject({
+      sandbox: async (request) => {
+        const at = request.args.indexOf("--doctool");
+        if (at < 0) return {};
+        const classes = path.join(request.args[at + 1] ?? "", "doc", "classes");
+        await mkdir(classes, { recursive: true });
+        await writeFile(path.join(classes, "Node.xml"), '<class name="Node" inherits="Object"></class>');
+        await link(outside, path.join(classes, "Secrets"));
+        return {};
+      },
+    });
+    await tool(fixture, GodotTool.ClassReference, { query: "Node" });
+    const kept = (await readdir(path.join(fixture.storage, "reference"), { recursive: true })).map(String);
+    assert.equal(
+      kept.some((name) => name.includes("Secrets") || name.includes("keep.txt")),
+      false,
+      kept.join(", "),
+    );
+    assert.equal((await lstat(path.join(outside, "left", "keep.txt"))).isFile(), true);
   });
 
   it("removes a stage Windows still holds once it lets go, and never fails the job when it doesn't", async () => {

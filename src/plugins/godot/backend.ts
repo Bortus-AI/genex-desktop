@@ -12,7 +12,7 @@ import { mkdir, readdir, readFile, realpath, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { SECOND_MS } from "../../shared/duration.ts";
+import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { writeFileNoFollow } from "../../substrate/fsx.ts";
 import { type HookAnswer, HookEvent, HOOK_RECORDING_MAX } from "../../shared/plugin-hooks.ts";
@@ -171,6 +171,13 @@ const HERO_RECORDING_FRAMES = 6;
 const HERO_RECORDING_SECONDS = 6;
 /** How far a file system's clock may lag Genex's when it tells a fresh export from an old one. */
 const EXPORT_CLOCK_SLACK_MS = 2 * SECOND_MS;
+/**
+ * `web-export`'s whole call (plugin.json's `timeoutMs`, nine minutes) less the time its answer
+ * takes: the template's fetch, its copy on Windows and Godot's export all fit in it.
+ */
+const WEB_EXPORT_BUDGET_MS = 9 * MINUTE_MS - 15 * SECOND_MS;
+/** The least of that budget Godot's export is left: a template that took longer to fetch stops the call before Godot runs. */
+const MIN_EXPORT_MS = MINUTE_MS;
 /** How many problems a checkpoint's note names. */
 const NOTED_PROBLEMS = 3;
 /** The plugin storage folder holding each game's Don't use Godot. */
@@ -210,6 +217,8 @@ const MESSAGE = {
     Failed: (lines: readonly string[]) =>
       `Godot's web export didn't finish${lines.length ? `: ${lines.join(" | ")}` : ""}. Fix what it names (godot__check helps), then export again.`,
     TimedOut: "Godot's web export didn't finish in time and was stopped.",
+    NoTimeLeft:
+      "Getting Godot's Web export template took most of this call's time, so Genex didn't start the export. It's in place now: export again.",
     NoTemplateCopy: (why: string) =>
       `Genex couldn't put Godot's Web export template where its sandbox reads it (${why}). Export again; if it keeps failing, install the template again in Godot (Editor → Manage Export Templates).`,
     NothingSaid: "Godot said nothing",
@@ -331,6 +340,8 @@ export type GodotBackendDeps = {
     license: string;
     release?: ColyseusRelease;
   };
+  /** The clock a call's budget is read on (`web-export`'s); the wall clock unless a test holds it. */
+  now?: () => number;
 };
 
 type Handler = (args: Record<string, unknown>, context: PluginContext) => Promise<unknown>;
@@ -488,11 +499,16 @@ async function reloadEditor(deps: GodotBackendDeps, context: PluginContext): Pro
  * for this Godot. Refused before Godot runs when the template is missing. Answers how many files it wrote.
  */
 async function webExport(deps: GodotBackendDeps, context: PluginContext): Promise<number> {
+  const now = deps.now ?? Date.now;
+  const deadline = now() + WEB_EXPORT_BUDGET_MS;
   const game = gameFolderOf(context);
   if (!game) throw new Error(MESSAGE.NoGameOpen);
   const project = await requireProject(context);
   const install = await requireGodot(deps, context);
-  await ensureTemplates(deps, install, [ExportTemplate.Web]).catch((error: unknown) => {
+  // The fetch leaves the export its least: a slower one is stopped, never Godot's export cut short.
+  const fetching = AbortSignal.any([context.signal, AbortSignal.timeout(WEB_EXPORT_BUDGET_MS - MIN_EXPORT_MS)]);
+  await ensureTemplates(deps, install, [ExportTemplate.Web], fetching).catch((error: unknown) => {
+    context.signal.throwIfAborted();
     throw new Error(MESSAGE.Web.NoTemplates(versionName(install.version), errorMessage(error)));
   });
   const multiplayer = await usesMultiplayer(project);
@@ -508,8 +524,10 @@ async function webExport(deps: GodotBackendDeps, context: PluginContext): Promis
   const job = jobOf(context, project);
   // Windows: the sandbox user's Godot reads templates in its own data folder, so the person's goes there first.
   if (deps.env.platform === "win32") await placeTemplate(deps, install, project, job);
+  const left = deadline - now();
+  if (left < MIN_EXPORT_MS) throw new Error(MESSAGE.Web.NoTimeLeft);
   const started = Date.now();
-  const result = await deps.run(install.binary, call, job);
+  const result = await deps.run(install.binary, { ...call, timeoutMs: Math.min(call.timeoutMs, left) }, job);
   if (result.timedOut) throw new Error(MESSAGE.Web.TimedOut);
   const pack = await stat(path.join(folder, WEB_PACK)).catch(() => null);
   const written = pack !== null && pack.mtimeMs >= started - EXPORT_CLOCK_SLACK_MS;
@@ -538,9 +556,14 @@ async function placeTemplate(
  * The templates asked for in the person's templates folder for the Godot in use: there already, or
  * fetched now from Godot's own release (`export-templates.ts`); answers the ones fetched.
  */
-function ensureTemplates(deps: GodotBackendDeps, install: GodotInstall, names: readonly ExportTemplate[]) {
+function ensureTemplates(
+  deps: GodotBackendDeps,
+  install: GodotInstall,
+  names: readonly ExportTemplate[],
+  signal: AbortSignal,
+) {
   const { folder } = webTemplates(deps.env.dataHome, install);
-  return fetchTemplates((deps.install ?? systemInstallDeps(deps.env)).fetch, install, folder, names);
+  return fetchTemplates((deps.install ?? systemInstallDeps(deps.env)).fetch, install, folder, names, signal);
 }
 
 /** The platforms an agent's `export-templates` names: web, windows, mac, comma-separated; all three when none. */
@@ -566,7 +589,7 @@ async function exportTemplates(deps: GodotBackendDeps, args: Record<string, unkn
   const install = await requireGodot(deps, context);
   const platforms = platformsArg(args.platforms);
   const names = platforms.flatMap((platform) => PLATFORM_TEMPLATES[platform]);
-  const fetched = await ensureTemplates(deps, install, names);
+  const fetched = await ensureTemplates(deps, install, names, context.signal);
   const windows = deps.env.platform === "win32";
   const job = jobOf(context, project);
   if (windows) for (const name of names) await placeTemplate(deps, install, project, job, name);
@@ -607,8 +630,8 @@ async function newestChange(project: string): Promise<number> {
 /**
  * `keep-web-build` at the end of each turn and after a restore: Godot's web build in `web/` made
  * again when the project changed since the last one, so Live's Web game tab and Publish always have
- * the game as it is. Nothing without a project, a usable Godot or its Web template; a failure is a
- * note, never a block.
+ * the game as it is. Nothing without a project, a usable Godot or its Web template, which it never
+ * fetches itself (Do it for me and `web-export` do); a failure is a note, never a block.
  */
 async function keepWebBuild(deps: GodotBackendDeps, context: PluginContext): Promise<HookAnswer> {
   const on = context.hook?.on;
@@ -617,12 +640,7 @@ async function keepWebBuild(deps: GodotBackendDeps, context: PluginContext): Pro
   const project = game ? await projectOf(context) : null;
   const install = usableGodot(await godots(deps, context));
   if (!game || !project || !install) return {};
-  // Without a Web template a turn's end fetches it once, and says nothing when it can't.
-  const template = await ensureTemplates(deps, install, [ExportTemplate.Web]).then(
-    () => true,
-    () => false,
-  );
-  if (!template) return {};
+  if (!(await hasWebTemplate(deps.env.dataHome, install))) return {};
   const pack = await stat(path.join(game, WEB_EXPORT_FOLDER, WEB_PACK)).catch(() => null);
   if (pack && pack.mtimeMs >= (await newestChange(project))) return {};
   try {
@@ -1048,7 +1066,7 @@ const windowsSetup = (deps: GodotBackendDeps): Setup => ({
     await context.host(HostService.RuntimeInstall, GODOT_RUNTIME).catch(() => undefined);
     // With Godot, its Web template, so the game plays in Live and publishes without a trip to Godot's editor.
     const installed = usableGodot(await godots(deps, context));
-    if (installed) await ensureTemplates(deps, installed, [ExportTemplate.Web]).catch(() => undefined);
+    if (installed) await ensureTemplates(deps, installed, [ExportTemplate.Web], context.signal).catch(() => undefined);
   },
   stop: async (context) => {
     await context.host(HostService.RuntimeCancelInstall, GODOT_RUNTIME).catch(() => undefined);

@@ -7,9 +7,11 @@
  * written whole into the person's templates folder for that version, where the Template Manager
  * puts them, beside the archive's `version.txt`. A template already there is kept.
  */
+import { randomUUID } from "node:crypto";
 import { lstat, mkdir, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import { crc32, inflateRawSync } from "node:zlib";
+import { SECOND_MS } from "../../shared/duration.ts";
 import { writeFileNoFollow } from "../../substrate/fsx.ts";
 import { type GodotInstall, versionName } from "./find-godot.ts";
 
@@ -36,6 +38,13 @@ const LOCAL_BYTES = 30;
 const DIRECTORY_MAX_BYTES = 1024 * 1024;
 const TEMPLATE_MAX_BYTES = 512 * 1024 * 1024;
 const PARTIAL = ".partial";
+/** A request's own deadline: this long, plus the time its bytes take at the slowest rate allowed. */
+const REQUEST_BASE_MS = 30 * SECOND_MS;
+const SLOWEST_BYTES_PER_SECOND = 256 * 1024;
+/** How many times one request is made before the fetch gives up: once, then twice again. */
+const REQUEST_TRIES = 3;
+/** A range the server answered: `bytes <first>-<last>/<size>`. */
+const CONTENT_RANGE = /^bytes (\d+)-(\d+)\/(\d+|\*)$/;
 
 /** Godot's template files Genex fetches, by what they export. Wire values: Godot's own file names. */
 export const ExportTemplate = {
@@ -93,6 +102,8 @@ const MESSAGE = {
   Archive: "Godot's templates archive isn't one Genex can read.",
   Missing: (name: string) => `Godot's templates archive has no ${name}.`,
   Damaged: (name: string) => `Godot's ${name} arrived damaged; try again.`,
+  NotRanged: (status: number) => `the server answered HTTP ${status} with the whole archive, not the part asked for`,
+  TimedOut: "it took too long",
 } as const;
 
 /** One template's place in the archive: its local header, its sizes, how it is packed and its CRC-32. */
@@ -109,32 +120,86 @@ export function templatesArchiveUrl(install: GodotInstall): string | null {
   return `${RELEASES}/${name}-stable/Godot_v${name}-stable${version.mono ? "_mono" : ""}_export_templates.tpz`;
 }
 
-/** Bytes `from` to `to` of the archive, as GitHub serves a range; refused unless it is that range. */
-async function range(fetcher: TemplateFetch, url: string, from: number, to: number): Promise<Buffer> {
-  const answer = await fetcher(url, { headers: { Range: `bytes=${from}-${to}` } }).catch((error: unknown) => {
-    throw new Error(MESSAGE.Download(error instanceof Error ? error.message : String(error)));
+/** Where the templates come from and how a fetch of them is stopped: the network, with ranges. */
+type Source = { fetcher: TemplateFetch; url: string; signal: AbortSignal | undefined };
+
+/** A failure no second try mends (a server that ignores ranges, an archive Genex can't read). */
+type Final = Error & { final: true };
+const final = (message: string): Final => Object.assign(new Error(message), { final: true as const });
+const isFinal = (error: unknown): error is Final => error instanceof Error && "final" in error;
+
+/**
+ * One request of the fetch, made again when it fails (the network, a timeout, a short answer), up
+ * to {@link REQUEST_TRIES} times; never once the caller stopped, nor after a final failure. Each
+ * try has its own deadline, by the bytes it reads (`bytes`).
+ */
+async function tried<T>(source: Source, bytes: number, ask: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  for (let attempt = 1; ; attempt += 1) {
+    source.signal?.throwIfAborted();
+    const deadline = AbortSignal.timeout(requestMs(bytes));
+    const signal = source.signal ? AbortSignal.any([source.signal, deadline]) : deadline;
+    try {
+      return await ask(signal);
+    } catch (error) {
+      if (source.signal?.aborted) throw source.signal.reason;
+      if (isFinal(error)) throw new Error(error.message);
+      if (attempt >= REQUEST_TRIES) throw new Error(MESSAGE.Download(failureWords(error, deadline)));
+    }
+  }
+}
+
+/** A request's deadline in whole milliseconds, by the bytes it reads. */
+const requestMs = (bytes: number): number =>
+  REQUEST_BASE_MS + Math.ceil((bytes / SLOWEST_BYTES_PER_SECOND) * SECOND_MS);
+
+/** Why a try failed, in a few words. */
+function failureWords(error: unknown, deadline: AbortSignal): string {
+  if (deadline.aborted) return MESSAGE.TimedOut;
+  return error instanceof Error ? error.message : String(error);
+}
+
+/** Whether a 206 answer is the range asked: its Content-Range names exactly `from` to `to`. */
+function isRange(answer: Response, from: number, to: number): boolean {
+  const named = CONTENT_RANGE.exec(answer.headers.get("content-range") ?? "");
+  return answer.status === 206 && named !== null && Number(named[1]) === from && Number(named[2]) === to;
+}
+
+/**
+ * Bytes `from` to `to` of the archive, as GitHub serves a range. An answer that isn't that range
+ * (a whole archive from a server or proxy that ignores ranges) is refused before its body is read,
+ * and its body cancelled.
+ */
+function range(source: Source, from: number, to: number): Promise<Buffer> {
+  const length = to - from + 1;
+  return tried(source, length, async (signal) => {
+    const answer = await source.fetcher(source.url, { headers: { Range: `bytes=${from}-${to}` }, signal });
+    if (!isRange(answer, from, to)) {
+      await answer.body?.cancel().catch(() => undefined);
+      const message = MESSAGE.Download(answer.ok ? MESSAGE.NotRanged(answer.status) : `HTTP ${answer.status}`);
+      throw answer.ok ? final(message) : new Error(message);
+    }
+    const bytes = Buffer.from(await answer.arrayBuffer());
+    if (bytes.length !== length) throw new Error(`${bytes.length} of ${length} bytes`);
+    return bytes;
   });
-  const bytes = Buffer.from(await answer.arrayBuffer());
-  if (!answer.ok || bytes.length !== to - from + 1) throw new Error(MESSAGE.Download(`HTTP ${answer.status}`));
-  return bytes;
 }
 
 /** The archive's size, from its headers. */
-async function archiveSize(fetcher: TemplateFetch, url: string): Promise<number> {
-  const answer = await fetcher(url, { method: "HEAD" }).catch((error: unknown) => {
-    throw new Error(MESSAGE.Download(error instanceof Error ? error.message : String(error)));
+function archiveSize(source: Source): Promise<number> {
+  return tried(source, 0, async (signal) => {
+    const answer = await source.fetcher(source.url, { method: "HEAD", signal });
+    const size = Number(answer.headers.get("content-length"));
+    if (!answer.ok) throw new Error(`HTTP ${answer.status}`);
+    if (!Number.isSafeInteger(size) || size < END_BYTES) throw final(MESSAGE.Archive);
+    return size;
   });
-  const size = Number(answer.headers.get("content-length"));
-  if (!answer.ok || !Number.isSafeInteger(size) || size < END_BYTES)
-    throw new Error(MESSAGE.Download(`HTTP ${answer.status}`));
-  return size;
 }
 
-/** The archive's central directory, read through its end record; a ZIP64 archive is refused. */
-async function centralDirectory(fetcher: TemplateFetch, url: string): Promise<Buffer> {
-  const size = await archiveSize(fetcher, url);
+/** The archive's central directory, read through its end record, and the archive's size; a ZIP64 archive is refused. */
+async function centralDirectory(source: Source): Promise<{ directory: Buffer; size: number }> {
+  const size = await archiveSize(source);
   const start = Math.max(0, size - END_SEARCH_BYTES);
-  const tail = await range(fetcher, url, start, size - 1);
+  const tail = await range(source, start, size - 1);
   let end = tail.length - END_BYTES;
   while (end >= 0 && tail.readUInt32LE(end) !== END_SIGNATURE) end -= 1;
   if (end < 0) throw new Error(MESSAGE.Archive);
@@ -142,7 +207,7 @@ async function centralDirectory(fetcher: TemplateFetch, url: string): Promise<Bu
   const offset = tail.readUInt32LE(end + 16);
   const valid = offset !== ZIP64_MARK && length > 0 && length <= DIRECTORY_MAX_BYTES && offset + length <= size;
   if (!valid) throw new Error(MESSAGE.Archive);
-  return range(fetcher, url, offset, offset + length - 1);
+  return { directory: await range(source, offset, offset + length - 1), size };
 }
 
 /** The archive's entries by name, from its central directory. */
@@ -164,54 +229,84 @@ function entriesOf(directory: Buffer): Map<string, ArchiveEntry> {
   return entries;
 }
 
-/** One entry's bytes, read past its local header, inflated and checked against its size and CRC-32. */
-async function entryBytes(fetcher: TemplateFetch, url: string, name: string, entry: ArchiveEntry): Promise<Buffer> {
+/** Whether an entry is one Genex reads: stored or deflated, within the sizes a template has, never ZIP64's. */
+function readable(entry: ArchiveEntry): boolean {
   const known = entry.method === STORED || entry.method === DEFLATED;
   const fits = entry.packed !== ZIP64_MARK && entry.size <= TEMPLATE_MAX_BYTES && entry.packed <= TEMPLATE_MAX_BYTES;
-  if (!known || !fits) throw new Error(MESSAGE.Archive);
-  const header = await range(fetcher, url, entry.local, entry.local + LOCAL_BYTES - 1);
+  // A deflated entry is never empty: even no bytes deflate to some.
+  const packs = entry.method !== DEFLATED || entry.packed > 0;
+  return known && fits && packs;
+}
+
+/**
+ * One entry's bytes, read past its local header, inflated and checked against its size and CRC-32;
+ * one whose header or bytes would lie past the archive's end (`size`) is refused before it is asked for.
+ */
+async function entryBytes(source: Source, size: number, name: string, entry: ArchiveEntry): Promise<Buffer> {
+  if (!readable(entry) || entry.local + LOCAL_BYTES > size) throw new Error(MESSAGE.Archive);
+  const header = await range(source, entry.local, entry.local + LOCAL_BYTES - 1);
   if (header.readUInt32LE(0) !== LOCAL_SIGNATURE) throw new Error(MESSAGE.Archive);
   const start = entry.local + LOCAL_BYTES + header.readUInt16LE(26) + header.readUInt16LE(28);
-  const packed = entry.packed ? await range(fetcher, url, start, start + entry.packed - 1) : Buffer.alloc(0);
-  const bytes = entry.method === DEFLATED ? inflateRawSync(packed, { maxOutputLength: TEMPLATE_MAX_BYTES }) : packed;
+  if (start + entry.packed > size) throw new Error(MESSAGE.Archive);
+  const packed = entry.packed ? await range(source, start, start + entry.packed - 1) : Buffer.alloc(0);
+  const bytes = entry.method === DEFLATED ? inflated(packed, name) : packed;
   if (bytes.length !== entry.size || crc32(bytes) !== entry.crc) throw new Error(MESSAGE.Damaged(name));
   return bytes;
+}
+
+/** A deflated entry's bytes, or a damaged template when they don't inflate. */
+function inflated(packed: Buffer, name: string): Buffer {
+  try {
+    return inflateRawSync(packed, { maxOutputLength: TEMPLATE_MAX_BYTES });
+  } catch {
+    throw new Error(MESSAGE.Damaged(name));
+  }
 }
 
 /** Whether `file` is there as a plain file (a link is not one). */
 const isFile = async (file: string) => (await lstat(file).catch(() => null))?.isFile() === true;
 
-/** A file written whole: beside its place first, then moved in, never through a link. */
+/**
+ * A file written whole: beside its place first, under a name of this write's own (two fetches at
+ * once never share one), then moved in, never through a link.
+ */
 async function writeWhole(file: string, bytes: Buffer): Promise<void> {
-  const partial = `${file}${PARTIAL}`;
-  await rm(partial, { force: true });
-  await writeFileNoFollow(partial, bytes);
-  await rename(partial, file);
+  const partial = `${file}.${randomUUID()}${PARTIAL}`;
+  try {
+    await writeFileNoFollow(partial, bytes);
+    await rename(partial, file);
+  } finally {
+    await rm(partial, { force: true });
+  }
 }
 
 /**
  * The templates asked for in `folder` (the person's templates folder for `install`'s version),
  * each fetched from Godot's archive unless it is already there, with the archive's `version.txt`.
- * Answers the names it fetched; refuses a Godot that isn't an official stable release.
+ * Answers the names it fetched; refuses a Godot that isn't an official stable release. `signal`
+ * stops the fetch; each request also has its own deadline and is tried again when it fails.
  */
 export async function fetchTemplates(
   fetcher: TemplateFetch,
   install: GodotInstall,
   folder: string,
   names: readonly ExportTemplate[],
+  signal?: AbortSignal,
 ): Promise<string[]> {
   const missing: string[] = [];
   for (const name of names) if (!(await isFile(path.join(folder, name)))) missing.push(name);
   if (missing.length === 0) return [];
   const url = templatesArchiveUrl(install);
   if (!url) throw new Error(MESSAGE.NotOfficial(install.version.text));
-  const entries = entriesOf(await centralDirectory(fetcher, url));
+  const source: Source = { fetcher, url, signal };
+  const { directory, size } = await centralDirectory(source);
+  const entries = entriesOf(directory);
   await mkdir(folder, { recursive: true });
   for (const name of [...missing, VERSION_FILE]) {
     const entry = entries.get(`${ARCHIVE_FOLDER}/${name}`);
     if (!entry) throw new Error(MESSAGE.Missing(name));
     if (name === VERSION_FILE && (await isFile(path.join(folder, name)))) continue;
-    await writeWhole(path.join(folder, name), await entryBytes(fetcher, url, name, entry));
+    await writeWhole(path.join(folder, name), await entryBytes(source, size, name, entry));
   }
   return missing;
 }

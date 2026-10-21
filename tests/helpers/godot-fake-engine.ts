@@ -255,6 +255,8 @@ export async function godotBackendFixture(
     release?: ColyseusRelease;
     /** The computer the backend believes it is on; a Mac unless a test names another. */
     platform?: NodeJS.Platform;
+    /** The clock a call's budget is read on; the wall clock unless a test holds it. */
+    now?: () => number;
   } = {},
 ) {
   const mac = await fakeMac(options.apps);
@@ -274,6 +276,7 @@ export async function godotBackendFixture(
     addon: ADDON,
     multiplayer: { ...MULTIPLAYER, ...(options.release ? { release: options.release } : {}) },
     install: options.install ?? offlineInstall(mac.root),
+    ...(options.now ? { now: options.now } : {}),
   });
   const hostCalls: HostCall[] = [];
   /** The game's engine link as the host keeps it (`game.engine.link` / `game.engine.read`). */
@@ -451,9 +454,15 @@ type ZipFile = { name: string; data: Buffer; packed: Buffer; crc: number; local:
 /**
  * Godot's templates archive as GitHub serves it, made of `files` (names inside the archive, such as
  * `templates/web_nothreads_release.zip`): a zip answering HEAD with its size and GET with the byte
- * range asked, every request kept in `asked` (`HEAD`, or the range).
+ * range asked (206 and its Content-Range), every request kept in `asked` (`HEAD`, or the range).
+ * `serve` stands in for a server that does otherwise: `ignoresRange` answers the whole archive
+ * with 200 (each body it cancelled counted in `cancelled`), and `drops` requests fail first as a
+ * network does. Each request's signal is kept in `signals`.
  */
-export function templatesArchive(files: Record<string, Buffer | string>) {
+export function templatesArchive(
+  files: Record<string, Buffer | string>,
+  serve: { ignoresRange?: boolean; drops?: number } = {},
+) {
   const zipped: ZipFile[] = [];
   const parts: Buffer[] = [];
   let offset = 0;
@@ -495,16 +504,43 @@ export function templatesArchive(files: Record<string, Buffer | string>) {
   const archive = Buffer.concat(parts);
   const asked: string[] = [];
   const urls: string[] = [];
+  const signals: Array<AbortSignal | null | undefined> = [];
+  const state = { cancelled: 0, drops: serve.drops ?? 0 };
+  const whole = () =>
+    new Response(
+      new ReadableStream({
+        pull: (controller) => controller.enqueue(new Uint8Array(archive)),
+        cancel: () => {
+          state.cancelled += 1;
+        },
+      }),
+      { status: 200 },
+    );
   const served = async (url: string | URL | Request, init?: RequestInit): Promise<Response> => {
     urls.push(String(url));
+    signals.push(init?.signal);
+    if (state.drops > 0) {
+      state.drops -= 1;
+      asked.push("dropped");
+      throw new TypeError("fetch failed");
+    }
     if (init?.method === "HEAD") {
       asked.push("HEAD");
       return new Response(null, { headers: { "content-length": String(archive.length) } });
     }
     const wanted = /bytes=(\d+)-(\d+)/.exec(new Headers(init?.headers).get("range") ?? "");
     asked.push(wanted?.[0] ?? "all");
-    const [from, to] = wanted ? [Number(wanted[1]), Number(wanted[2])] : [0, archive.length - 1];
-    return new Response(archive.subarray(from, to + 1), { status: wanted ? 206 : 200 });
+    if (!wanted || serve.ignoresRange) return whole();
+    const [from, to] = [Number(wanted[1]), Number(wanted[2])];
+    const headers = { "content-range": `bytes ${from}-${to}/${archive.length}` };
+    return new Response(archive.subarray(from, to + 1), { status: 206, headers });
   };
-  return { fetch: served as typeof fetch, asked, urls, archive };
+  return {
+    fetch: served as typeof fetch,
+    asked,
+    urls,
+    archive,
+    signals,
+    cancelled: () => state.cancelled,
+  };
 }

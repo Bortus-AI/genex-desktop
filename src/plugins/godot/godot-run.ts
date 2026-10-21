@@ -11,7 +11,7 @@
  * capture) would wait forever. Tests hand in their own runner and never start Godot.
  */
 import { randomUUID } from "node:crypto";
-import { cp, mkdir, mkdtemp, readdir, readFile, realpath, rm, symlink } from "node:fs/promises";
+import { cp, lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -96,6 +96,8 @@ const MESSAGE = {
     "On Windows Genex runs Godot only on a project inside the game's folder; this game's project is linked from elsewhere.",
   NotStarted: (reason: string) => `Genex's sandbox didn't start Godot (${reason}).`,
   Lost: "Genex's sandbox lost Godot's job before it ended.",
+  StageLink: (folder: string) =>
+    `Genex runs Godot's jobs only in folders of the game's own: ${folder} is a link or a junction, so Genex stopped. Remove it, then try again.`,
 } as const;
 
 /** One job: Godot's arguments, the folder it runs in, what it may read and write, and its deadline. */
@@ -361,7 +363,44 @@ async function windowsFolders(call: GodotCall, job: GodotJobScope) {
     staged: path.join(root, INPUTS_FOLDER, String(index), path.basename(file)),
   }));
   if (!project) await ignoreOwnFolders(game);
-  return { root, game, project, writes: writes.length ? writes : [project ?? root], staged, inputs };
+  // The real folder the stage is made in: every folder from it to the stage is checked as Genex's own.
+  const base = project ?? game;
+  return { root, base, game, project, writes: writes.length ? writes : [project ?? root], staged, inputs };
+}
+
+/**
+ * Whether `folder` (below `base`, a real path) is a real folder reached through real folders only:
+ * no link or junction on the way, and its real path is the one named. Nothing is made, listed,
+ * copied out of or removed through one that isn't, since Genex's backend runs as the person.
+ */
+async function realBelow(base: string, folder: string): Promise<boolean> {
+  if (!isBelow(base, folder)) return false;
+  let at = base;
+  for (const part of path.relative(base, folder).split(path.sep)) {
+    at = path.join(at, part);
+    if (!(await isRealFolder(at))) return false;
+  }
+  const real = await realpath(folder).catch(() => null);
+  return real !== null && path.relative(real, folder) === "";
+}
+
+/** Whether `folder` is a folder itself, never a link or a junction to one. */
+const isRealFolder = async (folder: string): Promise<boolean> => {
+  const stat = await lstat(folder).catch(() => null);
+  return stat?.isDirectory() === true && !stat.isSymbolicLink();
+};
+
+/** Makes `folder` below `base` one folder at a time, refusing one that is a link or a junction. */
+async function makeBelow(base: string, folder: string): Promise<void> {
+  let at = base;
+  for (const part of path.relative(base, folder).split(path.sep)) {
+    at = path.join(at, part);
+    await mkdir(at).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== "EEXIST") throw error;
+    });
+    if (!(await isRealFolder(at))) throw new Error(MESSAGE.StageLink(at));
+  }
+  if (!(await realBelow(base, folder))) throw new Error(MESSAGE.StageLink(folder));
 }
 
 /**
@@ -393,14 +432,27 @@ async function ignoreOwnFolders(game: string): Promise<void> {
   await writeFileNoFollow(file, `${before}${OWN_FOLDER_IGNORE}\n`);
 }
 
-/** Every stage a job of this game left, at the game's root and in its project's `.godot`: none of them is running. */
-async function staleStages(game: string, project: string | null): Promise<string[]> {
-  const own = (await readdir(game).catch(() => [] as string[])).filter((name) => name.startsWith(OWN_FOLDER_PREFIX));
+/** A stage and the real folder it was made in. */
+type Stage = { base: string; stage: string };
+
+/**
+ * Every stage a job of this game left, at the game's root and in its project's `.godot`: none of
+ * them is running. Only real folders are stages: a link or a junction among them, or in place of
+ * `.godot` or its `genex-jobs`, is never listed through or removed.
+ */
+async function staleStages(game: string, project: string | null): Promise<Stage[]> {
+  const own = (await foldersIn(game)).filter((name) => name.startsWith(OWN_FOLDER_PREFIX));
+  const stages = own.map((name) => ({ base: game, stage: path.join(game, name) }));
   const inProject = project ? path.join(project, ...STAGING) : null;
-  const left = inProject
-    ? (await readdir(inProject).catch(() => [] as string[])).map((n) => path.join(inProject, n))
-    : [];
-  return [...own.map((name) => path.join(game, name)), ...left];
+  if (!project || !inProject || !(await realBelow(project, inProject))) return stages;
+  const left = (await foldersIn(inProject)).map((name) => ({ base: project, stage: path.join(inProject, name) }));
+  return [...stages, ...left];
+}
+
+/** The names of the real folders in `folder` (no link, junction or file). */
+async function foldersIn(folder: string): Promise<string[]> {
+  const entries = await readdir(folder, { withFileTypes: true }).catch(() => []);
+  return entries.filter((entry) => entry.isDirectory() && !entry.isSymbolicLink()).map((entry) => entry.name);
 }
 
 /** Removes a folder and all it holds; tests stand in for one Windows holds. */
@@ -409,10 +461,16 @@ const removeFolder: RemoveStage = (folder) => rm(folder, { recursive: true, forc
 
 /**
  * Removes a stage, trying again while Windows still holds a file in it (an antivirus scan, Godot
- * not quite gone); one still held is left for the next sweep, never failing the job.
+ * not quite gone); one still held is left for the next sweep, never failing the job. A stage that
+ * is no longer a real folder of `base` (a link or a junction put on its way) is left as it is.
  */
-async function removeStage(stage: string, remove: RemoveStage, wait: (ms: number) => Promise<unknown>): Promise<void> {
+async function removeStage(
+  { base, stage }: Stage,
+  remove: RemoveStage,
+  wait: (ms: number) => Promise<unknown>,
+): Promise<void> {
   for (let tries = 0; ; tries += 1) {
+    if (!(await realBelow(base, stage))) return;
     const failure = await remove(stage).then(
       () => null,
       (error: NodeJS.ErrnoException) => error,
@@ -422,23 +480,47 @@ async function removeStage(stage: string, remove: RemoveStage, wait: (ms: number
   }
 }
 
-/** The stage, each staged folder in it, and each file read from outside the game copied in, before the job starts. */
-async function stageFolders(root: string, staged: readonly Staged[], inputs: readonly Staged[]): Promise<void> {
-  await mkdir(root, { recursive: true });
-  for (const { staged: folder } of staged) await mkdir(folder, { recursive: true });
+/**
+ * The stage, each staged folder in it, and each file read from outside the game copied in, before
+ * the job starts: each made one folder at a time from `base`, never through a link or a junction.
+ */
+async function stageFolders(
+  { base, root }: { base: string; root: string },
+  staged: readonly Staged[],
+  inputs: readonly Staged[],
+): Promise<void> {
+  await makeBelow(base, root);
+  for (const { staged: folder } of staged) await makeBelow(base, folder);
   for (const { folder: file, staged: copy } of inputs) {
-    await mkdir(path.dirname(copy), { recursive: true });
-    await cp(file, copy);
+    await makeBelow(base, path.dirname(copy));
+    await cp(file, copy, { errorOnExist: true, force: false });
   }
 }
 
-/** A text with each staged folder's path put in place of its folder's (`toStaged`), or back. */
+/**
+ * What a job wrote in a staged folder, copied out to the folder the call named: only when the stage
+ * is still a real folder of `base`, and never a link or a junction in it.
+ */
+async function copyOut(base: string, staged: readonly Staged[]): Promise<void> {
+  for (const { folder, staged: inProject } of staged) {
+    if (!(await realBelow(base, inProject))) throw new Error(MESSAGE.StageLink(inProject));
+    const plain = async (source: string) => !(await lstat(source)).isSymbolicLink();
+    await cp(inProject, folder, { recursive: true, filter: plain });
+  }
+}
+
+/** A path as Godot prints it on Windows too: with forward slashes. */
+const slashed = (folder: string): string => folder.replaceAll("\\", "/");
+
+/**
+ * A text with each staged folder's path put in place of its folder's (`toStaged`), or back; back,
+ * Godot's own spelling of it (forward slashes) is put back too.
+ */
 function swapFolders(text: string, staged: readonly Staged[], toStaged: boolean): string {
-  return staged.reduce(
-    (swapped, { folder, staged: inProject }) =>
-      toStaged ? swapped.replaceAll(folder, inProject) : swapped.replaceAll(inProject, folder),
-    text,
-  );
+  return staged.reduce((swapped, { folder, staged: inProject }) => {
+    if (toStaged) return swapped.replaceAll(folder, inProject);
+    return swapped.replaceAll(inProject, folder).replaceAll(slashed(inProject), slashed(folder));
+  }, text);
 }
 
 /** The sandbox job a Godot call is: Godot itself, reading its own folder and the call's, writing the folders named. */
@@ -507,18 +589,18 @@ export function windowsRunner(
     const folders = await windowsFolders(call, job);
     await sweep(folders.game, folders.project);
     try {
-      await stageFolders(folders.root, folders.staged, folders.inputs);
+      await stageFolders(folders, folders.staged, folders.inputs);
       const done = await turn(job.signal);
       try {
         const { id } = await job.host(PluginService.SandboxRun, sandboxRequest(binary, call, folders));
-        const result = resultOf(await jobEnd(job, id, wait), folders.staged);
-        for (const { folder, staged } of folders.staged) await cp(staged, folder, { recursive: true });
+        const result = resultOf(await jobEnd(job, id, wait), [...folders.inputs, ...folders.staged]);
+        await copyOut(folders.base, folders.staged);
         return result;
       } finally {
         done();
       }
     } finally {
-      await removeStage(folders.root, remove, wait);
+      await removeStage({ base: folders.base, stage: folders.root }, remove, wait);
     }
   };
 }
