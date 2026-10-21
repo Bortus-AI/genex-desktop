@@ -676,6 +676,9 @@ describe("an entry on one folder alone, on Windows", {
     // A lived-in Windows 11 profile: passing the deny down Chrome's profile took 17 s of the first
     // start, although only its owner, SYSTEM and the Administrators could open anything in it.
     const root = realpathSync.native(await tmpDir("folder-deny-closed-"));
+    // The test's own root starts closed too: another program's sandbox (the real Codex CLI's) can
+    // leave allows on the runner's temp folder that everything made under it would inherit.
+    ownerOnly(root);
     const secret = path.join(root, "above", "User Data");
     const before = path.join(secret, "Default", "Cookies");
     await mkdir(path.dirname(before), { recursive: true });
@@ -684,7 +687,11 @@ describe("an entry on one folder alone, on Windows", {
     const denies = ownAclEntries(path.join(root, "holders"), { sid: async () => GUESTS, pid: 1, alive: () => false });
     assert.equal(await denies.sync(routeWindowsDenies({ read: [secret], write: [] }).own), true);
     assert.match(sddl(secret, root), /\(D;OICI;FA;;;BG\)/, "the folder is denied, to pass down");
-    assert.doesNotMatch(sddl(before, root), /;;;BG\)/, "nothing under it was walked during the start");
+    assert.doesNotMatch(
+      sddl(before, root),
+      /;;;BG\)/,
+      `nothing under it was walked during the start; the folder: ${sddl(secret, root)}`,
+    );
     const later = path.join(secret, "Login Data");
     await writeFile(later, "later");
     assert.match(sddl(later, root), /\(D;ID;FA;;;BG\)/, "a file made in it meanwhile inherits the deny");

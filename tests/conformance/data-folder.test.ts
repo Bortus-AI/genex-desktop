@@ -17,6 +17,7 @@ import {
   DataLaunchKind,
   parseDataFolderRecord,
   pointElectronAtData,
+  quitsAtOnce,
   readDataFolderRecord,
   thisDataLaunch,
   writeDataFolderRecord,
@@ -260,4 +261,15 @@ test("a move while another Genex runs on the data only wakes that one: nothing m
   assert.deepEqual(pointElectronAtData(host), { kind: DataLaunchKind.Taken, dir: defaultDir });
   assert.equal(set.userData, path.join(host.temp, DATA_MOVE_SESSION), "Electron's own files stay out of both folders");
   assert.deepEqual(readDataFolderRecord(defaultDir), { moveTo: path.join(root, "D", "Genex") }, "the move waits");
+});
+
+test("a launch whose move is taken by a running Genex only quits; every other launch goes on", () => {
+  assert.equal(quitsAtOnce({ kind: DataLaunchKind.Taken, dir: DEFAULT }), true);
+  for (const launch of [
+    { kind: DataLaunchKind.Default, dir: DEFAULT },
+    { kind: DataLaunchKind.Moved, dir: CHOSEN },
+    { kind: DataLaunchKind.Move, from: DEFAULT, to: CHOSEN },
+    { kind: DataLaunchKind.Missing, dir: CHOSEN },
+  ] as const)
+    assert.equal(quitsAtOnce(launch), false, launch.kind);
 });

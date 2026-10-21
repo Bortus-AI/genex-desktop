@@ -31,6 +31,8 @@ export interface DataFolderRecord {
   moveTo?: string;
   /** The entries a move set out to move, recorded before it changed anything, so a closed Genex carries on. */
   moving?: string[];
+  /** When the move's first attempt began, in ms since the epoch: what changed in the old folder after it is someone's edit. */
+  movingSince?: number;
   /** How the move moved each entry it finished, so carrying on knows which side of an entry is the data. */
   done?: Record<string, EntryMove>;
   /** A move whose links and copies are still to repair: its old folder (cleared once repaired). */
@@ -101,6 +103,8 @@ export function parseDataFolderRecord(raw: unknown): DataFolderRecord {
   if (moveTo) record.moveTo = moveTo;
   const moving = Array.isArray(fields.moving) ? fields.moving.filter(isEntryName) : [];
   if (moveTo && moving.length) record.moving = moving;
+  if (moveTo && typeof fields.movingSince === "number" && Number.isFinite(fields.movingSince))
+    record.movingSince = fields.movingSince;
   const done = parseDone(fields.done);
   if (moveTo && Object.keys(done).length) record.done = done;
   const relinkFrom = absolute(fields.relinkFrom);
@@ -214,6 +218,15 @@ export interface DataPathsHost {
    * Genex holds it. Every Genex holds it for its data folder, so a move takes it there first.
    */
   lock(): boolean;
+}
+
+/**
+ * Whether this launch only quits: a move is due while another Genex has the data open. That one was
+ * woken when the lock was refused; this launch must not claim a lock of its own afterwards, which
+ * Electron would grant it on the temp folder and start a second, empty studio.
+ */
+export function quitsAtOnce(launch: DataLaunch): boolean {
+  return launch.kind === DataLaunchKind.Taken;
 }
 
 /**

@@ -389,3 +389,70 @@ test("a moving launch records each entry as it moves, so carrying on knows which
   });
   assert.deepEqual(readDataFolderRecord(m.from), { dir: m.to }, "the journal goes once the move is recorded");
 });
+
+/** Every file under `dir` last changed at `when` (links left alone). */
+async function ageFiles(dir: string, when: Date): Promise<void> {
+  const { lstat, utimes } = await import("node:fs/promises");
+  for (const name of await readdir(dir)) {
+    const entry = path.join(dir, name);
+    const info = await lstat(entry);
+    if (info.isDirectory()) await ageFiles(entry, when);
+    else if (info.isFile()) await utimes(entry, when, when);
+  }
+}
+
+test("an original edited between two attempts of a move stays: the first attempt's start counts", async (t) => {
+  const m = await machine(t);
+  const firstStart = Date.now() - 10 * MINUTE;
+  // Everything was there before the first attempt; it copied scratch, then Genex closed, and an
+  // editor changed one original meanwhile.
+  const { cp, utimes } = await import("node:fs/promises");
+  await ageFiles(m.from, new Date(firstStart - MINUTE));
+  await cp(path.join(m.from, "scratch"), path.join(m.to, "scratch"), { recursive: true, verbatimSymlinks: true });
+  const edited = path.join(m.from, "scratch", "autopilot", "run-1", "main.js");
+  await writeFile(edited, "edited between the attempts");
+  const between = new Date(firstStart + MINUTE);
+  await utimes(edited, between, between);
+  await writeDataFolderRecord(m.from, {
+    moveTo: m.to,
+    moving: ["opened-copies", "projects.json", "scratch", "workspaces"],
+    movingSince: firstStart,
+    done: { scratch: "copied" },
+  });
+  await runDataMove(deps(m, ACROSS_VOLUMES).deps);
+  assert.equal(await readFile(edited, "utf8"), "edited between the attempts", "the edit is not removed");
+  const kept = readDataFolderRecord(m.from).leftover?.find((item) => item.changed);
+  assert.deepEqual(kept?.entries, ["scratch"]);
+});
+
+test("what was written under a renamed entry's old name stays, and Storage names it", async (t) => {
+  const m = await machine(t);
+  const { rename } = await import("node:fs/promises");
+  await rename(path.join(m.from, "scratch"), path.join(m.to, "scratch"));
+  await mkdir(path.join(m.from, "scratch"));
+  await writeFile(path.join(m.from, "scratch", "late.log"), "written after the rename");
+  await writeDataFolderRecord(m.from, {
+    moveTo: m.to,
+    moving: ["opened-copies", "projects.json", "scratch", "workspaces"],
+    done: { scratch: "renamed" },
+  });
+  await runDataMove(deps(m).deps);
+  await removeLeftover(m.from, m.to, () => {});
+  assert.equal(await readFile(path.join(m.from, "scratch", "late.log"), "utf8"), "written after the rename");
+  assert.deepEqual(
+    readDataFolderRecord(m.from).leftover?.map(({ dir, entries, changed }) => ({ dir, entries, changed })),
+    [{ dir: m.from, entries: ["scratch"], changed: true }],
+  );
+});
+
+test("repairs and clean-up run only for the folder the record says is in use", async (t) => {
+  const m = await machine(t);
+  const other = path.join(m.root, "dev-profile", "core");
+  await mkdir(other, { recursive: true });
+  const leftover = [{ dir: m.root, entries: ["AI Games"], since: Date.now() + MINUTE }];
+  await writeDataFolderRecord(m.from, { dir: m.to, relinkFrom: m.from, leftover });
+  await finishMove(m.from, other, { log: () => {} });
+  await removeLeftover(m.from, other, () => {});
+  assert.deepEqual(readDataFolderRecord(m.from), { dir: m.to, relinkFrom: m.from, leftover });
+  assert.ok((await readdir(m.root)).includes("AI Games"));
+});

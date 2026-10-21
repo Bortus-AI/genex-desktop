@@ -195,7 +195,7 @@ import { routeStudioLink } from "./link-policy.ts";
 import { createLoginControllers, type SubscriptionEngine } from "./login-controllers.ts";
 import { createOpenRouterLogin } from "./openrouter-login.ts";
 import { openStudioLog } from "./logs.ts";
-import { DATA_FOLDER_FILE, DataLaunchKind, defaultDataDir, thisDataLaunch } from "./data-folder.ts";
+import { DATA_FOLDER_FILE, DataLaunchKind, defaultDataDir, quitsAtOnce, thisDataLaunch } from "./data-folder.ts";
 import { createDataFolderChoices, type DataFolderChoices } from "./data-folder-choice.ts";
 import { type DataFolderIpcDeps, registerDataFolderIpc } from "./ipc/data-folder.ts";
 import { freeBytes, measureData } from "../substrate/data-move.ts";
@@ -1867,6 +1867,10 @@ async function main(): Promise<void> {
     await runSelfTestAndExit();
     return;
   }
+  if (quitsAtOnce(dataLaunch)) {
+    app.exit(0);
+    return;
+  }
   if (!claimTheMac()) return;
   answerGameLinks();
   await app.whenReady();
@@ -1915,6 +1919,9 @@ async function settleDataFolder(): Promise<boolean> {
     await waitForDataFolder(dataLaunch.dir);
     return true;
   }
+  // Only the person's own launch tends the normal profile's record: a developer, test or smoke
+  // launch runs on a folder of its own and must never repair or clean up the real one.
+  if (!isNormalLaunch(process.argv)) return false;
   if (dataLaunch.kind === DataLaunchKind.Moved || dataLaunch.kind === DataLaunchKind.Default) {
     const log = (line: string) => studioLog.write("main", line);
     // A move Genex closed after recording repairs its links before anything reads them, and only

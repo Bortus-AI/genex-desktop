@@ -88,8 +88,9 @@ export async function runDataMove(deps: DataMoveLaunchDeps): Promise<DataMoveOut
   await settleLeftovers(defaultDir, (dir) => samePath(dir, to), { inUse: from, log: deps.log });
   const record = readDataFolderRecord(defaultDir);
   const journal: Record<string, EntryMove> = { ...record.done };
-  // A file in the old folder changed after this is someone's edit made while the copy ran: it stays.
-  const startedAt = now();
+  // A file in the old folder changed after this is someone's edit made while the copy ran (or
+  // between attempts, for a move that carries on): it stays.
+  const startedAt = (record.moving && record.movingSince) || now();
   let moved: DataMoved;
   try {
     moved = await (deps.move ?? moveData)(
@@ -103,7 +104,13 @@ export async function runDataMove(deps: DataMoveLaunchDeps): Promise<DataMoveOut
       {
         onProgress: report,
         onPlanned: (entries) =>
-          writeDataFolderRecord(defaultDir, { ...record, moveTo: to, moving: [...entries], done: { ...journal } }),
+          writeDataFolderRecord(defaultDir, {
+            ...record,
+            moveTo: to,
+            moving: [...entries],
+            movingSince: startedAt,
+            done: { ...journal },
+          }),
         onEntryMoved: async (name, how) => {
           journal[name] = how;
           await writeDataFolderRecord(defaultDir, { ...readDataFolderRecord(defaultDir), done: { ...journal } });
@@ -117,7 +124,8 @@ export async function runDataMove(deps: DataMoveLaunchDeps): Promise<DataMoveOut
   // repair, before anything is removed from the old one.
   const left = [
     ...(moved.copied.length ? [{ dir: from, entries: moved.copied, since: startedAt }] : []),
-    ...(moved.doubled.length ? [{ dir: from, entries: moved.doubled, since: startedAt }] : []),
+    // What was written under a renamed entry's old name after the rename is someone's: it stays.
+    ...(moved.doubled.length ? [{ dir: from, entries: moved.doubled, since: startedAt, changed: true as const }] : []),
   ];
   await writeDataFolderRecord(defaultDir, {
     ...chosen(to, defaultDir),
@@ -141,7 +149,8 @@ export async function finishMove(
   deps: Pick<DataMoveLaunchDeps, "log" | "hostGit">,
 ): Promise<void> {
   const record = readDataFolderRecord(defaultDir);
-  if (!record.relinkFrom) return;
+  // Only for the folder the record says is in use: never another launch's.
+  if (!record.relinkFrom || !samePath(dataDir, record.dir ?? defaultDir)) return;
   await relink({ from: record.relinkFrom, to: dataDir, ...deps });
   const after = readDataFolderRecord(defaultDir);
   delete after.relinkFrom;
@@ -241,9 +250,13 @@ interface Settling {
   log: Log;
 }
 
-/** Remove one leftover's entries nobody changed since the copy; what stays (changed or held), or null. */
-async function settleLeftover(leftover: DataLeftover, settling: Settling): Promise<DataLeftover | null> {
+/**
+ * Remove one leftover's entries nobody changed since the copy; what stays: the changed ones (listed
+ * as changed, so they stay for good and Storage names their folder) and the held ones (tried again).
+ */
+async function settleLeftover(leftover: DataLeftover, settling: Settling): Promise<DataLeftover[]> {
   const { log } = settling;
+  if (leftover.changed) return [leftover];
   const changed: string[] = [];
   const stale: string[] = [];
   for (const name of leftover.entries) {
@@ -258,9 +271,10 @@ async function settleLeftover(leftover: DataLeftover, settling: Settling): Promi
   if (changed.length) log(`data folder: kept ${changed.join(", ")} in ${leftover.dir}: changed after the move`);
   const held = await removeEntries(leftover.dir, stale);
   if (held.length) log(`data folder: ${held.length} old entries in ${leftover.dir} are still in use`);
-  const entries = [...changed, ...held];
-  if (!entries.length) return null;
-  return { ...leftover, entries, ...(changed.length || leftover.changed ? { changed: true as const } : {}) };
+  return [
+    ...(changed.length ? [{ ...leftover, entries: changed, changed: true as const }] : []),
+    ...(held.length ? [{ dir: leftover.dir, entries: held, since: leftover.since }] : []),
+  ];
 }
 
 /** Settle the leftovers in the folders `which` picks; the record keeps the others and what stays of these. */
@@ -268,10 +282,7 @@ async function settleLeftovers(defaultDir: string, which: (dir: string) => boole
   const leftovers = readDataFolderRecord(defaultDir).leftover ?? [];
   if (!leftovers.some((item) => which(item.dir))) return;
   const settled: DataLeftover[] = [];
-  for (const item of leftovers) {
-    const stays = which(item.dir) ? await settleLeftover(item, settling) : item;
-    if (stays) settled.push(stays);
-  }
+  for (const item of leftovers) settled.push(...(which(item.dir) ? await settleLeftover(item, settling) : [item]));
   const record = readDataFolderRecord(defaultDir);
   delete record.leftover;
   await writeDataFolderRecord(defaultDir, { ...record, ...withLeftovers([], settled) });
@@ -282,5 +293,7 @@ async function settleLeftovers(defaultDir: string, which: (dir: string) => boole
  * recorded, never in or holding the folder now in use, and never a file changed after the copy.
  */
 export async function removeLeftover(defaultDir: string, dataDir: string, log: Log): Promise<void> {
+  // Only for the folder the record says is in use: never another launch's.
+  if (!samePath(dataDir, readDataFolderRecord(defaultDir).dir ?? defaultDir)) return;
   await settleLeftovers(defaultDir, (dir) => !samePath(dir, dataDir), { inUse: dataDir, log });
 }
