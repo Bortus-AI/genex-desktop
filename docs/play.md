@@ -100,8 +100,11 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
   48px strip of its own across the top that never covers the game and never fades, as on the
   genex.games game page. The bar is drawn in a transparent view of its own above the game's
   (`renderer/play-bar.html`, `main/play/bar-layout.ts`): back, the name and facts, Like, Comments,
-  Share (its icon), Invite a friend (multiplayer games), Remix, Exit. Only the game's own full screen
-  gives it the whole window; the bar comes back when it ends. A held Esc gives the bar the keyboard. Only Studio's own page and the bar's may post or delete a comment. A single-use ticket in the address's fragment signs the player in; a guest is offered
+  Share (its icon), Invite a friend (multiplayer games), Remix, Full screen (its icon, once the game
+  plays), Exit. Only full screen gives the game the whole window: the game's own, or the bar's Full
+  screen, which asks the game's page for that same full screen; Esc ends it and the bar comes back.
+  A held Esc gives the bar the keyboard. The browser's focus ring is hidden on the game's canvas (a
+  user-origin rule); the keyboard stays with the game, and the page's other focus rings stay. Only Studio's own page and the bar's may post or delete a comment. A single-use ticket in the address's fragment signs the player in; a guest is offered
   sign-in. The rest of the app is inert until the game closes. Closing the window closes it; another
   window over the studio's, another desktop or minimizing leaves it playing (`view-drop.ts`).
 - Comments (the count, or the icon alone) opens a modal over the dimmed game: its count as the
