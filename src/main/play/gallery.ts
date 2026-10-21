@@ -153,6 +153,13 @@ export const TicketStatus = {
 } as const;
 export type TicketStatus = (typeof TicketStatus)[keyof typeof TicketStatus];
 
+/**
+ * How a ticket reaches the game, as Genex mints it: in a web page's address (`redirect`), or in a
+ * native game's environment when Play starts it on this Mac (`native`). Wire values: never rename.
+ */
+export const TicketDelivery = { Redirect: "redirect", Native: "native" } as const;
+export type TicketDelivery = (typeof TicketDelivery)[keyof typeof TicketDelivery];
+
 /** A ticket, or why there is none. */
 export type PlayTicket =
   | { status: typeof TicketStatus.Minted; ticket: string }
@@ -646,16 +653,17 @@ function accountCalls(deps: GalleryDeps) {
   };
 
   /**
-   * A single-use ticket that signs the player in when the game's page loads with it in its address
-   * fragment; else whether that is for want of an account (signed out) or because none could be
-   * minted for the one there. Either way the game plays as a guest.
+   * A single-use ticket that signs the player in: when the game's page loads with it in its address
+   * fragment, or (`native`) when Play starts the game with it in its environment. Else whether that
+   * is for want of an account (signed out) or because none could be minted for the one there.
+   * Either way the game plays as a guest.
    */
-  const ticket = async (slug: string): Promise<PlayTicket> => {
+  const ticket = async (slug: string, delivery: TicketDelivery = TicketDelivery.Redirect): Promise<PlayTicket> => {
     if (!isPlaySlug(slug)) return NOT_MINTED;
     const auth = await token();
     if (!auth) return { status: TicketStatus.SignedOut };
     try {
-      const body = { slug, delivery: "redirect", channel: "production" };
+      const body = { slug, delivery, channel: "production" };
       const answer = await request(PlayRoute.Ticket, { method: "POST", token: auth, body });
       const minted = isRecord(answer.body) ? answer.body.ticket : undefined;
       if (answer.status !== HTTP_OK || typeof minted !== "string" || !minted) return NOT_MINTED;

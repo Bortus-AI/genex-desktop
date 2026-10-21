@@ -14,6 +14,7 @@ import {
   PlayRoute,
   playGallery,
   SignInNeeded,
+  TicketDelivery,
   TicketStatus,
   toFeedPage,
   toPlayGame,
@@ -413,6 +414,15 @@ describe("Play gallery calls", () => {
       assert.deepEqual(await rig(answer).gallery.ticket("lost-cathedral"), { status: TicketStatus.NotMinted }, name);
     assert.deepEqual(await gallery.ticket("../x"), { status: TicketStatus.NotMinted });
     assert.equal(calls.length, 1, "a slug that is not a game is never sent");
+  });
+
+  it("mints a native ticket for a game Play starts on this Mac", async () => {
+    const { gallery, calls } = rig(() => ok({ ticket: "N1" }));
+    assert.deepEqual(await gallery.ticket("lost-cathedral", TicketDelivery.Native), {
+      status: TicketStatus.Minted,
+      ticket: "N1",
+    });
+    assert.deepEqual(calls[0]?.body, { slug: "lost-cathedral", delivery: "native", channel: "production" });
   });
 
   it("reads the search catalog once however many searches wait on it", async () => {

@@ -23,7 +23,10 @@ import { PROJECT_FILE } from "./game-project.ts";
 export const MULTIPLAYER_ADDON_FOLDER = "addons/genex_multiplayer";
 export const MULTIPLAYER_AUTOLOAD = "GenexMultiplayer";
 const MULTIPLAYER_SCRIPT = "genex_multiplayer.gd";
-/** The Genex SDK commit `addon/genex_multiplayer` is a copy of (`sdks/godot/addons/genex_multiplayer`). */
+/**
+ * The Genex SDK commit `addon/genex_multiplayer` is a copy of (`sdks/godot/addons/genex_multiplayer`),
+ * plus `identity.gd` taking Genex's API from the launcher's `GENEX_API_URL` (Play's gateway).
+ */
 export const MULTIPLAYER_ADDON_SOURCE = "me-ai-org/genex-demo@8cd1477a2a120937a1c79fc1c98b99cef3fcc145";
 
 /** Where the Colyseus GDExtension lives in a project. */
