@@ -5141,6 +5141,7 @@ export const PLAY_WORDS = {
     share: t("Share"),
     invite: t("Invite a friend"),
     remix: t("Remix"),
+    fullScreen: t("Full screen"),
     exit: t("Exit"),
     playing: (count: number) => t("{count} playing", { count }),
     plays: (count: string) => t("{count} plays", { count }),
