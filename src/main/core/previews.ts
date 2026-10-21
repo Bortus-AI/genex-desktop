@@ -41,6 +41,7 @@ import {
 } from "../../substrate/snapshots.ts";
 import { sizeWords } from "../../shared/byte-size.ts";
 import { isAssetPath, ruleMatches, webFolderOf } from "../../shared/project-workspace.ts";
+import { engineWebFolderOf, isEngineWebFolder } from "../../shared/project-facts.ts";
 import type { DelegateRequest } from "../../substrate/engines/types.ts";
 import type { ReferenceFrame } from "../../shared/protocol.ts";
 import type { Revision } from "../../shared/optimization.ts";
@@ -71,8 +72,8 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { ReadyPhase, CaptureSurface, GameClock, GameFront } from "../../shared/preview-contract.ts";
 import { StateShape, keepPathsOf } from "../../shared/studio-state-shape.ts";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
-import { LiveGate, type LiveOffer } from "./live-gate.ts";
-import type { LiveBehindEvent } from "../../shared/live-behind.ts";
+import { buildFinished, LiveGate, type LiveOffer, readBuild } from "./live-gate.ts";
+import { type LiveBehindEvent, WebBuildLoad } from "../../shared/live-behind.ts";
 import type { GameSoundRequest } from "../../shared/game-sound.ts";
 import { liveAudible, type LiveSound } from "../game-sound.ts";
 import { liveMaxFps } from "../live-pace.ts";
@@ -496,6 +497,19 @@ async function servedOnLoopback(
   return !shape.own && (await templateLoadsGenexSdk(dir));
 }
 
+/** An engine's web build of a game as Live saw it: its folder (null for none), its files' print, whether it is finished. */
+interface WebBuildSeen {
+  project: string;
+  folder: string | null;
+  print: string | null;
+  /** Whole and left alone for a while (`buildFinished`): never a build still being written. */
+  finished: boolean;
+}
+
+/** The same build of the same game: its folder, and files that did not change. */
+const sameWebBuild = (seen: WebBuildSeen | null, now: WebBuildSeen): boolean =>
+  seen?.project === now.project && seen.folder === now.folder && seen.print === now.print;
+
 export class PreviewService {
   readonly #core: StudioCore;
   readonly #x: CoreInternals;
@@ -514,6 +528,10 @@ export class PreviewService {
   #sound: Pick<LiveSound, "on" | "foreground"> = { on: true, foreground: true };
   /** Pooled windows a computer session plays in, by how many sessions hold each: none changes size. */
   readonly #sessionWindows = new Map<string, number>();
+  /** The engine's web build Live last loaded with its game folder (`engineWebFolderOf`), and its files' print. */
+  #liveWebBuild: WebBuildSeen | null = null;
+  /** The person stopped Live's game (`stopLive`): nothing loads into it until Play or a load of theirs. */
+  #liveStopped = false;
 
   constructor(core: StudioCore, x: CoreInternals) {
     this.#core = core;
@@ -723,14 +741,18 @@ export class PreviewService {
     const isLive = handle === LIVE_HANDLE;
     const revisionBefore = isLive ? await this.previewRevision(p.project, checkedRoot) : null;
     const print = isLive ? await this.#live.printBefore(p.project, checkedRoot) : undefined;
+    const webBuild = isLive && checkedRoot === null ? await this.#webBuildSeen(p.project) : null;
     if (isLive)
       this.#showIdentity({ project: p.project, head: null, state: PreviewIdentityState.Loading, error: null });
     try {
       const served = await this.servedEntry(p.project, checkedRoot, p.entry, port, { fallback: isLive });
       if (!served) return unservedUrl(p);
+      // A load starts the page again, whether or not it then arrives: Live's game is no longer stopped.
+      if (isLive) this.#liveStopped = false;
       const url = await port.load(p.project, served.entry, served.root, { loopback: served.loopback });
       // Only now is Live current: a load that failed leaves what waited for Reload waiting.
       if (isLive) await this.#live.loaded(p.project, { print, root: checkedRoot });
+      if (isLive) this.#liveLoaded(webBuild);
       remembered.loaded = servedKey(served);
       if (isLive) await this.#identifyLoaded(p.project, checkedRoot, served.stale, revisionBefore);
       // Loading clears the port's error, and the build is still broken: the agent loop and the
@@ -1580,10 +1602,12 @@ export class PreviewService {
       const port = this.preview(p?.handle);
       const last = this.#x.servedRoots.get(handle);
       const print = handle === LIVE_HANDLE && last ? await this.#live.printBefore(last.project, last.root) : undefined;
+      const webBuild = await this.#reloadStarting(handle, last);
       // Reload means "what is on disk NOW" — for a game with its own build, that is a rebuild.
       const rebuilt = last ? await this.#rebuildServed(port, last, handle, p?.retry === true) : false;
       if (!rebuilt) await port.reload();
       if (last && handle === LIVE_HANDLE) await this.#live.loaded(last.project, { print, root: last.root });
+      if (handle === LIVE_HANDLE) this.#liveLoaded(webBuild);
       return true;
     });
   }
@@ -1592,6 +1616,7 @@ export class PreviewService {
   stopLive(): Promise<void> {
     return serial(this.#x.previewOperations, LIVE_HANDLE, async () => {
       await this.#optionalPreview()?.stop?.();
+      this.#liveStopped = true;
     });
   }
 
@@ -1599,6 +1624,7 @@ export class PreviewService {
   playLive(): Promise<void> {
     return serial(this.#x.previewOperations, LIVE_HANDLE, async () => {
       await this.#optionalPreview()?.resume?.();
+      this.#liveStopped = false;
     });
   }
 
@@ -1606,10 +1632,91 @@ export class PreviewService {
 
   /**
    * Something would have changed Live — a checkpoint, a rewind, the harness loading the game or a
-   * build in the stand-in. It waits for the person's Reload instead (`live.behind`).
+   * build in the stand-in. It waits for the person's Reload instead (`live.behind`), except a Unity
+   * or Godot game's web build that appeared or was built again since Live loaded the game folder:
+   * the engine's own output, never edited, which Live loads at once.
    */
-  offerLive(offer: LiveOffer): Promise<void> {
-    return this.#live.offer(offer);
+  async offerLive(offer: LiveOffer): Promise<void> {
+    const folder = await this.#offersGameFolder(offer);
+    const loaded = folder && (await this.loadWebBuild(offer.project)) === WebBuildLoad.Loaded;
+    if (!loaded) await this.#live.offer(offer);
+  }
+
+  /** Whether an offer is of the game folder itself: no build named by commit, no other folder. */
+  async #offersGameFolder(offer: LiveOffer): Promise<boolean> {
+    if (offer.commit) return false;
+    return offer.root === null || sameRealPath(offer.root, this.#core.games.dirFor(offer.project));
+  }
+
+  /**
+   * Live loads the game's finished engine web build it lacks (`#missingWebBuild`). Asked first
+   * outside Live's queue, so an offer with no build to bring never waits behind a load; then again
+   * inside it, one decision per Live operation, so a checkpoint's offer and the Web game tab never
+   * load it twice. A load that fails keeps Live as it is.
+   */
+  async loadWebBuild(project: string): Promise<WebBuildLoad> {
+    const missing = await this.#missingWebBuild(project);
+    if (!missing) return WebBuildLoad.Kept;
+    if (!missing.finished) return WebBuildLoad.Unfinished;
+    return serial(this.#x.previewOperations, LIVE_HANDLE, async () => {
+      const now = await this.#missingWebBuild(project);
+      if (!now) return WebBuildLoad.Kept;
+      if (!now.finished) return WebBuildLoad.Unfinished;
+      try {
+        const checkedRoot = await this.#x.assertHarnessRoot(project, null);
+        this.#x.profileSources.delete(LIVE_HANDLE);
+        await this.#loadServedPreview({ project }, LIVE_HANDLE, checkedRoot, this.preview());
+        return WebBuildLoad.Loaded;
+      } catch {
+        return WebBuildLoad.Kept;
+      }
+    });
+  }
+
+  /**
+   * The game's engine web build Live lacks while it runs this game's own folder (never a build the
+   * person chose to view, never a stopped game): one Live has not loaded, finished or still being
+   * written, as when the game was opened before its export existed. Null when there is none.
+   */
+  async #missingWebBuild(project: string): Promise<WebBuildSeen | null> {
+    const served = this.#x.servedRoots.get(LIVE_HANDLE);
+    if (served?.project !== project || served.root !== null || this.#liveStopped) return null;
+    const now = await this.#webBuildSeen(project);
+    if (now.folder === null || sameWebBuild(this.#liveWebBuild, now)) return null;
+    return now;
+  }
+
+  /** A load reached Live: the engine web build it shows (null for none). */
+  #liveLoaded(webBuild: WebBuildSeen | null): void {
+    this.#liveWebBuild = webBuild;
+  }
+
+  /**
+   * A reload is starting: Live's game runs again, whether or not the page then arrives, and the
+   * engine web build a reload of Live's game folder is about to show (null for any other reload).
+   */
+  async #reloadStarting(handle: string, served: ServedRoot | undefined): Promise<WebBuildSeen | null> {
+    if (handle !== LIVE_HANDLE) return null;
+    this.#liveStopped = false;
+    if (!served || served.root !== null) return null;
+    return this.#webBuildSeen(served.project);
+  }
+
+  /**
+   * The game's engine web build as it is now: its folder (null when it has none), its files' print and
+   * whether it is finished. A game with no `web/` folder is not walked for its kinds.
+   */
+  async #webBuildSeen(project: string): Promise<WebBuildSeen> {
+    const none: WebBuildSeen = { project, folder: null, print: null, finished: false };
+    const dir = this.#core.games.dirFor(project);
+    const names = await readdir(dir).catch(() => [] as string[]);
+    if (!names.some(isEngineWebFolder)) return none;
+    const game = await this.#core.games.kindOf(project).catch(() => null);
+    const folder = game ? engineWebFolderOf(game) : null;
+    const build = folder ? await readBuild(path.join(dir, folder)) : null;
+    if (!game || !folder || !build) return { ...none, folder };
+    const kinds = game.facts.map((fact) => fact.id);
+    return { project, folder, print: build.print, finished: buildFinished(build, kinds, Date.now()) };
   }
 
   /**

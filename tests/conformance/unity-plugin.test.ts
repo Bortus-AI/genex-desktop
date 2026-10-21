@@ -13,7 +13,15 @@ import type {
 import { createUnityBackend, systemBackendDeps, UnityAction, UnityTool } from "../../src/plugins/unity/backend.ts";
 import { rememberedProject } from "../../src/plugins/unity/project-folder.ts";
 import { HookEvent, LockScope } from "../../src/shared/plugin-hooks.ts";
-import { CoreFact, type FactRef } from "../../src/shared/project-facts.ts";
+import {
+  CORE_FACT_RULES,
+  CoreFact,
+  FactSource,
+  type FactRef,
+  factsOfFiles,
+  pluginFactSource,
+} from "../../src/shared/project-facts.ts";
+import { kindKey, pluginWebBuilds } from "../../src/harness-seed/loop/web-build.ts";
 import { ENGINE_PLAY_TOOLS } from "../../src/shared/engine-play.ts";
 import { validateManifest } from "../../src/substrate/plugins/manifest.ts";
 import { PluginRegistry } from "../../src/substrate/plugins/registry.ts";
@@ -135,6 +143,20 @@ describe("the bundled Unity plugin", () => {
     assert.deepEqual(unity.observers, [
       { id: "viewport", facts: [CoreFact.UnityProject], tool: UnityTool.SceneShots, live: "stills" },
     ]);
+  });
+
+  it("claims its WebGL build in web/ as a build: no new kind, never a web game to edit", () => {
+    const rules = [
+      ...CORE_FACT_RULES.map((rule) => ({ rule, source: FactSource.Core })),
+      ...(bundledManifest().detect ?? []).map((rule) => ({ rule, source: pluginFactSource("unity") })),
+    ];
+    const project = ["unity/ProjectSettings/ProjectVersion.txt"];
+    const built = [...project, "web/index.html", "web/Build/web.loader.js", "web/Build/web.wasm"];
+    const facts = factsOfFiles(built, rules);
+    assert.deepEqual([...pluginWebBuilds(facts)], ["web"], "web/ is the plugin's build");
+    assert.equal(kindKey(facts), kindKey(factsOfFiles(project, rules)), "building for the web keeps the game's kind");
+    const site = factsOfFiles([...project, "site/index.html"], rules);
+    assert.deepEqual([...pluginWebBuilds(site)], [], "a page with no WebGL build beside it is no build");
   });
 
   it("gives the person a toolbar button on Unity games only that opens its panel, and declares every action the panel sends", () => {
