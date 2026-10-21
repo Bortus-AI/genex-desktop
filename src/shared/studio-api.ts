@@ -74,7 +74,7 @@ import type { ProviderUsageReport } from "./provider-usage.ts";
 import type { BootState, SandboxSetupResult } from "./boot.ts";
 import type { AppAbout, ReadyUpdate, UpdateCheckResult } from "./app-update.ts";
 import type { PermissionMode, PermissionSettingsView, ToolPermissionAnswer } from "./permissions.ts";
-import type { LiveBehindEvent } from "./live-behind.ts";
+import type { LiveBehindEvent, WebBuildLoad } from "./live-behind.ts";
 import type { FieldRow, RunSharingDeleteResult, RunSharingStatus } from "./run-sharing.ts";
 
 export type { ProjectAsset, ProjectAssets };
@@ -618,9 +618,9 @@ export interface StudioApi {
   /**
    * Live loads the game's finished web build in a folder (a Godot or Unity export in web/) when it
    * runs the game's folder without it, as when the game was opened before its export existed; never
-   * a build the person chose to view or a stopped game. Whether it loaded.
+   * a build the person chose to view or a stopped game. A build still being written is `Unfinished`.
    */
-  loadWebBuild(project: string): Promise<boolean>;
+  loadWebBuild(project: string): Promise<WebBuildLoad>;
   buildPreview(
     request: import("./build-preview.ts").BuildPreviewRequest,
   ): Promise<import("./build-preview.ts").BuildPreviewFrame | null>;

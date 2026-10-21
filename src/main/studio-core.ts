@@ -40,6 +40,7 @@ import { EventKind, ThreadKind, SnapshotScope } from "../shared/event-log.ts";
 import { assetKind, isAudioFile, type AssetDeliveredPayload } from "../shared/game-assets.ts";
 import { coverFromBrief, replaceableCover, type GameUpdate } from "../shared/game-library.ts";
 import type { HarnessHostHandlers, HarnessParams, HarnessResult, HostMethod } from "../shared/harness-api.ts";
+import type { WebBuildLoad } from "../shared/live-behind.ts";
 import {
   type ExportReview,
   type PluginBinding,
@@ -2479,12 +2480,12 @@ export class StudioCore {
     return this.#previews.playLive();
   }
 
-  /** Something would have changed Live: it waits for the person's Reload instead (`live.behind`). */
   /** Live loads the game's finished web build in a folder when it holds another page of the game (`PreviewService.loadWebBuild`). */
-  loadWebBuild(project: string): Promise<boolean> {
+  loadWebBuild(project: string): Promise<WebBuildLoad> {
     return this.#previews.loadWebBuild(project);
   }
 
+  /** Something would have changed Live: it waits for the person's Reload instead (`live.behind`). */
   offerLive(...args: Parameters<PreviewService["offerLive"]>): ReturnType<PreviewService["offerLive"]> {
     return this.#previews.offerLive(...args);
   }

@@ -1847,8 +1847,9 @@ not the port was recorded, and any other root page keeps its place (`withEngineW
 loads such a web build by itself once it is finished (whole for its engine, no file written in the
 last 2 s) and new since Live loaded the game (`PreviewService.offerLive`), and the game's file
 server unpacks a Unity build's Brotli or gzip parts (`packedBuildFile`). The Web game tab on screen
-asks for the same (`loadWebBuild`, decided in main in turn with Live's other loads), so a game opened
-before its export existed shows it; never into a stopped game or a build the person chose to view. New game
+asks for the same (`loadWebBuild`, decided in main in turn with Live's other loads, and asked again
+while main answers `Unfinished`), so a game opened before its export existed shows it; never into a
+stopped game or a build the person chose to view. New game
 now makes an empty folder. Either way the game lists no facts and has no kind until its first
 message picks one (`start_web_game`, or `game.start` from the harness, writes the web starter).
 A Loop on any project that isn't a web game (`loopProfileOf`) is led in place by the chat's own
