@@ -1,19 +1,24 @@
 /**
  * Live stays still while the person watches it. Only the person's own action loads the live view:
  * opening a game, Reload, Play or Make live, a build they asked the chat to show while Live is out of
- * their sight (`PreviewService.liveOutOfSight`). Anything else
+ * their sight (`PreviewService.liveOutOfSight`), and one more: a Unity or Godot game's web build that
+ * appeared or was built again since Live loaded the game, which is the engine's own output, never
+ * edited (`PreviewService.offerLive`). Anything else
  * that used to change it — the harness loading the game or a run's build, a builder's checkpoint,
  * a run landing, a rewind — is offered here instead: Live is marked behind, and the stage's
  * Reload says why and applies it (docs/product/builds-live.md).
  */
 import { createHash } from "node:crypto";
-import { lstat, realpath } from "node:fs/promises";
+import { lstat, readdir, realpath } from "node:fs/promises";
 import path from "node:path";
 import { LiveBehindReason, type LiveBehindEvent } from "../../shared/live-behind.ts";
 import { gitOrNull } from "../../substrate/snapshots.ts";
 
 /** The most uncommitted paths a folder's print reads the size and time of; past this it counts them. */
 const PRINT_MAX_PATHS = 400;
+/** The most files of a web build its print reads the size and time of, and how deep it looks. */
+const BUILD_PRINT_MAX_FILES = 400;
+const BUILD_PRINT_MAX_DEPTH = 4;
 
 /** What Live's Reload would load: the game folder, or a run's build by its commit (its folder may be gone by then). */
 export interface LiveWaiting {
@@ -84,6 +89,35 @@ export async function folderPrint(dir: string): Promise<string | null> {
     hash.update(`\0${entry}:${stat ? `${stat.size}:${stat.mtimeMs}` : "gone"}`);
   }
   hash.update(`\0${paths.length}`);
+  return hash.digest("hex");
+}
+
+/** A web build's files below `dir`, by path relative to it, sorted; links are never followed. */
+async function buildFiles(dir: string, rel = "", depth = 0): Promise<string[]> {
+  if (depth > BUILD_PRINT_MAX_DEPTH) return [];
+  const entries = await readdir(path.join(dir, rel), { withFileTypes: true });
+  const files: string[] = [];
+  for (const entry of entries.sort((a, b) => (a.name < b.name ? -1 : 1))) {
+    const at = rel ? `${rel}/${entry.name}` : entry.name;
+    if (entry.isFile()) files.push(at);
+    else if (entry.isDirectory()) files.push(...(await buildFiles(dir, at, depth + 1)));
+    if (files.length >= BUILD_PRINT_MAX_FILES) break;
+  }
+  return files;
+}
+
+/**
+ * A web build's state as far as Live cares: each of its files' path, size and time, read without
+ * git, which may ignore an engine's build. Null when the folder can't be read.
+ */
+export async function buildPrint(dir: string): Promise<string | null> {
+  const files = await buildFiles(dir).catch(() => null);
+  if (files === null) return null;
+  const hash = createHash("sha1");
+  for (const file of files.slice(0, BUILD_PRINT_MAX_FILES)) {
+    const stat = await lstat(path.join(dir, file)).catch(() => null);
+    hash.update(`${file}:${stat ? `${stat.size}:${stat.mtimeMs}` : "gone"}\0`);
+  }
   return hash.digest("hex");
 }
 

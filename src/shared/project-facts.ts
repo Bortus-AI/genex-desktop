@@ -280,6 +280,16 @@ const inEngineWebFolder = (fact: FactRef): boolean => fact.path.toLowerCase() ==
 const WEB_EXPORTING: ReadonlySet<string> = new Set<string>([CoreFact.UnityProject, CoreFact.GodotProject]);
 
 /**
+ * The folder of a Unity or Godot game's web version (`withEngineWebVersion`), the build its engine
+ * makes again from the project; null for any other game, and for one whose root page is its own.
+ */
+export function engineWebFolderOf(game: GameKind): string | null {
+  const exports = game.facts.some((fact) => WEB_EXPORTING.has(fact.id));
+  const webVersion = game.facts.find((fact) => fact.id === CoreFact.WebGame && inEngineWebFolder(fact));
+  return exports && webVersion ? webVersion.path : null;
+}
+
+/**
  * A Unity or Godot game's listed facts with its web version: the web game in `ENGINE_WEB_FOLDER`
  * among `found` (the folder's facts before settling, which drops a web game below another) is the
  * game's web game. A web game at the root beside it is left out when it is the web starter Genex

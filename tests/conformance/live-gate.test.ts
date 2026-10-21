@@ -7,7 +7,7 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { realpath, writeFile } from "node:fs/promises";
+import { mkdir, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createIpcHandle, type IpcResult, type IpcSender } from "../../src/main/ipc-handle.ts";
 import { registerPreviewIpc } from "../../src/main/ipc/preview.ts";
@@ -20,6 +20,8 @@ import { tmpDir } from "../helpers/tmp.ts";
 function fakePort() {
   const port = {
     loads: [] as Array<{ project: string; root: string | null }>,
+    /** The page each load opened, in order. */
+    entries: [] as string[],
     reloads: 0,
     inputs: 0,
     disposed: false,
@@ -31,6 +33,7 @@ function fakePort() {
         throw new Error("the page did not load");
       }
       port.loads.push({ project, root: root ?? null });
+      port.entries.push(entry);
       return `game://${project}/${entry}`;
     },
     async reload() {
@@ -210,6 +213,49 @@ function liveOf(behind: Stage["behind"][number] | undefined) {
  * those reach main directly, and only the stage's own Play said which build Live had. Main says it
  * now, on every path, and a stage that mounts later reads it.
  */
+describe("an engine's web build in Live", () => {
+  /** A file of the game's, with its folders. */
+  const put = async (dir: string, rel: string, text: string) => {
+    await mkdir(path.dirname(path.join(dir, rel)), { recursive: true });
+    await writeFile(path.join(dir, rel), text);
+  };
+
+  it("a Unity game's web build that appears or is built again after the game was opened loads on its own", async () => {
+    const live = fakePort();
+    const behind: Stage["behind"] = [];
+    const lite = await coreLite({
+      preview: live as never,
+      gamesRoot: await realpath(await tmpDir("studio-live-web-build-")),
+      previewPoolMax: 2,
+      createHeadlessPreview: async () => fakePort() as never,
+      onUiEvent: (event) => {
+        if (event.type === "live.behind") behind.push(event.payload as Stage["behind"][number]);
+      },
+    });
+    const game = await lite.core.games.makeEmpty("arena");
+    await put(game.dir, "unity/ProjectSettings/ProjectVersion.txt", "m_EditorVersion: 6000.6.0f1\n");
+    await lite.core.loadPreview({ project: "arena" });
+    assert.equal(live.entries.length, 1, "the person opened the game before it had a web build");
+
+    await put(game.dir, "web/index.html", "<canvas id=unity-canvas></canvas>\n");
+    await put(game.dir, "web/Build/web.loader.js", "createUnityInstance\n");
+    await lite.core.offerLive({ project: "arena", root: null, note: "built for the web" });
+    assert.deepEqual(live.entries.slice(1), ["web/index.html"], "Live plays the build with no Reload");
+    assert.equal(behind.at(-1)?.reason ?? null, null, "nothing waits for Reload");
+
+    await put(game.dir, "web/Build/web.wasm", "the arena, built again\n");
+    await lite.core.offerLive({ project: "arena", root: null });
+    assert.equal(live.entries.length, 3, "a build made again loads too");
+    await lite.core.offerLive({ project: "arena", root: null });
+    assert.equal(live.entries.length, 3, "the same build is not loaded twice");
+
+    await put(game.dir, "unity/Assets/Enemy.cs", "class Enemy {}\n");
+    await lite.core.offerLive({ project: "arena", root: null });
+    assert.equal(live.entries.length, 3, "a change to the project alone leaves Live as it is");
+    assert.equal(behind.at(-1)?.reason, "changed", "and waits for Reload");
+  });
+});
+
 describe("what Live shows, whoever loaded it", () => {
   it("Play from anywhere says which build Live shows, and the game folder says it shows none", async () => {
     const { lite, live, behind, dir } = await stage();
