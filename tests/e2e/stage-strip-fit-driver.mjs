@@ -45,6 +45,7 @@ const MEASURE = `(() => {
     .map((el) => ({ name: el.getAttribute('aria-label') || el.textContent.trim(), ...box(el) }));
   return {
     fold: strip.dataset.fold,
+    debug: strip.dataset.foldDebug && JSON.parse(strip.dataset.foldDebug),
     strip: box(strip),
     titlebar: area && { left: area.x, right: area.x + area.width, bottom: area.y + area.height },
     window: window.innerWidth,

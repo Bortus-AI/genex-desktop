@@ -115,11 +115,15 @@ export function useStripFold(
     };
     let frame = 0;
     let groupChanged = false;
+    const trail: unknown[] = [];
     const settle = () => {
+      const reset = groupChanged;
       if (groupChanged) apply(UNFOLDED);
       groupChanged = false;
       measure();
       remember();
+      trail.push({ reset, fold, widths: firstRow(row, parts), pad: getComputedStyle(row).paddingInlineEnd });
+      row.dataset.foldDebug = JSON.stringify(trail.slice(-12));
     };
     const observer = new ResizeObserver((entries) => {
       // A group that changed on its own is kept until the frame settles, so a later resize can't drop it.
