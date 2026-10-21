@@ -845,11 +845,21 @@ foreach ($p in $paths) { [GenexTestToken]::Own($p, $env:GENEX_OWNER_SID) }
   const refusesChanges = (dir: string, ...also: string[]) => {
     setOwner(dir, "S-1-5-18");
     const readOnly = [`*${runningUser()}:(OI)(CI)(RX)`, "*S-1-5-18:(OI)(CI)(F)", ...also];
-    execFileSync("icacls", [dir, "/inheritance:r", "/grant:r", ...readOnly], { stdio: "ignore" });
-    execFileSync("icacls", [dir, "/remove:g", "*S-1-5-32-544"], { stdio: "ignore" });
+    // While the person may still change the folder's entries: the second call takes that away.
+    icacls(dir, "/remove:g", "*S-1-5-32-544");
+    icacls(dir, "/inheritance:r", "/grant:r", ...readOnly);
     const descriptor = ownerAndDacl(dir);
     assert.match(descriptor, /^O:SY/, `SYSTEM owns the fixture: ${descriptor}`);
     assert.doesNotMatch(descriptor, /;;;BA\)/, `the Administrators have no entry: ${descriptor}`);
+  };
+  /** Runs icacls; a failure carries what icacls printed, which Node's message leaves out. */
+  const icacls = (...args: string[]) => {
+    try {
+      execFileSync("icacls", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    } catch (error) {
+      const said = typeof error === "object" && error !== null && "stdout" in error ? String(error.stdout) : "";
+      throw new Error(`icacls ${args.join(" ")}: ${said.trim()}`, { cause: error });
+    }
   };
   /** A path's owner and DACL as SDDL, through PowerShell's Get-Acl (icacls /save leaves the owner out). */
   const ownerAndDacl = (target: string) =>
