@@ -104,6 +104,13 @@ describe("the core table", () => {
       ["Plugins/Kit/Binaries/x.dylib", "Plugins/*/Binaries/", true],
       ["Plugins/Binaries/x.dylib", "Plugins/*/Binaries/", false],
       ["Saved/a", "../Saved/", false],
+      ["frame_0001.png", "*[0-9].png", true],
+      ["12.png", "*[0-9].png", true],
+      ["poster.png", "*[0-9].png", false],
+      ["frame_0001.jpg", "*[0-9].png", false],
+      ["take_1.mp4", "*[0-9].png", false],
+      ["frame_0001.png", "*[a-z].png", false],
+      ["frame_0001.png", "*[0-9.png", false],
     ];
     for (const [file, glob, matches] of table) assert.equal(globMatches(file, glob), matches, `${file} ~ ${glob}`);
   });
