@@ -321,6 +321,8 @@ export default {
   "Allow calls without asking, including changes this tool can make": "묻지 않고 호출 허용(이 도구가 하는 변경 포함)",
   "Allow it for Studio in a terminal, then quit and reopen Studio:":
     "터미널에서 Studio에 허용한 뒤, Studio를 종료하고 다시 열어 주세요:",
+  "Allow it only if you may share everything in the project. Assets bought in the Unity Asset Store or on Fab usually can’t be shared.":
+    "프로젝트의 모든 것을 공유할 수 있을 때만 허용하세요. Unity Asset Store나 Fab에서 산 에셋은 보통 공유할 수 없어요.",
   "Allow once": "한 번만 허용",
   "Allow remixing": "리믹스 허용",
   "Allow the mic in Settings": "설정에서 마이크를 허용해 주세요",
@@ -462,6 +464,7 @@ export default {
   Avatar: "아바타",
   Back: "뒤로",
   "Back to Play": "플레이로 돌아가기",
+  "Back to Publish": "게시로 돌아가기",
   "Back to game": "게임으로 돌아가기",
   "Back to workspace": "작업 공간으로 돌아가기",
   Background: "배경",
@@ -868,6 +871,8 @@ export default {
   Copied: "복사했어요",
   "Copied.": "복사했어요.",
   Copy: "복사",
+  "Copy and change {title}’s project to make their own game.":
+    "{title}의 프로젝트를 복사하고 바꿔서 자기 게임을 만들기.",
   "Copy command": "명령어 복사",
   "Copy diagnostics": "진단 정보 복사",
   "Copy error": "오류 복사",
@@ -1530,6 +1535,7 @@ export default {
   "Genex starts Git history here, so any change can be undone.":
     "Genex가 여기서 Git 기록을 시작해서 어떤 변경이든 되돌릴 수 있어요.",
   "Genex terms updated": "Genex 약관 업데이트됨",
+  "Genex terms, section 4": "Genex 약관 4조",
   "Genex the new version is available.": "Genex 새 버전이 나왔어요.",
   "Genex the new version is ready to install.": "Genex 새 버전을 설치할 준비가 됐어요.",
   "Genex tokens or VS Code JSON/JSONC. UI colors only; missing colors use Genex defaults.":
@@ -1595,6 +1601,8 @@ export default {
   "Going live": "공개 중",
   Grain: "그레인",
   Grid: "그리드",
+  "Good to know": "알아 두세요",
+  "Got it": "알겠어요",
   "Grid size": "그리드 크기",
   Grille: "그릴",
   "Guidance available to your agents. Availability depends on the source and selected provider.":
@@ -1857,12 +1865,17 @@ export default {
   "Its author no longer shares it.": "작성자가 더 이상 공유하지 않아요.",
   "Its code runs on your computer like an app you install. It isn't sandboxed.":
     "이 코드는 설치한 앱처럼 컴퓨터에서 실행돼요. 샌드박스에 격리되지 않아요.",
+  "Its creator hasn’t shared this game’s project yet, so it can’t be remixed.":
+    "만든 사람이 아직 이 게임의 프로젝트를 공유하지 않아서 리믹스할 수 없어요.",
   "Its files are in your game folder, waiting for the lead to use them.":
     "파일이 게임 폴더에 있고, 메인 에이전트가 쓰기를 기다리고 있어요.",
   "Its own scene": "독립된 장면",
   "Its packages aren’t installed yet — “{install}” runs on one press.":
     "패키지가 아직 설치되지 않았어요 — 한 번 누르면 “{install}” 명령이 실행돼요.",
   "Its packages aren’t installed yet.": "패키지가 아직 설치되지 않았어요.",
+  "Its project didn’t go, so no one can remix it yet.": "프로젝트가 전송되지 않아서 아직 아무도 리믹스할 수 없어요.",
+  "Its project is too big to remix: Genex keeps up to 2 GB and 5,000 files.":
+    "프로젝트가 너무 커서 리믹스할 수 없어요. Genex는 2GB, 파일 5,000개까지 보관해요.",
   "Its session failed before it delivered anything.": "아무것도 전달하기 전에 세션이 실패했어요.",
   "Its source is your own repository: run genex make-remixable in the game’s folder to allow remixing.":
     "소스가 내 저장소에 있어요. 리믹스를 허용하려면 게임 폴더에서 genex make-remixable을 실행하세요.",
@@ -2619,7 +2632,6 @@ export default {
   "Pay {amount}": "{amount} 결제",
   "Paying…": "결제 중…",
   People: "사람",
-  "People playing in the Genex app can install it.": "Genex 앱에서 플레이하는 사람은 게임을 설치할 수 있어요.",
   Period: "기간",
   "Permission expansion requires confirmation": "권한 확장은 확인이 필요해요",
   "Permission modes": "권한 모드",
@@ -2762,6 +2774,7 @@ export default {
   "Publish game": "게임 게시하기",
   "Publish in one click": "클릭 한 번으로 게시",
   "Publish progress": "게시 진행 상황",
+  "Publish their remix on Genex.": "자기 리믹스를 Genex에 게시하기.",
   "Publish this game": "이 게임 게시하기",
   "Publish this game on Genex": "이 게임을 Genex에 게시하기",
   "Publish this game with a playable link": "플레이할 수 있는 링크와 함께 이 게임 게시하기",
@@ -2878,6 +2891,7 @@ export default {
   Remix: "리믹스",
   "Remix progress": "리믹스 진행 상황",
   "Remix {title}": "{title} 리믹스",
+  "Remixes made before you turn this off stay theirs.": "이걸 끄기 전에 만들어진 리믹스는 만든 사람 것으로 남아요.",
   "Remixing {title}": "{title} 리믹스하는 중",
   "Remixing…": "리믹스하는 중…",
   Remove: "삭제",
@@ -3012,6 +3026,7 @@ export default {
   "Rigged model": "리깅된 모델",
   "Rigged, animated and ready for your game.": "리깅과 애니메이션까지 끝나서 바로 게임에 쓸 수 있어요.",
   "Rigging · animation": "리깅 · 애니메이션",
+  Rights: "권리",
   "Roblox Studio closed. It asked to save anything unsaved first.":
     "Roblox Studio를 닫았어요. 닫기 전에 저장하지 않은 내용을 저장할지 물어봤어요.",
   "Roblox Studio didn't say what {name} is. If a play test or a dialog is open in Studio, finish it, then choose the place again.":
@@ -3851,6 +3866,7 @@ export default {
     "이 파일들은 저장하기에 너무 커서 되감기 때 그대로 두었어요: {files}.",
   "These surfaces need different text colors. Use similar background brightness, or reset this theme.":
     "이 표면들은 서로 다른 글자색이 필요해요. 배경 밝기를 비슷하게 맞추거나 이 테마를 초기화하세요.",
+  "They can": "할 수 있는 것",
   "They get the Genex download page with a card from you.": "상대방은 내 카드와 함께 Genex 다운로드 페이지를 받아요.",
   "They get the Genex download page with a card from you. You get {count} credits when they make their first game.":
     "상대방은 내 카드와 함께 Genex 다운로드 페이지를 받아요. 상대방이 첫 게임을 만들면 {count} 크레딧을 받아요.",
@@ -4402,6 +4418,7 @@ export default {
   "What it does": "하는 일",
   "What phone players get. Your choice wins over the automatic check.":
     "휴대폰 플레이어에게 보이는 방식이에요. 자동 검사보다 내 선택이 우선해요.",
+  "What remixers can do": "리믹서가 할 수 있는 것",
   "What should it show? Or leave it empty": "무엇을 보여 줄까요? 비워 둬도 돼요",
   "What should the worker do instead?": "작업자가 대신 무엇을 하면 좋을까요?",
   "What the new cover should show": "새 커버에 담을 내용",

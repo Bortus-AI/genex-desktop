@@ -304,6 +304,8 @@ const FIXTURE_SAFE = [
   // A remix writes a new game into the profile's own games folder; a fixture launch's copy is a
   // local stand-in (`play/remix.ts` `fixtureClone`), so no socket opens.
   "studio:play.remix",
+  // Whether a game's source holds a game: a fixture launch answers yes from memory, so no socket opens.
+  "studio:play.remix-ready",
   "studio:play.online",
   "studio:play.open",
   "studio:play.close",

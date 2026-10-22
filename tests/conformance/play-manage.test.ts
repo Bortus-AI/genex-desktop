@@ -421,6 +421,7 @@ describe("Play's manage channels", () => {
       gallery: unused as PlayIpcDeps["gallery"],
       gameLinks: gameLinks(),
       remix: async () => "",
+      remixReady: async () => ({}),
       viewer: () => null,
       installs: () => null,
       sessions: () => null,

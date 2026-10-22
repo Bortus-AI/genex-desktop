@@ -146,7 +146,19 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
   LFS files come from the same repository's batch API over https, with no git-lfs needed, and each
   replaces its pointer only once its SHA-256 and size match; a download fails only once it stalls
   for a minute; a failed remix logs why in `studio.log`) into a
-  hidden folder, installs its packages with npm without running any of their scripts (a stale or
+  hidden folder; a source with no game in it (no `studio.json`, root page, npm scripts or engine
+  project: a creator who never shared its project, `game-source.ts`) makes nothing and says so
+  (`PlayRemixRefusal`). Cards and the viewer offer Remix only once main has looked at the source
+  (`studio:play.remix-ready`, `remix-ready.ts`: the head commit by `git ls-remote`, its file names by a
+  blobless shallow clone, kept by commit in `play-remix-ready.json`).
+  A game reaches Genex with its project only from a Publish that allowed remixing (the dialog's
+  Allow remixing, ticked by default; Rights says what remixers may do): Studio stages the files the
+  game's git keeps, without history, packages, agent settings, secrets or an engine's caches and
+  builds, an Unreal plugin's too (`remix-source.ts`), and the CLI pushes that folder as the source
+  (`--source`; a game with only apps sends it with `make-remixable` once they are live). The copy
+  goes once its push is over, and a draft carries none. Otherwise, or when the project can't
+  go (too big, no repository), the publish turns remixing off on Genex.
+  It then installs its packages with npm without running any of their scripts (a stale or
   another manager's lockfile: from package.json), moves it to `<slug>-remix`, adopts it without trusting its settings and builds it
   once, so it opens playing. One remix at a time. Remix (a card's, or the viewer's, which closes
   the viewer) switches to Create at once: a sidebar row with the cover in a ring (the adopted game

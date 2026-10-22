@@ -386,6 +386,8 @@ export default {
     "Permitir llamadas sin preguntar, incluidos los cambios que puede hacer esta herramienta",
   "Allow it for Studio in a terminal, then quit and reopen Studio:":
     "Permítelo para Studio en una terminal; luego cierra Studio y vuelve a abrirlo:",
+  "Allow it only if you may share everything in the project. Assets bought in the Unity Asset Store or on Fab usually can’t be shared.":
+    "Permítelo solo si puedes compartir todo lo que hay en el proyecto. Los assets comprados en la Unity Asset Store o en Fab normalmente no se pueden compartir.",
   "Allow once": "Permitir una vez",
   "Allow remixing": "Permitir remixes",
   "Allow the mic in Settings": "Permite el micrófono en Ajustes",
@@ -526,6 +528,7 @@ export default {
   Avatar: "Avatar",
   Back: "Atrás",
   "Back to Play": "Volver a Jugar",
+  "Back to Publish": "Volver a Publicar",
   "Back to game": "Volver al juego",
   "Back to workspace": "Volver al espacio de trabajo",
   Background: "Fondo",
@@ -947,6 +950,8 @@ export default {
   Copied: "Copiado",
   "Copied.": "Copiado.",
   Copy: "Copiar",
+  "Copy and change {title}’s project to make their own game.":
+    "Copiar y cambiar el proyecto de {title} para hacer su propio juego.",
   "Copy command": "Copiar comando",
   "Copy diagnostics": "Copiar diagnóstico",
   "Copy error": "Copiar error",
@@ -1623,6 +1628,7 @@ export default {
   "Genex starts Git history here, so any change can be undone.":
     "Genex inicia aquí un historial de Git para que puedas deshacer cualquier cambio.",
   "Genex terms updated": "Términos de Genex actualizados",
+  "Genex terms, section 4": "Términos de Genex, sección 4",
   "Genex the new version is available.": "Hay una nueva versión de Genex disponible.",
   "Genex the new version is ready to install.": "La nueva versión de Genex está lista para instalarse.",
   "Genex tokens or VS Code JSON/JSONC. UI colors only; missing colors use Genex defaults.":
@@ -1691,6 +1697,8 @@ export default {
   "Going live": "Publicando",
   Grain: "Grano",
   Grid: "Cuadrícula",
+  "Good to know": "Bueno saber",
+  "Got it": "Entendido",
   "Grid size": "Tamaño de cuadrícula",
   Grille: "Rejilla",
   "Guidance available to your agents. Availability depends on the source and selected provider.":
@@ -1958,12 +1966,18 @@ export default {
   "Its author no longer shares it.": "Su autor ya no lo comparte.",
   "Its code runs on your computer like an app you install. It isn't sandboxed.":
     "Su código se ejecuta en tu equipo como una app que instalas. No está en un sandbox.",
+  "Its creator hasn’t shared this game’s project yet, so it can’t be remixed.":
+    "Su creador aún no ha compartido el proyecto de este juego, así que no se le puede hacer un remix.",
   "Its files are in your game folder, waiting for the lead to use them.":
     "Sus archivos están en la carpeta de tu juego, esperando a que el agente principal los use.",
   "Its own scene": "Escena propia",
   "Its packages aren’t installed yet — “{install}” runs on one press.":
     "Sus paquetes aún no están instalados: “{install}” se ejecuta con un clic.",
   "Its packages aren’t installed yet.": "Sus paquetes aún no están instalados.",
+  "Its project didn’t go, so no one can remix it yet.":
+    "Su proyecto no se envió, así que aún nadie puede hacerle un remix.",
+  "Its project is too big to remix: Genex keeps up to 2 GB and 5,000 files.":
+    "Su proyecto es demasiado grande para remixes: Genex guarda hasta 2 GB y 5.000 archivos.",
   "Its session failed before it delivered anything.": "Su sesión falló antes de entregar nada.",
   "Its source is your own repository: run genex make-remixable in the game’s folder to allow remixing.":
     "Su código está en tu propio repositorio: ejecuta genex make-remixable en la carpeta del juego para permitir remixes.",
@@ -2739,7 +2753,6 @@ export default {
   "Pay {amount}": "Pagar {amount}",
   "Paying…": "Pagando…",
   People: "Personas",
-  "People playing in the Genex app can install it.": "Quienes juegan en la app de Genex pueden instalar el juego.",
   Period: "Periodo",
   "Permission expansion requires confirmation": "Ampliar los permisos requiere confirmación",
   "Permission modes": "Modos de permisos",
@@ -2884,6 +2897,7 @@ export default {
   "Publish game": "Publicar juego",
   "Publish in one click": "Publica con un clic",
   "Publish progress": "Progreso de la publicación",
+  "Publish their remix on Genex.": "Publicar su remix en Genex.",
   "Publish this game": "Publicar este juego",
   "Publish this game on Genex": "Publicar este juego en Genex",
   "Publish this game with a playable link": "Publica este juego con un enlace para jugar",
@@ -3002,6 +3016,8 @@ export default {
   Remix: "Remix",
   "Remix progress": "Progreso del remix",
   "Remix {title}": "Hacer remix de {title}",
+  "Remixes made before you turn this off stay theirs.":
+    "Los remixes hechos antes de que lo desactives siguen siendo suyos.",
   "Remixing {title}": "Haciendo remix de {title}",
   "Remixing…": "Haciendo remix…",
   Remove: "Quitar",
@@ -3137,6 +3153,7 @@ export default {
   "Rigged model": "Modelo con rig",
   "Rigged, animated and ready for your game.": "Con rig, animados y listos para tu juego.",
   "Rigging · animation": "Rigging · animación",
+  Rights: "Derechos",
   "Roblox Studio closed. It asked to save anything unsaved first.":
     "Roblox Studio se cerró. Antes pidió guardar lo que no estaba guardado.",
   "Roblox Studio didn't say what {name} is. If a play test or a dialog is open in Studio, finish it, then choose the place again.":
@@ -4003,6 +4020,7 @@ export default {
     "Estos archivos eran demasiado grandes para guardarse, así que al retroceder se quedaron como estaban: {files}.",
   "These surfaces need different text colors. Use similar background brightness, or reset this theme.":
     "Estas superficies necesitan colores de texto distintos. Usa fondos con un brillo parecido o restablece este tema.",
+  "They can": "Pueden",
   "They get the Genex download page with a card from you.":
     "Recibirá la página de descarga de Genex con una tarjeta tuya.",
   "They get the Genex download page with a card from you. You get {count} credits when they make their first game.":
@@ -4571,6 +4589,7 @@ export default {
   "What it does": "Qué hace",
   "What phone players get. Your choice wins over the automatic check.":
     "Lo que verán quienes jueguen en el teléfono. Tu elección manda sobre la comprobación automática.",
+  "What remixers can do": "Qué pueden hacer quienes hacen remixes",
   "What should it show? Or leave it empty": "¿Qué debería mostrar? O déjalo vacío",
   "What should the worker do instead?": "¿Qué debería hacer el ayudante en su lugar?",
   "What the new cover should show": "Qué debe mostrar la nueva portada",
