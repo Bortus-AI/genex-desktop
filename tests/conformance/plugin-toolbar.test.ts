@@ -7,7 +7,6 @@ import {
   showsMultiplayer,
   takesEngineMultiplayer,
   shownToolbarStatus,
-  toolbarGlyph,
   toolbarItems,
   toolbarReaction,
   toolbarStatusFrom,
@@ -256,18 +255,11 @@ test("every bundled plugin that makes a kind of project keeps its buttons off a 
     for (const button of manifest.toolbar ?? []) {
       const own: GameKind = { facts: (button.facts ?? []).map((id) => ({ id, path: "." })) };
       assert.ok(button.facts?.length, `${manifest.id}:${button.id} names the facts of its games`);
-      assert.ok(button.icon, `${manifest.id}:${button.id} has an icon to fold into`);
+      assert.ok(button.icon, `${manifest.id}:${button.id} has an icon beside its name`);
       const keys = visibleToolbarEntries(toolbarItems(plugins, "game", own), {}).map((entry) => entry.key);
       assert.ok(keys.includes(`${manifest.id}:${button.id}`), `${manifest.id}:${button.id} on its own game`);
     }
   }
-});
-
-test("a folded button is never blank: its icon, else its label's first letter; unfolded, an icon-less button has none", () => {
-  assert.equal(toolbarGlyph(item({ icon: "box" }), true), "box");
-  assert.equal(toolbarGlyph(item({ icon: "box" }), false), "box");
-  assert.equal(toolbarGlyph(item({ label: "example" }), true), "E");
-  assert.equal(toolbarGlyph(item({ label: "example" }), false), undefined);
 });
 
 test("toolbarStatusFrom keeps shown as a boolean", () => {

@@ -1394,6 +1394,7 @@ export default {
   "Game sound": "게임 소리",
   "Game stopped": "게임이 멈췄어요",
   "Game view": "게임 보기",
+  "Game view: {view}": "게임 보기: {view}",
   Games: "게임",
   "Games by {name}": "{name}의 게임",
   "Games from Play": "플레이에서 받은 게임",

@@ -1478,6 +1478,7 @@ export default {
   "Game sound": "Som do jogo",
   "Game stopped": "Jogo parado",
   "Game view": "Visualização do jogo",
+  "Game view: {view}": "Visualização do jogo: {view}",
   Games: "Jogos",
   "Games by {name}": "Jogos de {name}",
   "Games from Play": "Jogos da seção Jogar",

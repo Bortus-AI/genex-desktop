@@ -1440,6 +1440,7 @@ export default {
   "Game sound": "Звук игры",
   "Game stopped": "Игра остановлена",
   "Game view": "Вид игры",
+  "Game view: {view}": "Вид игры: {view}",
   Games: "Игры",
   "Games by {name}": "Игры {name}",
   "Games from Play": "Игры из раздела «Играть»",

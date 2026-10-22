@@ -446,10 +446,13 @@ chat header's ⋯ menu and uses that chat's bound game; it is disabled on drafts
 game stage, selected build history and native-view occlusion behind Review, drawers and dialogs.
 
 Chat header and stage strip are 48px: 8px above and below 32px controls, and every gap between
-controls drags the window. The strip is always one row: once its labelled buttons (a plugin's, Make
-multiplayer, Publish) would overflow it, they all fold into 32px icons at once, each name moving to
-its tooltip and a status dot to the icon's corner, and unfold only when the labelled row fits again
-(`panels/stage/strip-fold.ts`). The game title hugs its text (at most 320px, then truncates); select it
+controls drags the window. The strip holds the views, Play/Stop, Reload, Sound and Full screen at
+its start and the plugin buttons (a plugin's, Make multiplayer, Publish) at its end, always named,
+and nothing in it ever runs under the window's own controls. Narrower, it makes room in steps
+(`panels/stage/strip-fold.ts`): the views fold into one button naming the current one, in the
+switcher's accent with a chevron, its menu listing every view with the current one ticked; then the
+plugin buttons move to a second 48px row at the strip's end; then Sound and Full screen join them at
+that row's start. Each step undoes once the first row fits again. The game title hugs its text (at most 320px, then truncates); select it
 to rename, Enter to save and Escape to cancel. Rename updates the library display name; folder
 paths and identifiers stay stable. Show in Finder and Terminal sit together at the header's end,
 then ⋯ (Export game…, Rename). One game has one chat, so there is no chat switcher; conversations

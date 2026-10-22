@@ -16,7 +16,6 @@ import type { FactRef, FolderHolds, GameKind } from "../../shared/project-facts.
 import {
   type PluginToolbarEntry,
   shownToolbarStatus,
-  toolbarGlyph,
   toolbarReaction,
   toolbarStatusFrom,
   MultiplayerPress,
@@ -64,9 +63,6 @@ const TONE_CLASS: Record<NonNullable<PluginToolbarStatus["tone"]>, string> = {
   err: "text-red",
   info: "text-ink-2",
 };
-/** A badge's dot on a folded button: on the icon's corner, ringed in the strip's colour. */
-const CORNER_DOT = "absolute top-1.5 right-1.5 size-[7px] ring-2 ring-canvas";
-
 /** Each tone's dot, for a badge drawn as one: green, amber, red, and the third ink for the quiet grey. */
 const DOT_CLASS: Record<NonNullable<PluginToolbarStatus["tone"]>, string> = {
   ok: "bg-green",
@@ -89,8 +85,6 @@ interface Props {
   onNotice: Notify;
   /** A panel dialog is on screen — the stage zeroes the native view while it is. */
   onOpenChange: (open: boolean) => void;
-  /** The strip's labels are folded into icons (`strip-fold.ts`): each name moves to its tooltip. */
-  folded?: boolean;
 }
 
 /** A panel open over the stage: the plugin's own document in its frame, or (`drawn`) one Studio draws itself. */
@@ -189,41 +183,29 @@ function ToolbarIcon({ icon }: { icon: string | undefined }): JSX.Element | null
 
 /**
  * A button's badge: the update mark while its plugin is behind, else its status's word in its tone,
- * or (`dot`) a dot in that tone whose word only screen readers hear. On a folded button a dot sits
- * on the icon's corner and a word is heard only (the tooltip says it).
+ * or (`dot`) a dot in that tone whose word only screen readers hear.
  */
 function ToolbarBadge({
   id,
   update,
   status,
-  folded,
 }: {
   id: string;
   update: boolean;
   status: PluginToolbarStatus | undefined;
-  folded: boolean;
 }): JSX.Element | null {
-  if (update) return <UpdateMark id={id} word={PLUGIN_TOOLBAR_WORDS.update.badge} folded={folded} />;
+  if (update) return <UpdateMark id={id} word={PLUGIN_TOOLBAR_WORDS.update.badge} />;
   if (!status?.badge) return null;
   if (status.dot) {
     const tone = status.tone ?? "info";
     return (
-      <span
-        id={id}
-        data-plugin-badge
-        data-dot={tone}
-        className={cn("size-1.5 shrink-0 rounded-full", DOT_CLASS[tone], folded && CORNER_DOT)}
-      >
+      <span id={id} data-plugin-badge data-dot={tone} className={cn("size-1.5 shrink-0 rounded-full", DOT_CLASS[tone])}>
         <span className="sr-only">{status.badge}</span>
       </span>
     );
   }
   return (
-    <span
-      id={id}
-      data-plugin-badge
-      className={cn("text-micro", status.tone ? TONE_CLASS[status.tone] : "text-ink-2", folded && "sr-only")}
-    >
+    <span id={id} data-plugin-badge className={cn("text-micro", status.tone ? TONE_CLASS[status.tone] : "text-ink-2")}>
       {status.badge}
     </span>
   );
@@ -255,20 +237,11 @@ function StripTip({ lines, tip, children }: { lines: string[]; tip?: string; chi
 }
 
 /**
- * A button's tooltip lines: a dot's word, then its title; folded, its name leads them and its badge's
- * word follows, dot or not, since the icon alone says neither.
- */
-function tipLines(label: string, status: PluginToolbarStatus | undefined, folded: boolean): string[] {
-  if (!folded) return toolbarTip(status);
-  return [label, ...toolbarTip(status?.badge ? { ...status, dot: true } : status)];
-}
-
-/**
  * A plugin's button: the accent while its status says its action is due, the quiet pill otherwise;
  * Publish wears Play's blue instead, filled while there is something to publish (`toolbarLook`).
  * While its plugin is behind the bundled version it wears the Update badge instead, and then it
  * opens Plugins at the plugin, game or not. Its title, and a dot's word, show in the strip's own
- * tooltip; folded (`strip-fold.ts`) it is its icon alone, its name leading that tooltip.
+ * tooltip.
  */
 function ToolbarButton({
   entry,
@@ -276,7 +249,6 @@ function ToolbarButton({
   project,
   busy,
   due,
-  folded,
   onPress,
 }: {
   entry: PluginToolbarEntry;
@@ -284,7 +256,6 @@ function ToolbarButton({
   project: string | null;
   busy: boolean;
   due: boolean;
-  folded: boolean;
   onPress: () => void;
 }): JSX.Element {
   const badgeId = useId();
@@ -296,11 +267,9 @@ function ToolbarButton({
   const disabled = blocked || busy;
   const press = update ? () => openPluginsAt(entry.plugin.manifest.id) : onPress;
   return (
-    <StripTip lines={tipLines(entry.item.label, status, folded)} tip={entry.key}>
+    <StripTip lines={toolbarTip(status)} tip={entry.key}>
       <Button
         variant={toolbarLook(isGenexPublish(entry), due)}
-        size={folded ? "icon" : undefined}
-        className={folded ? "relative" : undefined}
         data-due={due ? "" : undefined}
         data-plugin-toolbar={entry.key}
         aria-label={entry.item.ariaLabel}
@@ -309,9 +278,9 @@ function ToolbarButton({
         disabled={disabled}
         onClick={press}
       >
-        <ToolbarIcon icon={toolbarGlyph(entry.item, folded)} />
-        <span className={folded ? "sr-only" : undefined}>{entry.item.label}</span>
-        <ToolbarBadge id={badgeId} update={Boolean(update)} status={status} folded={folded} />
+        <ToolbarIcon icon={entry.item.icon} />
+        <span>{entry.item.label}</span>
+        <ToolbarBadge id={badgeId} update={Boolean(update)} status={status} />
       </Button>
     </StripTip>
   );
@@ -434,18 +403,7 @@ function useMultiplayer(project: string | null, shown: boolean, genex: PluginToo
  * A plugin behind the version Studio bundles: a small rising arrow in the button's own ink, the word
  * ("Update") read by assistive tech and the button's title saying what pressing does.
  */
-function UpdateMark({ id, word, folded = false }: { id: string; word: string; folded?: boolean }): JSX.Element {
-  if (folded)
-    return (
-      <span
-        id={id}
-        data-plugin-badge
-        data-plugin-update
-        role="img"
-        aria-label={word}
-        className={cn(CORNER_DOT, "rounded-full bg-accent")}
-      />
-    );
+function UpdateMark({ id, word }: { id: string; word: string }): JSX.Element {
   return (
     <span id={id} data-plugin-badge data-plugin-update role="img" aria-label={word} className="inline-flex opacity-80">
       <Icon name="update" size={14} />
@@ -457,51 +415,36 @@ function UpdateMark({ id, word, folded = false }: { id: string; word: string; fo
 function MultiplayerButton({
   onPress,
   behind = null,
-  folded,
 }: {
   onPress: () => void;
   /** Genex is older than the one Studio bundles: the button says Update, as Genex's own buttons do. */
   behind?: PluginToolbarStatus | null;
-  folded: boolean;
 }): JSX.Element {
   const badgeId = useId();
   const label = GENEX_WORDS.multiplayer.button;
   return (
-    <StripTip lines={folded ? [label, ...(behind?.title ? [behind.title] : [])] : []}>
-      <Button
-        variant="pill"
-        size={folded ? "icon" : undefined}
-        className={folded ? "relative" : undefined}
-        data-genex-multiplayer
-        aria-label={GENEX_WORDS.multiplayer.buttonLabel}
-        aria-describedby={behind ? badgeId : undefined}
-        title={folded ? undefined : behind?.title}
-        onClick={onPress}
-      >
-        <Icon name="users" />
-        <span className={folded ? "sr-only" : undefined}>{label}</span>
-        {behind ? <UpdateMark id={badgeId} word={PLUGIN_TOOLBAR_WORDS.update.badge} folded={folded} /> : null}
-      </Button>
-    </StripTip>
+    <Button
+      variant="pill"
+      data-genex-multiplayer
+      aria-label={GENEX_WORDS.multiplayer.buttonLabel}
+      aria-describedby={behind ? badgeId : undefined}
+      title={behind?.title}
+      onClick={onPress}
+    >
+      <Icon name="users" />
+      <span>{label}</span>
+      {behind ? <UpdateMark id={badgeId} word={PLUGIN_TOOLBAR_WORDS.update.badge} /> : null}
+    </Button>
   );
 }
 
 /** Studio's own Publish, dressed as Genex's: Play's blue tint, since nobody has published from this Mac yet. */
-function StudioPublishButton({ onPress, folded }: { onPress: () => void; folded: boolean }): JSX.Element {
-  const label = GENEX_WORDS.publish.button;
+function StudioPublishButton({ onPress }: { onPress: () => void }): JSX.Element {
   return (
-    <StripTip lines={folded ? [label] : []}>
-      <Button
-        variant="play-tint"
-        size={folded ? "icon" : undefined}
-        data-studio-publish
-        aria-label={GENEX_WORDS.publish.buttonLabel}
-        onClick={onPress}
-      >
-        <Icon name="globe" />
-        <span className={folded ? "sr-only" : undefined}>{label}</span>
-      </Button>
-    </StripTip>
+    <Button variant="play-tint" data-studio-publish aria-label={GENEX_WORDS.publish.buttonLabel} onClick={onPress}>
+      <Icon name="globe" />
+      <span>{GENEX_WORDS.publish.button}</span>
+    </Button>
   );
 }
 
@@ -575,7 +518,6 @@ export function PluginToolbar({
   game,
   onNotice,
   onOpenChange,
-  folded = false,
 }: Props): JSX.Element {
   const { entries, web, apps } = useStripEntries(plugins, project, facts, holds);
   const entriesRef = useRef(entries);
@@ -648,7 +590,7 @@ export function PluginToolbar({
       {visible.map((entry) => (
         <Fragment key={entry.key}>
           {entry === genexPublish && multiplayerShown && (
-            <MultiplayerButton onPress={multiplayer.press} behind={multiplayer.behind} folded={folded} />
+            <MultiplayerButton onPress={multiplayer.press} behind={multiplayer.behind} />
           )}
           <ToolbarButton
             entry={entry}
@@ -656,13 +598,12 @@ export function PluginToolbar({
             project={project}
             busy={busy === entry.key}
             due={Boolean(status[entry.key]?.attention) && !emptyGame}
-            folded={folded}
             onPress={() => void press(entry)}
           />
         </Fragment>
       ))}
-      {studioPublish.shown && multiplayerShown && <MultiplayerButton onPress={multiplayer.press} folded={folded} />}
-      {studioPublish.shown && <StudioPublishButton onPress={studioPublish.open} folded={folded} />}
+      {studioPublish.shown && multiplayerShown && <MultiplayerButton onPress={multiplayer.press} />}
+      {studioPublish.shown && <StudioPublishButton onPress={studioPublish.open} />}
       {studioPublish.setup && <PublishSignInDialog onClose={studioPublish.close} />}
       {multiplayer.setup && <GenexSetupDialog genex={genexPlugin} onClose={multiplayer.close} />}
       {panel?.drawn && livePanelPlugin ? (

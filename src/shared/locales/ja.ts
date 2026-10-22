@@ -1422,6 +1422,7 @@ export default {
   "Game sound": "ゲームのサウンド",
   "Game stopped": "ゲームが停止しました",
   "Game view": "ゲームの表示",
+  "Game view: {view}": "ゲームの表示：{view}",
   Games: "ゲーム",
   "Games by {name}": "{name}のゲーム",
   "Games from Play": "「プレイ」のゲーム",

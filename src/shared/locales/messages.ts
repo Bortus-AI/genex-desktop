@@ -1217,6 +1217,7 @@ export const MESSAGES = [
   "Game sound",
   "Game stopped",
   "Game view",
+  "Game view: {view}",
   "Games",
   "Games by {name}",
   "Games from Play",

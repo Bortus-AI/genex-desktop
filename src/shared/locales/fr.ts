@@ -1486,6 +1486,7 @@ export default {
   "Game sound": "Son du jeu",
   "Game stopped": "Jeu arrêté",
   "Game view": "Vue du jeu",
+  "Game view: {view}": "Vue du jeu : {view}",
   Games: "Jeux",
   "Games by {name}": "Jeux de {name}",
   "Games from Play": "Jeux de « Jouer »",
