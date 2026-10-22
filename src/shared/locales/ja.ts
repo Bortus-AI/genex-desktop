@@ -324,6 +324,8 @@ export default {
     "確認なしでの呼び出しを許可（このツールによる変更も含む）",
   "Allow it for Studio in a terminal, then quit and reopen Studio:":
     "ターミナルでStudioに許可してから、Studioを終了して開き直してください：",
+  "Allow it only if you may share everything in the project. Assets bought in the Unity Asset Store or on Fab usually can’t be shared.":
+    "プロジェクトのすべてを共有できる場合だけ許可してください。Unity Asset Store や Fab で買ったアセットは、たいてい共有できません。",
   "Allow once": "今回だけ許可",
   "Allow remixing": "リミックスを許可",
   "Allow the mic in Settings": "設定でマイクを許可してください",
@@ -465,6 +467,7 @@ export default {
   Avatar: "アバター",
   Back: "戻る",
   "Back to Play": "プレイに戻る",
+  "Back to Publish": "公開に戻る",
   "Back to game": "ゲームに戻る",
   "Back to workspace": "ワークスペースに戻る",
   Background: "背景",
@@ -880,6 +883,8 @@ export default {
   Copied: "コピーしました",
   "Copied.": "コピーしました。",
   Copy: "コピー",
+  "Copy and change {title}’s project to make their own game.":
+    "{title} のプロジェクトをコピーして変え、自分のゲームを作る。",
   "Copy command": "コマンドをコピー",
   "Copy diagnostics": "診断情報をコピー",
   "Copy error": "エラーをコピー",
@@ -1563,6 +1568,7 @@ export default {
   "Genex starts Git history here, so any change can be undone.":
     "GenexがここでGit履歴を始めるので、どの変更も元に戻せます。",
   "Genex terms updated": "Genexの規約が更新されました",
+  "Genex terms, section 4": "Genex 利用規約 第4条",
   "Genex the new version is available.": "Genexの新しいバージョンが利用できます。",
   "Genex the new version is ready to install.": "Genexの新しいバージョンをインストールする準備ができました。",
   "Genex tokens or VS Code JSON/JSONC. UI colors only; missing colors use Genex defaults.":
@@ -1629,6 +1635,8 @@ export default {
   "Going live": "公開中",
   Grain: "粒子",
   Grid: "グリッド",
+  "Good to know": "知っておくこと",
+  "Got it": "わかった",
   "Grid size": "グリッドサイズ",
   Grille: "グリル",
   "Guidance available to your agents. Availability depends on the source and selected provider.":
@@ -1899,12 +1907,18 @@ export default {
   "Its author no longer shares it.": "作者が共有をやめました。",
   "Its code runs on your computer like an app you install. It isn't sandboxed.":
     "このコードは、インストールしたアプリと同じようにコンピューター上で動きます。サンドボックス化されていません。",
+  "Its creator hasn’t shared this game’s project yet, so it can’t be remixed.":
+    "作者がまだこのゲームのプロジェクトを共有していないので、リミックスできません。",
   "Its files are in your game folder, waiting for the lead to use them.":
     "ファイルはゲームフォルダーにあり、メインエージェントが使うのを待っています。",
   "Its own scene": "独自のシーン",
   "Its packages aren’t installed yet — “{install}” runs on one press.":
     "パッケージがまだインストールされていません。「{install}」はワンクリックで実行できます。",
   "Its packages aren’t installed yet.": "パッケージがまだインストールされていません。",
+  "Its project didn’t go, so no one can remix it yet.":
+    "プロジェクトが送れなかったので、まだ誰もリミックスできません。",
+  "Its project is too big to remix: Genex keeps up to 2 GB and 5,000 files.":
+    "プロジェクトが大きすぎてリミックスできません。Genex に置けるのは 2 GB・5,000 ファイルまでです。",
   "Its session failed before it delivered anything.": "何も提出しないうちにセッションが失敗しました。",
   "Its source is your own repository: run genex make-remixable in the game’s folder to allow remixing.":
     "ソースはあなた自身のリポジトリにあります。リミックスを許可するには、ゲームのフォルダーでgenex make-remixableを実行してください。",
@@ -2005,6 +2019,7 @@ export default {
   Lines: "ライン",
   "Link copied": "リンクをコピーしました",
   "Linked files cannot be previewed.": "リンクされたファイルはプレビューできません。",
+  "Linux app": "Linuxアプリ",
   "Listed the hero cameras": "ショット用カメラの一覧を取得しました",
   "Listed the toolsets": "ツールセットの一覧を取得しました",
   "Listing the hero cameras": "ショット用カメラの一覧を取得しています",
@@ -2104,15 +2119,15 @@ export default {
   "Main agent: {model}": "メインエージェント：{model}",
   "Main color": "メインカラー",
   "Main navigation": "メインナビゲーション",
-  "Make a Mac or Windows app first, then publish it here.":
-    "まずMacかWindowsのアプリをつくってから、ここで公開してください。",
+  "Make a Mac, Windows or Linux app first, then publish it here.":
+    "まずMac、Windows、Linuxのいずれかのアプリをつくってから、ここで公開してください。",
   "Make a community plugin": "コミュニティプラグインをつくる",
   "Make a profile, publish your games, play with friends.":
     "プロフィールをつくって、ゲームを公開して、フレンドと遊ぼう。",
   "Make a web version of {title} so I can publish it on the web.":
     "{title}のWeb版をつくってください。Webで公開したいです。",
-  "Make a web version or a Mac or Windows app first, then publish it here.":
-    "まずWeb版か、MacかWindowsのアプリをつくってから、ここで公開してください。",
+  "Make a web version or a Mac, Windows or Linux app first, then publish it here.":
+    "まずWeb版か、Mac、Windows、Linuxのいずれかのアプリをつくってから、ここで公開してください。",
   "Make a {players} app of {title} so I can publish it for {players} players.":
     "{title}の{players}アプリをつくってください。{players}のプレイヤー向けに公開したいです。",
   "Make another Genex clip for this game: a different moment.":
@@ -2680,7 +2695,6 @@ export default {
   "Pay {amount}": "{amount}を支払う",
   "Paying…": "支払い中…",
   People: "ユーザー",
-  "People playing in the Genex app can install it.": "Genexアプリで遊んでいる人はゲームをインストールできます。",
   Period: "期間",
   "Permission expansion requires confirmation": "権限の拡大には確認が必要です",
   "Permission modes": "権限モード",
@@ -2826,6 +2840,7 @@ export default {
   "Publish game": "ゲームを公開",
   "Publish in one click": "ワンクリックで公開",
   "Publish progress": "公開の進行状況",
+  "Publish their remix on Genex.": "自分のリミックスを Genex に公開する。",
   "Publish this game": "このゲームを公開",
   "Publish this game on Genex": "このゲームをGenexで公開",
   "Publish this game with a playable link": "プレイできるリンク付きでこのゲームを公開",
@@ -2836,8 +2851,8 @@ export default {
   "Publish {apps}": "{apps}を公開",
   "Publish {name} to Roblox as a new game?": "{name}を新しいゲームとしてRobloxに公開しますか？",
   Publishing: "公開",
-  "Publishing Mac and Windows apps comes with the next Genex update.":
-    "MacとWindowsのアプリの公開は、次のGenexアップデートで使えるようになります。",
+  "Publishing Mac, Windows and Linux apps comes with the next Genex update.":
+    "Mac、Windows、Linuxのアプリの公開は、次のGenexアップデートで使えるようになります。",
   "Publishing needs git and git-lfs on this Mac (brew install git-lfs). Studio will not let the Genex CLI install software.":
     "公開にはこのMacにgitとgit-lfsが必要です（brew install git-lfs）。StudioはGenex CLIにソフトウェアをインストールさせません。",
   "Publishing needs git on this Mac. Install git (Xcode command line tools or Homebrew) and try again.":
@@ -2945,6 +2960,8 @@ export default {
   Remix: "リミックス",
   "Remix progress": "リミックスの進行状況",
   "Remix {title}": "{title}をリミックス",
+  "Remixes made before you turn this off stay theirs.":
+    "オフにする前に作られたリミックスは、作った人のものとして残ります。",
   "Remixing {title}": "{title}をリミックス中",
   "Remixing…": "リミックス中…",
   Remove: "削除",
@@ -3079,6 +3096,7 @@ export default {
   "Rigged model": "リグ付きモデル",
   "Rigged, animated and ready for your game.": "リグ付き・アニメーション付きで、すぐゲームに使えます。",
   "Rigging · animation": "リギング · アニメーション",
+  Rights: "権利",
   "Roblox Studio closed. It asked to save anything unsaved first.":
     "Roblox Studioを閉じました。閉じる前に、保存していない内容を保存するか確認しました。",
   "Roblox Studio didn't say what {name} is. If a play test or a dialog is open in Studio, finish it, then choose the place again.":
@@ -3939,6 +3957,7 @@ export default {
     "これらのファイルは保存するには大きすぎたため、巻き戻しでもそのままにしました：{files}。",
   "These surfaces need different text colors. Use similar background brightness, or reset this theme.":
     "これらのサーフェスには別々の文字色が必要です。背景の明るさをそろえるか、このテーマをリセットしてください。",
+  "They can": "できること",
   "They get the Genex download page with a card from you.":
     "相手には、あなたからのカードつきでGenexのダウンロードページが届きます。",
   "They get the Genex download page with a card from you. You get {count} credits when they make their first game.":
@@ -4039,10 +4058,10 @@ export default {
   "This game has an unlisted draft page": "このゲームには限定公開の下書きページがあります",
   "This game has more files than the canvas lists.":
     "このゲームには、キャンバスに表示されている以上のファイルがあります。",
-  "This game has no Mac or Windows app ready to publish":
-    "このゲームには公開できるMac版またはWindows版のアプリがありません",
-  "This game has no Mac or Windows app ready to publish.":
-    "このゲームには、公開できるMac版やWindows版のアプリがありません。",
+  "This game has no Mac, Windows or Linux app ready to publish":
+    "このゲームには公開できるMac版、Windows版、Linux版のアプリがありません",
+  "This game has no Mac, Windows or Linux app ready to publish.":
+    "このゲームには、公開できるMac版、Windows版、Linux版のアプリがありません。",
   "This game has no Unity project": "このゲームにはUnityプロジェクトがありません",
   "This game has no Unity project.": "このゲームにはUnityプロジェクトがありません。",
   "This game has no skills of its own.": "このゲーム専用のスキルはありません。",
@@ -4508,6 +4527,7 @@ export default {
   "What it does": "できること",
   "What phone players get. Your choice wins over the automatic check.":
     "スマホのプレイヤーに表示される内容です。自動チェックよりあなたの選択が優先されます。",
+  "What remixers can do": "リミックスする人ができること",
   "What should it show? Or leave it empty": "何を写しますか？空欄のままでもOKです",
   "What should the worker do instead?": "代わりにワーカーにどうしてほしいですか？",
   "What the new cover should show": "新しいカバーに写すもの",
@@ -5808,4 +5828,19 @@ export default {
   "— the biggest of them: {problem}": "— いちばん大きな問題：{problem}",
   "… Preview truncated at 256 KiB; original unchanged.":
     "… プレビューは256 KiBで切り詰めました。元のファイルは変わりません。",
+  "On this computer": "このコンピューターで",
+  "On this computer · {size}": "このコンピューター · {size}",
+  "Not for this computer": "このコンピューターには非対応",
+  "Couldn’t install: free {size} on this computer and try again.":
+    "インストールできませんでした。このコンピューターで{size}空けて、もう一度試してください。",
+  "Couldn’t install: this game doesn’t run on this computer.":
+    "インストールできませんでした。このゲームはこのコンピューターでは動きません。",
+  "There’s no version of this game for this computer.": "このコンピューター用のバージョンはありません。",
+  "It isn’t on this computer any more. Install it again.":
+    "このコンピューターにはもうありません。もう一度インストールしてください。",
+  "It couldn’t start on this computer.": "このコンピューターで起動できませんでした。",
+  "Remove from this computer": "このコンピューターから削除",
+  "{title} is removed from this computer. Its saves stay.":
+    "{title}をこのコンピューターから削除しました。セーブデータは残ります。",
+  "Ready to play on this computer.": "このコンピューターでプレイできます。",
 } satisfies LocaleCatalog;

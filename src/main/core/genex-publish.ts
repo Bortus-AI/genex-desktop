@@ -25,7 +25,7 @@ const MESSAGE = {
   UnrealGame: (title: string) =>
     t("{title} builds in Unreal; publishing an Unreal game isn't supported yet.", { title }),
   NotWebGame: (title: string) => t("{title} isn't a web game, so Genex can't publish it yet.", { title }),
-  NoApps: () => t("This game has no Mac or Windows app ready to publish"),
+  NoApps: () => t("This game has no Mac, Windows or Linux app ready to publish"),
 } as const;
 
 /** Why a game can't be published at all, by code: callers act on it, never on its words. */
@@ -80,6 +80,9 @@ export async function assertPublishable(core: Pick<StudioCore, "games">, project
   throw new PublishRefusedError(PublishRefusal.NotWebGame, MESSAGE.NotWebGame(game.title));
 }
 
+/** The dialog's Allow remixing as the publish's argument: sent only when the dialog said yes or no. */
+const remixArg = (remix: unknown): { remix?: boolean } => (typeof remix === "boolean" ? { remix } : {});
+
 /** The game the dialog names, bound as Studio allows it to be opened, while Studio's Genex is installed. */
 async function boundGame(core: DialogCore, project: unknown): Promise<PluginBinding> {
   if (typeof project !== "string" || !project) throw new Error(MESSAGE.NoGame());
@@ -113,12 +116,13 @@ export async function publishFromDialog(
   review: unknown,
   title?: unknown,
   sendsApps = pinnedCliSendsApps(),
+  remix?: unknown,
 ): Promise<void> {
   if (!isExportReview(review)) throw new Error(MESSAGE.NoFileList());
   const binding = await dialogBinding(core, project);
   const name = cleanGenexTitle(title);
   const native = await publishedApps(core, binding.project, sendsApps);
-  const args = { ...(name ? { title: name } : {}), ...(native.length > 0 ? { native } : {}) };
+  const args = { ...(name ? { title: name } : {}), ...(native.length > 0 ? { native } : {}), ...remixArg(remix) };
   // Genex exports inside this call, so the approval lives exactly as long as it.
   await core.withApprovedExport(GENEX_PLUGIN_ID, binding.project, review, () =>
     core.plugins.action(GENEX_PLUGIN_ID, GenexAction.PublishGallery, args, binding),
@@ -136,6 +140,7 @@ export async function publishAppsFromDialog(
   project: unknown,
   title?: unknown,
   sendsApps = pinnedCliSendsApps(),
+  remix?: unknown,
 ): Promise<void> {
   const binding = await boundGame(core, project);
   const native = await publishedApps(core, binding.project, sendsApps);
@@ -144,7 +149,7 @@ export async function publishAppsFromDialog(
   await core.plugins.action(
     GENEX_PLUGIN_ID,
     GenexAction.PublishApps,
-    { native, ...(name ? { title: name } : {}) },
+    { native, ...(name ? { title: name } : {}), ...remixArg(remix) },
     binding,
   );
 }

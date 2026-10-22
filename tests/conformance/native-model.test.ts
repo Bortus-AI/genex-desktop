@@ -28,6 +28,7 @@ import {
   type NativeSession,
   NativeSessionPhase,
 } from "../../src/shared/play-native.ts";
+import { NATIVE_WORDS, nativeHereWords } from "../../src/renderer/words.ts";
 
 const HOST: NativeHost = { platform: NativePlatform.Mac, arch: NativeArch.Arm64, osVersion: "15.0" };
 
@@ -150,16 +151,33 @@ describe("a native game's card", () => {
       percent: 38,
       etaMs: 120_000,
     });
-    assert.deepEqual(cardBadge(game(), installs({ installed: [installed()] })), { kind: CardBadge.Installed });
+    assert.deepEqual(cardBadge(game(), installs({ installed: [installed()] })), {
+      kind: CardBadge.Installed,
+      platform: NativePlatform.Mac,
+    });
     assert.deepEqual(cardBadge(game(), installs({ installed: [installed("1.2")] })), {
       kind: CardBadge.Update,
       bytes: 1_200,
     });
     assert.deepEqual(
       cardBadge(game([build()], true), installs({ installed: [installed()] })),
-      { kind: CardBadge.Installed },
+      { kind: CardBadge.Installed, platform: NativePlatform.Mac },
       "a web game's Mac app installed here says so",
     );
+  });
+
+  it("names this Mac on a Mac, and this computer on Linux", () => {
+    const linux = installs({ host: { platform: NativePlatform.Linux, arch: NativeArch.X64, osVersion: "6.8.0" } });
+    assert.equal(gameStanding(game(), installs(), []).here, NativePlatform.Mac);
+    assert.equal(gameStanding(game(), linux, []).here, NativePlatform.Linux);
+    for (const platform of ["", "darwin", NativePlatform.Mac])
+      assert.equal(nativeHereWords(platform).installedHere, "On this Mac", platform || "before main has said");
+    for (const platform of ["linux", NativePlatform.Linux]) {
+      const here = nativeHereWords(platform);
+      assert.equal(here.installedHere, "On this computer");
+      assert.equal(here.readyToPlay, "Ready to play on this computer.");
+      assert.equal(NATIVE_WORDS.installFailed[InstallFailure.NotOffered]("", here), here.notOffered);
+    }
   });
 
   it("reads a download's percent whole and never past 100", () => {

@@ -321,6 +321,8 @@ export default {
   "Allow calls without asking, including changes this tool can make": "묻지 않고 호출 허용(이 도구가 하는 변경 포함)",
   "Allow it for Studio in a terminal, then quit and reopen Studio:":
     "터미널에서 Studio에 허용한 뒤, Studio를 종료하고 다시 열어 주세요:",
+  "Allow it only if you may share everything in the project. Assets bought in the Unity Asset Store or on Fab usually can’t be shared.":
+    "프로젝트의 모든 것을 공유할 수 있을 때만 허용하세요. Unity Asset Store나 Fab에서 산 에셋은 보통 공유할 수 없어요.",
   "Allow once": "한 번만 허용",
   "Allow remixing": "리믹스 허용",
   "Allow the mic in Settings": "설정에서 마이크를 허용해 주세요",
@@ -462,6 +464,7 @@ export default {
   Avatar: "아바타",
   Back: "뒤로",
   "Back to Play": "플레이로 돌아가기",
+  "Back to Publish": "게시로 돌아가기",
   "Back to game": "게임으로 돌아가기",
   "Back to workspace": "작업 공간으로 돌아가기",
   Background: "배경",
@@ -868,6 +871,8 @@ export default {
   Copied: "복사했어요",
   "Copied.": "복사했어요.",
   Copy: "복사",
+  "Copy and change {title}’s project to make their own game.":
+    "{title}의 프로젝트를 복사하고 바꿔서 자기 게임을 만들기.",
   "Copy command": "명령어 복사",
   "Copy diagnostics": "진단 정보 복사",
   "Copy error": "오류 복사",
@@ -1530,6 +1535,7 @@ export default {
   "Genex starts Git history here, so any change can be undone.":
     "Genex가 여기서 Git 기록을 시작해서 어떤 변경이든 되돌릴 수 있어요.",
   "Genex terms updated": "Genex 약관 업데이트됨",
+  "Genex terms, section 4": "Genex 약관 4조",
   "Genex the new version is available.": "Genex 새 버전이 나왔어요.",
   "Genex the new version is ready to install.": "Genex 새 버전을 설치할 준비가 됐어요.",
   "Genex tokens or VS Code JSON/JSONC. UI colors only; missing colors use Genex defaults.":
@@ -1595,6 +1601,8 @@ export default {
   "Going live": "공개 중",
   Grain: "그레인",
   Grid: "그리드",
+  "Good to know": "알아 두세요",
+  "Got it": "알겠어요",
   "Grid size": "그리드 크기",
   Grille: "그릴",
   "Guidance available to your agents. Availability depends on the source and selected provider.":
@@ -1857,12 +1865,17 @@ export default {
   "Its author no longer shares it.": "작성자가 더 이상 공유하지 않아요.",
   "Its code runs on your computer like an app you install. It isn't sandboxed.":
     "이 코드는 설치한 앱처럼 컴퓨터에서 실행돼요. 샌드박스에 격리되지 않아요.",
+  "Its creator hasn’t shared this game’s project yet, so it can’t be remixed.":
+    "만든 사람이 아직 이 게임의 프로젝트를 공유하지 않아서 리믹스할 수 없어요.",
   "Its files are in your game folder, waiting for the lead to use them.":
     "파일이 게임 폴더에 있고, 메인 에이전트가 쓰기를 기다리고 있어요.",
   "Its own scene": "독립된 장면",
   "Its packages aren’t installed yet — “{install}” runs on one press.":
     "패키지가 아직 설치되지 않았어요 — 한 번 누르면 “{install}” 명령이 실행돼요.",
   "Its packages aren’t installed yet.": "패키지가 아직 설치되지 않았어요.",
+  "Its project didn’t go, so no one can remix it yet.": "프로젝트가 전송되지 않아서 아직 아무도 리믹스할 수 없어요.",
+  "Its project is too big to remix: Genex keeps up to 2 GB and 5,000 files.":
+    "프로젝트가 너무 커서 리믹스할 수 없어요. Genex는 2GB, 파일 5,000개까지 보관해요.",
   "Its session failed before it delivered anything.": "아무것도 전달하기 전에 세션이 실패했어요.",
   "Its source is your own repository: run genex make-remixable in the game’s folder to allow remixing.":
     "소스가 내 저장소에 있어요. 리믹스를 허용하려면 게임 폴더에서 genex make-remixable을 실행하세요.",
@@ -1962,6 +1975,7 @@ export default {
   Lines: "라인",
   "Link copied": "링크를 복사했어요",
   "Linked files cannot be previewed.": "링크된 파일은 미리 볼 수 없어요.",
+  "Linux app": "Linux 앱",
   "Listed the hero cameras": "쇼케이스 카메라 목록을 가져왔어요",
   "Listed the toolsets": "도구 세트 목록을 가져왔어요",
   "Listing the hero cameras": "쇼케이스 카메라 목록을 가져오는 중",
@@ -2060,13 +2074,14 @@ export default {
   "Main agent: {model}": "메인 에이전트: {model}",
   "Main color": "메인 색상",
   "Main navigation": "기본 탐색",
-  "Make a Mac or Windows app first, then publish it here.": "먼저 Mac 또는 Windows 앱을 만든 다음 여기서 게시하세요.",
+  "Make a Mac, Windows or Linux app first, then publish it here.":
+    "먼저 Mac, Windows 또는 Linux 앱을 만든 다음 여기서 게시하세요.",
   "Make a community plugin": "커뮤니티 플러그인 만들기",
   "Make a profile, publish your games, play with friends.": "프로필을 만들고, 게임을 게시하고, 친구와 함께 플레이해요.",
   "Make a web version of {title} so I can publish it on the web.":
     "{title}의 웹 버전을 만들어 주세요. 웹에 게시하고 싶어요.",
-  "Make a web version or a Mac or Windows app first, then publish it here.":
-    "먼저 웹 버전이나 Mac 또는 Windows 앱을 만든 다음 여기서 게시하세요.",
+  "Make a web version or a Mac, Windows or Linux app first, then publish it here.":
+    "먼저 웹 버전이나 Mac, Windows 또는 Linux 앱을 만든 다음 여기서 게시하세요.",
   "Make a {players} app of {title} so I can publish it for {players} players.":
     "{title}의 {players} 앱을 만들어 주세요. {players} 플레이어에게 게시하고 싶어요.",
   "Make another Genex clip for this game: a different moment.":
@@ -2617,7 +2632,6 @@ export default {
   "Pay {amount}": "{amount} 결제",
   "Paying…": "결제 중…",
   People: "사람",
-  "People playing in the Genex app can install it.": "Genex 앱에서 플레이하는 사람은 게임을 설치할 수 있어요.",
   Period: "기간",
   "Permission expansion requires confirmation": "권한 확장은 확인이 필요해요",
   "Permission modes": "권한 모드",
@@ -2760,6 +2774,7 @@ export default {
   "Publish game": "게임 게시하기",
   "Publish in one click": "클릭 한 번으로 게시",
   "Publish progress": "게시 진행 상황",
+  "Publish their remix on Genex.": "자기 리믹스를 Genex에 게시하기.",
   "Publish this game": "이 게임 게시하기",
   "Publish this game on Genex": "이 게임을 Genex에 게시하기",
   "Publish this game with a playable link": "플레이할 수 있는 링크와 함께 이 게임 게시하기",
@@ -2770,8 +2785,8 @@ export default {
   "Publish {apps}": "{apps} 게시하기",
   "Publish {name} to Roblox as a new game?": "{name} 플레이스를 새 게임으로 Roblox에 게시할까요?",
   Publishing: "게시",
-  "Publishing Mac and Windows apps comes with the next Genex update.":
-    "Mac 및 Windows 앱 게시는 다음 Genex 업데이트에서 지원돼요.",
+  "Publishing Mac, Windows and Linux apps comes with the next Genex update.":
+    "Mac, Windows 및 Linux 앱 게시는 다음 Genex 업데이트에서 지원돼요.",
   "Publishing needs git and git-lfs on this Mac (brew install git-lfs). Studio will not let the Genex CLI install software.":
     "게시하려면 이 Mac에 git과 git-lfs가 필요해요(brew install git-lfs). Studio는 Genex CLI가 소프트웨어를 설치하도록 두지 않아요.",
   "Publishing needs git on this Mac. Install git (Xcode command line tools or Homebrew) and try again.":
@@ -2876,6 +2891,7 @@ export default {
   Remix: "리믹스",
   "Remix progress": "리믹스 진행 상황",
   "Remix {title}": "{title} 리믹스",
+  "Remixes made before you turn this off stay theirs.": "이걸 끄기 전에 만들어진 리믹스는 만든 사람 것으로 남아요.",
   "Remixing {title}": "{title} 리믹스하는 중",
   "Remixing…": "리믹스하는 중…",
   Remove: "삭제",
@@ -3010,6 +3026,7 @@ export default {
   "Rigged model": "리깅된 모델",
   "Rigged, animated and ready for your game.": "리깅과 애니메이션까지 끝나서 바로 게임에 쓸 수 있어요.",
   "Rigging · animation": "리깅 · 애니메이션",
+  Rights: "권리",
   "Roblox Studio closed. It asked to save anything unsaved first.":
     "Roblox Studio를 닫았어요. 닫기 전에 저장하지 않은 내용을 저장할지 물어봤어요.",
   "Roblox Studio didn't say what {name} is. If a play test or a dialog is open in Studio, finish it, then choose the place again.":
@@ -3849,6 +3866,7 @@ export default {
     "이 파일들은 저장하기에 너무 커서 되감기 때 그대로 두었어요: {files}.",
   "These surfaces need different text colors. Use similar background brightness, or reset this theme.":
     "이 표면들은 서로 다른 글자색이 필요해요. 배경 밝기를 비슷하게 맞추거나 이 테마를 초기화하세요.",
+  "They can": "할 수 있는 것",
   "They get the Genex download page with a card from you.": "상대방은 내 카드와 함께 Genex 다운로드 페이지를 받아요.",
   "They get the Genex download page with a card from you. You get {count} credits when they make their first game.":
     "상대방은 내 카드와 함께 Genex 다운로드 페이지를 받아요. 상대방이 첫 게임을 만들면 {count} 크레딧을 받아요.",
@@ -3942,8 +3960,10 @@ export default {
   "This game folder is no longer available.": "이 게임 폴더를 더 이상 사용할 수 없어요.",
   "This game has an unlisted draft page": "이 게임에는 일부 공개 초안 페이지가 있어요",
   "This game has more files than the canvas lists.": "이 게임에는 캔버스에 표시된 것보다 파일이 더 많아요.",
-  "This game has no Mac or Windows app ready to publish": "이 게임에는 게시할 준비가 된 Mac 또는 Windows 앱이 없어요",
-  "This game has no Mac or Windows app ready to publish.": "이 게임에는 게시할 준비가 된 Mac 또는 Windows 앱이 없어요.",
+  "This game has no Mac, Windows or Linux app ready to publish":
+    "이 게임에는 게시할 준비가 된 Mac, Windows 또는 Linux 앱이 없어요",
+  "This game has no Mac, Windows or Linux app ready to publish.":
+    "이 게임에는 게시할 준비가 된 Mac, Windows 또는 Linux 앱이 없어요.",
   "This game has no Unity project": "이 게임에는 Unity 프로젝트가 없어요",
   "This game has no Unity project.": "이 게임에는 Unity 프로젝트가 없어요.",
   "This game has no skills of its own.": "이 게임에는 자체 스킬이 없어요.",
@@ -4398,6 +4418,7 @@ export default {
   "What it does": "하는 일",
   "What phone players get. Your choice wins over the automatic check.":
     "휴대폰 플레이어에게 보이는 방식이에요. 자동 검사보다 내 선택이 우선해요.",
+  "What remixers can do": "리믹서가 할 수 있는 것",
   "What should it show? Or leave it empty": "무엇을 보여 줄까요? 비워 둬도 돼요",
   "What should the worker do instead?": "작업자가 대신 무엇을 하면 좋을까요?",
   "What the new cover should show": "새 커버에 담을 내용",
@@ -5684,4 +5705,18 @@ export default {
   "×{count} during {phase}": "{phase} 중 ×{count}",
   "— the biggest of them: {problem}": "— 가장 큰 문제: {problem}",
   "… Preview truncated at 256 KiB; original unchanged.": "… 미리보기는 256KiB에서 잘렸어요. 원본은 그대로예요.",
+  "On this computer": "이 컴퓨터",
+  "On this computer · {size}": "이 컴퓨터에 있음 · {size}",
+  "Not for this computer": "이 컴퓨터용이 아님",
+  "Couldn’t install: free {size} on this computer and try again.":
+    "설치하지 못했어요. 이 컴퓨터에서 {size}를 확보하고 다시 시도하세요.",
+  "Couldn’t install: this game doesn’t run on this computer.":
+    "설치하지 못했어요. 이 게임은 이 컴퓨터에서 실행되지 않아요.",
+  "There’s no version of this game for this computer.": "이 컴퓨터용 버전이 없는 게임이에요.",
+  "It isn’t on this computer any more. Install it again.": "이제 이 컴퓨터에 없어요. 다시 설치하세요.",
+  "It couldn’t start on this computer.": "이 컴퓨터에서 시작하지 못했어요.",
+  "Remove from this computer": "이 컴퓨터에서 제거",
+  "{title} is removed from this computer. Its saves stay.":
+    "{title} 게임을 이 컴퓨터에서 제거했어요. 저장 데이터는 남아 있어요.",
+  "Ready to play on this computer.": "이 컴퓨터에서 플레이할 수 있어요.",
 } satisfies LocaleCatalog;

@@ -372,12 +372,12 @@ describe("native game sessions", () => {
 });
 
 describe("a native game's way to Genex", () => {
-  it("gives a game its gateway's ports and Genex's address and ticket, and closes the gateway once it ends", async () => {
+  it("gives a game its gateway's ports, Genex's address and ticket and its own name on Genex, and closes the gateway once it ends", async () => {
     const { sessions, games, requests, gateways } = await rig({ genex: "open" });
     await sessions.launch("dust-runners");
     assert.deepEqual(requests[0]?.genex, {
       ports: [41000, 41001],
-      env: { GENEX_API_URL: "http://127.0.0.1:41000", GENEX_EMBED_TICKET: TICKET },
+      env: { GENEX_API_URL: "http://127.0.0.1:41000", GENEX_EMBED_TICKET: TICKET, GENEX_GAME: "dust-runners" },
     });
     assert.equal(gateways.closed, 0, "open while it plays");
     games[0]?.exit(0);
@@ -405,9 +405,13 @@ describe("a native game's way to Genex", () => {
 });
 
 describe("what a game's sandbox and environment take of its way to Genex", () => {
-  const good = { GENEX_API_URL: "http://127.0.0.1:41000", GENEX_EMBED_TICKET: "t".repeat(32) };
+  const good = {
+    GENEX_API_URL: "http://127.0.0.1:41000",
+    GENEX_EMBED_TICKET: "t".repeat(32),
+    GENEX_GAME: "dust-runners",
+  };
 
-  it("passes Genex's address and ticket on as they are", () => {
+  it("passes Genex's address, ticket and the game's name on as they are", () => {
     assert.deepEqual(gameGenexEnv(good), good);
     assert.deepEqual(gameGenexEnv({ GENEX_API_URL: good.GENEX_API_URL }), { GENEX_API_URL: good.GENEX_API_URL });
   });
@@ -433,10 +437,26 @@ describe("what a game's sandbox and environment take of its way to Genex", () =>
     for (const ticket of tickets)
       assert.deepEqual(
         gameGenexEnv({ ...good, GENEX_EMBED_TICKET: ticket }),
-        { GENEX_API_URL: good.GENEX_API_URL },
+        { GENEX_API_URL: good.GENEX_API_URL, GENEX_GAME: good.GENEX_GAME },
         `${ticket}: a guest`,
       );
     assert.deepEqual(gameGenexEnv(undefined), {});
+  });
+
+  it("drops a game name Genex would never give", () => {
+    const names = [
+      "",
+      "Dust-Runners",
+      "-dust",
+      "dust runners",
+      "dust\nrunners",
+      "$(rm -rf ~)",
+      "d".repeat(101),
+      "../dust",
+    ];
+    const { GENEX_GAME: _, ...rest } = good;
+    for (const name of names)
+      assert.deepEqual(gameGenexEnv({ ...good, GENEX_GAME: name }), rest, `${JSON.stringify(name)}: no name`);
   });
 
   it("names only unprivileged local ports in its profile, after the network is denied", () => {

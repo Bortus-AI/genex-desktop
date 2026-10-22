@@ -1,5 +1,5 @@
 /**
- * The Publish dialog's platforms (canvas board "Publish"): the web, Mac and Windows rows read from
+ * The Publish dialog's platforms (canvas board "Publish"): the web, Mac, Windows and Linux rows read from
  * the game folder, each with what its build runs on, when it was built and its size. An app not made
  * yet, and a Unity or Godot game's web version, offers "Make with agent", which sends the ask through
  * the game's chat at once and keeps the dialog open, the row then saying it was asked; an Unreal
@@ -40,6 +40,7 @@ const MARK: Readonly<Record<PublishTarget, IconName>> = {
   [PublishTarget.Web]: "globe",
   [PublishTarget.Mac]: "apple",
   [PublishTarget.Windows]: "windows",
+  [PublishTarget.Linux]: "linux",
 };
 
 /** The game folder's platforms, read once as the dialog opens; null until read or when unreadable. */

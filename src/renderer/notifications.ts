@@ -34,6 +34,7 @@ import type { EventEnvelope } from "./types.ts";
 import {
   A_PLUGIN,
   NATIVE_WORDS,
+  nativeHereWords,
   NOTICE_WORDS,
   permissionTitleWords,
   permissionWords,
@@ -381,7 +382,10 @@ function onSignedOut(feed: FeedDraft, event: EventEnvelope): void {
 
 /** What a Play install's row says: ready, why it failed, or a new version waiting. */
 function playInstallText(event: EventEnvelope, kind: PlayInstallEvent): Pick<Notice, "text" | "tone"> {
-  if (kind === CustomEvent.PlayInstallFinished) return { text: NOTICE_WORDS.readyToPlay, tone: NoticeTone.Done };
+  if (kind === CustomEvent.PlayInstallFinished) {
+    const { platform } = payloadOf(event, CustomEvent.PlayInstallFinished);
+    return { text: nativeHereWords(String(platform)).readyToPlay, tone: NoticeTone.Done };
+  }
   if (kind === CustomEvent.PlayUpdateAvailable) {
     const size = payloadOf(event, CustomEvent.PlayUpdateAvailable).sizeBytes;
     return { text: NOTICE_WORDS.newVersion(sizeWords(typeof size === "number" ? size : 0)) };
@@ -389,7 +393,8 @@ function playInstallText(event: EventEnvelope, kind: PlayInstallEvent): Pick<Not
   const failed = payloadOf(event, CustomEvent.PlayInstallFailed);
   const failure = isInstallFailure(failed.failure) ? failed.failure : InstallFailure.Failed;
   const needed = typeof failed.neededBytes === "number" ? failed.neededBytes : 0;
-  return { text: NATIVE_WORDS.installFailed[failure](sizeWords(needed)), tone: NoticeTone.Failed };
+  const here = nativeHereWords(String(failed.platform));
+  return { text: NATIVE_WORDS.installFailed[failure](sizeWords(needed), here), tone: NoticeTone.Failed };
 }
 
 /** The Play install events a row is raised for. */

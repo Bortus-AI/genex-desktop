@@ -167,15 +167,18 @@ import { runTool } from "./play/native-unpack.ts";
 import { type GameGenex, type NativeSessions, type NativeSessionsDeps, nativeSessions } from "./play/native-launch.ts";
 import { nativePlays } from "./play/native-plays.ts";
 import { hasGameWindow, showGameWindow } from "./play/native-windows.ts";
+import { linuxGameWindows } from "./play/native-windows-linux.ts";
 import { spawnNativeGame } from "../substrate/plugins/native-process.ts";
+import { spawnLinuxGame } from "../substrate/plugins/linux-game.ts";
 import { psProbe, SYSTEM_CLOCK } from "../substrate/job-process.ts";
 import { killProcessTree } from "../substrate/process-tree.ts";
 import { prepareNativeGamesFixture } from "./dev/fixture-native-games.ts";
 import { fixtureNativeFetch } from "./dev/fixture-native.ts";
-import { launchesOn, nativeAppOffer } from "../shared/play-native.ts";
+import { launchesOn, nativeAppOffer, NativePlatform } from "../shared/play-native.ts";
 import type { PlayViewerDeps } from "./play/viewer.ts";
 import { createPlayManage, type PlayManage } from "./play/manage.ts";
 import { fixtureClone, gitClone, gitCloneCode, remixGame } from "./play/remix.ts";
+import { gitRemixReadiness, type RemixReadiness, readyFor, withReadyRemix } from "./play/remix-ready.ts";
 import { type MentionSources, vendorAssetModule } from "./core/mention-tags.ts";
 import type { PlayViewer } from "./play/viewer.ts";
 import { playMicStore } from "./play/mic-store.ts";
@@ -1125,12 +1128,15 @@ function watchNativeUpdates(studio: StudioCore): void {
 function playSessionsFor(studio: StudioCore): NativeSessions | null {
   const installs = playInstallsFor(studio);
   if (!installs) return null;
+  // Linux runs a game in bubblewrap and has no window list to read; the Mac in Seatbelt.
+  const linux = process.platform === StudioPlatform.Linux;
+  const windows = linux ? linuxGameWindows() : { hasWindow: hasGameWindow, show: showGameWindow };
   nativeLauncher ??= nativeSessions({
     root: studio.layout.installedGames,
     record: (slug) => installs.record(slug),
-    spawn: spawnNativeGame,
-    hasWindow: hasGameWindow,
-    show: showGameWindow,
+    spawn: linux ? spawnLinuxGame : spawnNativeGame,
+    hasWindow: windows.hasWindow,
+    show: windows.show,
     kill: (pid, signal) => process.kill(pid, signal),
     killTree: (pid) => killProcessTree(pid),
     probe: psProbe(),
@@ -1210,7 +1216,9 @@ async function askNativeIdentity(game: string): Promise<boolean> {
 async function prepareNativeGames(studio: StudioCore): Promise<void> {
   const host = thisComputer();
   if (!host || !launchesOn(host)) return;
-  if (fixtureProviders && dev?.fixture === FixtureName.NativeGames) {
+  // The fixture's builds are Mac apps, made with the Mac's own tools.
+  const macFixture = host.platform === NativePlatform.Mac && dev?.fixture === FixtureName.NativeGames;
+  if (fixtureProviders && macFixture) {
     await prepareNativeGamesFixture({
       dir: path.join(userDataRoot, "fixture-native"),
       root: studio.layout.installedGames,
@@ -1337,6 +1345,25 @@ function mentionSourcesFor(core: () => StudioCore): MentionSources {
   };
 }
 
+/** Whether a game's source holds a game, kept across launches; made on first use. */
+let playRemixReadiness: RemixReadiness | undefined;
+
+/**
+ * Whether each named game's source holds a game, so Play shows its card's Remix: genex.games' git
+ * for a real launch, yes for every game of a fixture launch's (its remix is a local stand-in).
+ */
+function playRemixReadyFor(studio: StudioCore): (slugs: readonly unknown[]) => Promise<Record<string, boolean>> {
+  const readiness = playRemixReadinessFor(studio);
+  return (slugs) => readyFor(slugs, readiness, playCatalogFor(studio));
+}
+
+/** Whether one source holds a game: genex.games' git, or yes for a fixture launch's stand-ins. */
+function playRemixReadinessFor(studio: StudioCore): Pick<RemixReadiness, "ready"> {
+  if (fixtureNativePolicy) return { ready: async () => true };
+  playRemixReadiness ??= gitRemixReadiness(path.join(userDataRoot, "play-remix-ready.json"), studio.layout.scratch);
+  return playRemixReadiness;
+}
+
 /** A Play game's public source as a new game of the person's own; answers its library name. */
 function remixPlayGame(studio: StudioCore, world: PlayWorld): Promise<string> {
   return remixGame(world, {
@@ -1404,7 +1431,8 @@ function signInToGenex(studio: StudioCore): void {
 function attachPlay(studio: StudioCore, win: BrowserWindow): void {
   playView = wirePlayViewer({
     win,
-    gallery: playCatalogFor(studio),
+    // The viewer's Remix shows only for a game whose source holds a game, as a card's does.
+    gallery: withReadyRemix(playCatalogFor(studio), playRemixReadinessFor(studio)),
     emit: (payload) => pushUiEvent({ type: UiEvent.PlayViewer, payload }),
     openExternal: (url) => {
       if (!fixtureNativePolicy) void openOutside(studio, win, url);
@@ -1857,6 +1885,7 @@ function playIpcDeps(studio: StudioCore): PlayIpcDeps {
   return {
     gallery: playCatalogFor(studio),
     remix: (world) => remixPlayGame(studio, world),
+    remixReady: playRemixReadyFor(studio),
     viewer: () => playView,
     ...playAccountFor(studio),
     manage: playManageFor(studio),

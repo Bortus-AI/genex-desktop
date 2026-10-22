@@ -630,16 +630,19 @@ describe("Godot on Windows: jobs in Genex's sandbox", () => {
       "templates/windows_release_x86_64.exe": "win",
       "templates/windows_release_x86_64_console.exe": "console",
       "templates/macos.zip": "mac",
+      "templates/linux_release.x86_64": "linux",
+      "templates/linux_release.arm64": "linux arm",
     });
     const fixture = await windowsProject({
       templates: network.fetch,
       sandbox: (request) =>
         request.args.some((arg) => arg.startsWith("from=")) ? { stdout: "GENEX_DATA_COPIED somewhere\r\n" } : {},
     });
-    const answer = String(await tool(fixture, GodotTool.ExportTemplates, { platforms: "windows, mac" }));
-    assert.match(answer, /export templates for windows, mac are in place/);
+    const answer = String(await tool(fixture, GodotTool.ExportTemplates, { platforms: "windows, mac, linux" }));
+    assert.match(answer, /export templates for windows, mac, linux are in place/);
     const templates = path.join(fixture.env.dataHome, "Godot", "export_templates", "4.7.2.stable");
     assert.deepEqual((await readdir(templates)).sort(), [
+      "linux_release.x86_64",
       "macos.zip",
       "version.txt",
       "windows_release_x86_64.exe",
@@ -650,10 +653,11 @@ describe("Godot on Windows: jobs in Genex's sandbox", () => {
       "to=Godot/export_templates/4.7.2.stable/windows_release_x86_64.exe",
       "to=Godot/export_templates/4.7.2.stable/windows_release_x86_64_console.exe",
       "to=Godot/export_templates/4.7.2.stable/macos.zip",
+      "to=Godot/export_templates/4.7.2.stable/linux_release.x86_64",
     ]);
     const settings = await readFile(path.join(fixture.project, "project.godot"), "utf8");
     assert.equal(settings.split("textures/vram_compression/import_etc2_astc=true").length, 2, "said once");
-    await assert.rejects(tool(fixture, GodotTool.ExportTemplates, { platforms: "linux" }), /web, windows or mac/);
+    await assert.rejects(tool(fixture, GodotTool.ExportTemplates, { platforms: "ios" }), /web, windows, mac or linux/);
   });
 
   it("passes a Stop on to the sandbox and starts nothing after it", async () => {

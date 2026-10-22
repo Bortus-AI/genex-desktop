@@ -255,7 +255,7 @@ const MESSAGE = {
       t("Genex downloads Godot this way on Windows only; on a Mac, Do it for me installs it in Applications."),
   },
   Templates: {
-    BadPlatforms: `platforms is web, windows or mac, comma-separated (all three when left out).`,
+    BadPlatforms: `platforms is web, windows, mac or linux, comma-separated (all four when left out).`,
     Ready: (version: string, platforms: readonly string[], fetched: readonly string[], windows: boolean) =>
       [
         `Godot ${version}'s export templates for ${platforms.join(", ")} are in place${fetched.length ? ` (fetched now: ${fetched.join(", ")})` : ""}.`,
@@ -285,9 +285,9 @@ const MESSAGE = {
           : "",
         state.slug
           ? `Its Genex project is ${state.slug} (project.godot [genex] slug).`
-          : "It has no Genex project yet: after its first publish, call godot__multiplayer again with slug (genex__publish-status names it), so native builds know which game to join; the web build reads it from its Genex page.",
+          : "It has no Genex project yet, and builds don't need one: Genex's Play names it to a native build (GENEX_GAME) and the published page to the web build (window.__GENEX__.slug), so the copies a publish sends join their rooms with no second build. To test online in the editor or a build you start yourself, publish first, then call godot__multiplayer again with slug (genex__publish-status names it).",
         ...notes,
-        "Write the game's online play now, as the godot-multiplayer skill says (godot__skill): GenexMultiplayer.join with mode matchmake (or play), the slug, and native identity; then godot__check.",
+        "Write the game's online play now, as the godot-multiplayer skill says (godot__skill): GenexMultiplayer.join with mode matchmake (or play), the slug from its slug() (GENEX_GAME, then the page, then project.godot), and native identity; then godot__check.",
       ]
         .filter(Boolean)
         .join("\n"),
@@ -582,7 +582,7 @@ function ensureTemplates(
   return fetchTemplates((deps.install ?? systemInstallDeps(deps.env)).fetch, install, folder, names, signal);
 }
 
-/** The platforms an agent's `export-templates` names: web, windows, mac, comma-separated; all three when none. */
+/** The platforms an agent's `export-templates` names: web, windows, mac, linux, comma-separated; all four when none. */
 function platformsArg(value: unknown): ExportPlatform[] {
   const all = Object.values(ExportPlatform);
   if (value === undefined || value === "") return all;

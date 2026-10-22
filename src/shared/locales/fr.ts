@@ -382,6 +382,8 @@ export default {
     "Autoriser les appels sans demander, y compris les changements que cet outil peut faire",
   "Allow it for Studio in a terminal, then quit and reopen Studio:":
     "Autorise-le pour Studio dans un terminal, puis quitte et rouvre Studio :",
+  "Allow it only if you may share everything in the project. Assets bought in the Unity Asset Store or on Fab usually can’t be shared.":
+    "Autorise-le seulement si tu peux partager tout ce que contient le projet. Les assets achetés sur l’Unity Asset Store ou Fab ne peuvent généralement pas être partagés.",
   "Allow once": "Autoriser une fois",
   "Allow remixing": "Autoriser les remix",
   "Allow the mic in Settings": "Autorise le micro dans Réglages",
@@ -524,6 +526,7 @@ export default {
   Avatar: "Avatar",
   Back: "Retour",
   "Back to Play": "Retour à « Jouer »",
+  "Back to Publish": "Retour à Publier",
   "Back to game": "Retour au jeu",
   "Back to workspace": "Retour à l’espace de travail",
   Background: "Arrière-plan",
@@ -946,6 +949,8 @@ export default {
   Copied: "Copié",
   "Copied.": "Copié.",
   Copy: "Copier",
+  "Copy and change {title}’s project to make their own game.":
+    "Copier et modifier le projet de {title} pour faire leur propre jeu.",
   "Copy command": "Copier la commande",
   "Copy diagnostics": "Copier le diagnostic",
   "Copy error": "Copier l’erreur",
@@ -1626,6 +1631,7 @@ export default {
   "Genex starts Git history here, so any change can be undone.":
     "Genex démarre ici un historique Git, pour que chaque modification puisse être annulée.",
   "Genex terms updated": "Conditions de Genex mises à jour",
+  "Genex terms, section 4": "Conditions de Genex, section 4",
   "Genex the new version is available.": "Une nouvelle version de Genex est disponible.",
   "Genex the new version is ready to install.": "La nouvelle version de Genex est prête à être installée.",
   "Genex tokens or VS Code JSON/JSONC. UI colors only; missing colors use Genex defaults.":
@@ -1694,6 +1700,8 @@ export default {
   "Going live": "Mise en ligne",
   Grain: "Grain",
   Grid: "Grille",
+  "Good to know": "Bon à savoir",
+  "Got it": "Compris",
   "Grid size": "Taille de la grille",
   Grille: "Grille",
   "Guidance available to your agents. Availability depends on the source and selected provider.":
@@ -1963,12 +1971,18 @@ export default {
   "Its author no longer shares it.": "Son auteur ne le partage plus.",
   "Its code runs on your computer like an app you install. It isn't sandboxed.":
     "Son code s’exécute sur ton ordinateur comme une app que tu installes. Il n’est pas dans un bac à sable.",
+  "Its creator hasn’t shared this game’s project yet, so it can’t be remixed.":
+    "Son créateur n’a pas encore partagé le projet de ce jeu, donc on ne peut pas le remixer.",
   "Its files are in your game folder, waiting for the lead to use them.":
     "Ses fichiers sont dans le dossier de ton jeu et attendent que l’agent principal les utilise.",
   "Its own scene": "Scène à part",
   "Its packages aren’t installed yet — “{install}” runs on one press.":
     "Ses paquets ne sont pas encore installés — « {install} » se lance en un clic.",
   "Its packages aren’t installed yet.": "Ses paquets ne sont pas encore installés.",
+  "Its project didn’t go, so no one can remix it yet.":
+    "Son projet n’est pas parti, donc personne ne peut encore le remixer.",
+  "Its project is too big to remix: Genex keeps up to 2 GB and 5,000 files.":
+    "Son projet est trop gros pour être remixé : Genex garde jusqu’à 2 Go et 5 000 fichiers.",
   "Its session failed before it delivered anything.": "Sa session a échoué avant de livrer quoi que ce soit.",
   "Its source is your own repository: run genex make-remixable in the game’s folder to allow remixing.":
     "Son code source est dans ton propre dépôt : lance genex make-remixable dans le dossier du jeu pour autoriser les remix.",
@@ -2070,6 +2084,7 @@ export default {
   Lines: "Lignes",
   "Link copied": "Lien copié",
   "Linked files cannot be previewed.": "Les fichiers liés n’ont pas d’aperçu.",
+  "Linux app": "App Linux",
   "Listed the hero cameras": "Caméras de présentation listées",
   "Listed the toolsets": "Jeux d’outils listés",
   "Listing the hero cameras": "Liste les caméras de présentation",
@@ -2169,13 +2184,14 @@ export default {
   "Main agent: {model}": "Agent principal : {model}",
   "Main color": "Couleur principale",
   "Main navigation": "Navigation principale",
-  "Make a Mac or Windows app first, then publish it here.": "Crée d’abord une app Mac ou Windows, puis publie-la ici.",
+  "Make a Mac, Windows or Linux app first, then publish it here.":
+    "Crée d’abord une app Mac, Windows ou Linux, puis publie-la ici.",
   "Make a community plugin": "Crée un plugin pour la communauté",
   "Make a profile, publish your games, play with friends.": "Crée un profil, publie tes jeux, joue avec tes amis.",
   "Make a web version of {title} so I can publish it on the web.":
     "Fais une version web de {title} pour que je puisse la publier sur le web.",
-  "Make a web version or a Mac or Windows app first, then publish it here.":
-    "Crée d’abord une version web ou une app Mac ou Windows, puis publie-la ici.",
+  "Make a web version or a Mac, Windows or Linux app first, then publish it here.":
+    "Crée d’abord une version web ou une app Mac, Windows ou Linux, puis publie-la ici.",
   "Make a {players} app of {title} so I can publish it for {players} players.":
     "Fais une app {players} de {title} pour que je puisse la publier pour les joueurs {players}.",
   "Make another Genex clip for this game: a different moment.":
@@ -2742,7 +2758,6 @@ export default {
   "Pay {amount}": "Payer {amount}",
   "Paying…": "Paiement…",
   People: "Personnes",
-  "People playing in the Genex app can install it.": "Les joueurs de l’app Genex peuvent installer le jeu.",
   Period: "Période",
   "Permission expansion requires confirmation": "L’extension des autorisations doit être confirmée",
   "Permission modes": "Modes d’autorisation",
@@ -2888,6 +2903,7 @@ export default {
   "Publish game": "Publier le jeu",
   "Publish in one click": "Publie en un clic",
   "Publish progress": "Progression de la publication",
+  "Publish their remix on Genex.": "Publier leur remix sur Genex.",
   "Publish this game": "Publier ce jeu",
   "Publish this game on Genex": "Publier ce jeu sur Genex",
   "Publish this game with a playable link": "Publie ce jeu avec un lien pour y jouer",
@@ -2898,8 +2914,8 @@ export default {
   "Publish {apps}": "Publier : {apps}",
   "Publish {name} to Roblox as a new game?": "Publier {name} sur Roblox comme nouveau jeu ?",
   Publishing: "Publication",
-  "Publishing Mac and Windows apps comes with the next Genex update.":
-    "La publication d’apps Mac et Windows arrive avec la prochaine mise à jour de Genex.",
+  "Publishing Mac, Windows and Linux apps comes with the next Genex update.":
+    "La publication d’apps Mac, Windows et Linux arrive avec la prochaine mise à jour de Genex.",
   "Publishing needs git and git-lfs on this Mac (brew install git-lfs). Studio will not let the Genex CLI install software.":
     "Publier nécessite git et git-lfs sur ce Mac (brew install git-lfs). Studio ne laissera pas la CLI Genex installer de logiciels.",
   "Publishing needs git on this Mac. Install git (Xcode command line tools or Homebrew) and try again.":
@@ -3007,6 +3023,7 @@ export default {
   Remix: "Remixer",
   "Remix progress": "Progression du remix",
   "Remix {title}": "Remixer {title}",
+  "Remixes made before you turn this off stay theirs.": "Les remix faits avant que tu désactives ça restent à eux.",
   "Remixing {title}": "Remix de {title} en cours",
   "Remixing…": "Remix en cours…",
   Remove: "Retirer",
@@ -3143,6 +3160,7 @@ export default {
   "Rigged model": "Modèle riggé",
   "Rigged, animated and ready for your game.": "Riggés, animés et prêts pour ton jeu.",
   "Rigging · animation": "Rigging · animation",
+  Rights: "Droits",
   "Roblox Studio closed. It asked to save anything unsaved first.":
     "Roblox Studio s’est fermé. Il a d’abord proposé d’enregistrer ce qui ne l’était pas.",
   "Roblox Studio didn't say what {name} is. If a play test or a dialog is open in Studio, finish it, then choose the place again.":
@@ -4010,6 +4028,7 @@ export default {
     "Ces fichiers étaient trop volumineux pour être enregistrés, donc le retour en arrière les a laissés tels quels : {files}.",
   "These surfaces need different text colors. Use similar background brightness, or reset this theme.":
     "Ces surfaces ont besoin de couleurs de texte différentes. Choisis des fonds de luminosité proche, ou réinitialise ce thème.",
+  "They can": "Ils peuvent",
   "They get the Genex download page with a card from you.":
     "Tes amis reçoivent la page de téléchargement de Genex avec une carte de ta part.",
   "They get the Genex download page with a card from you. You get {count} credits when they make their first game.":
@@ -4108,8 +4127,10 @@ export default {
   "This game folder is no longer available.": "Ce dossier de jeu n’est plus disponible.",
   "This game has an unlisted draft page": "Ce jeu a une page brouillon non listée",
   "This game has more files than the canvas lists.": "Ce jeu contient plus de fichiers que le canevas n’en affiche.",
-  "This game has no Mac or Windows app ready to publish": "Ce jeu n’a pas d’app Mac ou Windows prête à publier",
-  "This game has no Mac or Windows app ready to publish.": "Ce jeu n’a aucune app Mac ou Windows prête à publier.",
+  "This game has no Mac, Windows or Linux app ready to publish":
+    "Ce jeu n’a pas d’app Mac, Windows ou Linux prête à publier",
+  "This game has no Mac, Windows or Linux app ready to publish.":
+    "Ce jeu n’a aucune app Mac, Windows ou Linux prête à publier.",
   "This game has no Unity project": "Ce jeu n’a pas de projet Unity",
   "This game has no Unity project.": "Ce jeu n’a pas de projet Unity.",
   "This game has no skills of its own.": "Ce jeu n’a pas de compétences à lui.",
@@ -4574,6 +4595,7 @@ export default {
   "What it does": "Ce qu’il fait",
   "What phone players get. Your choice wins over the automatic check.":
     "Ce que reçoivent les joueurs sur mobile. Ton choix passe avant la vérification automatique.",
+  "What remixers can do": "Ce que peuvent faire les remixeurs",
   "What should it show? Or leave it empty": "Que doit-elle montrer ? Ou laisse vide",
   "What should the worker do instead?": "Que devrait faire l’assistant à la place ?",
   "What the new cover should show": "Ce que la nouvelle couverture doit montrer",
@@ -5919,4 +5941,18 @@ export default {
   "×{count} during {phase}": "×{count} pendant {phase}",
   "— the biggest of them: {problem}": "— le plus gros problème : {problem}",
   "… Preview truncated at 256 KiB; original unchanged.": "… Aperçu coupé à 256 Kio ; l’original n’est pas modifié.",
+  "On this computer": "Sur cet ordinateur",
+  "On this computer · {size}": "Sur cet ordinateur · {size}",
+  "Not for this computer": "Pas pour cet ordinateur",
+  "Couldn’t install: free {size} on this computer and try again.":
+    "Installation impossible : libère {size} sur cet ordinateur et réessaie.",
+  "Couldn’t install: this game doesn’t run on this computer.":
+    "Installation impossible : ce jeu ne fonctionne pas sur cet ordinateur.",
+  "There’s no version of this game for this computer.": "Il n’y a pas de version de ce jeu pour cet ordinateur.",
+  "It isn’t on this computer any more. Install it again.": "Il n’est plus sur cet ordinateur. Réinstalle-le.",
+  "It couldn’t start on this computer.": "Il n’a pas pu démarrer sur cet ordinateur.",
+  "Remove from this computer": "Retirer de cet ordinateur",
+  "{title} is removed from this computer. Its saves stay.":
+    "{title} est retiré de cet ordinateur. Ses sauvegardes restent.",
+  "Ready to play on this computer.": "Prêt à jouer sur cet ordinateur.",
 } satisfies LocaleCatalog;

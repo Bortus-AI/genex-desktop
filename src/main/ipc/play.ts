@@ -16,6 +16,7 @@ import { isSessionAction, NO_INSTALLS, SessionAction } from "../../shared/play-n
 import type { NativeSessions } from "../play/native-launch.ts";
 import { onWebsite } from "../play/origins.ts";
 import type { PlayPeople } from "../play/people.ts";
+import { RemixRefusedError } from "../play/remix.ts";
 import type { PlayViewer } from "../play/viewer.ts";
 import type { IpcHandle } from "./registrar.ts";
 
@@ -47,6 +48,8 @@ export interface PlayIpcDeps {
   gallery: PlayGallery;
   /** Copy a game's public source into a new game; answers its library name. */
   remix(world: PlayWorld): Promise<string>;
+  /** Whether each named game's source holds a game, so its card offers Remix (`remix-ready.ts`). */
+  remixReady(slugs: readonly unknown[]): Promise<Record<string, boolean>>;
   /** The viewer in the studio window; null while there is none. */
   viewer(): PlayViewer | null;
   people: PlayPeople;
@@ -102,11 +105,17 @@ export function registerPlayIpc(handle: IpcHandle, deps: PlayIpcDeps): void {
     viewer()?.remixing(true);
     try {
       return await remix(await gallery.world(payload.slug));
+    } catch (error) {
+      // A refusal is told by its code: the renderer says each in its own words.
+      if (error instanceof RemixRefusedError) return { refused: error.code };
+      throw error;
     } finally {
       viewer()?.remixing(false);
     }
   });
   handle("studio:play.online", (payload) => gallery.online(Array.isArray(payload?.slugs) ? payload.slugs : []));
+  // Main finds each game's source from the catalog itself; the renderer names games only by slug.
+  handle("studio:play.remix-ready", (payload) => deps.remixReady(Array.isArray(payload?.slugs) ? payload.slugs : []));
   // The renderer names a game by its slug; main builds every address from it.
   handle("studio:play.open", async (payload) => {
     if (!isPlaySlug(payload?.slug)) throw new Error(MESSAGE.badSlug);

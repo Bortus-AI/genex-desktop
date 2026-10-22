@@ -5,6 +5,7 @@ import type {
   PlayGame,
   PlayGameDetail,
   PlayPoint,
+  PlayRemixAnswer,
   PlayShelf,
   PlayShelves,
 } from "./play.ts";
@@ -216,19 +217,20 @@ export interface StudioApi {
   pluginChooseFile(id: string, request: PluginFileRequest): Promise<string | null>;
   /** The files Publish would put online for a game, for Studio's Publish dialog to show. Uploads nothing. */
   genexPublishReview(project: string): Promise<ExportReview>;
-  /** The web, Mac and Windows rows of Studio's Publish dialog for a game, from what its folder holds. */
+  /** The web, Mac, Windows and Linux rows of Studio's Publish dialog for a game, from what its folder holds. */
   genexPublishPlatforms(project: string): Promise<PublishPlatform[]>;
   /**
    * Publish the game to the Genex gallery from Studio's Publish dialog: its Publish press approved
-   * the files in `review`; `title` is the name players see.
+   * the files in `review`; `title` is the name players see; `remix` is its Allow remixing, whether the
+   * game's project goes with it so others can remix it.
    */
-  genexPublish(project: string, review: ExportReview, title?: string): Promise<void>;
+  genexPublish(project: string, review: ExportReview, title?: string, remix?: boolean): Promise<void>;
   /**
    * Publish a game that has only apps (no web build) from Studio's Publish dialog: its ready Mac and
    * Windows apps go to Genex and the game is listed under `title`. The press, under the rows it names,
-   * is the consent.
+   * is the consent; `remix` is its Allow remixing, whether the game's project goes once they are live.
    */
-  genexPublishApps(project: string, title?: string): Promise<void>;
+  genexPublishApps(project: string, title?: string, remix?: boolean): Promise<void>;
   pluginsIndex(refresh?: boolean): Promise<PluginIndexView>;
   pluginInstallGithub(spec: string): Promise<void>;
   /** What a pasted GitHub link leads to, pinned to one exact commit; nothing is installed. */
@@ -515,8 +517,13 @@ export interface StudioApi {
   playSearch(query: string, shelf: PlayShelf): Promise<PlayGame[]>;
   /** The whole catalog for the composer's @ picker: every shelf, who made each, whether it may be taken. */
   playCatalog(): Promise<GenexCatalogItem[]>;
-  /** Play: copy a game's public source into a new game of the person's own; answers its library name. */
-  playRemix(slug: string): Promise<string>;
+  /**
+   * Play: copy a game's public source into a new game of the person's own; answers its library name,
+   * or why nothing was made (a source with no game in it).
+   */
+  playRemix(slug: string): Promise<PlayRemixAnswer>;
+  /** Play: whether each named game's source holds a game, so its card offers Remix. */
+  playRemixReady(slugs: string[]): Promise<Record<string, boolean>>;
   /** Play: players in each named game now; a game nobody counts is left out. */
   playOnline(slugs: string[]): Promise<Record<string, number>>;
   /** Play: open a game full screen in the viewer, its bar showing `title`; how it goes arrives as `UiEvent.PlayViewer`. */

@@ -1155,6 +1155,7 @@ describe("Play's share menu", () => {
       gallery: unused as PlayIpcDeps["gallery"],
       gameLinks: links,
       remix: async () => "",
+      remixReady: async () => ({}),
       viewer: () => null,
       installs: () => null,
       sessions: () => null,

@@ -306,6 +306,8 @@ export default {
   "Allow calls without asking, including changes this tool can make": "允许无需询问即可调用，包括此工具可能做出的更改",
   "Allow it for Studio in a terminal, then quit and reopen Studio:":
     "在终端中为 Studio 允许它，然后退出并重新打开 Studio：",
+  "Allow it only if you may share everything in the project. Assets bought in the Unity Asset Store or on Fab usually can’t be shared.":
+    "只有在你有权分享项目里的全部内容时才允许。从 Unity Asset Store 或 Fab 买的素材通常不能分享。",
   "Allow once": "允许一次",
   "Allow remixing": "允许改编",
   "Allow the mic in Settings": "请在设置中允许使用麦克风",
@@ -440,6 +442,7 @@ export default {
   Avatar: "头像",
   Back: "返回",
   "Back to Play": "返回“游玩”",
+  "Back to Publish": "返回发布",
   "Back to game": "返回游戏",
   "Back to workspace": "返回工作区",
   Background: "背景",
@@ -838,6 +841,7 @@ export default {
   Copied: "已复制",
   "Copied.": "已复制。",
   Copy: "复制",
+  "Copy and change {title}’s project to make their own game.": "复制并修改 {title} 的项目，做出自己的游戏。",
   "Copy command": "复制命令",
   "Copy diagnostics": "复制诊断信息",
   "Copy error": "复制错误",
@@ -1470,6 +1474,7 @@ export default {
   "Genex sign-in expired. Reconnect your account.": "Genex 登录已过期。请重新连接你的账号。",
   "Genex starts Git history here, so any change can be undone.": "Genex 会在这里创建 Git 历史，任何修改都可以撤销。",
   "Genex terms updated": "Genex 条款已更新",
+  "Genex terms, section 4": "Genex 条款第 4 节",
   "Genex the new version is available.": "Genex 新版本现已可用。",
   "Genex the new version is ready to install.": "Genex 新版本已可安装。",
   "Genex tokens or VS Code JSON/JSONC. UI colors only; missing colors use Genex defaults.":
@@ -1533,6 +1538,8 @@ export default {
   "Going live": "上线中",
   Grain: "颗粒",
   Grid: "网格",
+  "Good to know": "须知",
+  "Got it": "知道了",
   "Grid size": "网格大小",
   Grille: "格栅",
   "Guidance available to your agents. Availability depends on the source and selected provider.":
@@ -1785,11 +1792,16 @@ export default {
   "Its author no longer shares it.": "作者已不再分享它。",
   "Its code runs on your computer like an app you install. It isn't sandboxed.":
     "它的代码会像你安装的应用一样在你的电脑上运行，不在沙盒中。",
+  "Its creator hasn’t shared this game’s project yet, so it can’t be remixed.":
+    "作者还没有分享这个游戏的项目，所以暂时不能改编。",
   "Its files are in your game folder, waiting for the lead to use them.":
     "它的文件在你的游戏文件夹中，等待主智能体使用。",
   "Its own scene": "独立场景",
   "Its packages aren’t installed yet — “{install}” runs on one press.": "依赖包还没安装——点一下即可运行“{install}”。",
   "Its packages aren’t installed yet.": "依赖包尚未安装。",
+  "Its project didn’t go, so no one can remix it yet.": "项目没有发送成功，所以暂时没人能改编它。",
+  "Its project is too big to remix: Genex keeps up to 2 GB and 5,000 files.":
+    "项目太大，无法改编：Genex 最多保存 2 GB、5,000 个文件。",
   "Its session failed before it delivered anything.": "它的会话在交付任何内容之前就失败了。",
   "Its source is your own repository: run genex make-remixable in the game’s folder to allow remixing.":
     "它的源码在你自己的仓库里：在游戏文件夹中运行 genex make-remixable 即可允许改编。",
@@ -1889,6 +1901,7 @@ export default {
   Lines: "线条",
   "Link copied": "链接已复制",
   "Linked files cannot be previewed.": "链接的文件无法预览。",
+  "Linux app": "Linux 应用",
   "Listed the hero cameras": "已列出展示摄像机",
   "Listed the toolsets": "已列出工具集",
   "Listing the hero cameras": "正在列出展示摄像机",
@@ -1987,13 +2000,14 @@ export default {
   "Main agent: {model}": "主智能体：{model}",
   "Main color": "主色",
   "Main navigation": "主导航",
-  "Make a Mac or Windows app first, then publish it here.": "请先制作 Mac 或 Windows 应用，再在这里发布。",
+  "Make a Mac, Windows or Linux app first, then publish it here.":
+    "请先制作 Mac、Windows 或 Linux 应用，再在这里发布。",
   "Make a community plugin": "制作社区插件",
   "Make a profile, publish your games, play with friends.": "创建个人主页，发布你的游戏，和好友一起玩。",
   "Make a web version of {title} so I can publish it on the web.":
     "为 {title} 制作一个网页版，这样我就能把它发布到网上。",
-  "Make a web version or a Mac or Windows app first, then publish it here.":
-    "请先制作网页版或 Mac、Windows 应用，再在这里发布。",
+  "Make a web version or a Mac, Windows or Linux app first, then publish it here.":
+    "请先制作网页版或 Mac、Windows、Linux 应用，再在这里发布。",
   "Make a {players} app of {title} so I can publish it for {players} players.":
     "为 {title} 制作一个 {players} 应用，这样我就能把它发布给 {players} 玩家。",
   "Make another Genex clip for this game: a different moment.": "为这个游戏再做一个 Genex 片段：换一个场景。",
@@ -2526,7 +2540,6 @@ export default {
   "Pay {amount}": "支付 {amount}",
   "Paying…": "正在支付…",
   People: "用户",
-  "People playing in the Genex app can install it.": "在 Genex 应用中游玩的玩家可以安装这款游戏。",
   Period: "时间段",
   "Permission expansion requires confirmation": "扩大权限需要确认",
   "Permission modes": "权限模式",
@@ -2669,6 +2682,7 @@ export default {
   "Publish game": "发布游戏",
   "Publish in one click": "一键发布",
   "Publish progress": "发布进度",
+  "Publish their remix on Genex.": "把自己的改编作品发布到 Genex。",
   "Publish this game": "发布这个游戏",
   "Publish this game on Genex": "在 Genex 上发布这个游戏",
   "Publish this game with a playable link": "发布此游戏并获得可游玩的链接",
@@ -2679,8 +2693,8 @@ export default {
   "Publish {apps}": "发布 {apps}",
   "Publish {name} to Roblox as a new game?": "要把 {name} 作为新游戏发布到 Roblox 吗？",
   Publishing: "发布",
-  "Publishing Mac and Windows apps comes with the next Genex update.":
-    "下一次 Genex 更新将支持发布 Mac 和 Windows 应用。",
+  "Publishing Mac, Windows and Linux apps comes with the next Genex update.":
+    "下一次 Genex 更新将支持发布 Mac、Windows 和 Linux 应用。",
   "Publishing needs git and git-lfs on this Mac (brew install git-lfs). Studio will not let the Genex CLI install software.":
     "发布需要这台 Mac 上有 git 和 git-lfs（brew install git-lfs）。Studio 不会让 Genex CLI 安装软件。",
   "Publishing needs git on this Mac. Install git (Xcode command line tools or Homebrew) and try again.":
@@ -2784,6 +2798,7 @@ export default {
   Remix: "改编",
   "Remix progress": "改编进度",
   "Remix {title}": "改编 {title}",
+  "Remixes made before you turn this off stay theirs.": "在你关闭之前做出的改编作品仍归改编者所有。",
   "Remixing {title}": "正在改编 {title}",
   "Remixing…": "正在改编…",
   Remove: "移除",
@@ -2913,6 +2928,7 @@ export default {
   "Rigged model": "绑骨模型",
   "Rigged, animated and ready for your game.": "已绑骨、带动画，可直接用于你的游戏。",
   "Rigging · animation": "绑骨 · 动画",
+  Rights: "权利",
   "Roblox Studio closed. It asked to save anything unsaved first.":
     "Roblox Studio 已关闭。关闭前它提示过保存未保存的内容。",
   "Roblox Studio didn't say what {name} is. If a play test or a dialog is open in Studio, finish it, then choose the place again.":
@@ -3715,6 +3731,7 @@ export default {
     "这些文件过大，无法保存，因此回退时保持原样：{files}。",
   "These surfaces need different text colors. Use similar background brightness, or reset this theme.":
     "这些表面需要不同的文字颜色。请使用亮度相近的背景，或重置此主题。",
+  "They can": "他们可以",
   "They get the Genex download page with a card from you.": "对方会收到 Genex 下载页面和一张来自你的卡片。",
   "They get the Genex download page with a card from you. You get {count} credits when they make their first game.":
     "对方会收到 Genex 下载页面和一张来自你的卡片。对方做出第一款游戏后，你将获得 {count} 积分。",
@@ -3801,8 +3818,8 @@ export default {
   "This game folder is no longer available.": "这个游戏文件夹已不可用。",
   "This game has an unlisted draft page": "此游戏有一个不公开列出的草稿页面",
   "This game has more files than the canvas lists.": "此游戏的文件比画布列出的更多。",
-  "This game has no Mac or Windows app ready to publish": "这个游戏还没有可发布的 Mac 或 Windows 应用",
-  "This game has no Mac or Windows app ready to publish.": "此游戏没有可发布的 Mac 或 Windows 应用。",
+  "This game has no Mac, Windows or Linux app ready to publish": "这个游戏还没有可发布的 Mac、Windows 或 Linux 应用",
+  "This game has no Mac, Windows or Linux app ready to publish.": "此游戏没有可发布的 Mac、Windows 或 Linux 应用。",
   "This game has no Unity project": "这个游戏没有 Unity 项目",
   "This game has no Unity project.": "这个游戏没有 Unity 项目。",
   "This game has no skills of its own.": "此游戏没有自己的技能。",
@@ -4242,6 +4259,7 @@ export default {
   "What it did": "操作记录",
   "What it does": "它能做什么",
   "What phone players get. Your choice wins over the automatic check.": "手机玩家看到的内容。你的选择优先于自动检查。",
+  "What remixers can do": "改编者可以做什么",
   "What should it show? Or leave it empty": "要展示什么？也可以留空",
   "What should the worker do instead?": "助手应该改做什么？",
   "What the new cover should show": "新封面要展示的内容",
@@ -5502,4 +5520,15 @@ export default {
   "×{count} during {phase}": "{phase} 期间 ×{count}",
   "— the biggest of them: {problem}": "——其中最大的问题：{problem}",
   "… Preview truncated at 256 KiB; original unchanged.": "… 预览已在 256 KiB 处截断；原文件未改动。",
+  "On this computer": "在这台电脑上",
+  "On this computer · {size}": "在这台电脑上 · {size}",
+  "Not for this computer": "不适用于这台电脑",
+  "Couldn’t install: free {size} on this computer and try again.": "无法安装：请在这台电脑上释放 {size} 空间后重试。",
+  "Couldn’t install: this game doesn’t run on this computer.": "无法安装：这个游戏无法在这台电脑上运行。",
+  "There’s no version of this game for this computer.": "这个游戏没有适用于这台电脑的版本。",
+  "It isn’t on this computer any more. Install it again.": "它已不在这台电脑上。请重新安装。",
+  "It couldn’t start on this computer.": "它无法在这台电脑上启动。",
+  "Remove from this computer": "从这台电脑移除",
+  "{title} is removed from this computer. Its saves stay.": "{title} 已从这台电脑移除。存档仍会保留。",
+  "Ready to play on this computer.": "可以在这台电脑上游玩了。",
 } satisfies LocaleCatalog;
