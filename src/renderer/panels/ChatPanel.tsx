@@ -28,7 +28,7 @@ import { type ChatParts, useChatPanel } from "../chat/use-chat-panel.ts";
 import { chatPlaceholder } from "../composer-placeholder.ts";
 import { loopAvailableFor } from "../loop-setting.ts";
 import { notifyProblem } from "../state/toasts.ts";
-import { Pending } from "../ui/Pending.tsx";
+import { ChatSkeleton } from "../chat/ChatSkeleton.tsx";
 import { LoadFailed } from "../ui/LoadFailed.tsx";
 import { PromptBar, type PromptBarHandle } from "../ui/PromptBar.tsx";
 import { engineLoopGate, engineRewindNote } from "../engine-game.ts";
@@ -65,7 +65,7 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
                   onRetry={props.onRetryLoad}
                 />
               ) : (
-                <Pending label={t("Loading conversation…")} className="p-4 text-sm" />
+                <ChatSkeleton />
               )}
             </div>
           )}
