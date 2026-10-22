@@ -229,6 +229,27 @@ export async function holdsGame(dir: string): Promise<boolean> {
   return sourceHoldsGame(files, packageJson);
 }
 
+/**
+ * Make the copy's `studio.json` the remix's own: what kind of game it is stays (its scaffold, engine,
+ * shape), under the remix's title and its own date, without the author's name for it; adoption keeps
+ * a record that is there, so the remix would otherwise list under the author's title. A record that
+ * is not a JSON object is left as it is.
+ */
+async function ownRecord(dir: string, title: string): Promise<void> {
+  const file = path.join(dir, "studio.json");
+  const text = await readFile(file, "utf8").catch(() => null);
+  if (text === null) return;
+  let record: unknown;
+  try {
+    record = JSON.parse(text);
+  } catch {
+    return;
+  }
+  if (typeof record !== "object" || record === null || Array.isArray(record)) return;
+  const { name: _name, title: _title, createdAt: _createdAt, ...kind } = record as Record<string, unknown>;
+  await writeFile(file, `${JSON.stringify({ ...kind, title, createdAt: new Date().toISOString() }, null, 2)}\n`);
+}
+
 /** Hears a clone's models download: bytes so far, and their total when it is known. */
 export type ModelsProgress = (done: number, total: number | null) => void;
 
@@ -315,6 +336,7 @@ async function makeRemix(world: PlayWorld, source: string, deps: RemixDeps): Pro
     // The copy starts its own history; the author's stays theirs.
     await rm(path.join(work, ".git"), { recursive: true, force: true });
     if (!(await holdsGame(work))) throw new RemixRefusedError(PlayRemixRefusal.NoProject, MESSAGE.NoProject);
+    await ownRecord(work, remixTitle(world.title));
     step(RemixStep.Packages);
     await deps.install(work).catch(() => {});
     dest = await claimFolder(root, world.slug, (dir) => moveInto(work, dir));

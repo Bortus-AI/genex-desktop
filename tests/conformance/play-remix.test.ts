@@ -201,6 +201,46 @@ describe("Play remix", () => {
     assert.deepEqual(await readdir(dest), ["index.html"]);
   });
 
+  it("lists the copy under the remix's own title, keeping what kind of game the author's record says it is", async () => {
+    const root = await tmpDir("play-remix-record");
+    const record = {
+      name: "lost-cathedral",
+      title: "Lost Cathedral",
+      createdAt: "2026-09-18T10:00:00.000Z",
+      scaffold: { plugin: "unity", id: "game", label: "Unity game", facts: [] },
+    };
+    await remixGame(
+      WORLD,
+      quiet(root, {
+        clone: async (_url, dest) => {
+          await mkdir(dest, { recursive: true });
+          await writeFile(path.join(dest, "studio.json"), JSON.stringify(record));
+        },
+      }),
+    );
+    const own = JSON.parse(await readFile(path.join(root, "lost-cathedral-remix", "studio.json"), "utf8"));
+    assert.equal(own.title, "Lost Cathedral remix");
+    assert.deepEqual(own.scaffold, record.scaffold);
+    assert.equal(own.name, undefined, "the author's name for it goes");
+    assert.notEqual(own.createdAt, record.createdAt);
+    const odd = await tmpDir("play-remix-odd-record");
+    await remixGame(
+      WORLD,
+      quiet(odd, {
+        clone: async (_url, dest) => {
+          await mkdir(dest, { recursive: true });
+          await writeFile(path.join(dest, "index.html"), "<canvas></canvas>");
+          await writeFile(path.join(dest, "studio.json"), "[1, 2]");
+        },
+      }),
+    );
+    assert.equal(
+      await readFile(path.join(odd, "lost-cathedral-remix", "studio.json"), "utf8"),
+      "[1, 2]",
+      "not an object: left as it is",
+    );
+  });
+
   it("leaves nothing behind when the copy fails", async () => {
     const root = await tmpDir("play-remix-fail");
     await assert.rejects(
