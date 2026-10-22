@@ -3039,8 +3039,8 @@ export default {
     "Roblox Studio가 아직 열려 있어요. 플레이스를 저장할지 물었다면 답한 다음 ‘Studio 종료’를 다시 누르세요.",
   "Roblox Studio is still open. If it asked to save your place, answer it, then press Restart Studio again.":
     "Roblox Studio가 아직 열려 있어요. 플레이스를 저장할지 물었다면 답한 다음 ‘Studio 다시 시작’을 다시 누르세요.",
-  "Roblox Studio is still open. Sign in there; once it has closed by itself, press Set up so Genex can finish.":
-    "Roblox Studio가 아직 열려 있어요. 거기서 로그인하고, 저절로 닫히면 ‘설정하기’를 눌러 Genex가 마무리하게 하세요.",
+  "Roblox Studio is still open, and nobody signed in to Roblox there in time. Sign in there, then press Set it up for me so Genex can finish.":
+    "Roblox Studio가 아직 열려 있고, 제시간에 Roblox 로그인이 없었어요. 거기서 로그인한 다음 ‘대신 설정해 주기’를 눌러 Genex가 마무리하게 하세요.",
   "Roblox Studio isn't on this computer.": "이 컴퓨터에 Roblox Studio가 없어요.",
   "Roblox Studio isn't on this computer. Open this to get it.":
     "이 컴퓨터에 Roblox Studio가 없어요. 여기를 열어서 받으세요.",
@@ -3303,8 +3303,8 @@ export default {
   "Sign in to Genex to see your friends.": "친구를 보려면 Genex에 로그인하세요.",
   "Sign in to Genex to see your game stats.": "Genex에 로그인하면 게임 통계를 볼 수 있어요.",
   "Sign in to Roblox": "Roblox에 로그인",
-  "Sign in to Roblox in the Studio that just opened. It closes by itself once you have.":
-    "방금 열린 Studio에서 Roblox에 로그인하세요. 로그인하면 저절로 닫혀요.",
+  "Sign in to Roblox in the Studio that just opened. Genex then closes it, sets it up and opens it again.":
+    "방금 열린 Studio에서 Roblox에 로그인하세요. 그러면 Genex가 Studio를 닫고, 설정한 뒤 다시 열어요.",
   "Sign in to Unity": "Unity 로그인",
   "Sign in to Unity Hub": "Unity Hub에 로그인하세요",
   "Sign in to a provider": "제공자 로그인",

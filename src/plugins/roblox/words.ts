@@ -227,7 +227,8 @@ export const MESSAGE = {
       checking: () => t("Checking that Roblox signed the installer."),
       installing: () => t("Roblox's installer is installing Studio."),
       "waiting-for-studio": () => t("Waiting for Roblox Studio to finish installing."),
-      "signing-in": () => t("Sign in to Roblox in the Studio that just opened. It closes by itself once you have."),
+      "signing-in": () =>
+        t("Sign in to Roblox in the Studio that just opened. Genex then closes it, sets it up and opens it again."),
       "setting-up": () => t("Setting Roblox Studio up for Genex."),
       opening: () => t("Opening Roblox Studio."),
       done: () => t("Roblox Studio is installed and set up."),
@@ -254,7 +255,7 @@ export const MESSAGE = {
         t("Roblox's installer finished, but Roblox Studio didn't appear. Press Get Roblox Studio to try again."),
       "still-open": () =>
         t(
-          "Roblox Studio is still open. Sign in there; once it has closed by itself, press Set up so Genex can finish.",
+          "Roblox Studio is still open, and nobody signed in to Roblox there in time. Sign in there, then press Set it up for me so Genex can finish.",
         ),
     },
   },

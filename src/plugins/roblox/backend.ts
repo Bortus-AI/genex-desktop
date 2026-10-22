@@ -119,6 +119,7 @@ import { insertAsset } from "./insert-asset.ts";
 import { checkModelTool, importModel } from "./model-import.ts";
 import { linkedPlace, listPlaces, type ScanCache, usePlace, usePlaceNamed } from "./places.ts";
 import { type PlaceTarget, quitStudio, startingNow, systemOpener } from "./studio-launch.ts";
+import { signInWatch, studioLogFolder } from "./studio-logs.ts";
 import {
   type LocateDeps,
   locateStudio,
@@ -360,10 +361,24 @@ export function toolbarStatusOf(status: StudioStatus, install?: StudioInstall): 
   return { badge: badge(), tone, dot: true, title: titleOf(status, install) };
 }
 
+/** Genex's setup record when it is a plain file in the plugin's storage; undefined otherwise. */
+async function setupRecord(deps: RobloxDeps, storage: string) {
+  const stat = await deps.fs.lstat(path.join(storage, SETUP_RECORD));
+  return stat?.file && !stat.link ? stat : undefined;
+}
+
 /** Whether Genex's setup record is a plain file in the plugin's storage. */
 async function setUpIn(deps: RobloxDeps, storage: string): Promise<boolean> {
-  const stat = await deps.fs.lstat(path.join(storage, SETUP_RECORD));
-  return Boolean(stat?.file && !stat.link);
+  return Boolean(await setupRecord(deps, storage));
+}
+
+/** Whether Set up has run since this was made (a record new or rewritten), as another press runs it. */
+async function setUpSince(deps: RobloxDeps, storage: string): Promise<() => Promise<boolean>> {
+  const before = (await setupRecord(deps, storage))?.mtimeMs;
+  return async () => {
+    const now = (await setupRecord(deps, storage))?.mtimeMs;
+    return now !== undefined && now !== before;
+  };
 }
 
 /** Whether Genex can click in Studio here: the test's word, else the host's (never when it can't say). */
@@ -642,6 +657,8 @@ async function nextForMe(deps: RobloxDeps, context: PluginContext, snapshot: boo
  * save first.
  */
 async function finishSetup(deps: RobloxDeps, context: PluginContext, slot: InstallSlot): Promise<{ message: string }> {
+  // Get Roblox Studio under way finishes the setup itself: a quit now would cut off the sign-in.
+  if (slot.job && !isFinished(slot.job)) return { message: slot.job.message };
   const run: Record<ForMeStep, () => Promise<{ message: string }>> = {
     [ForMeStep.GetStudio]: () => getStudio(deps, context, slot, true),
     [ForMeStep.SetUp]: () => setUpThenOpen(deps, context),
@@ -701,16 +718,21 @@ async function finish(job: InstallJob, storage: string, end: { phase: InstallPha
 
 /**
  * Get Roblox Studio, start to end: Roblox's installer downloaded, checked and run; Studio waited
- * for; the person's sign-in in the installer's Studio; Set up while that Studio is closed; Studio
- * opened again once, with the game's place when it has one.
+ * for; the person's sign-in in the installer's Studio, seen in Studio's log, then its normal quit;
+ * Set up while Studio is closed; Studio opened again once, with the game's place when it has one.
+ * A Studio set up another way meanwhile is left as it is.
  */
 async function getStudioJob(deps: RobloxDeps, job: InstallJob, storage: string, place?: PlaceTarget): Promise<void> {
   const signal = job.controller.signal;
   const onPhase = (phase: InstallPhase) => notePhase(job, storage, phase, deps.now());
+  // Only a Set up or a sign-in after this press counts: an earlier one is from before Studio was here.
+  const setUpAlready = await setUpSince(deps, storage);
+  const signedIn = signInWatch(studioLogFolder(deps.platform, deps.env, deps.home), deps.now());
   try {
     await installStudio({ ...deps.install, platform: deps.platform, env: deps.env }, { signal, onPhase });
-    const setUpStep = async () => (await runSetupWith(setupOptionsIn(deps, storage))).message;
-    const done = await afterInstall({ ...deps, setUp: setUpStep, ...(place ? { place } : {}) }, { signal, onPhase });
+    const setUp = async () => (await runSetupWith(setupOptionsIn(deps, storage))).message;
+    const after = { ...deps, setUp, setUpAlready, signedIn, ...(place ? { place } : {}) };
+    const done = await afterInstall(after, { signal, onPhase });
     await finish(job, storage, { phase: InstallPhase.Done, message: done.message, now: deps.now() });
   } catch (error) {
     if (error instanceof InstallError) job.reason = error.code;
@@ -1081,6 +1103,7 @@ async function reopenedWords(deps: RobloxDeps, context: PluginContext, answer: S
 
 /** Set it up for me as the agent's tool: the same step, answered in its words. */
 async function finishSetupTool(deps: RobloxDeps, context: PluginContext, slot: InstallSlot): Promise<string> {
+  if (slot.job && !isFinished(slot.job)) return SETUP_PROMPTS.Getting;
   const words: Record<ForMeStep, () => Promise<string>> = {
     [ForMeStep.GetStudio]: async () => getStudioWords(await getStudio(deps, context, slot, false)),
     [ForMeStep.SetUp]: async () => reopenedWords(deps, context, await setUpThenOpen(deps, context)),

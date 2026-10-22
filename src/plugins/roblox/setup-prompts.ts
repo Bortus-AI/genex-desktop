@@ -30,7 +30,7 @@ const CLICKING_TURN =
   "If that message is already in front of you in this turn, you are that turn: click it now with the desktop tool. Otherwise end this turn now and don't click anything yourself.";
 
 /** Get Roblox Studio under way, as the agent passes it on. */
-const GETTING = `Genex is getting Roblox Studio from Roblox. When Studio opens, the person signs in to Roblox there (only they can); Studio then closes by itself, and Genex sets it up and opens it again. ${SHOW_STEPS} shows them where it stands, and you are told once Studio answers.`;
+const GETTING = `Genex is getting Roblox Studio from Roblox. When Studio opens, the person signs in to Roblox there (only they can); Genex then quits Studio normally, sets it up and opens it again, so don't call other setup tools meanwhile. ${SHOW_STEPS} shows them where it stands, and you are told once Studio answers.`;
 
 export const SETUP_PROMPTS = {
   NotInstalled: `Roblox Studio isn't on this computer. Call ${GET_STUDIO}: it downloads Studio from Roblox, installs and sets it up. Signing in to Roblox in the Studio that opens is the person's; Genex finishes the rest.`,

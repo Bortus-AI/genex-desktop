@@ -47,8 +47,10 @@ The Roblox Studio plugin must be turned on in Plugins first; it is off until the
 
 ## 2. Sign in
 
-The first time, Studio asks the person to sign in. That is their step alone. Right after the first
-sign-in, Studio may close by itself; that is expected: call `open-studio` again.
+The first time, Studio asks the person to sign in. That is their step alone. While `get-studio` is
+under way, Genex waits for that sign-in, then closes Studio itself, sets it up and opens the game's
+place: call no other setup tool meanwhile. If Studio closes after a sign-in some other time, call
+`open-studio` again.
 
 ## 3. The MCP server switch
 

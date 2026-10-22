@@ -3162,8 +3162,8 @@ export default {
     "O Roblox Studio ainda está aberto. Se ele pediu para salvar seu lugar, responda e clique em “Fechar Studio” de novo.",
   "Roblox Studio is still open. If it asked to save your place, answer it, then press Restart Studio again.":
     "O Roblox Studio ainda está aberto. Se ele pediu para salvar seu lugar, responda e clique em “Reiniciar Studio” de novo.",
-  "Roblox Studio is still open. Sign in there; once it has closed by itself, press Set up so Genex can finish.":
-    "O Roblox Studio ainda está aberto. Entre nele; quando ele fechar sozinho, clique em “Configurar” para o Genex terminar.",
+  "Roblox Studio is still open, and nobody signed in to Roblox there in time. Sign in there, then press Set it up for me so Genex can finish.":
+    "O Roblox Studio ainda está aberto e ninguém entrou no Roblox nele a tempo. Entre nele e depois clique em “Configurar por mim” para o Genex terminar.",
   "Roblox Studio isn't on this computer.": "O Roblox Studio não está neste computador.",
   "Roblox Studio isn't on this computer. Open this to get it.":
     "O Roblox Studio não está neste computador. Abra aqui para baixá-lo.",
@@ -3434,8 +3434,8 @@ export default {
   "Sign in to Genex to see your friends.": "Entre no Genex para ver seus amigos.",
   "Sign in to Genex to see your game stats.": "Entre no Genex para ver as estatísticas dos seus jogos.",
   "Sign in to Roblox": "Entrar no Roblox",
-  "Sign in to Roblox in the Studio that just opened. It closes by itself once you have.":
-    "Entre no Roblox pelo Studio que acabou de abrir. Ele fecha sozinho quando você entrar.",
+  "Sign in to Roblox in the Studio that just opened. Genex then closes it, sets it up and opens it again.":
+    "Entre no Roblox pelo Studio que acabou de abrir. Depois o Genex o fecha, configura e abre de novo.",
   "Sign in to Unity": "Entrar no Unity",
   "Sign in to Unity Hub": "Entre no Unity Hub",
   "Sign in to a provider": "Entrar em um provedor",

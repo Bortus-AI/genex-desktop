@@ -1246,8 +1246,10 @@ in a private temporary folder and always detached. On Windows Authenticode must 
 environment, never from the command text. A failed check runs nothing, and the temporary folder is
 always removed. The installer and Studio run outside the process sandbox, as argument lists: the
 install is the point, and Studio's sign-in must work. After the installer Genex waits for Studio,
-lets the person sign in in the Studio the installer opens (it closes by itself after; Genex never
-closes it and never sees the password), runs Set up while it is closed (the helper always; the
+lets the person sign in in the Studio the installer opens (Genex never sees the password), then
+quits that Studio with its own quit once Studio's log records the sign-in (`studio-logs.ts`: only
+Studio's own logs written since the press, read where they grew, never through a link; a Studio set
+up meanwhile by another press is left open as it is), runs Set up while it is closed (the helper always; the
 switch when a settings file exists), and opens Studio once, with the game's place when it has one. The action answers at once; `status`
 carries the phase (`install`) and `install/state.json` in storage keeps the last one, and **Stop**
 (`cancel-get-studio`) ends a download or a wait. The install has not been run live; it is proven

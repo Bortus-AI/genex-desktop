@@ -3100,8 +3100,8 @@ export default {
     "Roblox Studio всё ещё открыт. Если он спросил, сохранить ли плейс, ответь и снова нажми «Закрыть Studio».",
   "Roblox Studio is still open. If it asked to save your place, answer it, then press Restart Studio again.":
     "Roblox Studio всё ещё открыт. Если он спросил, сохранить ли плейс, ответь и снова нажми «Перезапустить Studio».",
-  "Roblox Studio is still open. Sign in there; once it has closed by itself, press Set up so Genex can finish.":
-    "Roblox Studio всё ещё открыт. Войди в нём; когда он закроется сам, нажми «Настроить», чтобы Genex закончил.",
+  "Roblox Studio is still open, and nobody signed in to Roblox there in time. Sign in there, then press Set it up for me so Genex can finish.":
+    "Roblox Studio всё ещё открыт, и никто не вошёл в Roblox там вовремя. Войди в нём, затем нажми «Настроить за меня», чтобы Genex закончил.",
   "Roblox Studio isn't on this computer.": "Roblox Studio нет на этом компьютере.",
   "Roblox Studio isn't on this computer. Open this to get it.":
     "Roblox Studio нет на этом компьютере. Открой, чтобы установить.",
@@ -3371,8 +3371,8 @@ export default {
   "Sign in to Genex to see your friends.": "Войди в Genex, чтобы видеть друзей.",
   "Sign in to Genex to see your game stats.": "Войди в Genex, чтобы видеть статистику своих игр.",
   "Sign in to Roblox": "Войти в Roblox",
-  "Sign in to Roblox in the Studio that just opened. It closes by itself once you have.":
-    "Войди в Roblox в только что открывшемся Studio. Он закроется сам, как только ты войдёшь.",
+  "Sign in to Roblox in the Studio that just opened. Genex then closes it, sets it up and opens it again.":
+    "Войди в Roblox в только что открывшемся Studio. Потом Genex закроет его, настроит и откроет снова.",
   "Sign in to Unity": "Войти в Unity",
   "Sign in to Unity Hub": "Войди в Unity Hub",
   "Sign in to a provider": "Войти в аккаунт провайдера",

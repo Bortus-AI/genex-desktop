@@ -7,11 +7,14 @@
  *   Genex can do now: a new place for a game with none, Set up while Studio is closed (Restart
  *   Studio's normal quit while it is open), then the game's place opened. Once only signing in is
  *   left, it changes nothing and says signing in is the person's.
+ * - When the installer's Studio stays open after the person signs in (Studio's log says so), Genex
+ *   quits it normally, sets it up and opens the game's place; Set it up for me meanwhile changes
+ *   nothing, so it never cuts off the sign-in.
  * - Neither asks on a card: the person's press, or the agent's call, is the go-ahead.
  */
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, it } from "node:test";
 import { setImmediate as nextTurn } from "node:timers/promises";
@@ -19,6 +22,7 @@ import type { PluginContext, PluginScalar } from "../../src/plugin-sdk/index.d.t
 import { createRobloxBackend, type RobloxStatus } from "../../src/plugins/roblox/backend.ts";
 import { HELPER_FILE } from "../../src/plugins/roblox/setup.ts";
 import { STUDIO_MAC_APP } from "../../src/plugins/roblox/studio-locate.ts";
+import { SIGNED_IN_MARK } from "../../src/plugins/roblox/studio-logs.ts";
 import { type HostCall, hostFor, type Mac, makeGame, robloxMac } from "../helpers/roblox-mac.ts";
 
 const STUDIO = `${STUDIO_MAC_APP}/Contents/MacOS/RobloxStudio`;
@@ -124,6 +128,65 @@ describe("Get Roblox Studio in a game with no place", () => {
     assert.equal(existsSync(path.join(game.directory, "sky-race.rbxlx")), false);
     assert.deepEqual(mac.launches, [editFile(own)]);
   });
+});
+
+describe("Get Roblox Studio when the installer's Studio stays open after the sign-in", () => {
+  it(
+    "quits it normally once Studio's log shows the sign-in, sets it up and opens the game's place",
+    ON_A_MAC,
+    async () => {
+      const mac = await robloxMac({ installed: false, setUp: false, running: false });
+      const folders = await studioFolders(mac);
+      await withInstaller(mac);
+      const log = path.join(
+        mac.home,
+        "Library",
+        "Logs",
+        "Roblox",
+        "0.744.0.7441077_20261022T181824Z_Studio_147ed_last.log",
+      );
+      await mkdir(path.dirname(log), { recursive: true });
+      const installer = mac.deps.install.run;
+      mac.deps.install.run = async (file, args, options) => {
+        const ran = await installer(file, args, options);
+        // Roblox's installer opens Studio at its sign-in, and Studio starts its log.
+        if (file === "/usr/bin/open") {
+          mac.state.running = true;
+          await writeFile(log, "Info [FLog::StudioKeyEvents] login (automatic) [start]\n");
+        }
+        return ran;
+      };
+      const quits: string[] = [];
+      const run = mac.deps.run;
+      mac.deps.run = async (file, args) => {
+        if (file === "/usr/bin/osascript") {
+          quits.push(file);
+          mac.state.running = false;
+        }
+        return run(file, args);
+      };
+      const game = await makeGame(mac, "sky-race", "Sky Race");
+      const { context } = hostFor(mac, game);
+      const backend = createRobloxBackend(mac.deps);
+      await backend.action?.("get-studio", {}, context);
+      for (let tries = 0; tries < 400 && !mac.state.running; tries++) await nextTurn();
+      for (let tries = 0; tries < 50; tries++) await nextTurn();
+      const signingIn = (await backend.action?.("status", {}, context)) as RobloxStatus;
+      assert.equal(signingIn.install?.phase, "signing-in");
+      assert.deepEqual(quits, [], "never quit before the sign-in");
+      const pressed = (await backend.action?.("finish-setup", {}, context)) as { message: string };
+      assert.equal(pressed.message, signingIn.install?.message, "Set it up for me leaves the sign-in alone");
+      assert.match(String(await backend.tool?.("finish-setup", {}, context)), /signs in to Roblox there/);
+      assert.deepEqual(quits, []);
+      await appendFile(log, `Info ${SIGNED_IN_MARK}\n`);
+      const status = await finished(mac, backend, context);
+      assert.equal(status.install?.phase, "done", status.install?.message);
+      assert.equal(quits.length, 1, "Studio's own quit, which asks to save");
+      assert.ok(existsSync(folders.helper));
+      assert.equal(await folders.switchOn(), true);
+      assert.deepEqual(mac.launches, [editFile(path.join(game.directory, "sky-race.rbxlx"))]);
+    },
+  );
 });
 
 describe("Set it up for me", () => {

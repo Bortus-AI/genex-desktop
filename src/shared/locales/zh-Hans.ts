@@ -2940,8 +2940,8 @@ export default {
     "Roblox Studio 还开着。如果它问你是否保存地点，先回答，然后再点“退出 Studio”。",
   "Roblox Studio is still open. If it asked to save your place, answer it, then press Restart Studio again.":
     "Roblox Studio 还开着。如果它问你是否保存地点，先回答，然后再点“重启 Studio”。",
-  "Roblox Studio is still open. Sign in there; once it has closed by itself, press Set up so Genex can finish.":
-    "Roblox Studio 还开着。请在那里登录；等它自动关闭后，点击“设置”让 Genex 完成。",
+  "Roblox Studio is still open, and nobody signed in to Roblox there in time. Sign in there, then press Set it up for me so Genex can finish.":
+    "Roblox Studio 还开着，但没有人及时在那里登录 Roblox。请在那里登录，然后点击“帮我设置”让 Genex 完成。",
   "Roblox Studio isn't on this computer.": "这台电脑上没有 Roblox Studio。",
   "Roblox Studio isn't on this computer. Open this to get it.": "这台电脑上没有 Roblox Studio。打开这里来获取。",
   "Roblox Studio isn't on this computer. Press Get Roblox Studio first.":
@@ -3199,8 +3199,8 @@ export default {
   "Sign in to Genex to see your friends.": "登录 Genex 即可查看你的好友。",
   "Sign in to Genex to see your game stats.": "登录 Genex 即可查看你的游戏统计。",
   "Sign in to Roblox": "登录 Roblox",
-  "Sign in to Roblox in the Studio that just opened. It closes by itself once you have.":
-    "请在刚打开的 Studio 中登录 Roblox。登录后它会自动关闭。",
+  "Sign in to Roblox in the Studio that just opened. Genex then closes it, sets it up and opens it again.":
+    "请在刚打开的 Studio 中登录 Roblox。之后 Genex 会关闭它、完成设置并重新打开。",
   "Sign in to Unity": "登录 Unity",
   "Sign in to Unity Hub": "登录 Unity Hub",
   "Sign in to a provider": "登录提供方",

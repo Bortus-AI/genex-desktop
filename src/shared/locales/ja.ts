@@ -3109,8 +3109,8 @@ export default {
     "Roblox Studioがまだ開いています。プレイスを保存するか聞かれたら答えてから、もう一度「Studioを終了」を押してください。",
   "Roblox Studio is still open. If it asked to save your place, answer it, then press Restart Studio again.":
     "Roblox Studioがまだ開いています。プレイスを保存するか聞かれたら答えてから、もう一度「Studioを再起動」を押してください。",
-  "Roblox Studio is still open. Sign in there; once it has closed by itself, press Set up so Genex can finish.":
-    "Roblox Studioがまだ開いています。そこでサインインし、自動で閉じたら「セットアップ」を押して、Genexに仕上げを任せてください。",
+  "Roblox Studio is still open, and nobody signed in to Roblox there in time. Sign in there, then press Set it up for me so Genex can finish.":
+    "Roblox Studioがまだ開いていて、時間内にRobloxへのサインインがありませんでした。そこでサインインしてから「おまかせで設定」を押して、Genexに仕上げを任せてください。",
   "Roblox Studio isn't on this computer.": "Roblox Studioがこのコンピューターにありません。",
   "Roblox Studio isn't on this computer. Open this to get it.":
     "Roblox Studioがこのコンピューターにありません。ここを開いて入手してください。",
@@ -3375,8 +3375,8 @@ export default {
   "Sign in to Genex to see your friends.": "フレンドを見るにはGenexにサインインしてください。",
   "Sign in to Genex to see your game stats.": "Genexにサインインすると、ゲームの統計が見られます。",
   "Sign in to Roblox": "Robloxにサインイン",
-  "Sign in to Roblox in the Studio that just opened. It closes by itself once you have.":
-    "開いたばかりのStudioでRobloxにサインインしてください。サインインすると自動で閉じます。",
+  "Sign in to Roblox in the Studio that just opened. Genex then closes it, sets it up and opens it again.":
+    "開いたばかりのStudioでRobloxにサインインしてください。そのあとGenexがStudioを閉じ、セットアップして、もう一度開きます。",
   "Sign in to Unity": "Unityにサインイン",
   "Sign in to Unity Hub": "Unity Hubにサインイン",
   "Sign in to a provider": "プロバイダーにサインイン",

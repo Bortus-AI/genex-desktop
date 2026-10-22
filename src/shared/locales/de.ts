@@ -3189,8 +3189,8 @@ export default {
     "Roblox Studio ist noch offen. Falls es gefragt hat, ob dein Ort gespeichert werden soll, antworte und drücke dann noch mal „Studio beenden“.",
   "Roblox Studio is still open. If it asked to save your place, answer it, then press Restart Studio again.":
     "Roblox Studio ist noch offen. Falls es gefragt hat, ob dein Ort gespeichert werden soll, antworte und drücke dann noch mal „Studio neu starten“.",
-  "Roblox Studio is still open. Sign in there; once it has closed by itself, press Set up so Genex can finish.":
-    "Roblox Studio ist noch offen. Melde dich dort an; sobald es sich von selbst geschlossen hat, drücke „Einrichten“, damit Genex fertig werden kann.",
+  "Roblox Studio is still open, and nobody signed in to Roblox there in time. Sign in there, then press Set it up for me so Genex can finish.":
+    "Roblox Studio ist noch offen, und niemand hat sich dort rechtzeitig bei Roblox angemeldet. Melde dich dort an und drücke dann „Richte es für mich ein“, damit Genex fertig werden kann.",
   "Roblox Studio isn't on this computer.": "Roblox Studio ist nicht auf diesem Computer.",
   "Roblox Studio isn't on this computer. Open this to get it.":
     "Roblox Studio ist nicht auf diesem Computer. Öffne das hier, um es zu holen.",
@@ -3462,8 +3462,8 @@ export default {
   "Sign in to Genex to see your friends.": "Melde dich bei Genex an, um deine Freunde zu sehen.",
   "Sign in to Genex to see your game stats.": "Melde dich bei Genex an, um die Statistiken deiner Spiele zu sehen.",
   "Sign in to Roblox": "Bei Roblox anmelden",
-  "Sign in to Roblox in the Studio that just opened. It closes by itself once you have.":
-    "Melde dich in dem Studio, das sich gerade geöffnet hat, bei Roblox an. Es schließt sich von selbst, sobald du angemeldet bist.",
+  "Sign in to Roblox in the Studio that just opened. Genex then closes it, sets it up and opens it again.":
+    "Melde dich in dem Studio, das sich gerade geöffnet hat, bei Roblox an. Danach schließt Genex es, richtet es ein und öffnet es wieder.",
   "Sign in to Unity": "Bei Unity anmelden",
   "Sign in to Unity Hub": "Melde dich in Unity Hub an",
   "Sign in to a provider": "Bei einem Anbieter anmelden",

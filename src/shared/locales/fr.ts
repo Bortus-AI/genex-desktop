@@ -3172,8 +3172,8 @@ export default {
     "Roblox Studio est toujours ouvert. S’il t’a demandé d’enregistrer ton lieu, réponds-lui, puis appuie à nouveau sur « Quitter Studio ».",
   "Roblox Studio is still open. If it asked to save your place, answer it, then press Restart Studio again.":
     "Roblox Studio est toujours ouvert. S’il t’a demandé d’enregistrer ton lieu, réponds-lui, puis appuie à nouveau sur « Redémarrer Studio ».",
-  "Roblox Studio is still open. Sign in there; once it has closed by itself, press Set up so Genex can finish.":
-    "Roblox Studio est toujours ouvert. Connecte-toi dedans ; une fois qu’il s’est fermé tout seul, appuie sur « Configurer » pour que Genex termine.",
+  "Roblox Studio is still open, and nobody signed in to Roblox there in time. Sign in there, then press Set it up for me so Genex can finish.":
+    "Roblox Studio est toujours ouvert, et personne ne s’y est connecté à Roblox à temps. Connecte-toi dedans, puis appuie sur « Configure-le pour moi » pour que Genex termine.",
   "Roblox Studio isn't on this computer.": "Roblox Studio n’est pas sur cet ordinateur.",
   "Roblox Studio isn't on this computer. Open this to get it.":
     "Roblox Studio n’est pas sur cet ordinateur. Ouvre ceci pour l’installer.",
@@ -3444,8 +3444,8 @@ export default {
   "Sign in to Genex to see your friends.": "Connecte-toi à Genex pour voir tes amis.",
   "Sign in to Genex to see your game stats.": "Connecte-toi à Genex pour voir les stats de tes jeux.",
   "Sign in to Roblox": "Se connecter à Roblox",
-  "Sign in to Roblox in the Studio that just opened. It closes by itself once you have.":
-    "Connecte-toi à Roblox dans le Studio qui vient de s’ouvrir. Il se ferme tout seul une fois que c’est fait.",
+  "Sign in to Roblox in the Studio that just opened. Genex then closes it, sets it up and opens it again.":
+    "Connecte-toi à Roblox dans le Studio qui vient de s’ouvrir. Genex le ferme ensuite, le configure et le rouvre.",
   "Sign in to Unity": "Se connecter à Unity",
   "Sign in to Unity Hub": "Connecte-toi à Unity Hub",
   "Sign in to a provider": "Se connecter à un fournisseur",
