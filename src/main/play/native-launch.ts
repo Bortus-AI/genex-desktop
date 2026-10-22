@@ -243,7 +243,8 @@ export class NativeSessions {
       bundleId,
       bundleName,
       args: launchArgs(record),
-      ...(genex ? { genex: { ports: genex.ports, env: genex.env } } : {}),
+      // The game's own name on Genex too: a build made before its first publish knows no other.
+      ...(genex ? { genex: { ports: genex.ports, env: { ...genex.env, GENEX_GAME: slug } } } : {}),
     };
     try {
       const child = await this.#deps.spawn(request);

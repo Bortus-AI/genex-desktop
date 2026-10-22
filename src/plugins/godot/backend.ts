@@ -285,9 +285,9 @@ const MESSAGE = {
           : "",
         state.slug
           ? `Its Genex project is ${state.slug} (project.godot [genex] slug).`
-          : "It has no Genex project yet: after its first publish, call godot__multiplayer again with slug (genex__publish-status names it), so native builds know which game to join; the web build reads it from its Genex page.",
+          : "It has no Genex project yet, and builds don't need one: Genex's Play names it to a native build (GENEX_GAME) and the published page to the web build (window.__GENEX__.slug), so the copies a publish sends join their rooms with no second build. To test online in the editor or a build you start yourself, publish first, then call godot__multiplayer again with slug (genex__publish-status names it).",
         ...notes,
-        "Write the game's online play now, as the godot-multiplayer skill says (godot__skill): GenexMultiplayer.join with mode matchmake (or play), the slug, and native identity; then godot__check.",
+        "Write the game's online play now, as the godot-multiplayer skill says (godot__skill): GenexMultiplayer.join with mode matchmake (or play), the slug from its slug() (GENEX_GAME, then the page, then project.godot), and native identity; then godot__check.",
       ]
         .filter(Boolean)
         .join("\n"),

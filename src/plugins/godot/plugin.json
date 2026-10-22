@@ -1,7 +1,7 @@
 {
   "apiVersion": 3,
   "id": "godot",
-  "version": "0.11.1",
+  "version": "0.11.2",
   "icon": "icon.svg",
   "name": "Godot",
   "publisher": "Genex",
@@ -162,7 +162,7 @@
       "name": "multiplayer",
       "timeoutMs": 540000,
       "facts": ["godot-project"],
-      "description": "Make this Godot game playable online with Genex multiplayer, on the web and in native builds alike (web and native players meet in the same rooms): adds Genex's multiplayer addon and its GenexMultiplayer autoload, the Colyseus GDExtension native builds connect with (a one-time download, about 100 MB, kept by Genex), the game's Genex project in project.godot's [genex] section, its matchmaking in genex.json, and Genex's Web preset loading the multiplayer bridge. Call it once when the person wants people to play together, then read the godot-multiplayer skill and write the online play; call it again with slug after the first publish. Never add npm, a package.json or an HTML shell to a Godot game for this.",
+      "description": "Make this Godot game playable online with Genex multiplayer, on the web and in native builds alike (web and native players meet in the same rooms): adds Genex's multiplayer addon and its GenexMultiplayer autoload, the Colyseus GDExtension native builds connect with (a one-time download, about 100 MB, kept by Genex), the game's Genex project in project.godot's [genex] section, its matchmaking in genex.json, and Genex's Web preset loading the multiplayer bridge. Call it once when the person wants people to play together, then read the godot-multiplayer skill and write the online play; call it again with slug after the first publish only to test online in the editor or a build started by hand (Genex's Play and the published page name the game to the others). Never add npm, a package.json or an HTML shell to a Godot game for this.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -173,7 +173,7 @@
           },
           "slug": {
             "type": "string",
-            "description": "The game's Genex project (genex__publish-status names it after the first publish): native builds join that game. Lowercase letters, digits and dashes."
+            "description": "The game's Genex project (genex__publish-status names it after the first publish), for the editor and builds started by hand; Genex's Play and the published page name it to the others. Lowercase letters, digits and dashes."
           }
         }
       }

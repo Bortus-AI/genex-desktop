@@ -204,9 +204,9 @@ const MESSAGE = {
       `Genex multiplayer is in this game's Unity project: Packages/${MULTIPLAYER_PACKAGE} (Genex's package) and the Colyseus Unity SDK it runs on in Packages/manifest.json${manifestChanged ? ", which Unity fetches from Colyseus's repository when its editor next comes forward (it needs git on this Mac)" : ""}.`,
       state.slug
         ? `Its Genex project is ${state.slug} (${SETTINGS_FILE}).`
-        : `It has no Genex project yet: after its first publish, call unity__multiplayer again with slug (genex__publish-status names it) so its builds know which game to join, then build again.`,
+        : `It has no Genex project yet, and builds don't need one: GenexGame.Slug (Assets/Genex/GenexGame.cs) takes it from Genex's Play and from the published web page, so the copies a publish sends join their rooms with no second build. To test online in the editor or in a build you start yourself, publish first, then call unity__multiplayer again with slug (genex__publish-status names it).`,
       kept.length ? `Kept your changed ${kept.join(", ")} beside the new ones as .mine~.` : "",
-      "Write the game's online play now, as the unity-multiplayer skill says (unity__skill): GenexMultiplayer.Connect or GenexMatchmaker with the slug, WebGL identity from the page and native identity through GenexNativeIdentity; then check it compiles in the editor.",
+      "Write the game's online play now, as the unity-multiplayer skill says (unity__skill): GenexMultiplayer.Connect or GenexMatchmaker with GameId = GenexGame.Slug (never a slug read from GenexSettings.json alone), WebGL identity from the page and native identity through GenexNativeIdentity(GenexGame.ApiUrl, slug); then check it compiles in the editor.",
     ]
       .filter(Boolean)
       .join("\n"),
