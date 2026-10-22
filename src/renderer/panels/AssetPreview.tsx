@@ -16,6 +16,8 @@ import { prefersReducedMotion } from "../ui/media-queries.ts";
 import { hostPlatform } from "../platform.ts";
 import { ASSET_WORDS, fileManagerWords } from "../words.ts";
 import { t } from "../../shared/i18n.ts";
+import { Pending } from "../ui/Pending.tsx";
+import { Skeleton } from "../ui/Skeleton.tsx";
 
 /** How much of a text file the preview decodes. */
 const TEXT_PREVIEW_BYTES = 256 * 1024;
@@ -359,12 +361,9 @@ export function AssetPreview({
         )}
         {model && shown && animated && <AnimationBar source={source} />}
         {loading && (
-          <div
-            role="status"
-            className="stage-loader-late pointer-events-none absolute inset-0 grid place-items-center text-body-sm text-ink-3"
-          >
-            {ASSET_WORDS.loading}
-          </div>
+          <Pending label={ASSET_WORDS.loading} className="pointer-events-none absolute inset-0 grid place-items-center">
+            <Skeleton width={220} height={220} radius={20} />
+          </Pending>
         )}
         {error && (
           <div role="alert" className="max-w-md text-center text-body-sm text-ink-2">

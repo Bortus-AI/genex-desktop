@@ -410,6 +410,7 @@
 :is(
   .chat-status-shimmer,
   .usage-skeleton,
+  .skeleton,
   .app-loader-shine,
   .home-backdrop-glint,
   .animate-ping,
@@ -4217,14 +4218,92 @@ button.chat-header-title:hover {
   border-radius: 99px;
 }
 
-/* A page's content on its way (Pending `spinner`): the working mark centred over the shimmering label. */
-.pending-page {
+/* Content on its way (ui/Pending.tsx): unseen for the first 0.4 s, when most local reads have
+   already answered, then faded in. */
+.pending-late {
+  animation: stage-loader-late 200ms ease-out 400ms both;
+}
+/* Real work starting (Pending `working`): the chat's orb beside one small shimmering line. */
+.pending-working {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 16px;
+}
+/* The shape of what is coming (ui/Skeleton.tsx): soft blocks the size of the lines, pictures and
+   controls, breathing slowly together; still under reduced motion. */
+.skeleton {
+  display: block;
+  flex: none;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--hover);
+  animation: skeleton-breathe 2.4s ease-in-out infinite;
+}
+@keyframes skeleton-breathe {
+  50% {
+    opacity: 0.45;
+  }
+}
+.skeleton-lines {
   display: flex;
   flex-direction: column;
+  gap: 12px;
+}
+.skeleton-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.skeleton-row-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+/* Builds on its way (RunGraph.tsx): what you asked, two parts and the build, on the graph's dots. */
+.skeleton-graph {
+  display: flex;
   align-items: center;
   justify-content: center;
-  gap: 14px;
-  min-height: 200px;
+  gap: 48px;
+  height: 100%;
+  padding: 32px;
+  background-image: radial-gradient(var(--line-strong) 1px, transparent 1.25px);
+  background-size: 22px 22px;
+}
+.skeleton-graph-column {
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+}
+/* The Assets tab on its way (AssetsCanvas.tsx): a first screen of tiles, each with its name. */
+.skeleton-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, 160px);
+  gap: 16px;
+}
+.skeleton-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+/* A picture on its way over the dark full-size backdrop (inspector/Lightbox.tsx). */
+.skeleton.skeleton-on-dark {
+  background: rgb(255 255 255 / 0.07);
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
 }
 
 /* Only current work animates. History and disclosures mount without entrance choreography. */
