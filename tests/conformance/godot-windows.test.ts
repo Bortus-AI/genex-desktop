@@ -62,6 +62,8 @@ const action = async (fixture: Fixture, name: string, args = {}) =>
   (await fixture.backend.action?.(name, args, fixture.context())) as Answer;
 const card = async (fixture: Fixture) => (await action(fixture, GodotSetupAction.Steps)) as unknown as PluginSetupCard;
 const MB = 2 ** 20;
+/** The most event-loop turns a test waits for jobs that stage files on disk to reach their turn. */
+const HOLD_TURNS_MAX = 10_000;
 /** Godot's Windows build writes CRLF lines and colours its progress even into a file. */
 const windowsWords = (text: string) => `\u001b[92m[ DONE ]\u001b[39m\r\n${text.replaceAll("\n", "\r\n")}`;
 
@@ -600,8 +602,13 @@ describe("Godot on Windows: jobs in Genex's sandbox", () => {
     const budget = { until: 2 * MINUTE, now: () => clock.at, least: MINUTE, refusal: "no time left" };
     await run(OWN_GODOT, call("first"), scope(budget));
     assert.equal(fixture.requests.at(-1)?.timeoutMs, 2 * MINUTE, "what the budget leaves, not the job's own 8 minutes");
-    // Both turns held: a third job waits, and the call's clock moves on meanwhile.
+    // Both turns held: a third job waits, and the call's clock moves on meanwhile. Each job stages
+    // its folders on disk before it asks for a turn, so the late job starts only once both holds
+    // are in the sandbox: started with them, it could take a turn first, on the old clock.
     const holding = [run(OWN_GODOT, call("hold"), scope()), run(OWN_GODOT, call("hold"), scope())];
+    const holdsRunning = () => fixture.requests.filter((request) => request.args.includes("hold")).length;
+    for (let turns = 0; holdsRunning() < 2 && turns < HOLD_TURNS_MAX; turns += 1) await turnOver();
+    assert.equal(holdsRunning(), 2, "both turns are held");
     // Its refusal is awaited from the start, so it never lands unawaited while the others end.
     const refused = assert.rejects(run(OWN_GODOT, call("late"), scope(budget)), /no time left/);
     for (let turns = 0; turns < 20; turns += 1) await turnOver();
