@@ -389,7 +389,9 @@ export function useComposerModel({
     setModelKey,
     remember: (id, key) => rememberChatModel(storage, id, key, studio),
     bar: {
-      choices,
+      // The resolved list: a saved pick that is no longer listed stays in it, so the picker names
+      // the model the chat really sends with instead of falling back to another row.
+      choices: view.choices,
       selected,
       onPick: pickModel,
       roles: sendRoles,
