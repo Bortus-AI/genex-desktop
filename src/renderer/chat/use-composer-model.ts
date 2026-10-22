@@ -164,7 +164,7 @@ export function effectiveRoles(
 
 /**
  * A saved pick its provider no longer offers (a model the plan dropped, a provider gone), known for
- * sure: the provider is ready with its models read, or not there at all. The chat then opens on a
+ * sure: the provider is ready with a fresh model list, or not there at all. The chat then opens on a
  * model that runs instead, and the picker, the panel and the send all name that one. A pick whose
  * provider is still reading its models, or is signed out (the sign-in is asked for), stays.
  */
@@ -176,7 +176,10 @@ function noLongerOffered(
   if (!choice || choices.includes(choice) || !engines.length) return false;
   const engine = engines.find((candidate) => candidate.id === parseModelKey(choice.key).engine);
   if (!engine) return true;
-  return engine.status.code === EngineStatusCode.Ready && engine.catalog?.state !== ModelCatalogState.Loading;
+  if (engine.status.code !== EngineStatusCode.Ready) return false;
+  // Only a fresh, complete list proves a model gone; a loading, stale or failed one may still name it.
+  const catalog = engine.catalog;
+  return !catalog || (catalog.state === ModelCatalogState.Ready && !catalog.refreshing);
 }
 
 /** Everything the composer derives from the engines and the chat's own picks (roles and effort). */

@@ -234,3 +234,47 @@ describe("the app's copy of the plan limits", () => {
     assert.equal(store.getState().reports?.length, 1);
   });
 });
+
+describe("a plan's limits around an account change", () => {
+  it("never keep numbers read while the account changed under them", async () => {
+    let accountId = "terminal";
+    let asked = 0;
+    const source: UsageSource = {
+      status: async () => ({ code: EngineStatusCode.Ready }),
+      account: async () => accountId,
+      readUsage: async () => {
+        asked += 1;
+        if (asked === 1) {
+          // The switch lands while the old account's (cached) numbers are being handed back.
+          accountId = "account-2";
+          return reading(80);
+        }
+        return reading(5);
+      },
+    };
+    const { usage, pushes, last } = rig({ [CLAUDE]: source });
+    await usage.refresh();
+    const paired = pushes.flat().filter((report) => report.account === "account-2");
+    assert.ok(
+      paired.every((report) => report.usage?.windows[0]?.percent !== 80),
+      "the new account never shows the old account's numbers",
+    );
+    assert.equal(asked, 2, "the new account is read at once");
+    assert.equal(last(CLAUDE)?.usage?.windows[0]?.percent, 5);
+  });
+
+  it("show a shown plan whose engine errors as failed, instead of making it vanish", async () => {
+    let code: string = EngineStatusCode.Ready;
+    const source: UsageSource = {
+      status: async () => ({ code }),
+      account: async () => "terminal",
+      readUsage: async () => reading(23),
+    };
+    const { usage, last } = rig({ [CLAUDE]: source });
+    await usage.refresh();
+    code = EngineStatusCode.Error;
+    await usage.refresh();
+    assert.equal(last(CLAUDE)?.state, UsageState.Failed);
+    assert.equal(last(CLAUDE)?.usage?.windows[0]?.percent, 23);
+  });
+});

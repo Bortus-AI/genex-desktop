@@ -23,6 +23,9 @@ export interface ProviderUsageDeps {
   push(reports: ProviderUsageReport[]): void;
 }
 
+/** How many reads in a row an account change mid-read may start, so a flapping choice cannot spin. */
+const MAX_READS_IN_A_ROW = 3;
+
 /** A read under way, joined by every refresh that arrives meanwhile. */
 interface Reading {
   done: Promise<void>;
@@ -42,13 +45,18 @@ export interface ProviderUsageService {
   refreshShown(): Promise<void>;
 }
 
+/** Engine troubles that pass: a shown plan stays, as a read that failed. */
+const PASSING_TROUBLE: ReadonlySet<string> = new Set([EngineStatusCode.Error, EngineStatusCode.NotRunning]);
+
 /**
- * A subscription that is not ready: one that was shown and signed out stays, asking for its sign-in;
- * one never signed in (or not installed) is not a plan of this person's.
+ * A subscription that is not ready. One that was shown and signed out stays, asking for its
+ * sign-in, and one whose engine has a passing trouble stays as failed; one never signed in (or not
+ * installed) is not a plan of this person's.
  */
 function notReady(previous: ProviderUsageReport | null, code: string | undefined): ProviderUsageReport | null {
-  if (!previous || code !== EngineStatusCode.NeedsLogin) return null;
-  return { ...previous, state: UsageState.SignedOut, usage: null };
+  if (!previous || !code) return null;
+  if (code === EngineStatusCode.NeedsLogin) return { ...previous, state: UsageState.SignedOut, usage: null };
+  return PASSING_TROUBLE.has(code) ? { ...previous, state: UsageState.Failed } : null;
 }
 
 export function createProviderUsage({ engines, source, push }: ProviderUsageDeps): ProviderUsageService {
@@ -65,24 +73,33 @@ export function createProviderUsage({ engines, source, push }: ProviderUsageDeps
     push(snapshot());
   };
 
-  /** One read of one subscription: status, account, then its limits. */
-  async function read(id: string): Promise<void> {
+  /**
+   * One read of one subscription: status, account, then its limits. True when the account changed
+   * during the read: its numbers are dropped and the new account is read at once.
+   */
+  async function read(id: string): Promise<boolean> {
     const engine = source(id);
     const status = await engine?.status().catch(() => null);
     const previous = reports.get(id) ?? null;
     if (!engine || status?.code !== EngineStatusCode.Ready) {
       set(id, notReady(previous, status?.code));
-      return;
+      return false;
     }
     const account = await engine.account().catch(() => null);
     const kept = previous?.account === account ? (previous?.usage ?? null) : null;
     set(id, { engine: id, state: UsageState.Checking, account, usage: kept });
     try {
       const usage = (await engine.readUsage?.()) ?? null;
+      const now = await engine.account().catch(() => null);
+      if (now !== account) {
+        set(id, { engine: id, state: UsageState.Checking, account: now, usage: null });
+        return true;
+      }
       set(id, { engine: id, state: usage ? UsageState.Ready : UsageState.NotShared, account, usage });
     } catch {
       set(id, { engine: id, state: UsageState.Failed, account, usage: kept });
     }
+    return false;
   }
 
   /** Read `id`, joining a read under way; `again` reads once more after it (the answer may be stale). */
@@ -95,10 +112,12 @@ export function createProviderUsage({ engines, source, push }: ProviderUsageDeps
     const reading: Reading = { done: Promise.resolve(), again: false };
     reading.done = (async () => {
       try {
+        let reads = 0;
         do {
           reading.again = false;
-          await read(id);
-        } while (reading.again);
+          reads += 1;
+          if (await read(id)) reading.again = true;
+        } while (reading.again && reads < MAX_READS_IN_A_ROW);
       } finally {
         readings.delete(id);
       }

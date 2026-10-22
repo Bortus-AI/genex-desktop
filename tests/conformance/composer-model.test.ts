@@ -87,8 +87,15 @@ describe("a saved model the plan no longer offers", () => {
   });
 
   it("keeps the saved pick while its provider's models are still being read", () => {
-    const loading: EngineDescriptor = { ...codex, catalog: { state: "loading" } as EngineDescriptor["catalog"] };
-    assert.equal(notOffered([claude, loading], "codex::gpt-5.5").selected, "codex::gpt-5.5");
+    const catalog = (state: string, refreshing = false) =>
+      ({ ...codex, catalog: { state, revision: 1, refreshing } }) as EngineDescriptor;
+    for (const unsure of [catalog("loading"), catalog("unavailable"), catalog("stale"), catalog("ready", true)])
+      assert.equal(
+        notOffered([claude, unsure], "codex::gpt-5.5").selected,
+        "codex::gpt-5.5",
+        `a ${unsure.catalog?.state} list is not proof the model is gone`,
+      );
+    assert.equal(notOffered([claude, catalog("ready")], "codex::gpt-5.5").selected?.split("::")[0], "claude-code");
     assert.equal(
       notOffered([], "codex::gpt-5.5").selected,
       "codex::gpt-5.5",
