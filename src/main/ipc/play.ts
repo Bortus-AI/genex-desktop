@@ -16,6 +16,7 @@ import { isSessionAction, NO_INSTALLS, SessionAction } from "../../shared/play-n
 import type { NativeSessions } from "../play/native-launch.ts";
 import { onWebsite } from "../play/origins.ts";
 import type { PlayPeople } from "../play/people.ts";
+import { RemixRefusedError } from "../play/remix.ts";
 import type { PlayViewer } from "../play/viewer.ts";
 import type { IpcHandle } from "./registrar.ts";
 
@@ -102,6 +103,10 @@ export function registerPlayIpc(handle: IpcHandle, deps: PlayIpcDeps): void {
     viewer()?.remixing(true);
     try {
       return await remix(await gallery.world(payload.slug));
+    } catch (error) {
+      // A refusal is told by its code: the renderer says each in its own words.
+      if (error instanceof RemixRefusedError) return { refused: error.code };
+      throw error;
     } finally {
       viewer()?.remixing(false);
     }

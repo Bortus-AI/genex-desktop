@@ -16,6 +16,7 @@ import {
   type PlayFeedPage,
   type PlayGame,
   type PlayGameDetail,
+  type PlayRemixRefusal,
   PlayShelf,
   type PlayShelves,
   type PlayViewerEvent,
@@ -136,6 +137,8 @@ export interface PlayState {
   remixed: string | null;
   /** A remix failed: the shell says so once. */
   remixFailed: boolean;
+  /** Why the failed remix made nothing, when Genex's answer named a reason; the shell says it in its words. */
+  remixRefusal: PlayRemixRefusal | null;
   /** The viewer's guest card asked to sign in: the shell signs in to Genex once (`useGuestSignIn`). */
   installAsked: boolean;
   /** The Assets shelf's switchers: whose assets, and which kind; kept while other shelves show. */
@@ -179,6 +182,7 @@ export const initialPlay = (recent: PlayRecentEntry[] = []): PlayState => ({
   making: null,
   remixed: null,
   remixFailed: false,
+  remixRefusal: null,
   installAsked: false,
   assetView: ALL_ASSETS,
   library: EMPTY_LIBRARY,
@@ -419,8 +423,12 @@ export function remixProgressed(state: PlayState, progress: RemixProgress): Play
 /** A card's remix was made: its name waits for the shell. */
 const remixAnswered = (state: PlayState, name: string): PlayState => ({ ...state, remixed: name });
 
-/** A remix failed: the shell says so once. */
-const remixRefused = (state: PlayState): PlayState => ({ ...state, remixFailed: true });
+/** A remix failed, for `refusal` when one was named: the shell says so once. */
+const remixRefused = (state: PlayState, refusal: PlayRemixRefusal | null = null): PlayState => ({
+  ...state,
+  remixFailed: true,
+  remixRefusal: refusal,
+});
 
 /** The new game is open in Create: nothing shows the remix being made any more. */
 export const remixEnded = (state: PlayState): PlayState => (state.making === null ? state : { ...state, making: null });
@@ -448,7 +456,7 @@ export function remixReturnedTo(state: PlayState): PlayState {
 
 /** The shell told a remix's failure; nothing shows it being made any more. */
 export const remixFailureTold = (state: PlayState): PlayState =>
-  state.remixFailed ? { ...state, remixFailed: false, making: null } : state;
+  state.remixFailed ? { ...state, remixFailed: false, remixRefusal: null, making: null } : state;
 
 /** The shell ran the guest card's Sign in. */
 export const installAnswered = (state: PlayState): PlayState =>
@@ -708,10 +716,11 @@ export function createPlayStore(
     if (store.getState().making) return;
     set((state) => remixStarted(state, game));
     try {
-      const name = await api.playRemix(game.slug);
-      set((state) => remixAnswered(state, name));
+      const answer = await api.playRemix(game.slug);
+      if (typeof answer === "string") set((state) => remixAnswered(state, answer));
+      else set((state) => remixRefused(state, answer.refused));
     } catch {
-      set(remixRefused);
+      set((state) => remixRefused(state));
     }
   };
 

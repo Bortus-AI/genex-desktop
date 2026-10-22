@@ -352,6 +352,8 @@ export default {
     "Разрешить вызовы без спроса, включая изменения, которые может внести этот инструмент",
   "Allow it for Studio in a terminal, then quit and reopen Studio:":
     "Разреши это для Studio в терминале, затем закрой и снова открой Studio:",
+  "Allow it only if you may share everything in the project. Assets bought in the Unity Asset Store or on Fab usually can’t be shared.":
+    "Разрешай, только если вправе делиться всем в проекте. Ассеты из Unity Asset Store или Fab обычно нельзя передавать другим.",
   "Allow once": "Разрешить один раз",
   "Allow remixing": "Разрешить ремиксы",
   "Allow the mic in Settings": "Разреши микрофон в настройках",
@@ -492,6 +494,7 @@ export default {
   Avatar: "Аватар",
   Back: "Назад",
   "Back to Play": "Назад в «Играть»",
+  "Back to Publish": "Назад к публикации",
   "Back to game": "Вернуться в игру",
   "Back to workspace": "Назад к работе",
   Background: "Фон",
@@ -904,6 +907,8 @@ export default {
   Copied: "Скопировано",
   "Copied.": "Скопировано.",
   Copy: "Копировать",
+  "Copy and change {title}’s project to make their own game.":
+    "Скопировать и изменить проект {title}, чтобы сделать свою игру.",
   "Copy command": "Скопировать команду",
   "Copy diagnostics": "Скопировать диагностику",
   "Copy error": "Скопировать ошибку",
@@ -1577,6 +1582,7 @@ export default {
   "Genex starts Git history here, so any change can be undone.":
     "Genex начнёт здесь Git-историю, чтобы любое изменение можно было отменить.",
   "Genex terms updated": "Условия Genex обновились",
+  "Genex terms, section 4": "Условия Genex, раздел 4",
   "Genex the new version is available.": "Доступна новая версия Genex.",
   "Genex the new version is ready to install.": "Новая версия Genex готова к установке.",
   "Genex tokens or VS Code JSON/JSONC. UI colors only; missing colors use Genex defaults.":
@@ -1644,6 +1650,8 @@ export default {
   "Going live": "Запускаем",
   Grain: "Зерно",
   Grid: "Сетка",
+  "Good to know": "Полезно знать",
+  "Got it": "Понятно",
   "Grid size": "Размер сетки",
   Grille: "Решётка",
   "Guidance available to your agents. Availability depends on the source and selected provider.":
@@ -1910,12 +1918,17 @@ export default {
   "Its author no longer shares it.": "Автор больше этим не делится.",
   "Its code runs on your computer like an app you install. It isn't sandboxed.":
     "Его код работает на твоём компьютере, как любое установленное приложение, — без песочницы.",
+  "Its creator hasn’t shared this game’s project yet, so it can’t be remixed.":
+    "Автор ещё не поделился проектом этой игры, поэтому её нельзя ремиксить.",
   "Its files are in your game folder, waiting for the lead to use them.":
     "Файлы лежат в папке твоей игры и ждут, когда главный агент их использует.",
   "Its own scene": "Своя сцена",
   "Its packages aren’t installed yet — “{install}” runs on one press.":
     "Пакеты ещё не установлены — «{install}» запускается одним нажатием.",
   "Its packages aren’t installed yet.": "Пакеты игры ещё не установлены.",
+  "Its project didn’t go, so no one can remix it yet.": "Проект не отправился, поэтому ремиксить игру пока нельзя.",
+  "Its project is too big to remix: Genex keeps up to 2 GB and 5,000 files.":
+    "Проект слишком большой для ремикса: Genex хранит до 2 ГБ и 5 000 файлов.",
   "Its session failed before it delivered anything.": "Сессия упала, ничего не доставив.",
   "Its source is your own repository: run genex make-remixable in the game’s folder to allow remixing.":
     "Исходники лежат в твоём собственном репозитории: чтобы разрешить ремиксы, запусти genex make-remixable в папке игры.",
@@ -2819,6 +2832,7 @@ export default {
   "Publish game": "Опубликовать игру",
   "Publish in one click": "Публикация в один клик",
   "Publish progress": "Ход публикации",
+  "Publish their remix on Genex.": "Опубликовать свой ремикс на Genex.",
   "Publish this game": "Опубликовать эту игру",
   "Publish this game on Genex": "Опубликовать эту игру на Genex",
   "Publish this game with a playable link": "Опубликуй игру, чтобы в неё можно было играть по ссылке",
@@ -2937,6 +2951,8 @@ export default {
   Remix: "Ремикс",
   "Remix progress": "Прогресс ремикса",
   "Remix {title}": "Сделать ремикс: {title}",
+  "Remixes made before you turn this off stay theirs.":
+    "Ремиксы, сделанные до того, как ты это выключишь, остаются у их авторов.",
   "Remixing {title}": "Делаем ремикс: {title}",
   "Remixing…": "Делаем ремикс…",
   Remove: "Удалить",
@@ -3072,6 +3088,7 @@ export default {
   "Rigged model": "Модель с ригом",
   "Rigged, animated and ready for your game.": "С ригом и анимацией — сразу готовы для твоей игры.",
   "Rigging · animation": "Риггинг · анимация",
+  Rights: "Права",
   "Roblox Studio closed. It asked to save anything unsaved first.":
     "Roblox Studio закрыт. Перед закрытием он предложил сохранить несохранённое.",
   "Roblox Studio didn't say what {name} is. If a play test or a dialog is open in Studio, finish it, then choose the place again.":
@@ -3926,6 +3943,7 @@ export default {
     "Эти файлы были слишком большими для сохранения, поэтому откат оставил их как есть: {files}.",
   "These surfaces need different text colors. Use similar background brightness, or reset this theme.":
     "Этим поверхностям нужны разные цвета текста. Выбери фоны похожей яркости или сбрось эту тему.",
+  "They can": "Они могут",
   "They get the Genex download page with a card from you.": "Друг откроет страницу загрузки Genex с карточкой от тебя.",
   "They get the Genex download page with a card from you. You get {count} credits when they make their first game.":
     "Друг откроет страницу загрузки Genex с карточкой от тебя. Ты получишь {count, plural, one {# кредит} few {# кредита} many {# кредитов} other {# кредита}}, когда друг сделает первую игру.",
@@ -4481,6 +4499,7 @@ export default {
   "What it does": "Что он делает",
   "What phone players get. Your choice wins over the automatic check.":
     "Что увидят игроки на телефонах. Твой выбор важнее автопроверки.",
+  "What remixers can do": "Что можно авторам ремиксов",
   "What should it show? Or leave it empty": "Что на ней показать? Или оставь пустым",
   "What should the worker do instead?": "Что помощнику сделать вместо этого?",
   "What the new cover should show": "Что должно быть на новой обложке",

@@ -11,13 +11,14 @@
  * as they download; a remix that fails says why in the log.
  */
 import { type ChildProcess, execFile } from "node:child_process";
+import type { Dirent } from "node:fs";
 import { randomBytes } from "node:crypto";
-import { mkdir, readdir, readFile, rename, rm, rmdir, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readdir, readFile, rename, rm, rmdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { MINUTE_MS } from "../../shared/duration.ts";
 import { errorMessage } from "../../shared/errors.ts";
-import { isPlaySlug, type RemixProgress, RemixStep, remixTitle } from "../../shared/play.ts";
+import { isPlaySlug, PlayRemixRefusal, type RemixProgress, RemixStep, remixTitle } from "../../shared/play.ts";
 import { HOST_GIT_CONFIG, hostGitEnv } from "../../substrate/git-policy.ts";
 import type { PlayWorld } from "./gallery.ts";
 import { downloadLfsFiles, type LfsDownloadDeps } from "./lfs.ts";
@@ -47,13 +48,28 @@ const STAGING_PREFIX = ".remix-";
 const STAGING_NAME = /^\.remix-[a-z0-9][a-z0-9-]*-[0-9a-f]{6}$/;
 /** Random bytes in a hidden folder's name: six hex digits. */
 const STAGING_RANDOM_BYTES = 3;
+/** How deep in a copy an engine's project may sit (`unity/ProjectSettings/…` is two folders down). */
+const ENGINE_PROJECT_DEPTH = 3;
+/** The most entries the look for an engine's project reads. */
+const ENGINE_LOOK_ENTRIES_MAX = 5_000;
 
 const MESSAGE = {
   NotRemixable: "This game can’t be remixed",
   NoFolder: "There is no free folder for the copy",
   Underway: "Another remix is being made",
   Stalled: "The download stopped moving",
+  NoProject: "The game's source holds no game: its creator hasn't shared its project",
 } as const;
+
+/** A remix refused before anything was made, with the code the renderer says it by. */
+export class RemixRefusedError extends Error {
+  readonly code: PlayRemixRefusal;
+  constructor(code: PlayRemixRefusal, message: string) {
+    super(message);
+    this.name = "RemixRefusedError";
+    this.code = code;
+  }
+}
 
 /**
  * Settings a clone runs under, after the host's own: https only (no `ext::` or `file://`
@@ -166,6 +182,72 @@ function routedIn(listing: string, byGitPath: Map<string, string>): Set<string> 
   return routed;
 }
 
+/** A file that marks an engine's project in its folder: Godot's or Unreal's. */
+const isEngineFile = (name: string): boolean => name === "project.godot" || name.endsWith(".uproject");
+/** Folders never looked in for a project: hidden ones and installed packages. */
+const passedOver = (name: string): boolean => name.startsWith(".") || name === "node_modules";
+
+/** Whether `folder`'s entries mark an engine's project (Unity's is its `ProjectSettings/ProjectVersion.txt`), and the folders to look in next. */
+async function lookIn(folder: string, entries: readonly Dirent[]): Promise<{ marked: boolean; below: string[] }> {
+  const below: string[] = [];
+  for (const entry of entries) {
+    if (entry.isFile() && isEngineFile(entry.name)) return { marked: true, below };
+    if (!entry.isDirectory() || passedOver(entry.name)) continue;
+    const at = path.join(folder, entry.name);
+    if (entry.name === "ProjectSettings" && (await isFile(path.join(at, "ProjectVersion.txt"))))
+      return { marked: true, below };
+    below.push(at);
+  }
+  return { marked: false, below };
+}
+
+/** Whether `dir` holds an engine's project within a few folders: Unity's, Godot's or Unreal's mark. Links are never followed. */
+async function holdsEngineProject(dir: string): Promise<boolean> {
+  let seen = 0;
+  let level = [dir];
+  for (let depth = 0; depth < ENGINE_PROJECT_DEPTH && level.length > 0; depth += 1) {
+    const next: string[] = [];
+    for (const folder of level) {
+      const entries = await readdir(folder, { withFileTypes: true }).catch(() => []);
+      seen += entries.length;
+      if (seen > ENGINE_LOOK_ENTRIES_MAX) return false;
+      const look = await lookIn(folder, entries);
+      if (look.marked) return true;
+      next.push(...look.below);
+    }
+    level = next;
+  }
+  return false;
+}
+
+/** Whether `file` is a plain file (a link is not). */
+const isFile = (file: string): Promise<boolean> =>
+  lstat(file).then(
+    (info) => info.isFile(),
+    () => false,
+  );
+
+/** Whether a package.json in `dir` runs anything: a game built with npm names its scripts. */
+async function packageRuns(dir: string): Promise<boolean> {
+  const text = await readFile(path.join(dir, "package.json"), "utf8").catch(() => "");
+  try {
+    const scripts = (JSON.parse(text) as { scripts?: unknown } | null)?.scripts;
+    return typeof scripts === "object" && scripts !== null && Object.keys(scripts).length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether a copy holds a game: a Genex game's record, a page at its root, packages that build it, or
+ * an engine's project. A README, ignore rules or a publish's bookkeeping alone are no game: such a
+ * source is what a game whose creator never shared its project has on Genex.
+ */
+export async function holdsGame(dir: string): Promise<boolean> {
+  if ((await isFile(path.join(dir, "studio.json"))) || (await isFile(path.join(dir, "index.html")))) return true;
+  return (await packageRuns(dir)) || holdsEngineProject(dir);
+}
+
 /** Hears a clone's models download: bytes so far, and their total when it is known. */
 export type ModelsProgress = (done: number, total: number | null) => void;
 
@@ -251,6 +333,7 @@ async function makeRemix(world: PlayWorld, source: string, deps: RemixDeps): Pro
     await deps.clone(source, work, (done, total) => step(RemixStep.Models, done, total));
     // The copy starts its own history; the author's stays theirs.
     await rm(path.join(work, ".git"), { recursive: true, force: true });
+    if (!(await holdsGame(work))) throw new RemixRefusedError(PlayRemixRefusal.NoProject, MESSAGE.NoProject);
     step(RemixStep.Packages);
     await deps.install(work).catch(() => {});
     dest = await claimFolder(root, world.slug, (dir) => moveInto(work, dir));

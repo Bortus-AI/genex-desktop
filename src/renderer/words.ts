@@ -38,7 +38,7 @@ import { LocalServerProblem } from "../shared/local-server.ts";
 import { computerSettingQuestion, type GithubLookupProblem } from "../shared/plugins.ts";
 import { computerControlOffered, desktopStopShortcut } from "../shared/computer-control.ts";
 import type { GenexPublishPhase } from "../shared/genex.ts";
-import { PlayCategory, PlayNote, PlayShelf, RemixStep } from "../shared/play.ts";
+import { PlayCategory, PlayNote, PlayRemixRefusal, PlayShelf, RemixStep } from "../shared/play.ts";
 import { InstallFailure, LaunchFailure, NativeArch, NativePlatform } from "../shared/play-native.ts";
 import { PublishTarget } from "../shared/publish-platforms.ts";
 import { CreditKind } from "../shared/play-credits.ts";
@@ -3618,6 +3618,32 @@ export const INSTALLED_GAMES_WORDS = {
   stopFailed: t("Couldn't stop sharing who you are. Try again in a moment."),
 } as const;
 
+/** The Publish dialog's Allow remixing, and its page on what remixers can do (`panels/plugins/genex/PublishRemix.tsx`). */
+export const PUBLISH_REMIX_WORDS = {
+  allow: t("Allow remixing"),
+  rights: t("Rights"),
+  rightsLabel: t("What remixers can do"),
+  title: t("What remixers can do"),
+  back: t("Back to Publish"),
+  canHeading: t("They can"),
+  can: (title: string) => [
+    t("Copy and change {title}’s project to make their own game.", { title }),
+    t("Publish their remix on Genex."),
+  ],
+  goodToKnowHeading: t("Good to know"),
+  goodToKnow: [
+    t("Remixes made before you turn this off stay theirs."),
+    t(
+      "Allow it only if you may share everything in the project. Assets bought in the Unity Asset Store or on Fab usually can’t be shared.",
+    ),
+  ],
+  terms: t("Genex terms, section 4"),
+  gotIt: t("Got it"),
+  /** Why the last publish's project didn't go: remixing then stays off. */
+  tooBig: t("Its project is too big to remix: Genex keeps up to 2 GB and 5,000 files."),
+  notSent: t("Its project didn’t go, so no one can remix it yet."),
+} as const;
+
 /** The Publish dialog's platform rows (`panels/plugins/genex/PublishPlatforms.tsx`). */
 export const PUBLISH_PLATFORM_WORDS = {
   label: t("Platforms"),
@@ -5060,6 +5086,10 @@ export const PLAY_WORDS = {
   remixing: t("Remixing…"),
   remixLabel: (title: string) => t("Remix {title}", { title }),
   remixFailed: t("Couldn’t make a copy of that game."),
+  /** Why Remix made nothing, when Genex's answer named a reason. */
+  remixRefused: {
+    [PlayRemixRefusal.NoProject]: t("Its creator hasn’t shared this game’s project yet, so it can’t be remixed."),
+  } satisfies Record<PlayRemixRefusal, string>,
   /** Create while a remix is made (`RemixLayer`): the step bar's names, the line under the loader. */
   making: {
     steps: {

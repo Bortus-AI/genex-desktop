@@ -1,6 +1,6 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { GenexTools } from "./adapter.ts";
+import { GenexTools, type RemixChoice } from "./adapter.ts";
 import { COVER_CLIP } from "./clip.ts";
 import { nativeUploads } from "./native-publish.ts";
 import { type CoverCamera, CoverOperation, COVER_STILL, MESSAGE as COVER_MESSAGE } from "./cover.ts";
@@ -103,6 +103,17 @@ function publishStatusFor(genex: GenexTools, project: string, args: Args) {
  * The host's camera on the bound game for this invocation, begun at `invokedAt`: a still of its
  * genex-cover demo through `observe`, which answers only while the invocation lasts. None unbound.
  */
+/**
+ * A publish's remixing: the dialog's choice when it sent one (an agent's publish sends none and keeps
+ * the person's last choice), and the game's folder its project is staged from.
+ */
+function remixChoice(args: Args, ctx: Invocation): RemixChoice {
+  return {
+    ...(typeof args.remix === "boolean" ? { allowed: args.remix } : {}),
+    ...(ctx.directory ? { gameDir: ctx.directory } : {}),
+  };
+}
+
 function coverCamera(ctx: Invocation, service: Service, invokedAt: number): CoverCamera | undefined {
   const { project, directory } = ctx;
   if (!project || !directory) return undefined;
@@ -150,7 +161,7 @@ async function publishTool(
   const state =
     args.operation === GenexPublishKind.Draft
       ? await genex.publishDraft(project, exportStage, camera)
-      : await genex.publishGallery(project, exportStage, undefined, camera);
+      : await genex.publishGallery(project, exportStage, undefined, camera, [], remixChoice(args, ctx));
   await ctx
     .host(PluginService.EventsEmit, {
       kind: "publish",
@@ -302,12 +313,14 @@ const ACTIONS: Record<string, Action> = {
     // The dialog names the game's apps by their place in its folder; only real builds inside it go.
     const apps = ctx.directory ? await nativeUploads(ctx.directory, args.native) : [];
     const exportStage = () => service(PluginService.ExportStage, {});
-    return genex.publishGallery(ctx.project, exportStage, args.title, coverCamera(ctx, service, invokedAt), apps);
+    const camera = coverCamera(ctx, service, invokedAt);
+    return genex.publishGallery(ctx.project, exportStage, args.title, camera, apps, remixChoice(args, ctx));
   },
   [GenexAction.PublishApps]: async (genex, args, ctx, service, invokedAt) => {
     if (!ctx.project) throw new Error(MESSAGE.OpenProject());
     const apps = ctx.directory ? await nativeUploads(ctx.directory, args.native) : [];
-    return genex.publishAppsOnly(ctx.project, apps, args.title, coverCamera(ctx, service, invokedAt));
+    const camera = coverCamera(ctx, service, invokedAt);
+    return genex.publishAppsOnly(ctx.project, apps, args.title, camera, remixChoice(args, ctx));
   },
   [GenexAction.PublishAllowUpload]: withProject((genex, project, args) =>
     genex.publishAllowNewUpload(project, String(args.jobId ?? "")),

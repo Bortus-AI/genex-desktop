@@ -306,6 +306,8 @@ export default {
   "Allow calls without asking, including changes this tool can make": "允许无需询问即可调用，包括此工具可能做出的更改",
   "Allow it for Studio in a terminal, then quit and reopen Studio:":
     "在终端中为 Studio 允许它，然后退出并重新打开 Studio：",
+  "Allow it only if you may share everything in the project. Assets bought in the Unity Asset Store or on Fab usually can’t be shared.":
+    "只有在你有权分享项目里的全部内容时才允许。从 Unity Asset Store 或 Fab 买的素材通常不能分享。",
   "Allow once": "允许一次",
   "Allow remixing": "允许改编",
   "Allow the mic in Settings": "请在设置中允许使用麦克风",
@@ -440,6 +442,7 @@ export default {
   Avatar: "头像",
   Back: "返回",
   "Back to Play": "返回“游玩”",
+  "Back to Publish": "返回发布",
   "Back to game": "返回游戏",
   "Back to workspace": "返回工作区",
   Background: "背景",
@@ -838,6 +841,7 @@ export default {
   Copied: "已复制",
   "Copied.": "已复制。",
   Copy: "复制",
+  "Copy and change {title}’s project to make their own game.": "复制并修改 {title} 的项目，做出自己的游戏。",
   "Copy command": "复制命令",
   "Copy diagnostics": "复制诊断信息",
   "Copy error": "复制错误",
@@ -1470,6 +1474,7 @@ export default {
   "Genex sign-in expired. Reconnect your account.": "Genex 登录已过期。请重新连接你的账号。",
   "Genex starts Git history here, so any change can be undone.": "Genex 会在这里创建 Git 历史，任何修改都可以撤销。",
   "Genex terms updated": "Genex 条款已更新",
+  "Genex terms, section 4": "Genex 条款第 4 节",
   "Genex the new version is available.": "Genex 新版本现已可用。",
   "Genex the new version is ready to install.": "Genex 新版本已可安装。",
   "Genex tokens or VS Code JSON/JSONC. UI colors only; missing colors use Genex defaults.":
@@ -1533,6 +1538,8 @@ export default {
   "Going live": "上线中",
   Grain: "颗粒",
   Grid: "网格",
+  "Good to know": "须知",
+  "Got it": "知道了",
   "Grid size": "网格大小",
   Grille: "格栅",
   "Guidance available to your agents. Availability depends on the source and selected provider.":
@@ -1785,11 +1792,16 @@ export default {
   "Its author no longer shares it.": "作者已不再分享它。",
   "Its code runs on your computer like an app you install. It isn't sandboxed.":
     "它的代码会像你安装的应用一样在你的电脑上运行，不在沙盒中。",
+  "Its creator hasn’t shared this game’s project yet, so it can’t be remixed.":
+    "作者还没有分享这个游戏的项目，所以暂时不能改编。",
   "Its files are in your game folder, waiting for the lead to use them.":
     "它的文件在你的游戏文件夹中，等待主智能体使用。",
   "Its own scene": "独立场景",
   "Its packages aren’t installed yet — “{install}” runs on one press.": "依赖包还没安装——点一下即可运行“{install}”。",
   "Its packages aren’t installed yet.": "依赖包尚未安装。",
+  "Its project didn’t go, so no one can remix it yet.": "项目没有发送成功，所以暂时没人能改编它。",
+  "Its project is too big to remix: Genex keeps up to 2 GB and 5,000 files.":
+    "项目太大，无法改编：Genex 最多保存 2 GB、5,000 个文件。",
   "Its session failed before it delivered anything.": "它的会话在交付任何内容之前就失败了。",
   "Its source is your own repository: run genex make-remixable in the game’s folder to allow remixing.":
     "它的源码在你自己的仓库里：在游戏文件夹中运行 genex make-remixable 即可允许改编。",
@@ -2669,6 +2681,7 @@ export default {
   "Publish game": "发布游戏",
   "Publish in one click": "一键发布",
   "Publish progress": "发布进度",
+  "Publish their remix on Genex.": "把自己的改编作品发布到 Genex。",
   "Publish this game": "发布这个游戏",
   "Publish this game on Genex": "在 Genex 上发布这个游戏",
   "Publish this game with a playable link": "发布此游戏并获得可游玩的链接",
@@ -2784,6 +2797,7 @@ export default {
   Remix: "改编",
   "Remix progress": "改编进度",
   "Remix {title}": "改编 {title}",
+  "Remixes made before you turn this off stay theirs.": "在你关闭之前做出的改编作品仍归改编者所有。",
   "Remixing {title}": "正在改编 {title}",
   "Remixing…": "正在改编…",
   Remove: "移除",
@@ -2913,6 +2927,7 @@ export default {
   "Rigged model": "绑骨模型",
   "Rigged, animated and ready for your game.": "已绑骨、带动画，可直接用于你的游戏。",
   "Rigging · animation": "绑骨 · 动画",
+  Rights: "权利",
   "Roblox Studio closed. It asked to save anything unsaved first.":
     "Roblox Studio 已关闭。关闭前它提示过保存未保存的内容。",
   "Roblox Studio didn't say what {name} is. If a play test or a dialog is open in Studio, finish it, then choose the place again.":
@@ -3715,6 +3730,7 @@ export default {
     "这些文件过大，无法保存，因此回退时保持原样：{files}。",
   "These surfaces need different text colors. Use similar background brightness, or reset this theme.":
     "这些表面需要不同的文字颜色。请使用亮度相近的背景，或重置此主题。",
+  "They can": "他们可以",
   "They get the Genex download page with a card from you.": "对方会收到 Genex 下载页面和一张来自你的卡片。",
   "They get the Genex download page with a card from you. You get {count} credits when they make their first game.":
     "对方会收到 Genex 下载页面和一张来自你的卡片。对方做出第一款游戏后，你将获得 {count} 积分。",
@@ -4242,6 +4258,7 @@ export default {
   "What it did": "操作记录",
   "What it does": "它能做什么",
   "What phone players get. Your choice wins over the automatic check.": "手机玩家看到的内容。你的选择优先于自动检查。",
+  "What remixers can do": "改编者可以做什么",
   "What should it show? Or leave it empty": "要展示什么？也可以留空",
   "What should the worker do instead?": "助手应该改做什么？",
   "What the new cover should show": "新封面要展示的内容",

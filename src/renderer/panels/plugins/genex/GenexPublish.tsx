@@ -57,6 +57,7 @@ import {
 import { drawRocket, ROCKET_FPS, ROCKET_FRAMES, ROCKET_GRID, rocketScene } from "./publish-rocket.ts";
 import { useGenexStatus } from "./use-genex-status.ts";
 import { CoverControls, CoverMedia, CoverTool } from "./PublishCover.tsx";
+import { RemixChoice, RemixRights, remixAllowedNow } from "./PublishRemix.tsx";
 import { CoverKind } from "./cover-asks.ts";
 import { type PublishCover, useElapsed, usePublishCover } from "./use-publish-cover.ts";
 import { Pressing, usePublishRecord } from "./use-publish-record.ts";
@@ -714,7 +715,7 @@ export function GenexPublishDialog({
       headerHidden
       className="genex-publish-dialog"
     >
-      <PublishBody view={view} record={record} project={project ?? ""} cover={cover} onClose={onClose} />
+      <PublishOrRights view={view} record={record} project={project ?? ""} cover={cover} onClose={onClose} />
       {record.review && <PluginApproval review={record.review} onClose={record.closeReview} />}
     </DialogSurface>
   );
@@ -742,6 +743,10 @@ function useAppsPublish(
   };
 }
 
+/** Whether Allow remixing shows under the press: only while there is a publish to press that would carry it. */
+const remixLineShown = (pressShown: boolean, publishing: boolean, view: PublishView, waiting: boolean): boolean =>
+  pressShown && !publishing && !view.terms && !waiting;
+
 /** The main press's own words: Save name while it celebrates, a game's apps, else the view's. */
 const pressLabel = (celebrate: boolean, apps: string | null): string | undefined =>
   celebrate ? WORDS.saveName : (apps ?? undefined);
@@ -760,6 +765,35 @@ function useCelebration(view: PublishView, publishing: boolean): boolean {
   return celebrate;
 }
 
+/** What the dialog shows the publish with: its record, the game, its cover, and the way to close it. */
+interface PublishBodyProps {
+  view: PublishView;
+  record: ReturnType<typeof usePublishRecord>;
+  project: string;
+  cover: PublishCover;
+  onClose: () => void;
+}
+
+/**
+ * The publish, or the page on what remixers can do while Rights has it open. The person's tick of
+ * Allow remixing lives here, so it outlasts a look at that page.
+ */
+function PublishOrRights(props: PublishBodyProps): JSX.Element {
+  const [ticked, setTicked] = useState<boolean | null>(null);
+  const [rights, setRights] = useState(false);
+  const gameTitle = useLibrary((s) => s.games.find((g) => g.name === props.project)?.title);
+  if (rights)
+    return (
+      <RemixRights title={offeredTitle(props.record.state, gameTitle, props.project)} onBack={() => setRights(false)} />
+    );
+  const remix = {
+    allowed: remixAllowedNow(props.record.state?.remix, ticked),
+    onAllowed: setTicked,
+    onRights: () => setRights(true),
+  };
+  return <PublishBody {...props} remix={remix} />;
+}
+
 /**
  * The read record: the banner with the game's name and where it is, then what the moment needs:
  * the platforms a game with an app is built for, the running attempt's progress, the celebration
@@ -771,12 +805,10 @@ function PublishBody({
   project,
   cover,
   onClose,
-}: {
-  view: PublishView;
-  record: ReturnType<typeof usePublishRecord>;
-  project: string;
-  cover: PublishCover;
-  onClose: () => void;
+  remix,
+}: PublishBodyProps & {
+  /** Allow remixing: whether this publish sends the game's project, and the presses that change it. */
+  remix: { allowed: boolean; onAllowed: (allowed: boolean) => void; onRights: () => void };
 }): JSX.Element {
   const gameTitle = useLibrary((s) => s.games.find((g) => g.name === project)?.title);
   const [title, setTitle] = useState<string | null>(null);
@@ -790,6 +822,7 @@ function PublishBody({
   const open = () => void record.act(GenexAction.PublishOpen, { target: LinkTarget.Gallery });
   const opening = record.pressing === Pressing.Action;
   const { platforms, behind, apps, waiting } = useAppsPublish(project, record.state?.native);
+  const pressShown = !celebrate || renamed;
   return (
     <div
       className="genex-publish-body"
@@ -825,7 +858,7 @@ function PublishBody({
         {view.running && <Progress view={view} />}
         {failure && !publishing && <p className="genex-publish-failure">{failure.text}</p>}
         <PublishShareLine share={share} celebrate={celebrate} />
-        {(!celebrate || renamed) && (
+        {pressShown && (
           <Presses
             view={view}
             record={record}
@@ -835,6 +868,15 @@ function PublishBody({
             label={pressLabel(celebrate, apps)}
             apps={apps !== null}
             waiting={waiting}
+            remix={remix.allowed}
+          />
+        )}
+        {remixLineShown(pressShown, publishing, view, waiting) && (
+          <RemixChoice
+            record={record.state?.remix}
+            allowed={remix.allowed}
+            onAllowed={remix.onAllowed}
+            onRights={remix.onRights}
           />
         )}
         {!publishing && <Links view={view} project={project} onOpen={open} opening={opening} />}
@@ -938,12 +980,15 @@ function Presses({
   label,
   apps = false,
   waiting = false,
+  remix,
 }: {
   view: PublishView;
   record: ReturnType<typeof usePublishRecord>;
   name: string;
   publishing: boolean;
   project: string;
+  /** Whether the press sends the game's project too, so others can remix it (Allow remixing). */
+  remix: boolean;
   /** The main press's words in place of the view's (Save name, for a rename right after it went live). */
   label?: string;
   /** The game has only apps: the press publishes them instead of a web build. */
@@ -975,7 +1020,7 @@ function Presses({
       aria-label={apps && label ? label : view.primary.ariaLabel}
       aria-busy={publishing || undefined}
       disabled={publishing || waiting || !view.canPublish || record.pressing !== Pressing.None}
-      onClick={() => void (apps ? record.publishApps(name) : record.publish(name))}
+      onClick={() => void (apps ? record.publishApps(name, remix) : record.publish(name, remix))}
     >
       {publishing ? <BusyLabel view={view} /> : (label ?? view.primary.label)}
     </Button>

@@ -93,6 +93,7 @@ import {
   type PlayGame,
   type PlayGameDetail,
   PlayNote,
+  PlayRemixRefusal,
   PlayShelf,
   type PlayShelves,
   PlayViewerPhase,
@@ -840,6 +841,16 @@ describe("Play: a remix shown in Create while it is made", () => {
     const refused = createPlayStore(fakeApi({ playRemix: () => Promise.reject(new Error("no")) }).api, memory());
     await refused.remix(game("c", { remixable: true }));
     assert.equal(refused.getState().remixFailed, true);
+    assert.equal(refused.getState().remixRefusal, null, "a failure names no reason");
+
+    const noProject = createPlayStore(
+      fakeApi({ playRemix: () => Promise.resolve({ refused: PlayRemixRefusal.NoProject }) }).api,
+      memory(),
+    );
+    await noProject.remix(game("d", { remixable: true }));
+    assert.equal(noProject.getState().remixFailed, true, "a source with no game makes nothing");
+    assert.equal(noProject.getState().remixRefusal, PlayRemixRefusal.NoProject, "and the shell says why");
+    assert.equal(noProject.getState().remixed, null);
   });
 
   it("makes the viewer's remix as a card's: the viewer gives way, and main always answers", async () => {
