@@ -4273,7 +4273,7 @@ button.chat-header-title:hover {
 .skeleton-graph {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: safe center;
   gap: 48px;
   height: 100%;
   padding: 32px;
@@ -4288,8 +4288,9 @@ button.chat-header-title:hover {
 /* The Assets tab on its way (AssetsCanvas.tsx): a first screen of tiles, each with its name. */
 .skeleton-tiles {
   display: grid;
-  grid-template-columns: repeat(3, 160px);
+  grid-template-columns: repeat(auto-fill, minmax(120px, 160px));
   gap: 16px;
+  width: min(512px, 100%);
 }
 .skeleton-tile {
   display: flex;

@@ -30,7 +30,6 @@ import {
 } from "./github-install.ts";
 import { PLUGIN_GUIDE_URL } from "./labels.ts";
 import { PluginIcon } from "../../ui/PluginIcon.tsx";
-import { Pending } from "../../ui/Pending.tsx";
 import { SkeletonLines } from "../../ui/Skeleton.tsx";
 
 const WORDS = PLUGINS_WORDS.github;
@@ -127,9 +126,9 @@ function VersionRow({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-64">
           {!versions && !failed && (
-            <Pending label={WORDS.versionsLoading} className="flex flex-col gap-3.5 px-2 py-2.5">
+            <DropdownMenuItem disabled aria-label={WORDS.versionsLoading} className="block py-2.5">
               <SkeletonLines widths={["70%", "55%", "62%"]} />
-            </Pending>
+            </DropdownMenuItem>
           )}
           {failed && <DropdownMenuItem disabled>{WORDS.versionsFailed}</DropdownMenuItem>}
           {versions?.map((version) => (

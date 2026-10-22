@@ -36,7 +36,7 @@ async function pendingModule() {
 /** The text a reader sees: the markup without its tags. */
 const visibleText = (markup: string): string => markup.replace(/<[^>]*>/g, "");
 
-test("a region on its way shows its caller's shape and no words, and announces its label once", async () => {
+test("a region on its way shows its caller's shape and no words, its label held back from the first moments", async () => {
   const { Pending, Skeleton, createElement, renderToStaticMarkup } = await pendingModule();
   const label = "Loading conversation…";
   const shape = createElement(Skeleton, { width: 200, height: 36, radius: 18 });
@@ -45,6 +45,7 @@ test("a region on its way shows its caller's shape and no words, and announces i
   assert.match(markup, /aria-busy="true"/);
   assert.ok(markup.includes(`aria-label="${label}"`), markup);
   assert.equal(visibleText(markup), "", "no words stand in for what is coming");
+  assert.doesNotMatch(markup, /sr-only/, "a short wait is not announced: the label comes in later");
   const blocks = markup.match(/<span aria-hidden="true" class="skeleton[ "][^>]*>/g) ?? [];
   assert.equal(blocks.length, 1, markup);
   assert.match(blocks[0] ?? "", /width:200px;height:36px;border-radius:18px/);

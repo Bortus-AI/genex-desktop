@@ -174,7 +174,7 @@ function StateBody({ view, live, busy }: { view: GenexAccountView; live: GenexLi
   switch (view.kind) {
     case GenexAccountKind.Loading:
       return (
-        <Pending label={WORDS.loading}>
+        <Pending label={WORDS.loading} className="self-stretch">
           <AccountSkeleton />
         </Pending>
       );
@@ -212,7 +212,7 @@ function StateBody({ view, live, busy }: { view: GenexAccountView; live: GenexLi
       );
     case GenexAccountKind.Checking:
       return (
-        <Pending label={WORDS.checking}>
+        <Pending label={WORDS.checking} className="self-stretch">
           <AccountSkeleton />
         </Pending>
       );

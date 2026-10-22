@@ -332,6 +332,8 @@ export function AssetPreview({
   const { mode, model, ready, error } = source;
   const shown = ready && !error;
   const loading = !ready && !error && mode !== "unsupported";
+  // A video or a sound draws its own player while it loads; the shape would cover its controls.
+  const drawsWhileLoading = mode === "video" || mode === "audio";
   const animated = source.animations.length > 0;
   const name = asset.file.split("/").pop() ?? t("Asset preview");
   return (
@@ -362,7 +364,7 @@ export function AssetPreview({
         {model && shown && animated && <AnimationBar source={source} />}
         {loading && (
           <Pending label={ASSET_WORDS.loading} className="pointer-events-none absolute inset-0 grid place-items-center">
-            <Skeleton width={220} height={220} radius={20} />
+            {!drawsWhileLoading && <Skeleton width={220} height={220} radius={20} />}
           </Pending>
         )}
         {error && (

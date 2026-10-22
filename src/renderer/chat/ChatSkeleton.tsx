@@ -30,7 +30,7 @@ export function ChatSkeleton(): JSX.Element {
       </Pending>
       <div aria-hidden className="shrink-0 px-3.5 pb-3.5">
         <div className="composer-panel h-[92px] px-4 py-4">
-          <Skeleton width={130} />
+          <Skeleton width={130} className="pending-late" />
         </div>
       </div>
     </div>
