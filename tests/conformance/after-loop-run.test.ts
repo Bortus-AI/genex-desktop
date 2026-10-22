@@ -551,15 +551,24 @@ describe("the chat's own session after a finished build, with Loop on (reopen-ru
       { label: "Loop on 2h, none named", loopRun: inPlace, commission: { hours: 2 }, hours: undefined, wallClock: 2 },
       { label: "Loop on 2h, 1h named", loopRun: inPlace, commission: { hours: 2 }, hours: 1, wallClock: 1 },
       { label: "a paused build, a new Loop", loopRun: paused, commission: null, hours: 3, wallClock: 3 },
+      { label: "Loop on 2h, until done said", loopRun: inPlace, commission: { hours: 2 }, hours: 0, wallClock: 24 },
     ];
     const seen: Array<{ label: string; stopped: unknown; hours: unknown }> = [];
-    for (const { label, loopRun, commission, hours } of rows) {
+    // Every session engine: the start is bridged in and spelled for each (its own call syntax).
+    const engines = ["codex", "claude-code", "opencode", "local-server"];
+    for (const [index, { label, loopRun, commission, hours }] of rows.entries()) {
       const args = { ...ask, ...(hours === undefined ? {} : { hours }) };
+      const engine = engines[index % engines.length];
       const { outcome, request } = await sessionTurn({
         loopRun,
         commission,
+        engine,
         recorded: [{ name: "start_autopilot", args }],
       });
+      assert.ok(
+        request?.interviewTools?.some((tool) => tool.name === "start_autopilot"),
+        `${label}: ${engine} holds the start`,
+      );
       const prompt = String(request?.prompt);
       assert.match(prompt, /You start Loops yourself/, `${label}: the session is told it starts Loops`);
       assert.doesNotMatch(prompt, /Loop is off\.|[Aa]sk the user to turn/, `${label}: never sent to the switch`);

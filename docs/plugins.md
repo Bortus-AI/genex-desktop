@@ -667,18 +667,23 @@ answers `{answering}`, `{starting}` while Genex is already opening it, or `{star
 job (no C++ build: Unreal's own Open builds a hot-reloaded module) ended what was left of a crashed
 editor and its crash reporter and opened the project; an editor of the game that runs without
 answering is `{busy}` and ended only with `restart: true` (or at once when its log says the port is
-blocked). `quit-editor` saves through the helper's `save_all`, then ends the editor and its crash
-reporter, and refuses an editor it can't save. `editor-status` answers what `editor-state` does,
+blocked). `quit-editor` saves through the helper's `save_all`, then sends Unreal's normal quit and waits
+up to 90 s, never a signal: an editor it can't save, or one still open after the wait, stays open
+with words saying why. `editor-status` answers what `editor-state` does,
 waiting up to `seconds` (at most 170) for an opening to end; `editor-state` stays the harness's, as a
 hooked tool must. `open-editor` and `quit-editor` hold the `editor` lock. `use-project` on a project
 that isn't set up and is open in Unreal sends Unreal's normal quit (Unreal asks about unsaved work:
 the project has no helper to save through), waits up to 90 s for it to close, sets it up and links
-it, then opens it again; two editors, or one that stays open, are refused in words for the person. A
+it, then opens it again; two editors, or one that stays open, are refused in words for the person.
+It holds no lock (one would reach every game, web games too, since it has no `facts`), so it refuses
+to quit while a run going now (`game.engine.runs`) has that project. A
 linked project with no set-up record in this profile (another profile set it up; its record stays in
 that profile's storage) is recorded as it is when its files are set up (`adoptSetUp`: plugins,
 toolsets, a port of Genex's block no other project here holds, a helper), touching nothing and
 quitting nothing; the editor queue's calls, `use-project`, `open-editor` and `open-for-run` all do
-this, and `open-editor` and `open-for-run` set up a project whose files aren't, as `use-project` does. A step runs while the chat is in
+this. `open-editor` sets up a project whose files aren't, as `use-project` does; `open-for-run`
+does so only while Unreal doesn't have it open, and otherwise blocks the Loop's start naming
+`use-project`, never quitting Unreal there. A step runs while the chat is in
 Plan mode unless it writes (`checkpoint: true`), which waits. A held write answers the Unreal
 runner behind its switch the Plan answer (`blocker: "plan_mode"`, `PluginCallBlocker`), which
 `loop/unreal/lead-steps.ts` turns into a refusal. The seed calls no other Unreal tool by name: a
@@ -2658,9 +2663,18 @@ The plugin makes, sets up and opens that project itself (`backend.ts`), with no 
   so the editor keeps running its loop while unfocused: the chat's own wait on `health` after a
   kind change follows an engine link, which Unity has none of.
 - `restart-editor` (a `confirmation`, no lock) ends the game's editor and opens the project again,
-  for an editor that stopped answering while somebody is there to confirm it. It waits 120 s for
-  the new editor, not 150: ending the old one may take half a minute, and the host ends one plugin
-  call at 190 s.
+  for an editor that stopped answering while somebody is there to confirm it. An editor that still
+  answers is saved first (its play stopped, then `saveWork`), so only a stalled one loses work; the
+  confirmation keeps saying work may be lost, since a manifest's `confirmation` is one fixed text
+  and can't depend on whether Unity answers. It waits 120 s for the new editor, not 150: ending the
+  old one may take half a minute, and the host ends one plugin call at 190 s.
+- `quit-editor` (the `editor` lock, no confirmation: it never loses work) lets the agent close Unity
+  itself (`editor-quit.ts`): it stops the agent's own play, saves (`saveWork`), then ends the editor
+  with its clean exit. Unity not open answers that there was nothing to quit; an editor that doesn't
+  answer or is stalled, the person's own play, a save Unity refused or a scene with no file yet
+  refuses and leaves the editor open, naming the call to make next.
+- `setup` on a project Unity never opened (no `Packages/manifest.json`) opens it in its own Unity
+  without waiting, so Unity writes the manifest, and tells the agent to call `setup` again.
 
 The six harness-only `play-*` tools implement the shared editor computer contract
 ([computer use](computer-use.md#game-engines-and-other-targets)). Each requires the `editor` lock
@@ -2810,7 +2824,7 @@ nobody is at a play the agent did not start, saying `wentAhead` the first time f
 (`went-ahead/<game>.json`); while it is off, agents wait for the person's play to end. An editor that can't be asked answers nothing: Genex can't
 tell, and the agents' calls wait. A stalled one says nobody is there once the computer was left
 alone for five minutes, so that the recovery above can take the lock. `save-all`, `end-editor`,
-`reopen-editor`, `open-for-run` and `scene-shots` need the lock; the probe, `editor-state` and
+`reopen-editor`, `open-for-run`, `scene-shots` and `quit-editor` need the lock; the probe, `editor-state` and
 `restart-editor` do not: a restart is the person's own confirmed word, and must not wait on a probe
 a stalled editor can't answer.
 

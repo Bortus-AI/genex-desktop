@@ -8,7 +8,7 @@
  * reply ends.
  */
 import { appLanguage } from "./app-language.ts";
-import { GIT_TIMEOUT_MS, MIN_DELEGATE_TIMEOUT_MS } from "./config.ts";
+import { GIT_TIMEOUT_MS, hoursNamed, MIN_DELEGATE_TIMEOUT_MS } from "./config.ts";
 import { GIT, gitAt } from "./git.ts";
 import {
   buildContractorBrief,
@@ -859,25 +859,19 @@ function chatWroteIt(options: DelegatedOptions): boolean {
 }
 
 /**
- * The Loop the user asked for in words, for the hours they named, else the hours the message's Loop
- * switch holds (none: until done), on this message's pictures.
+ * The Loop the user asked for in words, for the hours they named (0: until done), else the hours the
+ * message's Loop switch holds (none: until done), on this message's pictures.
  */
 function loopAskedInWords(hours: unknown, options: DelegatedOptions): AnyRecord {
-  const named = hoursNamed(hours);
-  const switched = Number((options.autopilot ?? options.loop)?.hours);
-  const chosen = named > 0 ? named : switched;
+  const chosen = hoursChosen(hoursNamed(hours), Number((options.autopilot ?? options.loop)?.hours));
   const stills = messageStills(options);
   return { ...(chosen > 0 ? { hours: chosen } : {}), ...(stills.length ? { frames: [...stills] } : {}) };
 }
 
-/** A number of hours, or minutes when it says so; NaN when it names none. */
-const HOURS_TEXT = /^\s*(\d*\.?\d+)\s*(m\b|mins?\b|minutes?)?/i;
-
-/** The hours an engine sent, as a number: 3, "3", "3h" or "2.5 hours"; "30m" is half an hour. */
-function hoursNamed(hours: unknown): number {
-  const match = HOURS_TEXT.exec(String(hours ?? ""));
-  if (!match) return Number.NaN;
-  return Number(match[1]) / (match[2] ? 60 : 1);
+/** The hours named win, 0 meaning until done; with none named, the switch's. */
+function hoursChosen(named: number, switched: number): number {
+  if (named >= 0) return named;
+  return switched;
 }
 
 function launchToolName(options: DelegatedOptions): string | null {
@@ -1588,7 +1582,9 @@ type Launch = { tool: HarnessTool; inWords: boolean };
 /** The commission a launch reads: the words' for a Loop asked in words, else the message's Loop switch. */
 function launchCommission(options: DelegatedOptions, launch: Launch, args: AnyRecord): AnyRecord {
   // The switch's own picks (its roles) go with it; the words' hours and the message's pictures win.
-  if (launch.inWords) return { autopilot: { ...(options.autopilot ?? {}), ...loopAskedInWords(args.hours, options) } };
+  // Its hours are the words' (or the switch's, `loopAskedInWords`): none left means until done.
+  if (launch.inWords)
+    return { autopilot: { ...(options.autopilot ?? {}), hours: null, ...loopAskedInWords(args.hours, options) } };
   if (options.loop) return { loop: options.loop, ...(options.autopilot ? { autopilot: options.autopilot } : {}) };
   return { autopilot: options.autopilot ?? loopAskedInWords(args.hours, options) };
 }

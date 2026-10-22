@@ -248,6 +248,10 @@ const MESSAGE = {
     `Unreal had ${name} open, so Genex quit it, set it up for Genex and linked this game to it (${file}); the chat shows both with one Undo. Unreal didn't open it again: ${why.replace(/\.?$/, ".")} Call unreal__open-editor.`,
   SetUpNotClosed: (name: string) =>
     `Genex asked Unreal to quit ${name} so it can set it up, but it is still open after ${QUIT_WAIT_MS / SECOND_MS} s: Unreal may be asking whether to save changes. Ask the user to answer it in Unreal, then call unreal__use-project again.`,
+  SetUpLooped: (title: string, name: string) =>
+    `${title}'s Loop is using ${name} in Unreal, so Genex didn't quit it to set it up. Call unreal__use-project again once that Loop has ended.`,
+  SetUpNotQuitForRun: (name: string) =>
+    `${name} isn't set up for Genex here, and Unreal has ${name} open, so Genex didn't quit it at the Loop's start. Call unreal__use-project with its .uproject path (it quits Unreal, sets the project up and opens it again), then start the Loop again.`,
   SetUpTwoEditors: (name: string) =>
     `Two Unreal editors are open, so Genex can't tell which one to quit to set up ${name}. Ask the user to quit the one that has ${name} open, then call unreal__use-project again.`,
   SetUpRefused: (name: string, why: string) => `Genex couldn't set up ${name}: ${why}`,
@@ -919,12 +923,13 @@ async function gameEditor(deps: UnrealBackendDeps, storage: string, game: string
  * profile set it up, or nobody did): recorded as it is when its files are set up, else set up as
  * `use-project` does, quitting Unreal first when it has the project open. Nothing without a link.
  */
-async function setUpLinked(deps: UnrealBackendDeps, storage: string, game: string): Promise<void> {
+async function setUpLinked(deps: UnrealBackendDeps, storage: string, game: string, mayQuit: boolean): Promise<void> {
   const file = await linkedProject(storage, game);
   if (!file || (await recordOf(storage, file))) return;
   const options: LaunchOptions = { env: deps.env, helper: deps.helper, storage, launch: deps.launch };
   if (await adoptSetUp(file, options)) return;
-  await setUpForLink(deps, file, options, (await inspectProject(file, options)).name);
+  const policy = mayQuit ? MAY_QUIT : null;
+  await setUpForLink(deps, file, options, (await inspectProject(file, options)).name, policy);
 }
 
 /** An editor answer as the Loop reads it: the Genex editor helper answers JSON text. */
@@ -977,7 +982,7 @@ function loopTools(deps: UnrealBackendDeps) {
       forget: (storage, project) => retireStarting(storage, project),
     },
     watchCrash: (storage, game) => gameCrashCheck(deps, storage, game),
-    setUpLinked: (storage, game) => setUpLinked(deps, storage, game),
+    setUpLinked: (storage, game, mayQuit) => setUpLinked(deps, storage, game, mayQuit),
     // A game whose project isn't set up has no start of Genex's to read.
     starting: async (storage, game) => {
       const editor = await gameEditor(deps, storage, game).catch(() => undefined);
@@ -1052,6 +1057,26 @@ async function quitForSetUp(deps: UnrealBackendDeps, file: string, options: Laun
   if (!closed) throw new Error(MESSAGE.SetUpNotClosed(name));
 }
 
+/**
+ * Whether a set-up may quit the Unreal that has the project open: never (a Loop's start, where the
+ * agent links the project itself), or once `check` found nothing that holds it (it throws why).
+ */
+type QuitPolicy = { check: () => Promise<void> } | null;
+
+/** Any quit is fine: the caller holds the game's editor lock. */
+const MAY_QUIT: QuitPolicy = { check: async () => {} };
+
+/**
+ * Refuses while a run going now (a Loop, which holds that game's editor lock) has `file` as its
+ * project: `use-project` needs no lock of its own, which would reach every game, web games too.
+ */
+async function refuseWhileLooped(context: PluginContext, file: string, name: string): Promise<void> {
+  const answer: unknown = await context.host(HostService.EngineRuns).catch(() => []);
+  const runs = Array.isArray(answer) ? answer.filter(isEngineRun) : [];
+  for (const run of runs)
+    if (await sameProject(file, run.project)) throw new Error(MESSAGE.SetUpLooped(run.title, name));
+}
+
 /** A project set up for a link, and whether Genex quit Unreal to set it up (so it opens it again). */
 type SetUpForLink = { state: ProjectState; quit: boolean };
 
@@ -1065,9 +1090,12 @@ async function setUpForLink(
   file: string,
   options: LaunchOptions,
   name: string,
+  policy: QuitPolicy,
 ): Promise<SetUpForLink> {
   const first = await setUpOnce(file, options, name);
   if (first) return { state: first, quit: false };
+  if (!policy) throw new Error(MESSAGE.SetUpNotQuitForRun(name));
+  await policy.check();
   await quitForSetUp(deps, file, options, name);
   const again = await setUpOnce(file, options, name).catch(async (error: unknown) => {
     await openEditor(file, options).catch(() => undefined);
@@ -1097,7 +1125,7 @@ async function useProject(deps: UnrealBackendDeps, file: string, context: Plugin
     const link = await context.host(HostService.EngineLink, { project: realProjectFile(ready) });
     return { link, setUp: false };
   }
-  const made = await setUpForLink(deps, file, options, name);
+  const made = await setUpForLink(deps, file, options, name, { check: () => refuseWhileLooped(context, file, name) });
   const setUp = !undoable;
   const project = realProjectFile(made.state);
   let link: PluginEngineLink;

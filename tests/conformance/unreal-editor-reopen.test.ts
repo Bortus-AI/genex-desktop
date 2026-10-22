@@ -897,11 +897,35 @@ describe("the agent's open-editor", () => {
 });
 
 describe("the agent's quit-editor", () => {
-  it("saves the editor's work, then quits it and ends its crash reporter", async () => {
+  it("saves the editor's work, then quits it by Unreal's own quit, never a signal", async () => {
     const w = await reopenWorld({ answering: true, rows: (p) => [ownEditor(p)], editorCall: saves() });
-    assert.deepEqual(await w.agentCall(EditorControlToolName.QuitEditor), { closed: true, ended: 2 });
+    assert.deepEqual(await w.agentCall(EditorControlToolName.QuitEditor), { closed: true });
     assert.deepEqual(w.events, ["save", `quit ${NAME}.uproject`], "saved before the normal quit");
-    assert.deepEqual(w.rows, []);
+    assert.deepEqual(w.signals, [], "nothing is terminated or killed");
+    assert.deepEqual(
+      w.rows.map((row) => row.pid),
+      [7900],
+      "the editor quit; a crash reporter is open-editor's to end",
+    );
+  });
+
+  it("leaves an editor that doesn't close after the quit open, sending no signal, and says why", async () => {
+    const w = await reopenWorld({
+      answering: true,
+      rows: (p) => [ownEditor(p)],
+      stubborn: { 8000: { quit: true } },
+      editorCall: saves(),
+    });
+    await assert.rejects(w.agentCall(EditorControlToolName.QuitEditor), (error: Error) => {
+      assert.match(error.message, /still open/);
+      assert.match(error.message, /unreal__quit-editor/);
+      return true;
+    });
+    assert.deepEqual(w.signals, [], "never terminated or killed: work made since the save stays");
+    assert.ok(
+      w.rows.some((row) => row.pid === 8000),
+      "Unreal stays open",
+    );
   });
 
   it("leaves Unreal open, ending nothing, when its work stays unsaved", async () => {
@@ -924,9 +948,9 @@ describe("the agent's quit-editor", () => {
     assert.deepEqual([w.events, w.signals], [[], []]);
   });
 
-  it("ends a crash reporter left behind when no editor of the game runs", async () => {
+  it("answers that Unreal is closed, quitting and ending nothing, when no editor of the game runs", async () => {
     const w = await reopenWorld();
-    assert.deepEqual(await w.agentCall(EditorControlToolName.QuitEditor), { closed: true, ended: 1 });
-    assert.deepEqual(w.signals, [[7900, "SIGTERM"]]);
+    assert.deepEqual(await w.agentCall(EditorControlToolName.QuitEditor), { closed: true });
+    assert.deepEqual([w.events, w.signals], [[], []]);
   });
 });

@@ -5,14 +5,17 @@
  * editor of it that runs without answering is ended only when the agent asks for a `restart` (it
  * may be busy, and its unsaved work is lost), or at once when its own log says Epic's server
  * couldn't listen on the game's port. `quit-editor` saves every unsaved level and asset in it, then
- * ends it; it never ends an editor whose work it couldn't save. `editor-status` answers what the
+ * sends Unreal's own quit and waits for it to close; it never terminates or kills an editor, so
+ * work made after the save, or a question Unreal asks before quitting, is never lost. `editor-status` answers what the
  * Loop's `editor-state` does (a hooked tool, the harness's alone), waiting up to `seconds` for an
  * opening to end. Opening and quitting need the game's editor lock (`needs: ["editor"]` in the
  * manifest), so none runs while the Loop holds the editor.
  */
 import { SECOND_MS } from "../../shared/duration.ts";
 import { PortBlockedError } from "./editor-log.ts";
+import { pollUntil } from "./editor-queue.ts";
 import { type EditorStateAnswer, type ReopenAnswer, ReopenState } from "./editor-reopen.ts";
+import { QUIT_WAIT_MS } from "./editor-restart.ts";
 import { EditorStart } from "./editor-status.ts";
 import { WAIT_EDITOR_MAX_MS } from "./editor-wait.ts";
 
@@ -30,8 +33,10 @@ export type EditorControlToolName = (typeof EditorControlToolName)[keyof typeof 
  */
 export type OpenEditorAnswer = ReopenAnswer | { starting: true } | { busy: true; next: string };
 /** `quit-editor`'s answer: how many of the project's editor and crash-reporter processes ended. */
-export type QuitEditorAnswer = { closed: true; ended: number };
+export type QuitEditorAnswer = { closed: true };
 
+/** How often `quit-editor` looks whether Unreal closed. */
+const QUIT_POLL_MS = 2 * SECOND_MS;
 /** How often a waiting `editor-status` looks again. */
 const STATE_POLL_MS = 3 * SECOND_MS;
 
@@ -42,6 +47,7 @@ const MESSAGE = {
   NotAnswering:
     "This game's Unreal runs but doesn't answer, so Genex can't save its work and didn't quit it. Call unreal__editor-status with seconds to wait for it; if it still doesn't answer, unreal__open-editor with restart: true ends it (work not saved in it is lost) and opens it again.",
   Unsaved: (names: string) => `Unreal didn't save ${names}, so Genex left it open.`,
+  NotQuit: `Genex saved this game's work and asked Unreal to quit, but it is still open after ${QUIT_WAIT_MS / SECOND_MS} s: it may be asking a question, or another Unreal editor is open (Genex quits only when one is). Call unreal__quit-editor again in a moment; if it stays open, ask the user to look at Unreal.`,
 } as const;
 /** The most unsaved packages a refusal names. */
 const MAX_UNSAVED_NAMED = 5;
@@ -57,9 +63,10 @@ export type EditorControlDeps = {
   setUp?(storage: string, game: string): Promise<void>;
   /** Saves every unsaved level and asset in the game's open editor (a play session ended first); what stayed unsaved. */
   save(storage: string, game: string): Promise<{ dirty: string[] }>;
+  /** Unreal's own quit for the project (the panel's Quit); refuses with two editors open. */
+  quit(storage: string, project: string): Promise<unknown>;
   reopen: {
     open(storage: string, game: string): Promise<ReopenAnswer>;
-    end(storage: string, game: string): Promise<{ ended: number }>;
     state(storage: string, game: string): Promise<EditorStateAnswer>;
     running(storage: string, game: string): Promise<boolean | null>;
   };
@@ -104,18 +111,24 @@ async function openEditor(deps: EditorControlDeps, storage: string, game: string
 }
 
 /**
- * `quit-editor`: saves the game's editor and ends it with its crash reporter. An editor that doesn't
- * answer is ended only when none of the project's runs (a crash reporter left behind); one whose
- * work stayed unsaved is left open.
+ * `quit-editor`: saves the game's editor, then sends Unreal's own quit and waits up to
+ * {@link QUIT_WAIT_MS} for it to close. Nothing is sent to an editor that doesn't answer (its work
+ * can't be saved) or whose work stayed unsaved; one still open after the wait is left open.
  */
 async function quitEditor(deps: EditorControlDeps, storage: string, game: string): Promise<QuitEditorAnswer> {
-  await linkedProject(deps, storage, game);
-  if ((await answerOf(deps, storage, game)) === true) {
-    const { dirty } = await deps.save(storage, game);
-    if (dirty.length > 0) throw new Error(MESSAGE.Unsaved(dirty.slice(0, MAX_UNSAVED_NAMED).join(", ")));
-  } else if ((await deps.reopen.running(storage, game)) !== false) throw new Error(MESSAGE.NotAnswering);
-  const { ended } = await deps.reopen.end(storage, game);
-  return { closed: true, ended };
+  const project = await linkedProject(deps, storage, game);
+  const closed = async () => (await deps.reopen.running(storage, game)) === false;
+  if ((await answerOf(deps, storage, game)) !== true) {
+    if (await closed()) return { closed: true };
+    throw new Error(MESSAGE.NotAnswering);
+  }
+  const { dirty } = await deps.save(storage, game);
+  if (dirty.length > 0) throw new Error(MESSAGE.Unsaved(dirty.slice(0, MAX_UNSAVED_NAMED).join(", ")));
+  await deps.quit(storage, project).catch(() => {
+    throw new Error(MESSAGE.NotQuit);
+  });
+  if (!(await pollUntil(deps, closed, QUIT_POLL_MS, QUIT_WAIT_MS))) throw new Error(MESSAGE.NotQuit);
+  return { closed: true };
 }
 
 /** The seconds an `editor-status` call waits, whole and at most {@link WAIT_EDITOR_MAX_MS}; anything else is 0. */
@@ -127,8 +140,10 @@ function waitMsOf(args: Record<string, unknown>): number {
 
 /** Whether an opening has ended: Unreal answers, the reopen failed, or nothing opens it any more. */
 async function settled(deps: EditorControlDeps, storage: string, game: string, state: EditorStateAnswer) {
-  if (state.answering || state.reopening.state === ReopenState.Failed) return true;
+  if (state.reopening.state === ReopenState.Failed) return true;
+  // A reopen job ends once it sees Unreal answer: its own end, not only the answer, is waited for.
   if (state.reopening.state === ReopenState.Reopening) return false;
+  if (state.answering) return true;
   return (await deps.starting?.(storage, game).catch(() => null)) !== EditorStart.Starting;
 }
 

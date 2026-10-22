@@ -367,9 +367,10 @@ export type LoopToolsDeps = {
   restart: EditorRestart;
   /**
    * Sets the game's linked project up in this profile when it has no set-up record here (another
-   * profile set it up): the backend's own, which may quit Unreal first; without it nothing is set up.
+   * profile set it up): the backend's own, which quits Unreal first only when `mayQuit` (else it
+   * refuses while Unreal has the project open); without it nothing is set up.
    */
-  setUpLinked?(storage: string, game: string): Promise<void>;
+  setUpLinked?(storage: string, game: string, mayQuit: boolean): Promise<void>;
   /** Starts watching the game's editor for a crash (its log and its process); without it the queue sees none. */
   watchCrash?(storage: string, game: string): Promise<CrashCheck>;
   /** This computer's processes, for ending a crashed editor and its crash reporter; without them none is ended. */
@@ -754,6 +755,12 @@ export function createLoopTools(deps: LoopToolsDeps) {
   };
 }
 
+/** `open-editor`'s set-up of a project this profile has no record of: it holds the editor lock, so it may quit Unreal. */
+const setUpThenOpen =
+  (setUpLinked: NonNullable<LoopToolsDeps["setUpLinked"]>) =>
+  (storage: string, game: string): Promise<void> =>
+    setUpLinked(storage, game, true);
+
 /** The agent's own editor tools (`editor-control.ts`) over the reopen jobs: open, quit and where it stands. */
 function controlHandlers(
   deps: LoopToolsDeps,
@@ -763,8 +770,9 @@ function controlHandlers(
     project: deps.project,
     editorAnswers: deps.editorAnswers,
     ...(deps.starting ? { starting: deps.starting } : {}),
-    ...(deps.setUpLinked ? { setUp: deps.setUpLinked } : {}),
+    ...(deps.setUpLinked ? { setUp: setUpThenOpen(deps.setUpLinked) } : {}),
     save: (storage, game) => saveAll(deps, storage, game),
+    quit: deps.restart.quit,
     reopen,
     now: deps.now,
     sleep: deps.sleep,
@@ -978,7 +986,8 @@ function editorOps(
     save: () =>
       saveAll(deps, storage, game, context.hook?.on === HookEvent.CheckpointBefore ? CHECKPOINT_SAVE : MOMENT_SAVE),
     end: () => reopen.end(storage, game),
-    setUp: async () => deps.setUpLinked?.(storage, game),
+    // At a Loop's start Unreal is never quit to set the project up: the agent links it itself.
+    setUp: async () => deps.setUpLinked?.(storage, game, false),
     reopen: (helper) => reopen.reopen(storage, game, helper),
     state: () => reopen.state(storage, game),
     start: async () => (deps.starting ? deps.starting(storage, game) : null),

@@ -3975,6 +3975,33 @@ describe("a Loop asked for in words with Mode on Auto (auto-loop)", () => {
     assert.equal(launch?.onlyWhenAsked, true, "called only when asked: messages still join the turn");
   });
 
+  it("auto-loop. a direct engine's chat (its tool loop, Loop off) starts the Loop it is asked for, for the hours named; a run's own turn never does", async () => {
+    const { tools } = await import("../../src/harness-seed/tools/game-tools.ts");
+    const { ctxRecorder } = await import("../helpers/ctx-recorder.ts");
+    const startAutopilot = tools.find((tool) => tool.name === "start_autopilot");
+    assert.ok(startAutopilot);
+    const call = async (args: Record<string, unknown>, extra: Record<string, unknown>) =>
+      startAutopilot.execute({ goal: "g", direction: "d", ...args }, ctxRecorder({ extra }).ctx) as Promise<
+        Record<string, any>
+      >;
+    const rows = [
+      { label: "1h named", args: { hours: "1h" }, extra: { engine: "ollama" }, hours: 1 },
+      { label: "30m named", args: { hours: "30m" }, extra: { engine: "ollama" }, hours: 0.5 },
+      { label: "none named: until done", args: {}, extra: { engine: "ollama" }, hours: 24 },
+      { label: "a run's own turn", args: { hours: 1 }, extra: { engine: "ollama", runId: "run_x" }, hours: null },
+      { label: "a follow-up's turn", args: { hours: 1 }, extra: { engine: "ollama", followupOf: "m1" }, hours: null },
+    ];
+    const seen = [];
+    for (const { label, args, extra } of rows) {
+      const outcome = await call(args, extra);
+      seen.push({ label, hours: outcome.ok ? outcome.details?.run?.hours : null });
+    }
+    assert.deepEqual(
+      seen,
+      rows.map(({ label, hours }) => ({ label, hours })),
+    );
+  });
+
   it('auto-loop. "30m" is half an hour, never 30 hours', async () => {
     const { rig, thread } = await autoChat({ ...ask, hours: "30m" });
     await rig.core.sendUserMessage("Start a 30 minute Loop", { thread, engine: "vendor" });
@@ -14848,11 +14875,43 @@ describe("the user's ask to finish a running build (director/wrap-up.ts)", () =>
 
     const { nextLoopOf } = await import("../../src/harness-seed/loop/next-loop-record.ts");
     const { startNextLoop } = await import("../../src/harness-seed/loop/next-loop.ts");
-    const log = [{ data: { type: "custom", event_type: RunEvent.RunControl, payload: ask } }];
-    assert.equal(nextLoopOf(log as never, "run_j")?.hours, 1);
-    assert.equal(nextLoopOf(log as never, "run_other"), null, "another run's ask starts nothing");
-    const plain = [{ data: { type: "custom", event_type: RunEvent.RunControl, payload: { ...ask, next: undefined } } }];
-    assert.equal(nextLoopOf(plain as never, "run_j"), null, "a plain ask to finish starts nothing");
+    const custom = (eventType: string, payload: Record<string, unknown>) => ({
+      data: { type: "custom", event_type: eventType, payload },
+    });
+    const asked = custom(RunEvent.RunControl, ask as Record<string, unknown>);
+    const finished = custom(RunEvent.RunFinished, { runId: "run_j" });
+    const rows = [
+      { label: "finished after the ask", log: [asked, finished], hours: 1 },
+      { label: "not closed yet", log: [asked], hours: null },
+      {
+        label: "paused (a limit, a Stop): its resume goes on",
+        log: [asked, finished, custom(RunEvent.AutopilotPaused, { runId: "run_j" })],
+        hours: null,
+      },
+      {
+        label: "resumed or reopened since: the old ask is spent",
+        log: [asked, custom(RunEvent.RunRegistered, { runId: "run_j" }), finished],
+        hours: null,
+      },
+      {
+        label: "another run's ask",
+        log: [custom(RunEvent.RunControl, { ...ask, runId: "run_other" }), finished],
+        hours: null,
+      },
+      {
+        label: "a plain ask to finish",
+        log: [custom(RunEvent.RunControl, { ...ask, next: undefined }), finished],
+        hours: null,
+      },
+    ];
+    assert.deepEqual(
+      rows.map(({ label, log }) => ({ label, hours: nextLoopOf(log as never, "run_j")?.hours ?? null })),
+      rows.map(({ label, hours }) => ({ label, hours })),
+    );
+    const { nextLoopFrom } = await import("../../src/harness-seed/loop/next-loop-record.ts");
+    assert.equal(nextLoopFrom({ next_goal: "g", next_hours: "30m" })?.hours, 0.5, "30m is half an hour");
+    assert.equal(nextLoopFrom({ next_goal: "g", next_hours: "0" })?.hours, null, "0 is until done");
+    const log = [asked, finished];
 
     // A Stop pressed since the ask wins: the log is not even read.
     const calls: string[] = [];
