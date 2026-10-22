@@ -4307,6 +4307,54 @@ button.chat-header-title:hover {
   }
 }
 
+/* A game's first message while it cannot go yet: the provider's mark, what it waits for, one action. */
+.held-send-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 14px 14px 16px;
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+}
+.held-send-mark {
+  flex: none;
+  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.35));
+}
+.held-send-title {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.held-send-line {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--ink-3);
+}
+.held-send-action {
+  flex: none;
+  height: 32px;
+  padding-inline: 14px;
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--ink) 9%, var(--control-hover, var(--hover)));
+  color: var(--ink);
+  font-family: var(--font-family-mono);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 120ms;
+}
+.held-send-action:is(:hover, :focus-visible) {
+  background: color-mix(in oklab, var(--ink) 15%, var(--control-hover, var(--hover)));
+}
+.held-send-action[data-primary] {
+  background: var(--accent-fill);
+  color: var(--accent-foreground);
+}
+.held-send-action[data-primary]:is(:hover, :focus-visible) {
+  background: var(--accent-hover);
+}
+
 /* Only current work animates. History and disclosures mount without entrance choreography. */
 .chat-status-shimmer {
   --shimmer-rest: color-mix(in oklab, var(--ink-3) 82%, var(--background));
@@ -8151,6 +8199,40 @@ a:focus-visible {
 }
 p.usage-divider {
   padding-bottom: 6px;
+}
+/* A plan's one problem (signed out, couldn't check) in orange, with its one action beside it. */
+.usage-problem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0 4px;
+  font-family: var(--font-family-content);
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--orange);
+}
+.usage-problem-action {
+  flex: none;
+  height: 24px;
+  padding-inline: 10px;
+  border-radius: 8px;
+  /* Settings' grey a step above the panel: a filled button, quieter than the accent. */
+  background: color-mix(in oklab, var(--ink) 9%, var(--control-hover, var(--hover)));
+  color: var(--ink);
+  font-family: var(--font-family-mono);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 120ms;
+}
+.usage-problem-action:is(:hover, :focus-visible) {
+  background: color-mix(in oklab, var(--ink) 15%, var(--control-hover, var(--hover)));
+}
+.usage-problem-action[data-primary] {
+  background: var(--accent-fill);
+  color: var(--accent-foreground);
+}
+.usage-problem-action[data-primary]:is(:hover, :focus-visible) {
+  background: var(--accent-hover);
 }
 /* A plan's usage while it is read: bars the size of the text they stand in for, swept by the same
    soft light as current work (`chat-status-shimmer`), still under reduced motion. */

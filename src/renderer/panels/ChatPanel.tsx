@@ -25,6 +25,7 @@ import { stepsOffer } from "../chat/engine-steps.ts";
 import { EngineStepsCard } from "../chat/EngineStepsCard.tsx";
 import { RewindDialog } from "../chat/RewindDialog.tsx";
 import { type ChatParts, useChatPanel } from "../chat/use-chat-panel.ts";
+import { HeldState } from "../chat/use-launch-handover.ts";
 import { chatPlaceholder } from "../composer-placeholder.ts";
 import { loopAvailableFor } from "../loop-setting.ts";
 import { notifyProblem } from "../state/toasts.ts";
@@ -85,6 +86,14 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
   );
 }
 
+/**
+ * A new game's held first message already asks for the sign-in, with its own button: the composer's
+ * card shows only once that sign-in is under way, for its steps.
+ */
+function heldAsksSignIn({ handover, composer }: ChatParts): boolean {
+  return handover.held?.state === HeldState.SignedOut && !composer.gate.card?.waiting;
+}
+
 /** The composer and the cards docked above it: sign-in, questions, the plan and consents. */
 function ChatComposer(parts: ChatParts & { composerRef: RefObject<PromptBarHandle | null> }): JSX.Element {
   const { chat, composer, work, submit, composerRef, focusComposer, reply } = parts;
@@ -100,7 +109,7 @@ function ChatComposer(parts: ChatParts & { composerRef: RefObject<PromptBarHandl
       {...(threadId ? { conversationKey: threadId } : {})}
       loading={parts.props.loading}
       connectModel={chat.isStudioThread && !gate.needsSignIn && composer.noModel}
-      signIn={gate.card}
+      signIn={heldAsksSignIn(parts) ? null : gate.card}
       questions={transcript.interviewQuestions.filter((entry) => entry.kind === EntryKind.Question)}
       questionsDisabled={busy || working}
       onAnswerQuestion={(answer) => submit(answer, undefined, true)}
