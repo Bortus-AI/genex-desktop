@@ -53,6 +53,7 @@ function row(overrides: Record<string, unknown> = {}): Record<string, unknown> {
 const MAC_ARM: NativeHost = { platform: NativePlatform.Mac, arch: NativeArch.Arm64, osVersion: "15.1" };
 const MAC_INTEL: NativeHost = { platform: NativePlatform.Mac, arch: NativeArch.X64, osVersion: "14.0" };
 const WINDOWS: NativeHost = { platform: NativePlatform.Windows, arch: NativeArch.X64, osVersion: "10.0.22631" };
+const LINUX: NativeHost = { platform: NativePlatform.Linux, arch: NativeArch.X64, osVersion: "6.8.0" };
 
 const build = (overrides: Partial<NativeBuild> = {}): NativeBuild => {
   const [parsed] = parseNativeBuilds([row()], HOSTS);
@@ -249,6 +250,15 @@ describe("The build for this computer", () => {
     assert.equal(buildFor([windows], WINDOWS), null);
   });
 
+  it("offers Linux this computer's own processor's build, and nothing built for another", () => {
+    const linuxX64 = build({ platform: NativePlatform.Linux, arch: NativeArch.X64, entry: "Dust/Dust.x86_64" });
+    const linuxArm = build({ platform: NativePlatform.Linux, arch: NativeArch.Arm64, entry: "Dust/Dust.arm64" });
+    assert.equal(buildFor([universal, windows, linuxArm, linuxX64], LINUX), linuxX64);
+    assert.equal(buildFor([linuxX64], { ...LINUX, arch: NativeArch.Arm64 }), null);
+    assert.equal(buildFor([universal, windows], LINUX), null);
+    assert.equal(buildFor([{ ...linuxX64, minOs: "99.0" }], LINUX)?.version, linuxX64.version, "no kernel minimum");
+  });
+
   it("plays a game here when it has a web build or a build for this computer", () => {
     assert.equal(playableHere({}, MAC_ARM), true);
     const nativeOnly = (builds: NativeBuild[]) => ({ native: { web: false, engine: null, builds } });
@@ -277,6 +287,12 @@ describe("This computer", () => {
     assert.deepEqual(thisComputer("darwin", "x64", "14.0", rosetta), MAC_INTEL);
     assert.deepEqual(thisComputer("win32", "x64", "10.0.22631", rosetta), WINDOWS);
     assert.equal(asked, 1);
+  });
+
+  it("is a Linux computer by its kernel release's numbers", () => {
+    assert.deepEqual(thisComputer("linux", "x64", "6.8.0-45-generic"), LINUX);
+    assert.deepEqual(thisComputer("linux", "arm64", "6.8.0"), { ...LINUX, arch: NativeArch.Arm64 });
+    assert.equal(thisComputer("linux", "x64", "generic-6.8"), undefined);
   });
 
   it("is unknown for a platform or processor the contract has no name for, or no system version", () => {

@@ -5859,4 +5859,18 @@ export default {
   "×{count} during {phase}": "×{count} на этапе {phase}",
   "— the biggest of them: {problem}": "— главная проблема: {problem}",
   "… Preview truncated at 256 KiB; original unchanged.": "… Превью обрезано на 256 КиБ; оригинал не изменён.",
+  "On this computer": "На этом компьютере",
+  "On this computer · {size}": "На этом компьютере · {size}",
+  "Not for this computer": "Не для этого компьютера",
+  "Couldn’t install: free {size} on this computer and try again.":
+    "Не удалось установить: освободи {size} на этом компьютере и попробуй снова.",
+  "Couldn’t install: this game doesn’t run on this computer.":
+    "Не удалось установить: эта игра не работает на этом компьютере.",
+  "There’s no version of this game for this computer.": "Для этого компьютера нет версии этой игры.",
+  "It isn’t on this computer any more. Install it again.": "Игры больше нет на этом компьютере. Установи её снова.",
+  "It couldn’t start on this computer.": "Не удалось запустить игру на этом компьютере.",
+  "Remove from this computer": "Удалить с этого компьютера",
+  "{title} is removed from this computer. Its saves stay.":
+    "Игра «{title}» удалена с этого компьютера. Сохранения остались.",
+  "Ready to play on this computer.": "Можно играть на этом компьютере.",
 } satisfies LocaleCatalog;
