@@ -170,8 +170,12 @@ describe("Get Roblox Studio when the installer's Studio stays open after the sig
       const backend = createRobloxBackend(mac.deps);
       await backend.action?.("get-studio", {}, context);
       for (let tries = 0; tries < 400 && !mac.state.running; tries++) await nextTurn();
-      for (let tries = 0; tries < 50; tries++) await nextTurn();
-      const signingIn = (await backend.action?.("status", {}, context)) as RobloxStatus;
+      // The job reaches the sign-in once its own checks after the installer have run.
+      let signingIn = (await backend.action?.("status", {}, context)) as RobloxStatus;
+      for (let tries = 0; tries < 400 && signingIn.install?.phase !== "signing-in"; tries++) {
+        await nextTurn();
+        signingIn = (await backend.action?.("status", {}, context)) as RobloxStatus;
+      }
       assert.equal(signingIn.install?.phase, "signing-in");
       assert.deepEqual(quits, [], "never quit before the sign-in");
       const pressed = (await backend.action?.("finish-setup", {}, context)) as { message: string };
