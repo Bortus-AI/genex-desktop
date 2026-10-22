@@ -4579,6 +4579,8 @@ export default {
   "Your one-time code": "일회용 코드",
   "Your open Unity editor, where agents build Unity games.":
     "열려 있는 Unity 에디터예요. 에이전트가 여기서 Unity 게임을 만들어요.",
+  "Your open Roblox Studio, where agents build Roblox games.":
+    "열려 있는 Roblox Studio예요. 에이전트가 여기서 Roblox 게임을 만들어요.",
   "Your open Unreal Editor, where agents build Unreal games.":
     "열려 있는 Unreal 에디터예요. 에이전트가 여기서 Unreal 게임을 만들어요.",
   "Your own answer": "직접 쓴 답변",

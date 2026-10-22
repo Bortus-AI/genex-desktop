@@ -19,6 +19,7 @@ export const CoreFact = {
   UnrealPlugin: "unreal-plugin",
   GodotProject: "godot-project",
   UnityProject: "unity-project",
+  RobloxProject: "roblox-project",
   BlenderAssets: "blender-assets",
 } as const;
 export type CoreFact = (typeof CoreFact)[keyof typeof CoreFact];
@@ -108,6 +109,8 @@ export const CORE_FACT_RULES: readonly FactRule[] = [
   { fact: CoreFact.UnrealPlugin, files: ["**/*.uplugin"], notUnder: ["**/Plugins/"] },
   { fact: CoreFact.GodotProject, files: ["**/project.godot"] },
   { fact: CoreFact.UnityProject, files: ["**/ProjectSettings/ProjectVersion.txt"] },
+  // A Roblox place (binary or XML) or a Rojo project: known while Roblox Studio is off, as Unity is.
+  { fact: CoreFact.RobloxProject, files: ["**/*.rbxl", "**/*.rbxlx", "**/default.project.json"] },
   { fact: CoreFact.BlenderAssets, files: ["**/*.blend"] },
 ];
 

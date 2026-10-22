@@ -1158,7 +1158,8 @@ stale Starting record once the project answers.
 it on (`seedEnabled.roblox = false`): it needs Roblox Studio and a Roblox account, and its
 description and panel say "Not affiliated with Roblox Corporation. For people 18 and over." It
 declares the engine `roblox` (label "Roblox Studio", project files `.rbxl`, `.rbxlx` and
-`.project.json`, fact `roblox-project`, `projectInFolder: false`, play for up to 8 players, and the
+`.project.json`, fact `roblox-project`, which the core table also finds by a place or
+`default.project.json` while the plugin is off, `projectInFolder: false`, play for up to 8 players, and the
 editor apps `com.Roblox.RobloxStudio` and `RobloxStudioBeta.exe`), the `network` capability (hosts
 `setup.rbxcdn.com` for Studio's installer, `127.0.0.1` for the helper link, and GitHub's
 `github.com`, `release-assets.githubusercontent.com`, `objects.githubusercontent.com` and
@@ -1170,7 +1171,7 @@ from Info.plist through `plutil`) with `Contents/MacOS/StudioMCP`, and on Window
 `%LOCALAPPDATA%\Roblox\Versions\version-*\RobloxStudioBeta.exe` beside `mcp.bat`; it refuses
 links out of those folders and a home or LOCALAPPDATA of the other system. Whether Studio runs is
 `pgrep -x RobloxStudio`, or `tasklist` by its full path. The toolbar item `studio` ("Roblox Studio"
-after the host's `box` glyph, scoped to `roblox-project` games like every engine's button) opens the panel; its `toolbar-status` is a
+after the host's `roblox` mark, scoped to `roblox-project` games like every engine's button) opens the panel; its `toolbar-status` is a
 dot: Not installed and Not open `info`, Set up and Starting `warn`, Ready `ok`. Set up holds until
 Genex's setup record (`setup/record.json` in plugin storage) exists; Ready means Studio's own MCP
 server lists an open Studio, asked through the one StudioMCP the backend keeps once Studio runs. Neither the button nor the
@@ -1248,8 +1249,8 @@ keeps the scripts, and warns when the last play found Studio can reach the game'
 (`live-data/<game>.json` in storage, which the play adapter writes), with Studio's switch to turn
 it off.
 
-Its connection `studio` (connector `roblox-studio`, "Roblox Studio, for this game's open place.")
-is Studio's own MCP server passed through. The node bridge (`studio-mcp.ts`, run per game in
+Its connection `studio` (connector `roblox-studio`; the plugin page names it "Roblox Studio",
+"Your open Roblox Studio, where agents build Roblox games.") is Studio's own MCP server passed through. The node bridge (`studio-mcp.ts`, run per game in
 `<storage>/mcp/<game>`) starts `StudioMCP` itself through `studio-client.ts`: on a Mac
 `/Applications/RobloxStudio.app/Contents/MacOS/StudioMCP` with the person's real home from the
 system's user record (the host points HOME at the connection's own folder, and StudioMCP keeps its
@@ -1836,7 +1837,8 @@ folders engines write while they run) that keeps only the files a rule's glob na
 before it reaches a project's marker; the Unity plugin finds its project with the same walk. They
 are matched against the core table (`web-game` by `index.html` outside
 output and vendored folders, `unreal-project`, `unreal-plugin` outside a `Plugins/` folder,
-`godot-project`, `unity-project`, `blender-assets`) and the `detect` rules of the **enabled**
+`godot-project`, `unity-project`, `roblox-project` by a `.rbxl`/`.rbxlx` place or a Rojo
+`default.project.json`, `blender-assets`) and the `detect` rules of the **enabled**
 plugins (an installed plugin that is off detects nothing; source `plugin:<id>`). A fact below a
 folder that already has the same one is dropped. The engine link reads as its engine's declared
 `fact` (`unreal-project` for Unreal) at the project file's folder (source `link`) and stands for the
@@ -1878,8 +1880,8 @@ existing file with the facts' rules alone (so a port never sweeps the new engine
 history, and a generic line the person removed, or a file they deleted, stays that way). The rules are those (`shared/project-workspace.ts`): Genex's table (`unreal-project`
 `Saved/`, `Intermediate/`, `DerivedDataCache/`, `Binaries/` and its plugins' builds;
 `unreal-plugin` `Intermediate/`, `Binaries/`; `godot-project` `.godot/`, keeping `*.import`;
-`unity-project` `Library/`, `Temp/`, `Logs/`, `obj/`, `UserSettings/`; `blender-assets` backups at
-any depth; none for `web-game`), then each enabled plugin's `workspace.ignore`, in plugin id order.
+`unity-project` `Library/`, `Temp/`, `Logs/`, `obj/`, `UserSettings/`; none for `roblox-project`;
+`blender-assets` backups at any depth; none for `web-game`), then each enabled plugin's `workspace.ignore`, in plugin id order.
 Every rule is anchored at its fact's folder (`/Saved/` at the root, `unreal/Saved/` for a project
 in `unreal`), so a Unity `Library/` never hides a folder of that name inside `Assets/`; a pattern
 starting `**/` reaches any depth below it. A plugin's `workspace` and `assets` reach the facts its
@@ -1903,7 +1905,7 @@ the ignore rules when the copy versions them). The Assets tab lists the media of
 `public/assets/` (images, models, audio, video; data a script writes there is no asset, and a
 model's `.bin`/`.mtl` stay readable beside it), then the folders of the facts the game holds (`assetFoldersFor`: none for `unreal-project` and
 `unreal-plugin`, whose `.uasset`/`.umap` packages have no preview; `godot-project` the folder's media; `unity-project`
-`Assets` media; `blender-assets` `.blend` and media; a `web-game` below the root its own two), then
+`Assets` media; none for `roblox-project`, whose assets live in its place and on Roblox; `blender-assets` `.blend` and media; a `web-game` below the root its own two), then
 each enabled plugin's `assets.folders` at its facts' folders, keeping only its `formats` (none: any
 file). `assets.folders` may not name a hidden or bookkeeping folder. Each folder is walked only by
 its exact spelling on disk (on a case-blind disk `assets` is not Unity's `Assets`) and a link at any

@@ -4665,6 +4665,8 @@ export default {
   "Your one-time code": "Твой одноразовый код",
   "Your open Unity editor, where agents build Unity games.":
     "Твой открытый редактор Unity, где агенты собирают игры на Unity.",
+  "Your open Roblox Studio, where agents build Roblox games.":
+    "Твой открытый Roblox Studio, где агенты собирают игры на Roblox.",
   "Your open Unreal Editor, where agents build Unreal games.":
     "Твой открытый Unreal Editor, где агенты собирают игры на Unreal.",
   "Your own answer": "Свой ответ",
