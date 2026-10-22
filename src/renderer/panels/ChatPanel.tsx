@@ -13,6 +13,7 @@
 import type { JSX, RefObject } from "react";
 import { MessageOrigin } from "../../shared/protocol.ts";
 import { RunState } from "../../shared/run-state.ts";
+import { t } from "../../shared/i18n.ts";
 import { EntryKind } from "../chat-entries.ts";
 import { ChatFilesScope, useChatFilesRecheck } from "../chat-files.ts";
 import type { ChatPanelProps } from "../chat/chat-panel-props.ts";
@@ -58,9 +59,13 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
           {loading && (
             <div className="absolute inset-0 bg-page">
               {props.loadError ? (
-                <LoadFailed what="this chat" error={props.loadError} onRetry={props.onRetryLoad} />
+                <LoadFailed
+                  message={t("Could not load this chat.")}
+                  error={props.loadError}
+                  onRetry={props.onRetryLoad}
+                />
               ) : (
-                <Pending label="Loading conversation…" className="p-4 text-sm" />
+                <Pending label={t("Loading conversation…")} className="p-4 text-sm" />
               )}
             </div>
           )}

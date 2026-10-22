@@ -583,7 +583,7 @@ describe("Get Roblox Studio and the steps card", () => {
     const studio = card.steps.find((row) => row.id === "studio");
     assert.deepEqual(studio?.action, { name: "get-studio", args: {}, label: "Get Roblox Studio" });
     const signIn = card.steps.find((row) => row.id === "sign-in");
-    assert.equal(signIn?.detail, MESSAGE.Steps.SignInDetail);
+    assert.equal(signIn?.detail, MESSAGE.Steps.SignInDetail());
     assert.equal(signIn?.action, undefined, "Genex never signs in");
     assert.equal(card.open, true);
     for (const row of card.steps) assert.doesNotMatch(`${row.label} ${row.detail}`, BANNED_WORDS);

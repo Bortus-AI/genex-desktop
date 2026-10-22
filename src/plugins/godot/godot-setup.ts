@@ -10,6 +10,7 @@
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { errorMessage } from "../../shared/errors.ts";
+import { t } from "../../shared/i18n.ts";
 import type { PluginSetupButton, PluginSetupCard, PluginSetupStep } from "../../plugin-sdk/index.d.ts";
 import {
   APP_COPY_MS,
@@ -45,32 +46,37 @@ const SETUP_FOLDER = "godot-setup";
 
 const MEGABYTE = 1024 * 1024;
 
+/**
+ * The card's words. What the person reads on it (and why an install stopped, its row's detail) is
+ * translated when said; what the agent is told (`doneSays`, `stuckSays`) stays English.
+ */
 const WORDS = {
-  Title: "Godot setup",
-  Intro: "One step before the agent can build in Godot.",
-  Working: "Genex is installing Godot. Nothing is needed from you.",
-  Get: "Get Godot 4",
-  GetDetail: "Free and open source, about 170 MB. Genex installs it in Applications.",
-  Downloading: (version: string) => `Downloading Godot ${version}`,
-  Installing: (version: string) => `Installing Godot ${version}`,
-  Bytes: (done: number, total: number) => `${Math.round(done / MEGABYTE)} of ${Math.round(total / MEGABYTE)} MB`,
-  Starting: "Starting…",
-  Ready: (version: string) => `Godot ${version} is installed`,
-  DoItForMe: "Do it for me",
-  TryAgain: "Try again",
-  Stop: "Stop",
-  Skip: "Don't use Godot",
+  Title: () => t("Godot setup"),
+  Intro: () => t("One step before the agent can build in Godot."),
+  Working: () => t("Genex is installing Godot. Nothing is needed from you."),
+  Get: () => t("Get Godot 4"),
+  GetDetail: () => t("Free and open source, about 170 MB. Genex installs it in Applications."),
+  Downloading: (version: string) => t("Downloading Godot {version}", { version }),
+  Installing: (version: string) => t("Installing Godot {version}", { version }),
+  Bytes: (done: number, total: number) =>
+    t("{done} of {total} MB", { done: Math.round(done / MEGABYTE), total: Math.round(total / MEGABYTE) }),
+  Starting: () => t("Starting…"),
+  Ready: (version: string) => t("Godot {version} is installed", { version }),
+  DoItForMe: () => t("Do it for me"),
+  TryAgain: () => t("Try again"),
+  Stop: () => t("Stop"),
+  Skip: () => t("Don't use Godot"),
   Done: (version: string) =>
     `Godot ${version} is installed on this Mac. Go on with the person's game in Godot: call godot__new-game if it has no Godot project yet.`,
   Skipped:
     "The person chose not to use Godot for now (Don't use Godot on the setup card). Offer in one line to build the game as a web game that plays in Genex instead, and do it if they agree.",
   Stuck: (why: string) =>
     `Genex's install of Godot for the person stopped: ${why} Tell them in one line what stopped and that Try again is on the card, or that they can download Godot from godotengine.org and put it in Applications.`,
-  NoRelease: "Godot's releases list no Mac build of Godot 4 right now.",
-  Download: (why: string) => `Couldn't download Godot (${why}). Check your connection, then try again.`,
-  NotGodot: "This Godot isn't signed by the Godot team, so Genex didn't install it.",
-  Copy: (why: string) => `Couldn't put Godot in Applications (${why}).`,
-  YouStopped: "You stopped it. Try again when you want Godot.",
+  NoRelease: () => t("Godot's releases list no Mac build of Godot 4 right now."),
+  Download: (why: string) => t("Couldn't download Godot ({why}). Check your connection, then try again.", { why }),
+  NotGodot: () => t("This Godot isn't signed by the Godot team, so Genex didn't install it."),
+  Copy: (why: string) => t("Couldn't put Godot in Applications ({why}).", { why }),
+  YouStopped: () => t("You stopped it. Try again when you want Godot."),
 } as const;
 
 /** Where Genex's install of Godot stands. Wire values. */
@@ -99,12 +105,12 @@ function row(install: GodotInstall | undefined, job: GodotJob | null): PluginSet
   if (job?.state === GodotJobState.Running && job.unpacking)
     return { id: STEP_ID, label: WORDS.Installing(version), detail: "", done: false, working: true };
   if (job?.state === GodotJobState.Running) {
-    const detail = job.total ? WORDS.Bytes(job.done ?? 0, job.total) : WORDS.Starting;
+    const detail = job.total ? WORDS.Bytes(job.done ?? 0, job.total) : WORDS.Starting();
     return { id: STEP_ID, label: WORDS.Downloading(version), detail, done: false, working: true };
   }
   if (job?.state === GodotJobState.Failed)
-    return { id: STEP_ID, label: WORDS.Get, detail: job.why ?? "", done: false, you: true };
-  return { id: STEP_ID, label: WORDS.Get, detail: WORDS.GetDetail, done: false };
+    return { id: STEP_ID, label: WORDS.Get(), detail: job.why ?? "", done: false, you: true };
+  return { id: STEP_ID, label: WORDS.Get(), detail: WORDS.GetDetail(), done: false };
 }
 
 /** Godot's setup card for this Mac now, the install under way, and whether the person chose Don't use Godot here. */
@@ -115,17 +121,17 @@ export function godotSetupCard(
 ): PluginSetupCard {
   const steps = [row(install, job)];
   const done = install ? `${install.version.major}.${install.version.minor}` : null;
-  const base = { title: WORDS.Title, steps };
-  if (done) return { ...base, intro: WORDS.Intro, open: false, doneSays: WORDS.Done(done) };
-  if (skipped) return { ...base, intro: WORDS.Intro, open: false, doneSays: WORDS.Skipped };
+  const base = { title: WORDS.Title(), steps };
+  if (done) return { ...base, intro: WORDS.Intro(), open: false, doneSays: WORDS.Done(done) };
+  if (skipped) return { ...base, intro: WORDS.Intro(), open: false, doneSays: WORDS.Skipped };
   const running = job?.state === GodotJobState.Running;
   const failed = job?.state === GodotJobState.Failed;
   return {
     ...base,
-    intro: running ? WORDS.Working : WORDS.Intro,
+    intro: running ? WORDS.Working() : WORDS.Intro(),
     open: true,
-    ...(running ? {} : { primary: button(GodotSetupAction.Install, failed ? WORDS.TryAgain : WORDS.DoItForMe) }),
-    secondary: running ? button(GodotSetupAction.Stop, WORDS.Stop) : button(GodotSetupAction.Skip, WORDS.Skip),
+    ...(running ? {} : { primary: button(GodotSetupAction.Install, failed ? WORDS.TryAgain() : WORDS.DoItForMe()) }),
+    secondary: running ? button(GodotSetupAction.Stop, WORDS.Stop()) : button(GodotSetupAction.Skip, WORDS.Skip()),
     ...(failed && !job?.stopped ? { stuckSays: WORDS.Stuck(job?.why ?? "") } : {}),
   };
 }
@@ -161,7 +167,7 @@ export function createGodotInstaller(deps: GodotInstallDeps, storage: () => Prom
 
   const fail = (why: string) => {
     job = stop.signal.aborted
-      ? { state: GodotJobState.Failed, why: WORDS.YouStopped, stopped: true }
+      ? { state: GodotJobState.Failed, why: WORDS.YouStopped(), stopped: true }
       : { state: GodotJobState.Failed, why };
   };
 
@@ -184,7 +190,7 @@ export function createGodotInstaller(deps: GodotInstallDeps, storage: () => Prom
     const place = { applications: deps.applications, name: GODOT_APP, team: GODOT_TEAM_ID, trash: deps.trash };
     await placeApp(deps.run, path.join(unpacked, GODOT_APP), place, signal).catch((error: unknown) => {
       const notSigned = error instanceof AppInstallError && error.problem === AppInstallProblem.NotSigned;
-      throw new Error(notSigned ? WORDS.NotGodot : WORDS.Copy(errorMessage(error)));
+      throw new Error(notSigned ? WORDS.NotGodot() : WORDS.Copy(errorMessage(error)));
     });
   }
 
@@ -193,7 +199,7 @@ export function createGodotInstaller(deps: GodotInstallDeps, storage: () => Prom
     job = { state: GodotJobState.Running };
     const release = await deps.fetch(GODOT_RELEASES, { signal }).then((r) => r.json());
     const asset = godotAsset(release);
-    if (!asset) throw new Error(WORDS.NoRelease);
+    if (!asset) throw new Error(WORDS.NoRelease());
     const current: GodotJob = { state: GodotJobState.Running, version: asset.version };
     job = current;
     const folder = path.join(await storage(), SETUP_FOLDER);
@@ -224,7 +230,7 @@ export function createGodotInstaller(deps: GodotInstallDeps, storage: () => Prom
       stop.abort();
       await running;
       if (job?.state === GodotJobState.Running)
-        job = { state: GodotJobState.Failed, why: WORDS.YouStopped, stopped: true };
+        job = { state: GodotJobState.Failed, why: WORDS.YouStopped(), stopped: true };
     },
     /** The install while it runs, for tests that wait it out. */
     running: (): Promise<void> | null => running,

@@ -27,6 +27,7 @@ import {
 import { ENGINE_LINKS_FOLDER, type PluginBinding } from "../../shared/plugins.ts";
 import { atomicWriteJson, readJsonIfExists } from "../fsx.ts";
 import { projectFileOf, restoreEngineBinding, stillThere, writeEngineBinding } from "../game-engine-binding.ts";
+import { t } from "../../shared/i18n.ts";
 
 /** A game id as it names a link file: a plain folder name, never a path. */
 const GAME_ID = /^[a-zA-Z0-9_-]{1,100}$/;
@@ -34,12 +35,16 @@ const GAME_ID = /^[a-zA-Z0-9_-]{1,100}$/;
 const MAX_LINK_NAME = 80;
 const CONTROL = /[\u0000-\u001f\u007f]/;
 
+/**
+ * What a link refuses with. Undo is the person's, so its words are functions, in their language; a
+ * link is a plugin's call, so its refusals stay English for the plugin and the model behind it.
+ */
 const MESSAGE = {
   GameRequired: "Project required",
   InvalidGame: "Invalid game",
   NoEngine: "This plugin declares no engine, so it can't link a game to a project.",
-  Stale: "This link already changed, so there is nothing to undo.",
-  NoSetUpUndo: "Genex can't take back this project's set-up here, so the link stays.",
+  Stale: () => t("This link already changed, so there is nothing to undo."),
+  NoSetUpUndo: () => t("Genex can't take back this project's set-up here, so the link stays."),
 } as const;
 
 /** A game's link as a plugin reads it: the binding plus the project's name. */
@@ -48,7 +53,7 @@ export type EngineLink = EngineBinding & { name: string };
 /** Undo was asked for a link that is no longer the game's current one. */
 export class EngineLinkStale extends Error {
   constructor() {
-    super(MESSAGE.Stale);
+    super(MESSAGE.Stale());
     this.name = "EngineLinkStale";
   }
 }
@@ -290,7 +295,7 @@ async function takeBackSetUp(
 ): Promise<SetUpUndo | null> {
   if (!current.setUp || !current.link) return null;
   if (await linkedElsewhere(deps.root(pluginId), game, current.link.project, engine)) return SetUpUndo.Kept;
-  if (!deps.undoSetUp) throw new Error(MESSAGE.NoSetUpUndo);
+  if (!deps.undoSetUp) throw new Error(MESSAGE.NoSetUpUndo());
   await deps.undoSetUp(pluginId, game, current.link.project);
   return SetUpUndo.Undone;
 }

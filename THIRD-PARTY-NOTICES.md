@@ -184,9 +184,13 @@ SOFTWARE.
 
 ## Fonts
 
-Zalando Sans SemiExpanded, Geist and Geist Mono are used as published under the SIL Open Font
-License 1.1 (Geist Mono as its Google Fonts Latin subset). Their OFL texts ship beside them in
-`dist/renderer/fonts`. Copies with their OFL texts in `design/genex-promo-video/public/fonts` and
+Zalando Sans SemiExpanded, Geist Mono, LINE Seed JP, TikTok Sans, Pretendard and Noto Sans SC
+are licensed under the SIL Open Font License 1.1; their OFL texts ship beside them in
+`dist/renderer/fonts`. Zalando Sans SemiExpanded, Geist Mono and LINE Seed JP are as published.
+TikTok Sans is cut to its Cyrillic and Greek at one width as "TikTok Sans Genex"; Pretendard
+(Reserved Font Name "Pretendard") is cut to its Hangul as "Genex Hangul"; Noto Sans SC is cut to
+the characters of GB 2312 ([sources](src/renderer/ui/GENEX-SOURCES.md#font-licenses)). Geist, as
+published, renders design studies in `design/`. Copies with their OFL texts in `design/genex-promo-video/public/fonts` and
 `design/play-publish-video/public/fonts` render the promo films.
 
 ## Promo films

@@ -34,6 +34,7 @@ import {
 } from "../run-steps.ts";
 import type { AgentScreenFrame } from "../../shared/agent-screen.ts";
 import { RunState } from "../../shared/run-state.ts";
+import { t } from "../../shared/i18n.ts";
 import type { HistoryEntry } from "../build-progress.ts";
 import { leadFrameOf } from "../state/agent-screens.ts";
 import { useAgentScreens } from "../state/hooks.ts";
@@ -268,7 +269,7 @@ function OutcomePending(): JSX.Element {
       className="stage-loader-late absolute inset-0 grid place-items-center p-8"
       style={{ visibility: "visible" }}
     >
-      <StageLoading label="Loading builds" />
+      <StageLoading label={t("Loading builds")} />
     </div>
   );
 }
@@ -322,7 +323,7 @@ export const RunGraph = memo(function RunGraph({
           tabs={tabs}
           action={
             playBar ? (
-              <PlayButton quiet={graph.active} label={graph.active ? "Play latest" : "Play"} onPlay={playBar} />
+              <PlayButton quiet={graph.active} label={graph.active ? t("Play latest") : t("Play")} onPlay={playBar} />
             ) : null
           }
         />

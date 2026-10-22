@@ -14,6 +14,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { errorMessage } from "../../shared/errors.ts";
+import { t, tc } from "../../shared/i18n.ts";
 import { writeFileNoFollow } from "../../substrate/fsx.ts";
 import { type HookAnswer, HookEvent, HOOK_RECORDING_MAX } from "../../shared/plugin-hooks.ts";
 import { OBSERVE_CALL_MS } from "../../shared/observers.ts";
@@ -162,8 +163,12 @@ const execFileAsync = promisify(execFile);
 /** The agent's name for the new-game tool, as the engine question reads it. */
 const NEW_GAME = "godot__new-game";
 
+/**
+ * The backend's words. The agent reads most of them, in English; the ones a person reads (the
+ * toolbar, Live's card, Set up's question and the panel's answers) are functions, translated when said.
+ */
 const MESSAGE = {
-  UnknownAction: (name: string) => `Unknown Godot action: ${name}`,
+  UnknownAction: (name: string) => t("Unknown Godot action: {name}", { name }),
   UnknownTool: (name: string) => `Unknown Godot tool: ${name}`,
   NoGodot:
     "Godot 4 isn't installed on this Mac. Call godot__show-steps: it puts the Godot setup card in the chat, where Genex installs Godot for the user (Do it for me). Say so in one line and end your reply; the chat tells you when Godot is ready.",
@@ -172,6 +177,8 @@ const MESSAGE = {
   StepsDone: "Godot is installed here; there is no setup card to show. Call godot__new-game.",
   StepsNoChat: "There is no chat to show the Godot setup card in.",
   NoGameOpen: "Open a game in Genex first: a Godot project is made in a game's folder.",
+  /** {@link MESSAGE.NoGameOpen} as the panel shows it. */
+  NoGameForPanel: () => t("Open a game in Genex first: a Godot project is made in a game's folder."),
   NewGame: (template: string, version: string) =>
     `Made this game's Godot project in ${GAME_PROJECT_FOLDER}/ from the ${template.toUpperCase()} template, for Godot ${version}: main.tscn (a player that moves, and a HeroCamera in the genex_shot group) and player.gd. Build the game there in GDScript and scenes, never as a web page. After each change call godot__check; call godot__screenshot to see it. The person opens it in Godot from the Godot button.`,
   ImportFailed: (why: string) => `Godot's first import didn't finish (${why}); godot__check imports again.`,
@@ -188,7 +195,7 @@ const MESSAGE = {
     Failed: (lines: readonly string[]) =>
       `Godot's web export didn't finish${lines.length ? `: ${lines.join(" | ")}` : ""}. Fix what it names (godot__check helps), then export again.`,
     TimedOut: "Godot's web export didn't finish in time and was stopped.",
-    Exported: "Exported for the web into web/: Live's Web game tab plays it, and Publish puts it online.",
+    Exported: () => t("Exported for the web into web/: Live's Web game tab plays it, and Publish puts it online."),
     NotKept: (why: string) => `Godot's web build in web/ wasn't refreshed (${why}); it plays the game as it was.`,
     Done: (files: number) =>
       `Exported the game for the web into ${WEB_EXPORT_FOLDER}/ (${files} files): Live's Web game tab plays it and Publish puts it online. It is Godot's build: never edit its files; export again after changing the project.`,
@@ -204,9 +211,12 @@ const MESSAGE = {
     NotReloaded:
       "Your Godot editor didn't answer Genex's ask to reload: it will offer to reload the changed files when you return to it.",
   },
-  SetUpQuestion: "Set this Godot game up for Genex's play?",
+  SetUpQuestion: () => t("Set this Godot game up for Genex's play?"),
   SetUpDetail: (where: string) =>
-    `Genex will add its addon to the project (${where}/addons/genex: a script that sleeps unless Genex starts the game, and an editor plugin that saves your open scenes before a save point and reloads them after a Rewind), list them in project.godot, write bin/play (starts the game for Genex) and mark the game in studio.json, so Genex's computer tool, playtesters and judges can play it. A Genex file you changed is kept beside the new one as .mine.`,
+    t(
+      "Genex will add its addon to the project ({where}/addons/genex: a script that sleeps unless Genex starts the game, and an editor plugin that saves your open scenes before a save point and reloads them after a Rewind), list them in project.godot, write bin/play (starts the game for Genex) and mark the game in studio.json, so Genex's computer tool, playtesters and judges can play it. A Genex file you changed is kept beside the new one as .mine.",
+      { where },
+    ),
   Multiplayer: {
     Done: (state: MultiplayerState, notes: readonly string[]) =>
       [
@@ -230,31 +240,31 @@ const MESSAGE = {
   BadSeconds: `seconds is a whole number from 1 to ${MAX_RUN_SECONDS}.`,
   BadShotSeconds: `seconds is when the screenshot is taken: from ${MIN_SHOT_SECONDS} to ${MAX_PLAY_SECONDS} seconds of play.`,
   Toolbar: {
-    Get: "Get Godot 4",
-    Old: (version: string) => `Godot ${version} is older than the 4.3 Genex builds with`,
+    /** The button's badge while Godot is missing: the same word Unity's and Unreal's say. */
+    GetBadge: () => t("Not installed"),
+    /** The button's badge while the game's project isn't set up for Genex's play. */
+    SetUpBadge: () => tc("badge", "Set up"),
+    Get: () => t("Get Godot 4"),
+    Old: (version: string) => t("Godot {version} is older than the 4.3 Genex builds with", { version }),
+    /** The product's name and version: never translated. */
     Ready: (version: string) => `Godot ${version}`,
-    Open: (version: string) => `Godot ${version} has this game's project open`,
-    SetUp: "Set this Godot game up for Genex's play",
+    Open: (version: string) => t("Godot {version} has this game's project open", { version }),
+    SetUp: () => t("Set this Godot game up for Genex's play"),
   },
   /** Live's card (`stage-status`): one line, a quieter hint and one step, as `shared/plugin-stage-card.ts` reads them. */
   Stage: {
-    Get: "Plays in Godot 4, which isn't on this Mac yet.",
-    GetButton: "Get Godot",
-    Old: (version: string) => `Godot ${version} is older than the 4.3 Genex builds with.`,
-    NoProject: "No Godot project in this game's folder yet.",
-    NotSetUp: "Plays in Godot. Set it up so Genex's playtesters and judges can play it too.",
-    SetUpButton: "Set up for Genex",
-    Open: (version: string) => `Open in Godot ${version}.`,
-    OpenHint: "Your Godot reloads the files Genex changes.",
-    Ready: (version: string) => `Plays in Godot ${version}.`,
-    OpenButton: "Open in Godot",
+    Get: () => t("Plays in Godot 4, which isn't on this Mac yet."),
+    GetButton: () => t("Get Godot"),
+    Old: (version: string) => t("Godot {version} is older than the 4.3 Genex builds with.", { version }),
+    NoProject: () => t("No Godot project in this game's folder yet."),
+    NotSetUp: () => t("Plays in Godot. Set it up so Genex's playtesters and judges can play it too."),
+    SetUpButton: () => t("Set up for Genex"),
+    Open: (version: string) => t("Open in Godot {version}.", { version }),
+    OpenHint: () => t("Your Godot reloads the files Genex changes."),
+    Ready: (version: string) => t("Plays in Godot {version}.", { version }),
+    OpenButton: () => t("Open in Godot"),
   },
 } as const;
-
-/** The toolbar button's badge while Godot is missing: the same word Unity's and Unreal's say. */
-const GET_BADGE = "Not installed";
-/** The toolbar button's badge while the game's project isn't set up for Genex's play. */
-const SET_UP_BADGE = "Set up";
 
 /**
  * What the backend is given: how Godot is found and run, the person's editor, and the folders of
@@ -715,7 +725,7 @@ async function status(deps: GodotBackendDeps, context: PluginContext) {
 
 /** The panel's Use this project: links the open game to the chosen Godot project, wherever it is. */
 async function useProject(args: Record<string, unknown>, context: PluginContext) {
-  if (!gameFolderOf(context)) throw new Error(MESSAGE.NoGameOpen);
+  if (!gameFolderOf(context)) throw new Error(MESSAGE.NoGameForPanel());
   return { linked: await linkProject(context, textArg(args, "folder")) };
 }
 
@@ -741,7 +751,7 @@ async function describeSetUp(context: PluginContext): Promise<PluginReview> {
   const project = game ? await projectOf(context) : null;
   if (!game || !project) return {};
   const where = (await projectPlace(context, project)).path;
-  return { message: MESSAGE.SetUpQuestion, detail: MESSAGE.SetUpDetail(where) };
+  return { message: MESSAGE.SetUpQuestion(), detail: MESSAGE.SetUpDetail(where) };
 }
 
 /** The folder in the plugin's storage where a game whose chat chose Godot before it could be made is remembered. */
@@ -784,14 +794,14 @@ async function buttonStatus(deps: GodotBackendDeps, context: PluginContext) {
   const install = usableGodot(installs);
   if (!install) {
     const older = installs[0];
-    const title = older ? MESSAGE.Toolbar.Old(versionName(older.version)) : MESSAGE.Toolbar.Get;
-    return { badge: GET_BADGE, tone: "info", dot: true, title };
+    const title = older ? MESSAGE.Toolbar.Old(versionName(older.version)) : MESSAGE.Toolbar.Get();
+    return { badge: MESSAGE.Toolbar.GetBadge(), tone: "info", dot: true, title };
   }
   const version = versionName(install.version);
   const game = gameFolderOf(context);
   const project = game ? await projectOf(context) : null;
   if (game && project && !isSetUp(await addonState(game, project, deps.addon)))
-    return { badge: SET_UP_BADGE, tone: "warn", title: MESSAGE.Toolbar.SetUp };
+    return { badge: MESSAGE.Toolbar.SetUpBadge(), tone: "warn", title: MESSAGE.Toolbar.SetUp() };
   const open = project ? await editorOpen(deps.editor, project) : false;
   return open ? { tone: "ok", title: MESSAGE.Toolbar.Open(version) } : { title: MESSAGE.Toolbar.Ready(version) };
 }
@@ -805,23 +815,26 @@ async function stageStatus(deps: GodotBackendDeps, context: PluginContext) {
   const install = usableGodot(installs);
   const older = installs[0];
   if (!install && older) return { line: MESSAGE.Stage.Old(versionName(older.version)), button: getButton() };
-  if (!install) return { line: MESSAGE.Stage.Get, button: getButton() };
+  if (!install) return { line: MESSAGE.Stage.Get(), button: getButton() };
   const game = gameFolderOf(context);
   const project = game ? await projectOf(context) : null;
-  if (!game || !project) return { line: MESSAGE.Stage.NoProject };
+  if (!game || !project) return { line: MESSAGE.Stage.NoProject() };
   if (!isSetUp(await addonState(game, project, deps.addon)))
-    return { line: MESSAGE.Stage.NotSetUp, button: { label: MESSAGE.Stage.SetUpButton, action: GodotAction.SetUp } };
+    return {
+      line: MESSAGE.Stage.NotSetUp(),
+      button: { label: MESSAGE.Stage.SetUpButton(), action: GodotAction.SetUp },
+    };
   const version = versionName(install.version);
   if (await editorOpen(deps.editor, project))
-    return { line: MESSAGE.Stage.Open(version), hint: MESSAGE.Stage.OpenHint };
+    return { line: MESSAGE.Stage.Open(version), hint: MESSAGE.Stage.OpenHint() };
   return {
     line: MESSAGE.Stage.Ready(version),
-    button: { label: MESSAGE.Stage.OpenButton, action: GodotAction.OpenEditor },
+    button: { label: MESSAGE.Stage.OpenButton(), action: GodotAction.OpenEditor },
   };
 }
 
 /** The card's Get Godot: the plugin's own panel, where the download and the choice of an install are. */
-const getButton = () => ({ label: MESSAGE.Stage.GetButton, panel: true });
+const getButton = () => ({ label: MESSAGE.Stage.GetButton(), panel: true });
 
 /** The panel's Create: the open game's project, or a new Genex game for it when none is open. */
 async function create(deps: GodotBackendDeps, args: Record<string, unknown>, context: PluginContext) {
@@ -830,7 +843,7 @@ async function create(deps: GodotBackendDeps, args: Record<string, unknown>, con
   const request = { template: textArg(args, "template") || GodotTemplate.ThreeD, name };
   const made = gameFolderOf(context) ? null : await context.host(HostService.GameCreate, { title: name });
   const game = gameFolderOf(context) ?? made?.directory;
-  if (!game) throw new Error(MESSAGE.NoGameOpen);
+  if (!game) throw new Error(MESSAGE.NoGameForPanel());
   const project = await createProject(game, request, deps.templates);
   await setUpGame(game, project, deps.addon, install.binary);
   const note = await firstImport(deps, install, project, context.signal);
@@ -917,7 +930,7 @@ export function createGodotBackend(deps: GodotBackendDeps): PluginActivation {
     [GodotAction.UseProject]: (args, context) => useProject(args, context),
     [GodotAction.WebExport]: async (_args, context) => {
       await webExport(deps, context);
-      return { note: MESSAGE.Web.Exported };
+      return { note: MESSAGE.Web.Exported() };
     },
   };
   const tools: Record<GodotTool, Handler> = {

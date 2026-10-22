@@ -13,6 +13,7 @@ import { registerSettingsIpc } from "../../src/main/ipc/settings.ts";
 import { createIpcHandle, type IpcResult, type IpcSender } from "../../src/main/ipc-handle.ts";
 import { errorReport } from "../../src/renderer/error-report.ts";
 import { tmpDir } from "../helpers/tmp.ts";
+import { SYSTEM_LANGUAGE } from "../../src/shared/locale.ts";
 
 const HOME = "/Users/someone";
 const KEY = "sk-ant-abcdefghijklmnop";
@@ -184,6 +185,7 @@ describe("Copy diagnostics", () => {
       blender: true,
       autoResume: true,
       computerControl: false,
+      language: SYSTEM_LANGUAGE,
     };
     const sent: unknown[] = [];
     registerSettingsIpc(handle, {

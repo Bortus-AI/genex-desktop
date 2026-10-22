@@ -5,6 +5,7 @@
  */
 import { type JSX, useRef } from "react";
 import { SOUND_SHORTCUT } from "../../../shared/game-sound.ts";
+import { t } from "../../../shared/i18n.ts";
 import type { PluginInfo } from "../../../shared/plugins.ts";
 import type { FactRef } from "../../../shared/project-facts.ts";
 import type { LiveView } from "../../live-views.ts";
@@ -36,7 +37,7 @@ const switcherItems = (tabs: readonly StageTab[]) =>
  * reason breathes the ring once (`key`), except under reduced motion (theme.css).
  */
 function ReloadButton({ behind, onReload }: { behind: LiveBehind | null; onReload: () => void }): JSX.Element {
-  const label = behind ? liveBehindLabel(behind.reason, behind.note) : "Reload game";
+  const label = behind ? liveBehindLabel(behind.reason, behind.note) : t("Reload game");
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -59,7 +60,7 @@ function ReloadButton({ behind, onReload }: { behind: LiveBehind | null; onReloa
       </TooltipTrigger>
       {/* Beside, not below: a tooltip under the strip would sit behind the native game view. */}
       <TooltipContent side="right" sideOffset={6} data-stage-reload-tip="">
-        {behind ? liveBehindWords(behind.reason) : "Reload game"}
+        {behind ? liveBehindWords(behind.reason) : t("Reload game")}
         {behind?.note ? <span className="block max-w-72 opacity-75">{behind.note}</span> : null}
       </TooltipContent>
     </Tooltip>
@@ -158,7 +159,7 @@ function SoundButton({ on, onToggle }: { on: boolean; onToggle: () => void }): J
       <TooltipTrigger asChild>
         <button
           type="button"
-          aria-label="Game sound"
+          aria-label={t("Game sound")}
           aria-pressed={on}
           data-stage-sound={on ? "on" : "off"}
           onClick={onToggle}
@@ -170,7 +171,7 @@ function SoundButton({ on, onToggle }: { on: boolean; onToggle: () => void }): J
       {/* Beside, not below: a tooltip under the strip would sit behind the native game view. */}
       <TooltipContent side="left" sideOffset={6}>
         <span className="flex items-center gap-2">
-          {on ? "Mute game" : "Unmute game"}
+          {on ? t("Mute game") : t("Unmute game")}
           <Shortcut>{SOUND_SHORTCUT}</Shortcut>
         </span>
       </TooltipContent>
@@ -254,7 +255,7 @@ export function StageStrip({
         {project ? (
           <ViewSwitcher
             className="no-drag shrink-0"
-            label="Game view"
+            label={t("Game view")}
             dataAttribute="data-stage-action"
             items={switcherItems(stageTabs({ views: live.views, plugins, hasBuilds, buildsLive, beside }))}
             active={activeStageTab(stageView, live.views, live.shown)}

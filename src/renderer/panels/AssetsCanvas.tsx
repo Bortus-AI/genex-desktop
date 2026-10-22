@@ -38,6 +38,7 @@ import { CardTagMark, PickCircle, ShareLineMark } from "./assets/CardMarks.tsx";
 import { SelectionBar } from "./assets/SelectionBar.tsx";
 import { ShareDialog } from "./assets/ShareDialog.tsx";
 import { ViewerActions } from "./assets/ViewerActions.tsx";
+import { t } from "../../shared/i18n.ts";
 
 const NO_WAITING: MakingJob[] = [];
 const NOTHING_PICKED: ReadonlySet<string> = new Set();
@@ -261,20 +262,20 @@ function EmptyAssets({
   if (loadError)
     return (
       <div role="alert" className="flex max-w-sm flex-col items-center gap-2">
-        <span className="text-name font-medium text-ink">Could not load assets</span>
+        <span className="text-name font-medium text-ink">{t("Could not load assets")}</span>
         <span className="text-body-sm leading-relaxed text-ink-3">{loadError}</span>
         <Button variant="outline" className="mt-2" onClick={onRetry}>
-          Retry
+          {t("Retry")}
         </Button>
       </div>
     );
-  if (!loaded) return <Pending label="Loading assets…" className="text-body-sm" />;
+  if (!loaded) return <Pending label={t("Loading assets…")} className="text-body-sm" />;
   return (
     <EmptyState
       data-assets-empty=""
       art="assets"
-      title="No assets yet"
-      subtitle="Models, sounds and images land here."
+      title={t("No assets yet")}
+      subtitle={t("Models, sounds and images land here.")}
     />
   );
 }
@@ -292,18 +293,20 @@ function AssetsZoom({
     <div className="absolute bottom-2.5 left-2.5 flex h-7 items-center gap-0.5 rounded-control bg-surface px-1 shadow-btn">
       <Button
         variant="ghost"
-        aria-label="Zoom out of the assets canvas"
-        title="Zoom out"
+        aria-label={t("Zoom out of the assets canvas")}
+        title={t("Zoom out")}
         className="!h-6 !px-2"
         onClick={() => onZoom(1 / ZOOM_STEP)}
       >
         −
       </Button>
-      <span className="w-10 text-center font-mono text-micro text-ink-3 tabular-nums">{pct}%</span>
+      <span className="w-10 text-center font-mono text-micro text-ink-3 tabular-nums">
+        {t("{percent}%", { percent: pct })}
+      </span>
       <Button
         variant="ghost"
-        aria-label="Zoom into the assets canvas"
-        title="Zoom in"
+        aria-label={t("Zoom into the assets canvas")}
+        title={t("Zoom in")}
         className="!h-6 !px-2"
         onClick={() => onZoom(ZOOM_STEP)}
       >
@@ -311,12 +314,12 @@ function AssetsZoom({
       </Button>
       <Button
         variant="ghost"
-        aria-label="Fit every asset"
-        title="Fit everything"
+        aria-label={t("Fit every asset")}
+        title={t("Fit everything")}
         className="!h-6 !px-2 !text-micro"
         onClick={onFit}
       >
-        Fit
+        {t("Fit")}
       </Button>
     </div>
   );
@@ -708,7 +711,7 @@ export function AssetsCanvas({ project, onNotice, focusJob }: Props): JSX.Elemen
 
       {ledger?.truncated ? (
         <div className="absolute top-2.5 right-2.5 rounded-control bg-surface px-2 py-1 text-micro text-ink-3 shadow-btn">
-          This game has more files than the canvas lists.
+          {t("This game has more files than the canvas lists.")}
         </div>
       ) : null}
 

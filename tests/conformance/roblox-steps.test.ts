@@ -145,8 +145,8 @@ describe("the Roblox Studio setup rows", () => {
     assert.deepEqual(mcp.more, [{ name: RobloxAction.RestartStudio, args: {}, label: "Restart Studio" }]);
     assert.deepEqual(mcp.clickPath, MCP_SWITCH_CLICK_PATH.split(" › "));
     // Flipped: a Studio on its sign-in screen doesn't answer either, so the row says to sign in first.
-    assert.equal(mcp.detail, `${MESSAGE.Steps.McpOff} ${MESSAGE.Steps.SignInFirst}`);
-    assert.equal(mcp.waiting, MESSAGE.Steps.Waiting);
+    assert.equal(mcp.detail, `${MESSAGE.Steps.McpOff()} ${MESSAGE.Steps.SignInFirst()}`);
+    assert.equal(mcp.waiting, MESSAGE.Steps.Waiting());
   });
 
   it("where Genex can't click in Studio (Windows, or no computer control), the MCP step never offers Do it for me", () => {
@@ -163,11 +163,11 @@ describe("the Roblox Studio setup rows", () => {
   it("Studio open with the switch already on waits for Studio: sign in first, open a place, and no Do it for me", () => {
     // Flipped: the switch is on, so clicking it can't help; Studio waits for a sign-in or a place.
     const linked = row(STATES["open, switch on, place linked"] as RobloxStepFacts, RobloxStepId.Mcp);
-    assert.equal(linked.detail, `${MESSAGE.Steps.McpOnWaiting} ${MESSAGE.Steps.SignInFirst}`);
-    assert.equal(linked.waiting, MESSAGE.Steps.Waiting);
+    assert.equal(linked.detail, `${MESSAGE.Steps.McpOnWaiting()} ${MESSAGE.Steps.SignInFirst()}`);
+    assert.equal(linked.waiting, MESSAGE.Steps.Waiting());
     assert.equal(linked.action?.name, RobloxAction.RestartStudio);
     const noPlace = row(STATES["open, switch on"] as RobloxStepFacts, RobloxStepId.Mcp);
-    assert.equal(noPlace.detail, `${MESSAGE.Steps.McpOnNoPlace} ${MESSAGE.Steps.SignInFirst}`);
+    assert.equal(noPlace.detail, `${MESSAGE.Steps.McpOnNoPlace()} ${MESSAGE.Steps.SignInFirst()}`);
     assert.match(noPlace.detail, /New Roblox game/);
   });
 
@@ -192,7 +192,7 @@ describe("the Roblox Studio setup rows", () => {
 
   it("macOS's Documents note shows before Set up on a Mac, and nowhere else", () => {
     const mac = STATES["not set up, closed"] as RobloxStepFacts;
-    assert.equal(row(mac, RobloxStepId.Helper).note, MESSAGE.Setup.DocumentsNote);
+    assert.equal(row(mac, RobloxStepId.Helper).note, MESSAGE.Setup.DocumentsNote());
     assert.equal(row({ ...mac, mac: false }, RobloxStepId.Helper).note, undefined, "not on Windows");
     assert.equal(row({ ...mac, setUp: true }, RobloxStepId.Helper).note, undefined, "not once set up");
   });
