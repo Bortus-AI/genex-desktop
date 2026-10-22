@@ -5898,4 +5898,30 @@ export default {
     "Genex сделал всё, что может. Войди в Roblox в Studio; когда Studio ответит, агенты смогут строить.",
   "Roblox Studio is set up and answering Genex, and this game builds in its place.":
     "Roblox Studio настроен и отвечает Genex, а эта игра строится в своём плейсе.",
+  "Couldn't read where this game stands on Roblox.": "Не удалось узнать, что с этой игрой на Roblox.",
+  "Everyone who plays gets this version.": "Все игроки получат эту версию.",
+  "Genex can't click in Roblox Studio on this computer. Publish it yourself in Studio:":
+    "Genex не может нажимать в Roblox Studio на этом компьютере. Опубликуй сам в Studio:",
+  "Handing it to the agent…": "Передаём агенту…",
+  "If the chat asks to use computer control, answer it there.":
+    "Если чат спросит про управление компьютером, ответь там.",
+  "In Roblox Studio": "В Roblox Studio",
+  "Name on Roblox": "Название на Roblox",
+  "On Roblox": "На Roblox",
+  "Open on Roblox": "Открыть на Roblox",
+  "Publish an update": "Опубликовать обновление",
+  "Publish to Roblox": "Опубликовать на Roblox",
+  "Publishing to Roblox": "Публикация на Roblox",
+  "Set up Roblox Studio": "Настроить Roblox Studio",
+  "The agent is publishing in Roblox Studio. Closing this doesn't stop it.":
+    "Агент публикует игру в Roblox Studio. Если закрыть это окно, публикация не остановится.",
+  "The agent stopped before Studio published. The chat says why.":
+    "Агент остановился до того, как Studio опубликовал игру. Причина — в чате.",
+  "The update is on Roblox": "Обновление на Roblox",
+  "This game has no Roblox place yet. Set up Roblox Studio first.":
+    "У этой игры пока нет плейса Roblox. Сначала настрой Roblox Studio.",
+  "To the agent": "Агенту",
+  "Your game is on Roblox": "Твоя игра на Roblox",
+  "Your game's agent publishes it in Roblox Studio while you keep working.":
+    "Агент твоей игры публикует её в Roblox Studio, а ты можешь работать дальше.",
 } satisfies LocaleCatalog;

@@ -5724,4 +5724,30 @@ export default {
     "Genex가 할 수 있는 건 다 했어요. Studio에서 Roblox에 로그인하세요. Studio가 응답하면 에이전트가 만들 수 있어요.",
   "Roblox Studio is set up and answering Genex, and this game builds in its place.":
     "Roblox Studio가 설정되어 Genex에 응답하고 있고, 이 게임은 자기 플레이스에서 만들어져요.",
+  "Couldn't read where this game stands on Roblox.": "이 게임이 Roblox에서 어떤 상태인지 읽지 못했어요.",
+  "Everyone who plays gets this version.": "플레이하는 모두가 이 버전을 받아요.",
+  "Genex can't click in Roblox Studio on this computer. Publish it yourself in Studio:":
+    "이 컴퓨터에서는 Genex가 Roblox Studio를 클릭할 수 없어요. Studio에서 직접 게시하세요:",
+  "Handing it to the agent…": "에이전트에게 넘기는 중…",
+  "If the chat asks to use computer control, answer it there.":
+    "채팅에서 컴퓨터 제어를 써도 되는지 물으면 거기서 답하세요.",
+  "In Roblox Studio": "Roblox Studio에서",
+  "Name on Roblox": "Roblox에서의 이름",
+  "On Roblox": "Roblox에",
+  "Open on Roblox": "Roblox에서 열기",
+  "Publish an update": "업데이트 게시",
+  "Publish to Roblox": "Roblox에 게시",
+  "Publishing to Roblox": "Roblox에 게시 중",
+  "Set up Roblox Studio": "Roblox Studio 설정",
+  "The agent is publishing in Roblox Studio. Closing this doesn't stop it.":
+    "에이전트가 Roblox Studio에서 게시하고 있어요. 이 창을 닫아도 멈추지 않아요.",
+  "The agent stopped before Studio published. The chat says why.":
+    "Studio가 게시하기 전에 에이전트가 멈췄어요. 이유는 채팅에 있어요.",
+  "The update is on Roblox": "업데이트가 Roblox에 올라갔어요",
+  "This game has no Roblox place yet. Set up Roblox Studio first.":
+    "이 게임에는 아직 Roblox 플레이스가 없어요. 먼저 Roblox Studio를 설정하세요.",
+  "To the agent": "에이전트에게",
+  "Your game is on Roblox": "게임이 Roblox에 올라갔어요",
+  "Your game's agent publishes it in Roblox Studio while you keep working.":
+    "작업을 계속하는 동안 게임의 에이전트가 Roblox Studio에서 게시해요.",
 } satisfies LocaleCatalog;

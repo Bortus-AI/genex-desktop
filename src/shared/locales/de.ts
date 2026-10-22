@@ -5996,4 +5996,30 @@ export default {
     "Genex hat alles erledigt, was es kann. Melde dich in Studio bei Roblox an; sobald Studio antwortet, können Agenten bauen.",
   "Roblox Studio is set up and answering Genex, and this game builds in its place.":
     "Roblox Studio ist eingerichtet und antwortet Genex, und dieses Spiel wird in seinem Ort gebaut.",
+  "Couldn't read where this game stands on Roblox.": "Konnte nicht lesen, wie dieses Spiel auf Roblox steht.",
+  "Everyone who plays gets this version.": "Alle, die spielen, bekommen diese Version.",
+  "Genex can't click in Roblox Studio on this computer. Publish it yourself in Studio:":
+    "Genex kann auf diesem Computer nicht in Roblox Studio klicken. Veröffentliche es selbst in Studio:",
+  "Handing it to the agent…": "Wird an den Agenten übergeben …",
+  "If the chat asks to use computer control, answer it there.":
+    "Wenn der Chat fragt, ob er den Computer steuern darf, antworte dort.",
+  "In Roblox Studio": "In Roblox Studio",
+  "Name on Roblox": "Name auf Roblox",
+  "On Roblox": "Auf Roblox",
+  "Open on Roblox": "Auf Roblox öffnen",
+  "Publish an update": "Update veröffentlichen",
+  "Publish to Roblox": "Auf Roblox veröffentlichen",
+  "Publishing to Roblox": "Wird auf Roblox veröffentlicht",
+  "Set up Roblox Studio": "Roblox Studio einrichten",
+  "The agent is publishing in Roblox Studio. Closing this doesn't stop it.":
+    "Der Agent veröffentlicht in Roblox Studio. Wenn du das hier schließt, läuft es weiter.",
+  "The agent stopped before Studio published. The chat says why.":
+    "Der Agent hat angehalten, bevor Studio veröffentlicht hat. Im Chat steht, warum.",
+  "The update is on Roblox": "Das Update ist auf Roblox",
+  "This game has no Roblox place yet. Set up Roblox Studio first.":
+    "Dieses Spiel hat noch keinen Roblox-Ort. Richte zuerst Roblox Studio ein.",
+  "To the agent": "An den Agenten",
+  "Your game is on Roblox": "Dein Spiel ist auf Roblox",
+  "Your game's agent publishes it in Roblox Studio while you keep working.":
+    "Der Agent deines Spiels veröffentlicht es in Roblox Studio, während du weiterarbeitest.",
 } satisfies LocaleCatalog;

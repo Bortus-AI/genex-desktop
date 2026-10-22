@@ -714,14 +714,17 @@ describe("every panel action the person can press is also an agent tool", () => 
     "first-publish": "first-publish",
     "finish-setup": "finish-setup",
   };
-  /** The tools that ask on a card though their panel press doesn't: an agent never closes Studio unasked. */
-  const ASKS_ONLY_AS_A_TOOL = new Set(["quit-studio"]);
+  /**
+   * The tools that ask on a card though their press doesn't: an agent never closes Studio or
+   * publishes unasked, while the person's own press is their go-ahead.
+   */
+  const ASKS_ONLY_AS_A_TOOL = new Set(["quit-studio", "publish-update", "first-publish"]);
   /** Words that hand the person a click Genex can do itself. */
   const HANDS_A_CLICK = /\bpress\b|click it yourself|turn it on yourself|in the Roblox Studio panel/i;
 
   it("the manifest declares a tool for each, asking on a card where its press asks (and before quitting Studio)", async () => {
     const manifest = validateManifest(JSON.parse(await readFile(MANIFEST, "utf8")));
-    const read = new Set(["status", "toolbar-status", "steps"]);
+    const read = new Set(["status", "toolbar-status", "steps", "publish-status"]);
     const actions = (manifest.actions ?? []).filter((action) => !read.has(action.name));
     assert.deepEqual(actions.map((action) => action.name).sort(), Object.keys(PRESSABLE).sort());
     for (const action of actions) {

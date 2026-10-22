@@ -5849,4 +5849,30 @@ export default {
     "Genexはできることをすべて済ませました。StudioでRobloxにサインインしてください。Studioが応答すれば、エージェントがつくれるようになります。",
   "Roblox Studio is set up and answering Genex, and this game builds in its place.":
     "Roblox Studioはセットアップ済みでGenexに応答しています。このゲームは自分のプレイスでつくられます。",
+  "Couldn't read where this game stands on Roblox.": "このゲームがRobloxでどうなっているか読み取れませんでした。",
+  "Everyone who plays gets this version.": "プレイする全員にこのバージョンが届きます。",
+  "Genex can't click in Roblox Studio on this computer. Publish it yourself in Studio:":
+    "このコンピューターではGenexがRoblox Studioをクリックできません。Studioで自分で公開してください：",
+  "Handing it to the agent…": "エージェントに渡しています…",
+  "If the chat asks to use computer control, answer it there.":
+    "チャットでコンピューター操作の使用を聞かれたら、そこで答えてください。",
+  "In Roblox Studio": "Roblox Studioで",
+  "Name on Roblox": "Robloxでの名前",
+  "On Roblox": "Robloxに",
+  "Open on Roblox": "Robloxで開く",
+  "Publish an update": "アップデートを公開",
+  "Publish to Roblox": "Robloxに公開",
+  "Publishing to Roblox": "Robloxに公開中",
+  "Set up Roblox Studio": "Roblox Studioをセットアップ",
+  "The agent is publishing in Roblox Studio. Closing this doesn't stop it.":
+    "エージェントがRoblox Studioで公開しています。これを閉じても止まりません。",
+  "The agent stopped before Studio published. The chat says why.":
+    "Studioが公開する前にエージェントが止まりました。理由はチャットにあります。",
+  "The update is on Roblox": "アップデートがRobloxに公開されました",
+  "This game has no Roblox place yet. Set up Roblox Studio first.":
+    "このゲームにはまだRobloxのプレイスがありません。先にRoblox Studioをセットアップしてください。",
+  "To the agent": "エージェントへ",
+  "Your game is on Roblox": "ゲームがRobloxに公開されました",
+  "Your game's agent publishes it in Roblox Studio while you keep working.":
+    "作業を続けている間に、ゲームのエージェントがRoblox Studioで公開します。",
 } satisfies LocaleCatalog;
