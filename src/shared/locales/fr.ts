@@ -5960,4 +5960,30 @@ export default {
     "Genex a fait tout ce qu’il peut. Connecte-toi à Roblox dans Studio ; dès que Studio répond, les agents peuvent construire.",
   "Roblox Studio is set up and answering Genex, and this game builds in its place.":
     "Roblox Studio est configuré et répond à Genex, et ce jeu se construit dans son lieu.",
+  "Couldn't read where this game stands on Roblox.": "Impossible de savoir où en est ce jeu sur Roblox.",
+  "Everyone who plays gets this version.": "Tous les joueurs reçoivent cette version.",
+  "Genex can't click in Roblox Studio on this computer. Publish it yourself in Studio:":
+    "Genex ne peut pas cliquer dans Roblox Studio sur cet ordinateur. Publie-le toi-même dans Studio :",
+  "Handing it to the agent…": "Transmission à l’agent…",
+  "If the chat asks to use computer control, answer it there.":
+    "Si le chat demande à utiliser le contrôle de l’ordinateur, réponds-y.",
+  "In Roblox Studio": "Dans Roblox Studio",
+  "Name on Roblox": "Nom sur Roblox",
+  "On Roblox": "Sur Roblox",
+  "Open on Roblox": "Ouvrir sur Roblox",
+  "Publish an update": "Publier une mise à jour",
+  "Publish to Roblox": "Publier sur Roblox",
+  "Publishing to Roblox": "Publication sur Roblox",
+  "Set up Roblox Studio": "Configurer Roblox Studio",
+  "The agent is publishing in Roblox Studio. Closing this doesn't stop it.":
+    "L’agent publie dans Roblox Studio. Fermer ceci ne l’arrête pas.",
+  "The agent stopped before Studio published. The chat says why.":
+    "L’agent s’est arrêté avant que Studio publie. Le chat dit pourquoi.",
+  "The update is on Roblox": "La mise à jour est sur Roblox",
+  "This game has no Roblox place yet. Set up Roblox Studio first.":
+    "Ce jeu n’a pas encore d’emplacement Roblox. Configure d’abord Roblox Studio.",
+  "To the agent": "À l’agent",
+  "Your game is on Roblox": "Ton jeu est sur Roblox",
+  "Your game's agent publishes it in Roblox Studio while you keep working.":
+    "L’agent de ton jeu le publie dans Roblox Studio pendant que tu continues à travailler.",
 } satisfies LocaleCatalog;

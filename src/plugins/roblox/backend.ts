@@ -52,6 +52,7 @@ import { createProbes, type ProbeLuauFile, RobloxProbe } from "./probes.ts";
 import {
   firstPublish,
   firstPublishName,
+  type PublishAnswer,
   PublishAsker,
   type PublishDeps,
   type PublishPlace,
@@ -60,6 +61,7 @@ import {
   reviewPublish,
   unfitName,
 } from "./publish.ts";
+import { PUBLISH_PROMPTS } from "./publish-prompts.ts";
 import { crashAnswer, probeAnswer } from "./hook-answers.ts";
 import {
   createStudioWatch,
@@ -120,6 +122,8 @@ import { checkModelTool, importModel } from "./model-import.ts";
 import { linkedPlace, listPlaces, type ScanCache, usePlace, usePlaceNamed } from "./places.ts";
 import { type PlaceTarget, quitStudio, startingNow, systemOpener } from "./studio-launch.ts";
 import { signInWatch, studioLogFolder } from "./studio-logs.ts";
+import { attemptNow, endAttempt, readAttempt, writeAttempt } from "./publish-attempt.ts";
+import { RobloxPublishKind, RobloxPublishPhase, type RobloxPublishState } from "../../shared/roblox-publish.ts";
 import {
   type LocateDeps,
   locateStudio,
@@ -1011,8 +1015,66 @@ function publishHandler(deps: RobloxDeps, services: MomentServices, asker: Publi
     // A place just published by hand is linked first, so it gets its update and not a first publish.
     await relinkQuietly(deps, services, context, true);
     const place = await publishPlace(context);
-    return publishUpdate(place, publishDeps(deps, services, context, place), asker);
+    const answer = await publishUpdate(place, publishDeps(deps, services, context, place), asker);
+    return noteAttempt(deps, context, RobloxPublishKind.Update, answer);
   };
+}
+
+/** Records a publish the game's chat took, so Studio's publishing card follows it; the answer as it was. */
+async function noteAttempt(
+  deps: RobloxDeps,
+  context: PluginContext,
+  kind: RobloxPublishKind,
+  answer: PublishAnswer,
+): Promise<PublishAnswer> {
+  if (!answer.started || !context.project) return answer;
+  const storage = await context.host(PluginService.StorageRoot);
+  const attempt = {
+    phase: RobloxPublishPhase.Publishing,
+    kind,
+    at: deps.now(),
+    ...(answer.name ? { name: answer.name } : {}),
+  };
+  await writeAttempt(storage, context.project, attempt).catch(() => undefined);
+  return answer;
+}
+
+/**
+ * Where the game's place and its latest publish stand, for Studio's publishing card: a place just
+ * published is linked first, so a first publish shows as done once Roblox has it.
+ */
+async function publishStatus(
+  deps: RobloxDeps,
+  services: MomentServices,
+  context: PluginContext,
+): Promise<RobloxPublishState> {
+  await relinkQuietly(deps, services, context);
+  const place = await publishPlace(context);
+  const remote = place.link?.remote;
+  const state: RobloxPublishState = {
+    linked: Boolean(place.link),
+    published: Boolean(remote),
+    canClick: await canClickHere(deps, context),
+  };
+  if (remote) state.placeId = remote.placeId;
+  else if (place.link) state.name = firstPublishName(place);
+  if (!context.project) return state;
+  const recorded = await readAttempt(await context.host(PluginService.StorageRoot), context.project);
+  if (recorded) state.attempt = attemptNow(recorded, Boolean(remote), deps.now());
+  return state;
+}
+
+/**
+ * The publishing turn's word on how its publish ended, for Studio's publishing card: published, or
+ * stopped with what Roblox asked the person. Only a publish under way is ended.
+ */
+async function publishResult(deps: RobloxDeps, context: PluginContext, args: Record<string, unknown>) {
+  if (!context.project) return PUBLISH_PROMPTS.NoAttempt;
+  const storage = await context.host(PluginService.StorageRoot);
+  const end = { published: args.published === true, detail: args.detail };
+  return (await endAttempt(storage, context.project, end, deps.now()))
+    ? PUBLISH_PROMPTS.ResultNoted
+    : PUBLISH_PROMPTS.NoAttempt;
 }
 
 /**
@@ -1027,7 +1089,9 @@ function firstPublishHandler(deps: RobloxDeps, services: MomentServices, asker: 
     const requested = requestedName(args);
     // The agent's card showed its name: a name Roblox would take otherwise is asked again, never changed.
     const unfit = asker === PublishAsker.Agent ? unfitName(place, requested) : undefined;
-    return unfit ?? firstPublish(place, publishDeps(deps, services, context, place), asker, requested);
+    if (unfit) return unfit;
+    const answer = await firstPublish(place, publishDeps(deps, services, context, place), asker, requested);
+    return noteAttempt(deps, context, RobloxPublishKind.First, answer);
   };
 }
 
@@ -1187,6 +1251,7 @@ export function createRobloxBackend(deps: RobloxDeps): PluginActivation {
     [RobloxAction.AddLuauChecks]: (_args, context) => addLuauAction(deps, luau, context),
     [RobloxAction.PublishUpdate]: publishHandler(deps, services, PublishAsker.Person),
     [RobloxAction.FirstPublish]: firstPublishHandler(deps, services, PublishAsker.Person),
+    [RobloxAction.PublishStatus]: (_args, context) => publishStatus(deps, services, context),
     [RobloxAction.FinishSetup]: (_args, context) => finishSetup(deps, context, slot),
   };
   const tools: Record<RobloxTool, Handler> = {
@@ -1210,6 +1275,7 @@ export function createRobloxBackend(deps: RobloxDeps): PluginActivation {
     ...modelHandlers(deps, services),
     [RobloxTool.PublishUpdate]: publishHandler(deps, services, PublishAsker.Agent),
     [RobloxTool.FirstPublish]: firstPublishHandler(deps, services, PublishAsker.Agent),
+    [RobloxTool.PublishResult]: (args, context) => publishResult(deps, context, args),
     ...pressHandlers(deps, slot, luau),
     [RobloxTool.HeroShots]: async (_args, context) => {
       // As the viewport observer: the picture within the time Genex gives.

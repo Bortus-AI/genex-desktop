@@ -1523,14 +1523,20 @@ comes in. When Studio can't add it, the answer names the checked file and Studio
 Import 3D.
 
 **Publishing** (`publish.ts`, the `publish` skill). No Studio or plugin API publishes a place, and
-Open Cloud's place publishing takes API keys Genex never asks for, so publishing is a Do it for me
-that the person approves on a card: the game's changed script files go to Studio first, then the
-game's chat is handed the task through `game.engine.assist`, and the turn that answers it (the
-agent's own turn when the message joins it) clicks File › Publish to Roblox in Studio itself, as
-the `publish` skill says. A place never published gets **Publish to
-Roblox** (the panel's `first-publish`, native, with a name field filled with the game's title, its
-card naming the name; the agent's `first-publish {name}`, whose card shows the name in a field the
-person may edit, `confirmationInput`): "Publish this place to Roblox as a new game named "<name>"…",
+Open Cloud's place publishing takes API keys Genex never asks for, so publishing is a Do it for me:
+the game's changed script files go to Studio first, then the game's chat is handed the task through
+`game.engine.assist`, and the turn that answers it (the agent's own turn when the message joins it)
+clicks File › Publish to Roblox in Studio itself, as the `publish` skill says. The person's press is
+their go-ahead: the actions ask on no card, while the agent's tools still do. A Roblox game's strip
+shows Genex's **Publish** (when no other Publish does), whose card (`RobloxPublish.tsx`) has one
+press and then follows the publish through `publish-status`: handed to the agent, in Studio, on
+Roblox, with the game's page once it is there. The publish under way is recorded
+(`publish-attempts/<game>.json`) when the chat takes it; the agent ends it with `publish-result`
+(published, or stopped with what Roblox asked, one plain line), a first publish also ends once Genex
+links the published place, and one never ended stops after 20 minutes. A place never published gets
+**Publish to Roblox** (`first-publish`, native, with a name field filled with the game's title; the
+agent's `first-publish {name}`, whose card shows the name in a field the person may edit,
+`confirmationInput`): "Publish this place to Roblox as a new game named "<name>"…",
 keeping Studio's privacy and settings and an empty description, stopping at any age, ID, two-step,
 terms or payment question. The name is one plain line of at most 50 characters (the game's title,
 else the place's name); the agent's `name` is required, and one Roblox wouldn't take as the card

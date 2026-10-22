@@ -5930,4 +5930,30 @@ export default {
     "O Genex fez tudo o que pode. Entre no Roblox no Studio; quando o Studio responder, os agentes podem construir.",
   "Roblox Studio is set up and answering Genex, and this game builds in its place.":
     "O Roblox Studio está configurado e respondendo ao Genex, e este jogo é construído no lugar dele.",
+  "Couldn't read where this game stands on Roblox.": "Não deu para saber como este jogo está no Roblox.",
+  "Everyone who plays gets this version.": "Todos que jogam recebem esta versão.",
+  "Genex can't click in Roblox Studio on this computer. Publish it yourself in Studio:":
+    "O Genex não consegue clicar no Roblox Studio neste computador. Publique você mesmo no Studio:",
+  "Handing it to the agent…": "Passando para o agente…",
+  "If the chat asks to use computer control, answer it there.":
+    "Se o chat pedir para usar o controle do computador, responda lá.",
+  "In Roblox Studio": "No Roblox Studio",
+  "Name on Roblox": "Nome no Roblox",
+  "On Roblox": "No Roblox",
+  "Open on Roblox": "Abrir no Roblox",
+  "Publish an update": "Publicar uma atualização",
+  "Publish to Roblox": "Publicar no Roblox",
+  "Publishing to Roblox": "Publicando no Roblox",
+  "Set up Roblox Studio": "Configurar o Roblox Studio",
+  "The agent is publishing in Roblox Studio. Closing this doesn't stop it.":
+    "O agente está publicando no Roblox Studio. Fechar isto não o interrompe.",
+  "The agent stopped before Studio published. The chat says why.":
+    "O agente parou antes de o Studio publicar. O chat diz por quê.",
+  "The update is on Roblox": "A atualização está no Roblox",
+  "This game has no Roblox place yet. Set up Roblox Studio first.":
+    "Este jogo ainda não tem um place do Roblox. Configure o Roblox Studio primeiro.",
+  "To the agent": "Para o agente",
+  "Your game is on Roblox": "Seu jogo está no Roblox",
+  "Your game's agent publishes it in Roblox Studio while you keep working.":
+    "O agente do seu jogo o publica no Roblox Studio enquanto você continua trabalhando.",
 } satisfies LocaleCatalog;

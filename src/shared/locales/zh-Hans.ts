@@ -5536,4 +5536,28 @@ export default {
     "Genex 已经完成了它能做的所有步骤。请在 Studio 中登录 Roblox；Studio 响应后，智能体就能开始搭建。",
   "Roblox Studio is set up and answering Genex, and this game builds in its place.":
     "Roblox Studio 已设置好并在响应 Genex，这个游戏在它自己的地点里搭建。",
+  "Couldn't read where this game stands on Roblox.": "无法读取这个游戏在 Roblox 上的状态。",
+  "Everyone who plays gets this version.": "所有玩家都会拿到这个版本。",
+  "Genex can't click in Roblox Studio on this computer. Publish it yourself in Studio:":
+    "Genex 无法在这台电脑上点击 Roblox Studio。请在 Studio 中自己发布：",
+  "Handing it to the agent…": "正在交给智能体…",
+  "If the chat asks to use computer control, answer it there.": "如果聊天中询问是否使用电脑控制，请在那里回答。",
+  "In Roblox Studio": "在 Roblox Studio 中",
+  "Name on Roblox": "在 Roblox 上的名称",
+  "On Roblox": "在 Roblox 上",
+  "Open on Roblox": "在 Roblox 上打开",
+  "Publish an update": "发布更新",
+  "Publish to Roblox": "发布到 Roblox",
+  "Publishing to Roblox": "正在发布到 Roblox",
+  "Set up Roblox Studio": "设置 Roblox Studio",
+  "The agent is publishing in Roblox Studio. Closing this doesn't stop it.":
+    "智能体正在 Roblox Studio 中发布。关闭这里不会停止发布。",
+  "The agent stopped before Studio published. The chat says why.": "智能体在 Studio 发布前停下了。原因见聊天。",
+  "The update is on Roblox": "更新已上线 Roblox",
+  "This game has no Roblox place yet. Set up Roblox Studio first.":
+    "这个游戏还没有 Roblox 场景。请先设置 Roblox Studio。",
+  "To the agent": "交给智能体",
+  "Your game is on Roblox": "你的游戏已上线 Roblox",
+  "Your game's agent publishes it in Roblox Studio while you keep working.":
+    "你继续工作时，游戏的智能体会在 Roblox Studio 中发布它。",
 } satisfies LocaleCatalog;

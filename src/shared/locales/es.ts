@@ -5944,4 +5944,30 @@ export default {
     "Genex ya hizo todo lo que puede. Inicia sesión en Roblox en Studio; cuando Studio responda, los agentes podrán construir.",
   "Roblox Studio is set up and answering Genex, and this game builds in its place.":
     "Roblox Studio está configurado y responde a Genex, y este juego se construye en su lugar.",
+  "Couldn't read where this game stands on Roblox.": "No se pudo saber cómo está este juego en Roblox.",
+  "Everyone who plays gets this version.": "Todos los que juegan reciben esta versión.",
+  "Genex can't click in Roblox Studio on this computer. Publish it yourself in Studio:":
+    "Genex no puede hacer clic en Roblox Studio en este equipo. Publícalo tú en Studio:",
+  "Handing it to the agent…": "Pasándoselo al agente…",
+  "If the chat asks to use computer control, answer it there.":
+    "Si el chat pide usar el control del equipo, responde ahí.",
+  "In Roblox Studio": "En Roblox Studio",
+  "Name on Roblox": "Nombre en Roblox",
+  "On Roblox": "En Roblox",
+  "Open on Roblox": "Abrir en Roblox",
+  "Publish an update": "Publicar una actualización",
+  "Publish to Roblox": "Publicar en Roblox",
+  "Publishing to Roblox": "Publicando en Roblox",
+  "Set up Roblox Studio": "Configurar Roblox Studio",
+  "The agent is publishing in Roblox Studio. Closing this doesn't stop it.":
+    "El agente está publicando en Roblox Studio. Cerrar esto no lo detiene.",
+  "The agent stopped before Studio published. The chat says why.":
+    "El agente se detuvo antes de que Studio publicara. El chat dice por qué.",
+  "The update is on Roblox": "La actualización está en Roblox",
+  "This game has no Roblox place yet. Set up Roblox Studio first.":
+    "Este juego aún no tiene un lugar de Roblox. Configura Roblox Studio primero.",
+  "To the agent": "Al agente",
+  "Your game is on Roblox": "Tu juego está en Roblox",
+  "Your game's agent publishes it in Roblox Studio while you keep working.":
+    "El agente de tu juego lo publica en Roblox Studio mientras sigues trabajando.",
 } satisfies LocaleCatalog;

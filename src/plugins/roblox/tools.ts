@@ -49,6 +49,8 @@ export const RobloxTool = {
   InsertAsset: AskFirstTool.InsertAsset,
   CheckModel: "check-model",
   ImportModel: "import-model",
+  /** The publishing turn's word on how its publish ended, for Studio's publishing card. */
+  PublishResult: "publish-result",
   PublishUpdate: RobloxAction.PublishUpdate,
   FirstPublish: RobloxAction.FirstPublish,
   Setup: RobloxAction.Setup,
