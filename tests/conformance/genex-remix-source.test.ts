@@ -106,7 +106,7 @@ describe("a game's project staged for remixing", () => {
     assert.deepEqual(copied, [...kept].sort());
   });
 
-  it("leaves out an engine project's caches and builds, but only inside that project", async () => {
+  it("leaves out an engine project's caches and builds, and its plugins', but only inside that project", async () => {
     const files = {
       "unity/ProjectSettings/ProjectVersion.txt": "m_EditorVersion: 6000.2",
       "unity/Assets/Scenes/Main.unity": "scene",
@@ -122,6 +122,10 @@ describe("a game's project staged for remixing", () => {
       "Arena/Intermediate/Build/x.o": "cache",
       "Arena/Saved/Logs/Arena.log": "log",
       "Arena/Content/Maps/Main.umap": "map",
+      "Arena/Plugins/Fx/Fx.uplugin": "{}",
+      "Arena/Plugins/Fx/Source/Fx.cpp": "code",
+      "Arena/Plugins/Fx/Binaries/Mac/libFx.dylib": "build",
+      "Arena/Plugins/Fx/Intermediate/Build/x.o": "cache",
       "web/Library/readme.md": "a web game's own folder named Library",
     };
     const { game, dest } = await gameWith(files);
@@ -129,6 +133,8 @@ describe("a game's project staged for remixing", () => {
     assert.deepEqual(await filesIn(dest), [
       "Arena/Arena.uproject",
       "Arena/Content/Maps/Main.umap",
+      "Arena/Plugins/Fx/Fx.uplugin",
+      "Arena/Plugins/Fx/Source/Fx.cpp",
       "godot/project.godot",
       "godot/scenes/main.tscn",
       "unity/Assets/Scenes/Main.unity",

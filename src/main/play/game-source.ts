@@ -9,6 +9,17 @@
 /** How many folders may sit above an engine project's marking file (`unity/ProjectSettings/…` has two). */
 export const ENGINE_PROJECT_DEPTH = 3;
 
+/**
+ * A file that marks an engine's project in its folder: Godot's, Unreal's, a Roblox place, or Rojo's
+ * project file (Roblox's games kept as files).
+ */
+const isEngineMark = (name: string): boolean =>
+  name === "project.godot" ||
+  name.endsWith(".uproject") ||
+  name.endsWith(".rbxl") ||
+  name.endsWith(".rbxlx") ||
+  name === "default.project.json";
+
 /** Whether `paths` (a source's files, `/` between parts) hold a game's mark: its root record or page, or an engine's project. */
 export function marksGame(paths: readonly string[]): boolean {
   for (const file of paths) {
@@ -17,7 +28,7 @@ export function marksGame(paths: readonly string[]): boolean {
     if (parts.slice(0, -1).some((part) => part.startsWith(".") || part === "node_modules")) continue;
     const name = parts.at(-1) ?? "";
     const folders = parts.length - 1;
-    if ((name === "project.godot" || name.endsWith(".uproject")) && folders < ENGINE_PROJECT_DEPTH) return true;
+    if (isEngineMark(name) && folders < ENGINE_PROJECT_DEPTH) return true;
     if (file.endsWith("ProjectSettings/ProjectVersion.txt") && folders <= ENGINE_PROJECT_DEPTH) return true;
   }
   return false;

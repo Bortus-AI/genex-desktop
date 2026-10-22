@@ -45,9 +45,11 @@ import { PluginStillProblemCode } from "../../shared/plugins.ts";
 import { GenexCliStopped, runGenexCli, genexCliPath } from "./cli.ts";
 import { appClipCommit, listingOf, type NativeUpload, pinnedCliSendsApps, sendNativeBuild } from "./native-publish.ts";
 import {
+  dropStaged,
   keptBackRecord,
   pinnedCliSendsSource,
   REMIX_FILE,
+  SOURCE_FOLDER,
   type RemixSaved,
   readRemixSaved,
   remixAllowed,
@@ -637,8 +639,9 @@ export class GenexTools {
     const dir = this.#publishDir(project);
     await mkdir(path.join(dir, "home"), { recursive: true, mode: 0o700 });
     await mkdir(path.join(dir, "dist"), { recursive: true, mode: 0o700 });
-    // The CLI pushes this folder as the game's source; Studio's private HOME is not part of it.
-    await writeFile(path.join(dir, ".gitignore"), "home/\n");
+    // The CLI pushes this folder as the game's source when no project goes with a publish: Studio's
+    // private HOME, a project staged for remixers and the record of it are never part of it.
+    await writeFile(path.join(dir, ".gitignore"), `home/\n${SOURCE_FOLDER}/\n${REMIX_FILE}\n`);
     return dir;
   }
   async #publishState(project: string): Promise<GenexPublishState> {
@@ -1117,7 +1120,9 @@ export class GenexTools {
       run.attempt.slug = meta.slug;
       if (connect) await this.#connectCopy(run, meta);
       const allowed = remixAllowed(remix.allowed, await this.#remixSaved(project));
-      const problem = allowed ? await this.#stageForUpload(run, remix.gameDir) : undefined;
+      // Only a publish opens the game to remixers: a draft carries no project.
+      const staging = allowed && kind === GenexPublishKind.Gallery;
+      const problem = staging ? await this.#stageForUpload(run, remix.gameDir) : undefined;
       const outs = kind === GenexPublishKind.Draft ? [await this.#uploadDraft(run)] : await this.#uploadTested(run);
       if (!outs) return;
       const relist = needsRelisting(meta, (await this.#publishState(project)).title, job.title);
@@ -1133,6 +1138,7 @@ export class GenexTools {
       await this.#failPublishJob(project, job, run.attempt, error);
     } finally {
       this.#controllers.delete(controller);
+      await dropStaged(dir);
     }
   }
   /** One CLI phase, persisted first, with Genex's record read just before anything is uploaded. */
@@ -1482,6 +1488,7 @@ export class GenexTools {
       await this.#settleRemixing(project, meta, true, null, GenexRemixProblem.Failed);
     } finally {
       this.#remixSends.delete(project);
+      await dropStaged(dir);
     }
   }
   /** A publish state with the game's cover, and the cover lines of its own job among its warnings. */

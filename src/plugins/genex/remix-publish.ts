@@ -9,6 +9,7 @@
  * published before remixing came to Studio. The choice and how the project last went are kept in
  * `remix.json`, beside `publish.json`.
  */
+import { rm } from "node:fs/promises";
 import path from "node:path";
 // Read at build time, as `native-publish.ts` does: the packaged app ships the CLI only in the plugin's payload.
 import cliPackage from "@genex-ai/cli-demo/package.json" with { type: "json" };
@@ -92,6 +93,10 @@ export async function stageProject(
     return { problem: GenexRemixProblem.Failed };
   }
 }
+
+/** Remove the workspace's staged project once its push is over: a later push of the workspace never carries it. */
+export const dropStaged = (dir: string): Promise<void> =>
+  rm(path.join(dir, SOURCE_FOLDER), { recursive: true, force: true }).catch(() => {});
 
 /** The CLI's arguments that name the staged project as the source a run pushes, or none. */
 export const sourceArgs = (staged: StagedProject | null): string[] => (staged ? ["--source", staged.sourceDir] : []);

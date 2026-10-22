@@ -61,8 +61,15 @@ const NEVER_FILES = new Set([".mcp.json", ".DS_Store"]);
 const isSecretsFile = (name: string): boolean =>
   (name === ".env" || name.startsWith(".env.")) && name !== ".env.example";
 
-/** An engine project's own caches and builds, by the file that marks the project's folder. */
-const ENGINE_CACHES: ReadonlyArray<{ marks: (file: string) => string | null; caches: ReadonlySet<string> }> = [
+/**
+ * An engine project's own caches and builds, by the file that marks the project's folder, and those
+ * of each plugin in its `plugins` folder (an Unreal plugin builds its own Binaries and Intermediate).
+ */
+const ENGINE_CACHES: ReadonlyArray<{
+  marks: (file: string) => string | null;
+  caches: ReadonlySet<string>;
+  plugins?: { folder: string; caches: ReadonlySet<string> };
+}> = [
   {
     // Unity: the folder holding `ProjectSettings/ProjectVersion.txt`.
     marks: (file) => (file.endsWith("ProjectSettings/ProjectVersion.txt") ? parentOf(parentOf(file)) : null),
@@ -75,6 +82,7 @@ const ENGINE_CACHES: ReadonlyArray<{ marks: (file: string) => string | null; cac
   {
     marks: (file) => (file.endsWith(".uproject") ? parentOf(file) : null),
     caches: new Set(["Binaries", "Intermediate", "Saved", "DerivedDataCache"]),
+    plugins: { folder: "Plugins", caches: new Set(["Binaries", "Intermediate"]) },
   },
 ];
 
@@ -84,16 +92,37 @@ function parentOf(file: string): string {
   return at < 0 ? "" : file.slice(0, at);
 }
 
-/** The cache folders of every engine project among `files`, as path prefixes ending in `/`. */
+/** `folder` under `root` as a path prefix ending in `/` (`root` is `""` at the top). */
+const under = (root: string, folder: string): string => (root ? `${root}/${folder}/` : `${folder}/`);
+
+/** The plugin folders among `files` in `plugins` (a prefix ending in `/`), each as a prefix. */
+function pluginFolders(files: readonly string[], plugins: string): Set<string> {
+  const found = new Set<string>();
+  for (const file of files) {
+    if (!file.startsWith(plugins)) continue;
+    const name = file.slice(plugins.length).split("/")[0];
+    if (name && file.length > plugins.length + name.length) found.add(`${plugins}${name}`);
+  }
+  return found;
+}
+
+/** The cache folders of one engine project at `root`, and of its plugins, as path prefixes ending in `/`. */
+function cachesAt(engine: (typeof ENGINE_CACHES)[number], root: string, files: readonly string[]): string[] {
+  const own = [...engine.caches].map((cache) => under(root, cache));
+  if (!engine.plugins) return own;
+  const { folder, caches } = engine.plugins;
+  const plugins = [...pluginFolders(files, under(root, folder))];
+  return [...own, ...plugins.flatMap((plugin) => [...caches].map((cache) => `${plugin}/${cache}/`))];
+}
+
+/** The cache folders of every engine project among `files`, and of its plugins, as path prefixes ending in `/`. */
 function engineCaches(files: readonly string[]): string[] {
-  const prefixes: string[] = [];
-  for (const file of files)
-    for (const engine of ENGINE_CACHES) {
+  return files.flatMap((file) =>
+    ENGINE_CACHES.flatMap((engine) => {
       const root = engine.marks(file);
-      if (root === null) continue;
-      for (const cache of engine.caches) prefixes.push(root ? `${root}/${cache}/` : `${cache}/`);
-    }
-  return prefixes;
+      return root === null ? [] : cachesAt(engine, root, files);
+    }),
+  );
 }
 
 /** Whether `file` (relative, `/` between parts) may be part of the game's project. */

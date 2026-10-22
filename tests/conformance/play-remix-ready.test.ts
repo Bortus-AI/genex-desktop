@@ -41,6 +41,8 @@ describe("a source that holds a game", () => {
       ["a Unity project two folders down", ["game/unity/ProjectSettings/ProjectVersion.txt"], null],
       ["a Godot project", ["godot/project.godot"], null],
       ["an Unreal project", ["Arena/Arena.uproject"], null],
+      ["a Roblox place", ["place.rbxlx"], null],
+      ["a Roblox game kept as files (Rojo)", ["game/default.project.json", "game/src/server/init.server.luau"], null],
     ];
     for (const [why, paths, pkg] of games) assert.equal(sourceHoldsGame(paths, pkg), true, why);
     const none: Array<[string, string[], string | null]> = [

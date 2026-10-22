@@ -12,7 +12,7 @@
  */
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
-import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
+import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { after, before, describe, it } from "node:test";
 import { pathToFileURL } from "node:url";
@@ -194,13 +194,18 @@ await import(${JSON.stringify(STUDIO_PRELOAD)});
     const started = await genex.publishGallery(PROJECT, exportStage, "Racing Demo", undefined, [], choice);
     return genex.publishWait(PROJECT, started.job?.id);
   };
+  /** Put the game on its draft page only, as an agent's draft does: no one chose about remixing. */
+  const draft = async () => {
+    const started = await genex.publishDraft(PROJECT, exportStage);
+    return genex.publishWait(PROJECT, started.job?.id);
+  };
   const runs = async (): Promise<CliRun[]> =>
     (await readFile(log, "utf8").catch(() => ""))
       .split("\n")
       .filter(Boolean)
       .map((line) => JSON.parse(line) as CliRun);
   const uploads = async () => (await runs()).filter((entry) => entry.args[0] === "preview");
-  return { genex, workspace, game, publish, uploads, visibility, close: () => server.close() };
+  return { genex, workspace, game, publish, draft, uploads, visibility, close: () => server.close() };
 }
 
 describe("a publish with Allow remixing", () => {
@@ -272,6 +277,24 @@ describe("a publish with Allow remixing", () => {
       assert.equal(uploads.length, 3);
       assert.ok(uploads.slice(1).every((upload) => upload.args.includes("--source")));
       assert.deepEqual(fx.visibility, [{ private: true }, { private: false }, { private: false }]);
+    } finally {
+      await fx.close();
+    }
+  });
+
+  it("never leaves the project in the workspace, so a later push of the workspace can't carry it", async (t) => {
+    if (!hasGit) return t.skip("git is not installed on this machine; the Genex publish path requires it");
+    const fx = await remixFixture();
+    try {
+      await fx.publish(true);
+      assert.equal(await stat(path.join(fx.workspace, "source")).catch(() => null), null, "the staged copy is gone");
+      const ignored = (await readFile(path.join(fx.workspace, ".gitignore"), "utf8")).split("\n");
+      for (const rule of ["home/", "source/", "remix.json"])
+        assert.ok(ignored.includes(rule), `the workspace ignores ${rule}`);
+      const draft = await fx.draft();
+      assert.equal(draft.job?.state, "done", draft.job?.error);
+      assert.equal((await fx.uploads()).at(-1)?.args.includes("--source"), false, "a draft carries no project");
+      assert.deepEqual(fx.visibility, [{ private: false }], "and changes nothing on Genex");
     } finally {
       await fx.close();
     }
