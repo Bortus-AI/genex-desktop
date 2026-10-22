@@ -80,20 +80,21 @@ describe("a video render's frames in a game", () => {
     await lite.core.games.scaffold(project);
     const dir = lite.core.games.dirFor(project);
     const frames = await writeFrames(dir, "docs/video/frames");
-    // The case a whole-folder rule lost: the video and a poster in the frames' own folder.
+    // The case a whole-folder rule lost: the video, a poster and a numbered texture in the frames' own folder.
     await writeFile(path.join(dir, "docs/video/frames/flythrough.mp4"), "mp4\n");
     await writeFile(path.join(dir, "docs/video/frames/poster.png"), "\x89PNG\r\n\x1a\n");
+    await writeFile(path.join(dir, "docs/video/frames/tile1.png"), "\x89PNG\r\n\x1a\n");
 
     const record = await lite.core.snapshot(SnapshotScope.Game, "after the render", project);
     assert.ok(record.git.game);
     const tree = await treeOf(dir, record.git.game);
     assert.deepEqual(
       tree.filter((file) => file.startsWith("docs/video/frames/")),
-      ["docs/video/frames/flythrough.mp4", "docs/video/frames/poster.png"],
-      "the video and the poster are kept, no frame is committed",
+      ["docs/video/frames/flythrough.mp4", "docs/video/frames/poster.png", "docs/video/frames/tile1.png"],
+      "the video, the poster and the texture are kept, no frame is committed",
     );
     const ignoreLines = (await readFile(path.join(dir, ".gitignore"), "utf8")).split("\n");
-    assert.ok(ignoreLines.includes("docs/video/frames/*[0-9].png"), "only the numbered pictures are left out");
+    assert.ok(ignoreLines.includes("docs/video/frames/frame_[0-9][0-9][0-9][0-9].png"), "only the frames are left out");
     for (const file of [frames[0], frames.at(-1)])
       assert.ok(file && (await pathExists(path.join(dir, file))), `${file} stays on disk`);
 
@@ -101,7 +102,7 @@ describe("a video render's frames in a game", () => {
     assert.ok(next.git.game);
     assert.deepEqual(
       (await treeOf(dir, next.git.game)).filter((file) => file.startsWith("docs/video/frames/")),
-      ["docs/video/frames/flythrough.mp4", "docs/video/frames/poster.png"],
+      ["docs/video/frames/flythrough.mp4", "docs/video/frames/poster.png", "docs/video/frames/tile1.png"],
     );
   });
 
@@ -119,7 +120,10 @@ describe("a video render's frames in a game", () => {
     assert.equal(await pathExists(path.join(dir, "renders/take-1/take-1.mp4")), false, "the video went back");
     for (const file of frames) assert.ok(await pathExists(path.join(dir, file)), `${file} stays on disk`);
     const ignoreLines = (await readFile(path.join(dir, ".gitignore"), "utf8")).split("\n");
-    assert.ok(ignoreLines.includes("renders/take-1/*[0-9].png"), "the frames stay out of the next save point");
+    assert.ok(
+      ignoreLines.includes("renders/take-1/frame_[0-9][0-9][0-9][0-9].png"),
+      "the frames stay out of the next save point",
+    );
   });
 
   it("never land in a chat checkpoint", async () => {
@@ -184,26 +188,34 @@ describe("what reads as a render's dump", () => {
   it("is a folder of enough numbered pictures, large enough together", async () => {
     const dir = await repo();
     await writeFrames(dir, "out/seq", { name: (i) => `Shot.${String(i).padStart(4, "0")}.jpg` });
-    assert.deepEqual(await renderDumpRules(dir), [{ base: "out/seq", pattern: "*[0-9].jpg" }]);
+    assert.deepEqual(await renderDumpRules(dir), [{ base: "out/seq", pattern: "Shot.[0-9][0-9][0-9][0-9].jpg" }]);
   });
 
   it("names a folder at the game's root by itself", async () => {
     const dir = await repo();
     await writeFrames(dir, "frames");
-    assert.deepEqual(await renderDumpRules(dir), [{ base: "frames", pattern: "*[0-9].png" }]);
+    assert.deepEqual(await renderDumpRules(dir), [{ base: "frames", pattern: "frame_[0-9][0-9][0-9][0-9].png" }]);
   });
 
-  it("names each extension as the frames spell it", async () => {
+  it("judges each sequence on its own and names it by its prefix, width and extension as spelled", async () => {
     const dir = await repo();
-    const half = RENDER_DUMP_MIN_FILES / 2;
-    await writeFrames(dir, "seq", { count: half, bytes: FRAME_BYTES * 2 });
-    await writeFrames(dir, "seq", { count: half, bytes: FRAME_BYTES * 2, name: (i) => `beauty.${i}.EXR` });
+    await writeFrames(dir, "seq");
+    // Unpadded, so its names come in three widths: 1 … 9, 10 … 99, 100 … 120.
+    await writeFrames(dir, "seq", { name: (i) => `beauty.${i}.EXR` });
+    // Too few to be a render, though the folder holds enough numbered pictures together.
+    await writeFrames(dir, "seq", { count: 10, name: (i) => `tile${i}.png` });
     const rules = await renderDumpRules(dir);
-    assert.deepEqual(rules.map(({ pattern }) => pattern).sort(), ["*[0-9].EXR", "*[0-9].png"]);
+    assert.deepEqual(rules.map(({ pattern }) => pattern).sort(), [
+      "beauty.[0-9].EXR",
+      "beauty.[0-9][0-9].EXR",
+      "beauty.[0-9][0-9][0-9].EXR",
+      "frame_[0-9][0-9][0-9][0-9].png",
+    ]);
     const leftOut = (file: string) => rules.some((rule) => ruleMatches(file, rule));
-    assert.ok(leftOut("seq/frame_0001.png") && leftOut("seq/beauty.12.EXR"), "the frames are left out");
-    for (const kept of ["seq/poster.png", "seq/take_1.mp4", "seq/notes.txt", "other/frame_0001.png"])
-      assert.ok(!leftOut(kept), `${kept} stays in history`);
+    for (const frame of ["seq/frame_0001.png", "seq/beauty.7.EXR", "seq/beauty.12.EXR", "seq/beauty.120.EXR"])
+      assert.ok(leftOut(frame), `${frame} is left out`);
+    const kept = ["seq/tile1.png", "seq/enemy2.png", "seq/poster.png", "seq/take_1.mp4", "other/frame_0001.png"];
+    for (const file of kept) assert.ok(!leftOut(file), `${file} stays in history`);
   });
 
   const notDumps: Array<{ why: string; folder: string; options: Parameters<typeof writeFrames>[2] }> = [
@@ -223,9 +235,10 @@ describe("what reads as a render's dump", () => {
     const dir = await repo();
     await writeFrames(dir, "renders/take-1");
     const lines = (await renderDumpRules(dir)).map(ignoreLine);
-    assert.deepEqual(lines, ["renders/take-1/*[0-9].png"]);
-    // A person's own lines of the same shape that no plain folder name says are not Genex's to answer.
-    await writeFile(path.join(dir, ".gitignore"), [...lines, "star*/*[0-9].png", "/*[0-9].png", ""].join("\n"));
+    assert.deepEqual(lines, ["renders/take-1/frame_[0-9][0-9][0-9][0-9].png"]);
+    // Lines of the same shape whose folder is no plain folder of the game are not Genex's to answer.
+    const others = ["star*/f_[0-9].png", "/[0-9].png", "./[0-9].png", "../shots/[0-9].png", "a/../b/[0-9].png"];
+    await writeFile(path.join(dir, ".gitignore"), [...lines, ...others, ""].join("\n"));
     assert.deepEqual((await renderDumpRules(dir)).map(ignoreLine), lines);
   });
 
