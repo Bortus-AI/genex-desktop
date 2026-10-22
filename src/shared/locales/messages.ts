@@ -3872,6 +3872,7 @@ export const MESSAGES = [
   "Your nickname and profile link",
   "Your notes",
   "Your one-time code",
+  "Your open Roblox Studio, where agents build Roblox games.",
   "Your open Unity editor, where agents build Unity games.",
   "Your open Unreal Editor, where agents build Unreal games.",
   "Your own answer",

@@ -4732,6 +4732,8 @@ export default {
   "Your one-time code": "Ton code à usage unique",
   "Your open Unity editor, where agents build Unity games.":
     "Ton éditeur Unity ouvert, où les agents créent des jeux Unity.",
+  "Your open Roblox Studio, where agents build Roblox games.":
+    "Ton Roblox Studio ouvert, où les agents créent des jeux Roblox.",
   "Your open Unreal Editor, where agents build Unreal games.":
     "Ton Unreal Editor ouvert, où les agents créent des jeux Unreal.",
   "Your own answer": "Ta propre réponse",

@@ -4393,6 +4393,7 @@ export default {
   "Your notes": "你的备注",
   "Your one-time code": "你的一次性验证码",
   "Your open Unity editor, where agents build Unity games.": "你打开的 Unity 编辑器，智能体在这里制作 Unity 游戏。",
+  "Your open Roblox Studio, where agents build Roblox games.": "你打开的 Roblox Studio，智能体在这里制作 Roblox 游戏。",
   "Your open Unreal Editor, where agents build Unreal games.": "你打开的 Unreal 编辑器，智能体在这里制作 Unreal 游戏。",
   "Your own answer": "你自己的回答",
   "Your profile link": "你的主页链接",

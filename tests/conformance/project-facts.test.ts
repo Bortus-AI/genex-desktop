@@ -77,6 +77,10 @@ describe("the core table", () => {
         ["unity-project@unity", "web-game@web"],
       ],
       ["a Godot project", ["project.godot", "scenes/main.tscn"], ["godot-project@."]],
+      ["a Roblox place at the root", ["Obby.rbxl", "src/server/main.server.luau"], ["roblox-project@."]],
+      ["a Roblox place in XML one folder down", ["places/Obby.rbxlx"], ["roblox-project@places"]],
+      ["a Rojo project", ["default.project.json", "src/shared/util.luau"], ["roblox-project@."]],
+      ["another JSON project file", ["game.project.json", "package.json"], []],
       ["nothing a kind is known by", ["README.md", "idea.txt"], []],
     ];
     for (const [name, files, facts] of table) assert.deepEqual(found(files), facts, name);

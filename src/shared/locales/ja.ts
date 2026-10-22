@@ -4665,6 +4665,8 @@ export default {
   "Your one-time code": "ワンタイムコード",
   "Your open Unity editor, where agents build Unity games.":
     "開いているUnityエディターです。エージェントはここでUnityのゲームをつくります。",
+  "Your open Roblox Studio, where agents build Roblox games.":
+    "開いているRoblox Studioです。エージェントはここでRobloxのゲームをつくります。",
   "Your open Unreal Editor, where agents build Unreal games.":
     "開いているUnreal Editorです。エージェントはここでUnrealのゲームをつくります。",
   "Your own answer": "自分の答え",
