@@ -342,7 +342,7 @@ describe("a plugin's hooks, locks, needs and readiness", () => {
   it("the bundled Unreal manifest is valid and its lock's probe needs no lock", () => {
     const raw = JSON.parse(readFileSync("src/plugins/unreal/plugin.json", "utf8")) as PluginManifest;
     const unreal = validateManifest(raw);
-    assert.equal(unreal.version, "0.17.8");
+    assert.equal(unreal.version, "0.17.9");
     assert.deepEqual(unreal.locks, [
       { id: "editor", label: "Unreal", per: LockScope.Project, personFirst: "editor-activity" },
     ]);
@@ -532,6 +532,9 @@ const UNREAL_EDITOR_STEPS = [
   "run-part",
   "rollback-part",
   "reload-level",
+  // The agent's own Open and Quit, which may end the editor.
+  "open-editor",
+  "quit-editor",
   // The computer's play in the editor (`shared/engine-play.ts`): each call waits for the lock.
   ...ENGINE_PLAY_TOOLS,
 ];
