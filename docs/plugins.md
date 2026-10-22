@@ -2669,13 +2669,20 @@ the online play) puts Genex multiplayer into the game's Unity project, WebGL and
   A version the person chose stays.
 - **IL2CPP.** `Assets/Genex/link.xml` keeps the Genex and Colyseus assemblies from stripping, since
   the relay's schema is reached by reflection.
+- **The game's project.** `Assets/Genex/GenexGame.cs` and `GenexGame.jslib` (from
+  `multiplayer/genex-game/`, kept as `.mine~` when changed) give `GenexGame.Slug`: Play's
+  `GENEX_GAME`, then the published page's `window.__GENEX__.slug`, then the settings file. Builds
+  made before the first publish join once published; only the editor and a build started by hand
+  need the slug written.
 - **The game's settings.** `Assets/Resources/GenexSettings.json` holds the slug (when given) and
-  API, which the game reads with `Resources.Load`. Matchmaking goes into the game's `genex.json`,
+  API, which `GenexGame` reads with `Resources.Load`. Matchmaking goes into the game's `genex.json`,
   as for Godot (`substrate/genex-game-settings.ts`).
 - **Identity.** A WebGL build's player comes from the published page's `window.genexEmbed` (the
   connect module's). A native build's comes from `GenexNativeIdentity`: Play's gateway and ticket
   (`GENEX_API_URL`, `GENEX_EMBED_TICKET`), or a guest.
-- **Not yet verified:** the package in a real Unity editor, an IL2CPP build or a WebGL build.
+- **Verified so far:** a Unity 6 Mono Mac build, named by `GENEX_GAME`, signed in as a guest and
+  two copies met in a published game's room; a WebGL build read its name from the page. Not yet:
+  an IL2CPP build, or a WebGL build's sign-in on a published page.
 
 #### The panel and the toolbar button
 
@@ -3519,7 +3526,9 @@ the online play) puts Genex multiplayer into the game's Godot project, web and n
   `sdks/godot` (`MULTIPLAYER_ADDON_SOURCE`). A changed file is kept as `.mine`. Its
   `GenexMultiplayer` autoload goes into `project.godot`.
 - **The Genex project.** The game's slug (when given) and API go into `project.godot`'s `[genex]`
-  section. A native build joins that game; the web build reads its slug from the page.
+  section. The skill's `slug()` takes Play's `GENEX_GAME` first, then the page's
+  `window.__GENEX__.slug`, then that section, so builds made before the first publish join once
+  published; only the editor and a build started by hand need the slug written.
 - **Matchmaking.** The `matchmaking` argument (checked: a preset, a win condition, numeric knobs)
   goes into the game's `genex.json`, which `readGenexGameManifest` sends at publish with
   `@genex-ai/multiplayer` at Studio's pin.

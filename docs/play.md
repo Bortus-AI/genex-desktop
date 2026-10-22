@@ -240,7 +240,8 @@ is.
     addresses in JSON answers (relay lists, a seat's `publicAddress`) are rewritten to their local
     port, so the next connection comes back through the gateway. Anything else is refused: a port
     with no host yet, a relay once the ports are full, a request over 1 MB.
-  - **What the game is told.** Its environment carries `GENEX_API_URL` (the gateway) and, while the
+  - **What the game is told.** Its environment carries `GENEX_API_URL` (the gateway), `GENEX_GAME`
+    (its slug, so a build made before its first publish knows which rooms to join) and, while the
     Genex account is unlocked, `GENEX_EMBED_TICKET`. That is a single-use ticket minted with
     `delivery: "native"` (`gallery.ticket`); otherwise the game plays as a guest. Genex's Godot
     addon and Unity package read both (CLI_INTEGRATION §6b).
