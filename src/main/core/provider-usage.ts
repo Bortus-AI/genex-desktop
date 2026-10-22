@@ -23,8 +23,8 @@ export interface ProviderUsageDeps {
   push(reports: ProviderUsageReport[]): void;
 }
 
-/** How many reads in a row an account change mid-read may start, so a flapping choice cannot spin. */
-const MAX_READS_IN_A_ROW = 3;
+/** How many reads an account change mid-read may start, so a flapping choice cannot spin. */
+const MAX_SWITCH_READS = 3;
 
 /** A read under way, joined by every refresh that arrives meanwhile. */
 interface Reading {
@@ -75,25 +75,38 @@ export function createProviderUsage({ engines, source, push }: ProviderUsageDeps
 
   /**
    * One read of one subscription: status, account, then its limits. True when the account changed
-   * during the read: its numbers are dropped and the new account is read at once.
+   * during the read: its numbers are dropped and the new account is read at once, unless this was
+   * the `last` read in a row, which then ends as failed (Try again) rather than checking for good.
    */
-  async function read(id: string): Promise<boolean> {
+  async function read(id: string, last: boolean): Promise<boolean> {
     const engine = source(id);
-    const status = await engine?.status().catch(() => null);
+    // A status that cannot be read is a passing trouble, not a plan gone.
+    const status = await engine?.status().catch(() => ({ code: EngineStatusCode.Error }));
     const previous = reports.get(id) ?? null;
     if (!engine || status?.code !== EngineStatusCode.Ready) {
       set(id, notReady(previous, status?.code));
       return false;
     }
+    return readLimits(id, engine, previous, last);
+  }
+
+  /** A ready subscription's limits for the account in use; true when that account changed meanwhile. */
+  async function readLimits(
+    id: string,
+    engine: UsageSource,
+    previous: ProviderUsageReport | null,
+    last: boolean,
+  ): Promise<boolean> {
     const account = await engine.account().catch(() => null);
     const kept = previous?.account === account ? (previous?.usage ?? null) : null;
     set(id, { engine: id, state: UsageState.Checking, account, usage: kept });
     try {
       const usage = (await engine.readUsage?.()) ?? null;
-      const now = await engine.account().catch(() => null);
+      // A second look that fails says nothing about a change: the reading stands.
+      const now = await engine.account().catch(() => account);
       if (now !== account) {
-        set(id, { engine: id, state: UsageState.Checking, account: now, usage: null });
-        return true;
+        set(id, { engine: id, state: last ? UsageState.Failed : UsageState.Checking, account: now, usage: null });
+        return !last;
       }
       set(id, { engine: id, state: usage ? UsageState.Ready : UsageState.NotShared, account, usage });
     } catch {
@@ -112,12 +125,15 @@ export function createProviderUsage({ engines, source, push }: ProviderUsageDeps
     const reading: Reading = { done: Promise.resolve(), again: false };
     reading.done = (async () => {
       try {
-        let reads = 0;
+        // Reads an account change starts are capped; reads a sign-in or switch asked for are not.
+        let switches = 0;
         do {
           reading.again = false;
-          reads += 1;
-          if (await read(id)) reading.again = true;
-        } while (reading.again && reads < MAX_READS_IN_A_ROW);
+          if (await read(id, switches + 1 >= MAX_SWITCH_READS)) {
+            switches += 1;
+            reading.again = true;
+          }
+        } while (reading.again);
       } finally {
         readings.delete(id);
       }

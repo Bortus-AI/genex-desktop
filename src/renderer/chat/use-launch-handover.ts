@@ -143,7 +143,8 @@ export function useLaunchHandover({
   const step = held ? handoverStep(held.state, ready) : null;
   // biome-ignore lint/correctness/useExhaustiveDependencies: acts when the step or the chat changes, with the held words then
   useEffect(() => {
-    if (!held || !step || !threadId) return;
+    // A chat still loading has no build or sign-in state to send by yet: it decides once loaded.
+    if (!held || !step || !threadId || loading) return;
     const chat = threadId;
     if (step === HandoverStep.SignIn) {
       if (held.state !== HeldState.SignedOut) put(chat, { ...held, state: HeldState.SignedOut });
@@ -167,7 +168,7 @@ export function useLaunchHandover({
       .send(held.text, held.extras)
       .then((sent) => settle(sent ? SendOutcome.Sent : SendOutcome.NotSent))
       .catch(() => settle(SendOutcome.Failed));
-  }, [step, threadId]);
+  }, [step, threadId, loading]);
 
   const act = (): void => {
     if (!held || !threadId) return;

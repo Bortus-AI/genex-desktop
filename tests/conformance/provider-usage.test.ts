@@ -278,3 +278,52 @@ describe("a plan's limits around an account change", () => {
     assert.equal(last(CLAUDE)?.usage?.windows[0]?.percent, 23);
   });
 });
+
+describe("a plan's read that cannot settle", () => {
+  it("ends as failed, never checking for good, when the account keeps changing", async () => {
+    let flip = 0;
+    const source: UsageSource = {
+      status: async () => ({ code: EngineStatusCode.Ready }),
+      account: async () => `account-${(flip++ % 2) + 2}`,
+      readUsage: async () => reading(10),
+    };
+    const { usage, last } = rig({ [CLAUDE]: source });
+    await usage.refresh();
+    assert.equal(last(CLAUDE)?.state, UsageState.Failed, "Try again shows instead of an endless shimmer");
+    assert.equal(last(CLAUDE)?.usage, null);
+  });
+
+  it("keeps good numbers when only the second look at the account fails", async () => {
+    let looks = 0;
+    const source: UsageSource = {
+      status: async () => ({ code: EngineStatusCode.Ready }),
+      account: async () => {
+        looks += 1;
+        if (looks === 2) throw new Error("accounts file busy");
+        return "terminal";
+      },
+      readUsage: async () => reading(23),
+    };
+    const { usage, last } = rig({ [CLAUDE]: source });
+    await usage.refresh();
+    assert.equal(last(CLAUDE)?.state, UsageState.Ready);
+    assert.equal(last(CLAUDE)?.usage?.windows[0]?.percent, 23);
+  });
+
+  it("shows a shown plan as failed when its engine cannot even say its status", async () => {
+    let broken = false;
+    const source: UsageSource = {
+      status: async () => {
+        if (broken) throw new Error("probe crashed");
+        return { code: EngineStatusCode.Ready };
+      },
+      account: async () => "terminal",
+      readUsage: async () => reading(23),
+    };
+    const { usage, last } = rig({ [CLAUDE]: source });
+    await usage.refresh();
+    broken = true;
+    await usage.refresh();
+    assert.equal(last(CLAUDE)?.state, UsageState.Failed);
+  });
+});
