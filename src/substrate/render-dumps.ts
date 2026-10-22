@@ -38,11 +38,15 @@ const FRAMES_LINE = /^(.+)\/([A-Za-z0-9._-]*?)((?:\[0-9\])+)\.([A-Za-z0-9]+)$/;
  */
 const PLAIN_SEGMENT = /^[\p{L}\p{N}._-](?:[\p{L}\p{N} ._-]*[\p{L}\p{N}._-])?$/u;
 
-/** A frame's name taken apart; null for a file that is no numbered picture. */
-function frameName(rel: string): { prefix: string; digits: number; extension: string } | null {
+/**
+ * A frame's name taken apart (`padded`: its number starts with a zero, as `0001`); null for a file
+ * that is no numbered picture.
+ */
+function frameName(rel: string): { prefix: string; digits: number; padded: boolean; extension: string } | null {
   if (assetFormat(rel)?.kind !== "image") return null;
   const [, prefix = "", digits = "", extension = ""] = FRAME_NAME.exec(path.posix.basename(rel)) ?? [];
-  return digits ? { prefix, digits: digits.length, extension } : null;
+  if (!digits) return null;
+  return { prefix, digits: digits.length, padded: digits.length > 1 && digits.startsWith("0"), extension };
 }
 
 /**
@@ -99,7 +103,19 @@ const sequenceOf = (rel: string): string => {
   return `${path.posix.dirname(rel)}\0${name?.prefix}\0${name?.extension}`;
 };
 
-/** A dumped sequence's rules: one per number width its frames use (`1.png` … `1200.png` has four). */
+/**
+ * A sequence's runs, each judged on its own: the frames of each zero-padded width (`0001` … `0120`),
+ * and the frames numbered without padding together (`1` … `120` spans three widths). A stray
+ * `1.png` beside `0001.png` … `0120.png` is a run of one, never a render's.
+ */
+function runsOf(sequence: readonly string[]): string[][] {
+  const widths = [...groupBy(sequence, (rel) => String(frameName(rel)?.digits)).values()];
+  const isPadded = (run: readonly string[]) => run.some((rel) => frameName(rel)?.padded);
+  const unpadded = widths.filter((run) => !isPadded(run)).flat();
+  return [...widths.filter(isPadded), ...(unpadded.length ? [unpadded] : [])];
+}
+
+/** A dumped run's rules: one per number width its frames use (`1.png` … `1200.png` has four). */
 function sequenceRules(sequence: readonly string[]): PlacedRule[] {
   const byWidth = new Map<number, PlacedRule | null>();
   for (const rel of sequence) {
@@ -117,8 +133,8 @@ function sequenceRules(sequence: readonly string[]): PlacedRule[] {
 async function newFramesRules(dir: string): Promise<PlacedRule[]> {
   const frames = (await untrackedFiles(dir)).filter((rel) => frameName(rel) && path.posix.dirname(rel) !== ".");
   const rules: PlacedRule[] = [];
-  for (const sequence of groupBy(frames, sequenceOf).values())
-    if (await isRenderDump(dir, sequence)) rules.push(...sequenceRules(sequence));
+  for (const run of [...groupBy(frames, sequenceOf).values()].flatMap(runsOf))
+    if (await isRenderDump(dir, run)) rules.push(...sequenceRules(run));
   return rules;
 }
 

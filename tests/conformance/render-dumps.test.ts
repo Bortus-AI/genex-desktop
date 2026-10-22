@@ -204,6 +204,9 @@ describe("what reads as a render's dump", () => {
     await writeFrames(dir, "seq", { name: (i) => `beauty.${i}.EXR` });
     // Too few to be a render, though the folder holds enough numbered pictures together.
     await writeFrames(dir, "seq", { count: 10, name: (i) => `tile${i}.png` });
+    // Stray pictures named like the padded frames, but unpadded: a run of their own, too short.
+    for (const stray of ["frame_1.png", "frame_12.png"])
+      await writeFile(path.join(dir, "seq", stray), "\x89PNG\r\n\x1a\n");
     const rules = await renderDumpRules(dir);
     assert.deepEqual(rules.map(({ pattern }) => pattern).sort(), [
       "beauty.[0-9].EXR",
@@ -214,7 +217,15 @@ describe("what reads as a render's dump", () => {
     const leftOut = (file: string) => rules.some((rule) => ruleMatches(file, rule));
     for (const frame of ["seq/frame_0001.png", "seq/beauty.7.EXR", "seq/beauty.12.EXR", "seq/beauty.120.EXR"])
       assert.ok(leftOut(frame), `${frame} is left out`);
-    const kept = ["seq/tile1.png", "seq/enemy2.png", "seq/poster.png", "seq/take_1.mp4", "other/frame_0001.png"];
+    const kept = [
+      "seq/tile1.png",
+      "seq/enemy2.png",
+      "seq/frame_1.png",
+      "seq/frame_12.png",
+      "seq/poster.png",
+      "seq/take_1.mp4",
+      "other/frame_0001.png",
+    ];
     for (const file of kept) assert.ok(!leftOut(file), `${file} stays in history`);
   });
 
