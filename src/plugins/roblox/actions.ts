@@ -17,5 +17,6 @@ export const RobloxAction = {
   AddLuauChecks: "add-luau-checks",
   PublishUpdate: "publish-update",
   FirstPublish: "first-publish",
+  FinishSetup: "finish-setup",
 } as const;
 export type RobloxAction = (typeof RobloxAction)[keyof typeof RobloxAction];

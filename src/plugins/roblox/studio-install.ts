@@ -24,7 +24,7 @@ import { lstat, mkdir, mkdtemp, open, rm } from "node:fs/promises";
 import path from "node:path";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
 import { envValue } from "../../substrate/toolchain.ts";
-import { type LaunchDeps, openLaunch } from "./studio-launch.ts";
+import { type Launch, type LaunchDeps, openLaunch, openPlaceLaunch, type PlaceTarget } from "./studio-launch.ts";
 import { isWindowsPath, locateStudio, type StudioInstall, studioRunning } from "./studio-locate.ts";
 import { MESSAGE } from "./words.ts";
 
@@ -419,6 +419,18 @@ export async function installStudio(deps: InstallDeps, options: InstallOptions):
 export interface AfterInstallDeps extends LaunchDeps {
   /** Genex's Set up, run while Studio is closed; answers its plain words. */
   setUp(): Promise<string>;
+  /** The game's place Studio opens with once it is set up; Studio alone without one. */
+  place?: PlaceTarget;
+}
+
+/** Studio opened once it is set up: with the game's place when it has one Studio can open, else alone. */
+function reopenLaunch(deps: AfterInstallDeps, install: StudioInstall): Launch {
+  if (!deps.place) return openLaunch(deps.platform, install);
+  try {
+    return openPlaceLaunch(deps.platform, install, deps.place);
+  } catch {
+    return openLaunch(deps.platform, install);
+  }
 }
 
 /** Studio set up and opened again after the installer. */
@@ -454,8 +466,8 @@ async function installedStudio(deps: LaunchDeps, signal: AbortSignal): Promise<S
 /**
  * After the installer: waits for Studio; when the installer's Studio opens, waits for the person to
  * sign in there and for that Studio to close by itself (never closing it); sets Studio up while it
- * is closed; then opens Studio once. A Studio that closes again after that is the person's: it is
- * never opened again from here.
+ * is closed; then opens Studio once, with the game's place when there is one. A Studio that closes
+ * again after that is the person's: it is never opened again from here.
  */
 export async function afterInstall(
   deps: AfterInstallDeps,
@@ -474,7 +486,7 @@ export async function afterInstall(
   const setUp = await deps.setUp();
   throwIfStopped(signal);
   options.onPhase?.(InstallPhase.Opening);
-  await deps.open(openLaunch(deps.platform, install));
+  await deps.open(reopenLaunch(deps, install));
   const done: AfterInstallDone = { message: `${setUp} ${MESSAGE.Install.Reopened()}`, reopened: true };
   if (install.version) done.version = install.version;
   return done;

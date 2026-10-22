@@ -165,7 +165,6 @@ export default {
     "Пинбол, где шарик — крошечный рыцарь, сражающийся с монстрами",
   "A pirate ship battle with cannons that shoot fruit": "Морской бой пиратов, где пушки стреляют фруктами",
   "A pixel-art fishing game under a frozen lake": "Пиксельная рыбалка подо льдом замёрзшего озера",
-  "A place open in Roblox Studio, or a new one.": "Плейс, открытый в Roblox Studio, или новый.",
   "A plan is ready for your review.": "План готов к проверке.",
   "A platformer where gravity flips every time you jump":
     "Платформер, где гравитация переворачивается при каждом прыжке",
@@ -297,9 +296,6 @@ export default {
   "Add the Genex helper": "Добавить плагин Genex",
   "Add the Genex helper to Roblox Studio and turn on its MCP server.":
     "Добавь плагин Genex в Roblox Studio и включи MCP-сервер Studio.",
-  "Add the Genex helper to Roblox Studio's Plugins folder and turn on Studio's MCP server?":
-    "Добавить плагин Genex в папку Plugins в Roblox Studio и включить MCP-сервер Studio?",
-  "Add the Genex helper to {folder}.": "Добавить плагин Genex в {folder}.",
   "Add to": "Добавить в",
   "Add your OpenRouter API key in Settings › Model Providers.":
     "Добавь свой API-ключ OpenRouter в разделе «Настройки › Провайдеры моделей».",
@@ -728,7 +724,6 @@ export default {
   "Choose file…": "Выбрать файл…",
   "Choose game image": "Выбрать изображение игры",
   "Choose image…": "Выбрать изображение…",
-  "Choose it with the Roblox Studio button.": "Выбери его кнопкой Roblox Studio.",
   "Choose microphone": "Выбрать микрофон",
   "Choose model": "Выбрать модель",
   "Choose one of the templates Genex shows.": "Выбери один из шаблонов, которые показывает Genex.",
@@ -1206,8 +1201,6 @@ export default {
     "Скачай Blender {version} (около {size}) для Studio. Твой Blender останется как есть.",
   "Download Bonsai 2 to build locally": "Скачай Bonsai 2, чтобы собирать игры локально",
   "Download Genex {version}": "Скачать Genex {version}",
-  "Download Roblox Studio from Roblox (about {megabytes} MB), check that Roblox signed it, and install it?":
-    "Скачать Roblox Studio с сайта Roblox (около {megabytes} МБ), проверить подпись Roblox и установить?",
   "Download a local model": "Скачать локальную модель",
   "Download cancelled. Verified files and resumable partials are retained.":
     "Загрузка отменена. Проверенные файлы и части для докачки сохранены.",
@@ -1523,8 +1516,6 @@ export default {
     "Так Genex скачивает Godot только на Windows; на Mac кнопка «Сделать за меня» установит его в «Программы».",
   "Genex downloads Roblox Studio only over a secure link, and this one isn't. Nothing was installed.":
     "Genex скачивает Roblox Studio только по защищённой ссылке, а эта ссылка не защищена. Ничего не установлено.",
-  "Genex downloads Roblox's own installer from {host} and checks that Roblox signed it before it runs.":
-    "Genex скачивает собственный установщик Roblox с {host} и перед запуском проверяет, что он подписан Roblox.",
   "Genex downloads it from Roblox, checks that Roblox signed it, and installs it.":
     "Genex скачает его с сайта Roblox, проверит подпись Roblox и установит.",
   "Genex downloads the pinned releases only, checks each file's size and fingerprint, and keeps them in its own storage. They run on this computer to check scripts, outside Genex's sandbox, as copies you installed yourself would.":
@@ -1562,8 +1553,6 @@ export default {
     "Genex оставляет все файлы как есть и не добавляет стартовую игру",
   "Genex keeps it empty; your first message decides what it becomes":
     "Genex оставит её пустой — твоё первое сообщение решит, что в ней будет",
-  "Genex keeps what was there first, and Undo Set up takes these changes back.":
-    "Genex сохранит то, что было раньше, а «Отменить настройку» вернёт всё как было.",
   "Genex kept the current cover: it outranks an uploaded one.":
     "Genex оставил текущую обложку: у неё приоритет над загруженной.",
   "Genex leaves it open until the Loop ends.": "Genex не закроет Unreal, пока Loop не закончится.",
@@ -2476,8 +2465,6 @@ export default {
   "On this Mac · {size}": "На этом Mac · {size}",
   "Once on, it runs at Genex's moments: {steps}; those steps don't ask you first.":
     "После включения он срабатывает в определённые моменты работы Genex: {steps}; в эти моменты он тебя не спрашивает.",
-  "Once you've signed in, that Studio closes by itself. Genex then adds its helper, turns on Studio's MCP server, and opens Studio again.":
-    "Как только ты войдёшь, этот Studio закроется сам. Затем Genex добавит свой плагин, включит MCP-сервер Studio и снова откроет Studio.",
   "One account for hundreds of models. You pay OpenRouter for what you use.":
     "Один аккаунт — сотни моделей. Платишь OpenRouter за то, что используешь.",
   "One bold move": "Одна смелая идея",
@@ -3133,8 +3120,6 @@ export default {
   "Roblox's installer is installing Studio.": "Установщик Roblox устанавливает Studio.",
   "Roblox's installer stopped before it finished. Press Get Roblox Studio to try again.":
     "Установщик Roblox остановился, не закончив. Нажми «Установить Roblox Studio», чтобы попробовать снова.",
-  "Roblox's installer then installs Studio and opens it. Studio asks you to sign in: Genex never sees your password.":
-    "Затем установщик Roblox ставит Studio и открывает его. Studio попросит тебя войти: Genex никогда не видит твой пароль.",
   "Rojo keeps your scripts in step, so Genex leaves them to it.":
     "Скрипты синхронизирует Rojo, поэтому Genex их не трогает.",
   "Roll the studio back to the moment before this change": "Откатить Studio к моменту до этого изменения",
@@ -3290,14 +3275,11 @@ export default {
   "Set up Claude Code": "Установить Claude Code",
   "Set up Codex": "Установить Codex",
   "Set up OpenCode": "Установить OpenCode",
-  "Set up adds it to Studio's Plugins folder and turns on Studio's MCP server while Studio is closed.":
-    "Кнопка «Настроить» добавит его в папку Plugins в Studio и включит MCP-сервер Studio, пока Studio закрыт.",
   "Set up an Unreal project for Genex.": "Настроить проект Unreal для Genex.",
   "Set up and open": "Настроить и открыть",
   "Set up for Genex": "Настроить для Genex",
   "Set up the protected workspace": "Настрой защищённое рабочее пространство",
   "Set up this game's Unity project": "Настрой проект Unity для этой игры",
-  "Set up turns it on while Studio is closed.": "Кнопка «Настроить» включит его, пока Studio закрыт.",
   "Set up {name} for Genex.": "Настроить проект {name} для Genex.",
   "Set up {name} for Genex?": "Настроить проект {name} для Genex?",
   "Set up {project} after it ends.": "Настрой проект {project}, когда Loop закончится.",
@@ -3562,8 +3544,6 @@ export default {
   "Studio does not know where this plugin came from; load it again":
     "Studio не знает, откуда этот плагин; загрузи его снова",
   "Studio forgets this account": "Studio забудет этот аккаунт",
-  "Studio hasn't saved its settings yet, so turn its MCP server on in Studio: {clicks}.":
-    "Studio ещё не сохранил настройки, поэтому включи MCP-сервер в самом Studio: {clicks}.",
   "Studio hit a problem.": "В Studio что-то пошло не так.",
   "Studio is building right now. Rewind when the build finishes.":
     "Studio сейчас собирает игру. Откати, когда сборка закончится.",
@@ -4226,8 +4206,6 @@ export default {
   "Turn on Secondary Logon in Windows Services (Startup type: Manual), then try again.":
     "Включи «Вторичный вход в систему» в службах Windows (тип запуска: «Вручную») и попробуй снова.",
   "Turn on Studio's MCP server": "Включить MCP-сервер Studio",
-  "Turn on Studio's MCP server in the settings of {count, plural, one {# Roblox account} other {# Roblox accounts}} on this computer.":
-    "Включить MCP-сервер Studio в настройках {count, plural, one {# аккаунта Roblox} few {# аккаунтов Roblox} many {# аккаунтов Roblox} other {# аккаунта Roblox}} на этом компьютере.",
   "Turn on computer control? Agents in every chat can then ask to use apps on this computer, one app at a time.":
     "Включить управление компьютером? Тогда агенты в любом чате смогут просить доступ к приложениям на этом компьютере — по одному за раз.",
   "Turn on mic": "Включить микрофон",
@@ -5907,4 +5885,17 @@ export default {
   "It needs a Mac with Apple silicon.": "Нужен Mac с Apple silicon.",
   "It needs Rosetta to run on this Mac.": "Чтобы запустить её на этом Mac, нужна Rosetta.",
   "It’s made for a different processor.": "Она сделана для другого процессора.",
+  "Genex adds it to Studio's Plugins folder and turns on Studio's MCP server while Studio is closed.":
+    "Genex добавит его в папку Plugins в Studio и включит MCP-сервер Studio, пока Studio закрыт.",
+  "Genex does this once you've signed in.": "Genex сделает это, когда ты войдёшь.",
+  "Genex turns it on while Studio is closed.": "Genex включит его, пока Studio закрыт.",
+  "Genex makes a new place for this game.": "Genex сделает для этой игры новый плейс.",
+  "To build in one of yours instead, choose it with the Roblox Studio button.":
+    "Чтобы строить в одном из своих, выбери его кнопкой Roblox Studio.",
+  "Signing in to Roblox is yours; Genex does the rest.": "Войти в Roblox нужно тебе, остальное сделает Genex.",
+  "Set it up for me": "Настроить за меня",
+  "Genex has done every step it can. Sign in to Roblox in Studio; once Studio answers, agents can build.":
+    "Genex сделал всё, что может. Войди в Roblox в Studio; когда Studio ответит, агенты смогут строить.",
+  "Roblox Studio is set up and answering Genex, and this game builds in its place.":
+    "Roblox Studio настроен и отвечает Genex, а эта игра строится в своём плейсе.",
 } satisfies LocaleCatalog;

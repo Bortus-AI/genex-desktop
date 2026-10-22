@@ -151,7 +151,6 @@ export default {
     "ボールがモンスターと戦う小さな騎士になっているピンボール",
   "A pirate ship battle with cannons that shoot fruit": "フルーツを撃つ大砲で戦う海賊船バトル",
   "A pixel-art fishing game under a frozen lake": "凍った湖の下で釣りをするピクセルアートのゲーム",
-  "A place open in Roblox Studio, or a new one.": "Roblox Studioで開いているプレイス、または新しいプレイス。",
   "A plan is ready for your review.": "プランの準備ができました。確認してください。",
   "A platformer where gravity flips every time you jump": "ジャンプするたびに重力が反転するプラットフォーマー",
   "A plugin": "プラグイン",
@@ -269,9 +268,6 @@ export default {
   "Add the Genex helper": "Genexヘルパーを追加",
   "Add the Genex helper to Roblox Studio and turn on its MCP server.":
     "Roblox StudioにGenexヘルパーを追加して、StudioのMCPサーバーをオンにしてください。",
-  "Add the Genex helper to Roblox Studio's Plugins folder and turn on Studio's MCP server?":
-    "Roblox StudioのPluginsフォルダーにGenexヘルパーを追加して、StudioのMCPサーバーをオンにしますか？",
-  "Add the Genex helper to {folder}.": "{folder}にGenexヘルパーを追加します。",
   "Add to": "追加先",
   "Add your OpenRouter API key in Settings › Model Providers.":
     "設定 › モデルプロバイダーでOpenRouterのAPIキーを追加してください。",
@@ -703,7 +699,6 @@ export default {
   "Choose file…": "ファイルを選択…",
   "Choose game image": "ゲームの画像を選択",
   "Choose image…": "画像を選択…",
-  "Choose it with the Roblox Studio button.": "Roblox Studioボタンから選んでください。",
   "Choose microphone": "マイクを選択",
   "Choose model": "モデルを選択",
   "Choose one of the templates Genex shows.": "Genexが表示するテンプレートから選んでください。",
@@ -1189,8 +1184,6 @@ export default {
     "Studio用にBlender {version}（約{size}）をダウンロードしてください。今のBlenderはそのまま残ります。",
   "Download Bonsai 2 to build locally": "ローカルでつくるにはBonsai 2をダウンロード",
   "Download Genex {version}": "Genex {version}をダウンロード",
-  "Download Roblox Studio from Roblox (about {megabytes} MB), check that Roblox signed it, and install it?":
-    "Roblox StudioをRobloxからダウンロードし（約{megabytes} MB）、Robloxの署名を確認してインストールしますか？",
   "Download a local model": "ローカルモデルをダウンロード",
   "Download cancelled. Verified files and resumable partials are retained.":
     "ダウンロードをキャンセルしました。検証済みのファイルと再開できる途中データは残してあります。",
@@ -1508,8 +1501,6 @@ export default {
     "この方法でGodotをダウンロードするのはWindowsだけです。Macでは「おまかせ」で「アプリケーション」にインストールします。",
   "Genex downloads Roblox Studio only over a secure link, and this one isn't. Nothing was installed.":
     "GenexはRoblox Studioを安全なリンクからしかダウンロードしませんが、このリンクは安全ではありません。何もインストールされていません。",
-  "Genex downloads Roblox's own installer from {host} and checks that Roblox signed it before it runs.":
-    "GenexはRoblox公式のインストーラーを{host}からダウンロードし、実行する前にRobloxの署名を確認します。",
   "Genex downloads it from Roblox, checks that Roblox signed it, and installs it.":
     "GenexがRobloxからダウンロードし、Robloxの署名を確認してインストールします。",
   "Genex downloads the pinned releases only, checks each file's size and fingerprint, and keeps them in its own storage. They run on this computer to check scripts, outside Genex's sandbox, as copies you installed yourself would.":
@@ -1548,8 +1539,6 @@ export default {
     "Genexはすべてのファイルをそのまま残し、スターターゲームは書き込みません",
   "Genex keeps it empty; your first message decides what it becomes":
     "Genexは空のまま残します。最初のメッセージで何になるかが決まります",
-  "Genex keeps what was there first, and Undo Set up takes these changes back.":
-    "Genexは元の状態を保存しておき、「セットアップを元に戻す」でこの変更を取り消せます。",
   "Genex kept the current cover: it outranks an uploaded one.":
     "Genexは今のカバーを残しました。アップロードした画像より優先されます。",
   "Genex leaves it open until the Loop ends.": "Loopが終わるまでGenexは開いたままにします。",
@@ -2479,8 +2468,6 @@ export default {
   "On this Mac · {size}": "このMac · {size}",
   "Once on, it runs at Genex's moments: {steps}; those steps don't ask you first.":
     "オンにすると、Genexの次のタイミングで実行されます：{steps}。これらのステップは事前に確認しません。",
-  "Once you've signed in, that Studio closes by itself. Genex then adds its helper, turns on Studio's MCP server, and opens Studio again.":
-    "サインインすると、そのStudioは自動で閉じます。そのあとGenexがヘルパーを追加し、StudioのMCPサーバーをオンにして、Studioをもう一度開きます。",
   "One account for hundreds of models. You pay OpenRouter for what you use.":
     "1つのアカウントで数百のモデルが使えます。使った分だけOpenRouterに支払います。",
   "One bold move": "大胆な一手",
@@ -3144,8 +3131,6 @@ export default {
   "Roblox's installer is installing Studio.": "RobloxのインストーラーがStudioをインストールしています。",
   "Roblox's installer stopped before it finished. Press Get Roblox Studio to try again.":
     "Robloxのインストーラーが途中で止まりました。「Roblox Studioを入手」を押して、もう一度試してください。",
-  "Roblox's installer then installs Studio and opens it. Studio asks you to sign in: Genex never sees your password.":
-    "その後、RobloxのインストーラーがStudioをインストールして開きます。Studioからサインインを求められますが、Genexがパスワードを見ることはありません。",
   "Rojo keeps your scripts in step, so Genex leaves them to it.":
     "Rojoがスクリプトを同期しているので、GenexはRojoに任せます。",
   "Roll the studio back to the moment before this change": "Studioをこの変更の直前に戻す",
@@ -3297,14 +3282,11 @@ export default {
   "Set up Claude Code": "Claude Codeをセットアップ",
   "Set up Codex": "Codexをセットアップ",
   "Set up OpenCode": "OpenCodeをセットアップ",
-  "Set up adds it to Studio's Plugins folder and turns on Studio's MCP server while Studio is closed.":
-    "「セットアップ」を押すと、Studioが閉じている間に、ヘルパーをStudioのPluginsフォルダーに追加してStudioのMCPサーバーをオンにします。",
   "Set up an Unreal project for Genex.": "UnrealプロジェクトをGenex用にセットアップします。",
   "Set up and open": "セットアップして開く",
   "Set up for Genex": "Genex用にセットアップ",
   "Set up the protected workspace": "保護されたワークスペースをセットアップ",
   "Set up this game's Unity project": "このゲームのUnityプロジェクトをセットアップしてください",
-  "Set up turns it on while Studio is closed.": "「セットアップ」を押すと、Studioが閉じている間にオンにします。",
   "Set up {name} for Genex.": "{name}をGenex用にセットアップします。",
   "Set up {name} for Genex?": "{name}をGenex用にセットアップしますか？",
   "Set up {project} after it ends.": "Loopが終わったら{project}をセットアップしてください。",
@@ -3573,8 +3555,6 @@ export default {
   "Studio does not know where this plugin came from; load it again":
     "Studioはこのプラグインの入手元がわかりません。もう一度読み込んでください",
   "Studio forgets this account": "Studioはこのアカウントを忘れます",
-  "Studio hasn't saved its settings yet, so turn its MCP server on in Studio: {clicks}.":
-    "Studioがまだ設定を保存していないので、StudioでMCPサーバーをオンにしてください：{clicks}。",
   "Studio hit a problem.": "Studioで問題が発生しました。",
   "Studio is building right now. Rewind when the build finishes.":
     "Studioは今ビルド中です。ビルドが終わってから巻き戻してください。",
@@ -4248,8 +4228,6 @@ export default {
   "Turn on Secondary Logon in Windows Services (Startup type: Manual), then try again.":
     "WindowsのサービスでSecondary Logonをオンにして（スタートアップの種類：手動）、もう一度試してください。",
   "Turn on Studio's MCP server": "StudioのMCPサーバーをオンにする",
-  "Turn on Studio's MCP server in the settings of {count, plural, one {# Roblox account} other {# Roblox accounts}} on this computer.":
-    "このコンピューターの{count, plural, other {#個のRobloxアカウント}}の設定で、StudioのMCPサーバーをオンにします。",
   "Turn on computer control? Agents in every chat can then ask to use apps on this computer, one app at a time.":
     "コンピューター操作をオンにしますか？オンにすると、どのチャットのエージェントも、このコンピューターのアプリを使わせてほしいと頼めるようになります（一度に1つのアプリずつ）。",
   "Turn on mic": "マイクをオン",
@@ -5857,4 +5835,18 @@ export default {
   "It needs a Mac with Apple silicon.": "Appleシリコン搭載のMacが必要です。",
   "It needs Rosetta to run on this Mac.": "このMacで実行するにはRosettaが必要です。",
   "It’s made for a different processor.": "別のプロセッサ向けに作られています。",
+  "Genex adds it to Studio's Plugins folder and turns on Studio's MCP server while Studio is closed.":
+    "Studioが閉じている間に、GenexがヘルパーをStudioのPluginsフォルダーに追加してStudioのMCPサーバーをオンにします。",
+  "Genex does this once you've signed in.": "サインインが済んだら、Genexがやります。",
+  "Genex turns it on while Studio is closed.": "Studioが閉じている間に、Genexがオンにします。",
+  "Genex makes a new place for this game.": "Genexがこのゲーム用に新しいプレイスを作ります。",
+  "To build in one of yours instead, choose it with the Roblox Studio button.":
+    "自分のプレイスでつくるなら、Roblox Studioボタンから選んでください。",
+  "Signing in to Roblox is yours; Genex does the rest.":
+    "Robloxへのサインインだけはあなたの番です。残りはGenexがやります。",
+  "Set it up for me": "おまかせで設定",
+  "Genex has done every step it can. Sign in to Roblox in Studio; once Studio answers, agents can build.":
+    "Genexはできることをすべて済ませました。StudioでRobloxにサインインしてください。Studioが応答すれば、エージェントがつくれるようになります。",
+  "Roblox Studio is set up and answering Genex, and this game builds in its place.":
+    "Roblox Studioはセットアップ済みでGenexに応答しています。このゲームは自分のプレイスでつくられます。",
 } satisfies LocaleCatalog;
