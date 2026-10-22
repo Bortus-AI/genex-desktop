@@ -75,6 +75,33 @@ const local: EngineDescriptor = {
   models: [model("qwen"), model("tiny", { supportsTools: false })],
 };
 
+describe("a saved model the plan no longer offers", () => {
+  const notOffered = (engines: EngineDescriptor[], modelKey: string) =>
+    resolveComposerModel({ studio: false, engines, modelKey, effort: null });
+
+  it("opens on a model that runs, so the picker, the panel and the send name the same one", () => {
+    const view = notOffered([claude, codex], "codex::gpt-5.5");
+    assert.equal(view.selected?.split("::")[0], "claude-code", "the first model the person can run");
+    assert.equal(view.selectedEngine?.id, "claude-code");
+    assert.ok(!view.choices.some((choice) => choice.key === "codex::gpt-5.5"), "no row for a model nobody can run");
+  });
+
+  it("keeps the saved pick while its provider's models are still being read", () => {
+    const loading: EngineDescriptor = { ...codex, catalog: { state: "loading" } as EngineDescriptor["catalog"] };
+    assert.equal(notOffered([claude, loading], "codex::gpt-5.5").selected, "codex::gpt-5.5");
+    assert.equal(
+      notOffered([], "codex::gpt-5.5").selected,
+      "codex::gpt-5.5",
+      "nothing is known before the engines are",
+    );
+  });
+
+  it("keeps a signed-out provider's pick, where the sign-in is asked for", () => {
+    const out: EngineDescriptor = { ...codex, status: { code: "needs_login", detail: "" } };
+    assert.equal(notOffered([claude, out], "codex::gpt-5.5").selected?.split("::")[0], "codex");
+  });
+});
+
 describe("what a chat opens with", () => {
   it("a game chat keeps its own pick; a fresh one inherits the last pick, then its last turn's engine", () => {
     const store = storage({
@@ -226,8 +253,8 @@ describe("what the composer derives", () => {
     );
     assert.equal(
       resolveComposerModel({ studio: false, engines: [local], modelKey: "gone::model", effort: null }).selected,
-      "gone::model",
-      "an explicit pick must not become another provider",
+      "ollama::qwen",
+      "a pick whose provider is gone opens on a model that runs, and the picker names that one",
     );
   });
 
@@ -616,17 +643,16 @@ describe("what a chat's Loop is", () => {
   });
 });
 
-it("submission rejects an unavailable explicit main model or worker instead of substituting", () => {
+it("submission rejects an unavailable main model or worker it is handed, never sending it as another", () => {
   const view = resolveComposerModel({
     studio: false,
     engines: [claude, codex],
     modelKey: "codex::gpt-6-sol",
     effort: "high",
   });
-  assert.equal(view.selected, "codex::gpt-6-sol");
-  assert.ok(view.choices.some((row) => row.key === view.selected && row.disabled));
+  assert.notEqual(view.selected, "codex::gpt-6-sol", "the composer itself opens on a model that runs");
   assert.throws(
-    () => composerSendOptions({ ...view, preferences: {} }, view.selected, { autopilot: false }),
+    () => composerSendOptions({ ...view, preferences: {} }, "codex::gpt-6-sol", { autopilot: false }),
     /unavailable/i,
   );
   const other = resolveComposerModel({
