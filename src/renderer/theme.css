@@ -6244,11 +6244,8 @@ a:focus-visible {
   font-weight: 500;
   line-height: 20px;
 }
-/* A loader drawn by CSS alone (Builds' graph on its way) waits out the first moments, as the stage's
-   own loader does (`loader-presence.ts`): most loads finish before it would show. */
-.stage-loader-late {
-  animation: stage-loader-late 200ms ease-out 400ms both;
-}
+/* How content on its way fades in after the first moments (`.pending-late`), as the stage's own
+   loader does (`loader-presence.ts`): most loads finish before it would show. */
 @keyframes stage-loader-late {
   from {
     opacity: 0;
