@@ -613,12 +613,13 @@ describe("Godot on Windows: jobs in Genex's sandbox", () => {
     // are in the sandbox: started with them, it could take a turn first, on the old clock.
     const holding = [run(OWN_GODOT, call("hold"), scope()), run(OWN_GODOT, call("hold"), scope())];
     await bothHeld;
-    // A job listens for a stop only while it waits its turn: then, and only then, the clock moves.
+    // A job listens for a stop only while it waits its turn (jobTurns in godot-run.ts): then, and
+    // only then, the clock moves.
     const lateStop = new AbortController();
     const waiting = new Promise<"waiting">((resolve) => {
       const listen = lateStop.signal.addEventListener.bind(lateStop.signal);
       lateStop.signal.addEventListener = (...args: Parameters<typeof listen>) => {
-        resolve("waiting");
+        if (args[0] === "abort") resolve("waiting");
         listen(...args);
       };
     });
