@@ -84,47 +84,47 @@ const clicks = (path: string) => path.split(CLICK_SEPARATOR);
 function studioRow(facts: RobloxStepFacts): RobloxRow {
   const W = MESSAGE.Steps;
   const id = RobloxStepId.Studio;
-  if (facts.installed) return { id, label: W.StudioDone(facts.version), detail: W.StudioDoneDetail, done: true };
+  if (facts.installed) return { id, label: W.StudioDone(facts.version), detail: W.StudioDoneDetail(), done: true };
   if (facts.getting)
     return {
       id,
-      label: W.Getting,
+      label: W.Getting(),
       detail: facts.getting.detail,
       done: false,
       busy: true,
-      action: button(RobloxAction.CancelGetStudio, W.Stop),
+      action: button(RobloxAction.CancelGetStudio, W.Stop()),
     };
-  const detail = facts.failed?.detail ?? W.GetStudioDetail;
-  return { id, label: W.GetStudio, detail, done: false, action: button(RobloxAction.GetStudio, W.GetStudio) };
+  const detail = facts.failed?.detail ?? W.GetStudioDetail();
+  return { id, label: W.GetStudio(), detail, done: false, action: button(RobloxAction.GetStudio, W.GetStudio()) };
 }
 
 function signInRow(facts: RobloxStepFacts): RobloxRow {
   const W = MESSAGE.Steps;
   const row: RobloxRow = {
     id: RobloxStepId.SignIn,
-    label: facts.answering ? W.SignedIn : W.SignIn,
-    detail: W.SignInDetail,
+    label: facts.answering ? W.SignedIn() : W.SignIn(),
+    detail: W.SignInDetail(),
     done: facts.answering,
   };
   const canOpen = facts.installed && !facts.running && !facts.getting;
-  return canOpen ? { ...row, action: button(RobloxAction.OpenStudio, W.OpenStudio) } : row;
+  return canOpen ? { ...row, action: button(RobloxAction.OpenStudio, W.OpenStudio()) } : row;
 }
 
 function helperRow(facts: RobloxStepFacts): RobloxRow {
   const W = MESSAGE.Steps;
   const id = RobloxStepId.Helper;
-  if (facts.setUp) return { id, label: W.HelperDone, detail: W.HelperDoneDetail, done: true };
-  const row: RobloxRow = { id, label: W.Helper, detail: W.HelperDetail, done: false };
+  if (facts.setUp) return { id, label: W.HelperDone(), detail: W.HelperDoneDetail(), done: true };
+  const row: RobloxRow = { id, label: W.Helper(), detail: W.HelperDetail(), done: false };
   if (!facts.installed || facts.getting) return row;
   // Set up writes Studio's settings only while it is closed, so an open Studio is restarted for it.
   if (facts.running)
     return {
       ...row,
-      detail: W.HelperStudioOpen,
-      action: button(RobloxAction.RestartStudio, MESSAGE.Choice.RestartStudio),
+      detail: W.HelperStudioOpen(),
+      action: button(RobloxAction.RestartStudio, MESSAGE.Choice.RestartStudio()),
     };
-  const withSetUp = { ...row, action: button(RobloxAction.Setup, W.SetUp) };
-  return facts.mac ? { ...withSetUp, note: MESSAGE.Setup.DocumentsNote } : withSetUp;
+  const withSetUp = { ...row, action: button(RobloxAction.Setup, W.SetUp()) };
+  return facts.mac ? { ...withSetUp, note: MESSAGE.Setup.DocumentsNote() } : withSetUp;
 }
 
 /**
@@ -133,37 +133,37 @@ function helperRow(facts: RobloxStepFacts): RobloxRow {
  */
 function mcpWaitingDetail(facts: RobloxStepFacts): string {
   const W = MESSAGE.Steps;
-  if (!facts.mcpOn) return `${W.McpOff} ${W.SignInFirst}`;
-  return `${facts.linked ? W.McpOnWaiting : W.McpOnNoPlace} ${W.SignInFirst}`;
+  if (!facts.mcpOn) return `${W.McpOff()} ${W.SignInFirst()}`;
+  return `${facts.linked ? W.McpOnWaiting() : W.McpOnNoPlace()} ${W.SignInFirst()}`;
 }
 
 function mcpRow(facts: RobloxStepFacts): RobloxRow {
   const W = MESSAGE.Steps;
   const id = RobloxStepId.Mcp;
-  if (facts.answering) return { id, label: W.McpDone, detail: W.McpDoneDetail, done: true };
-  if (!facts.setUp) return { id, label: W.Mcp, detail: W.McpLater, done: false };
-  if (!facts.running) return { id, label: W.Mcp, detail: W.McpWhenOpen, done: false };
-  const restart = button(RobloxAction.RestartStudio, MESSAGE.Choice.RestartStudio);
-  const row: RobloxRow = { id, label: W.Mcp, detail: mcpWaitingDetail(facts), done: false, waiting: W.Waiting };
+  if (facts.answering) return { id, label: W.McpDone(), detail: W.McpDoneDetail(), done: true };
+  if (!facts.setUp) return { id, label: W.Mcp(), detail: W.McpLater(), done: false };
+  if (!facts.running) return { id, label: W.Mcp(), detail: W.McpWhenOpen(), done: false };
+  const restart = button(RobloxAction.RestartStudio, MESSAGE.Choice.RestartStudio());
+  const row: RobloxRow = { id, label: W.Mcp(), detail: mcpWaitingDetail(facts), done: false, waiting: W.Waiting() };
   // The switch is on: clicking it can't help, and Studio waits for a sign-in or a place.
   if (facts.mcpOn) return { ...row, action: restart };
   const switchOff = { ...row, clickPath: clicks(MCP_SWITCH_CLICK_PATH) };
   // Only where Genex can click in Studio for the person; elsewhere their own clicks are the way.
   if (!facts.canClick) return { ...switchOff, action: restart };
-  return { ...switchOff, action: button(RobloxAction.DoItForMe, MESSAGE.Choice.DoItForMe), more: [restart] };
+  return { ...switchOff, action: button(RobloxAction.DoItForMe, MESSAGE.Choice.DoItForMe()), more: [restart] };
 }
 
 function placeRow(facts: RobloxStepFacts): RobloxRow {
   const W = MESSAGE.Steps;
   const id = RobloxStepId.Place;
-  if (!facts.linked) return { id, label: W.Place, detail: W.PlaceDetail, done: false };
+  if (!facts.linked) return { id, label: W.Place(), detail: W.PlaceDetail(), done: false };
   const row: RobloxRow = {
     id,
-    label: facts.place ? W.PlaceDoneNamed(facts.place) : W.PlaceDone,
-    detail: facts.rojo ? W.PlaceRojo : W.PlaceDoneDetail,
+    label: facts.place ? W.PlaceDoneNamed(facts.place) : W.PlaceDone(),
+    detail: facts.rojo ? W.PlaceRojo() : W.PlaceDoneDetail(),
     done: true,
   };
-  return facts.liveData ? { ...row, warning: { text: W.LiveData, clickPath: clicks(LIVE_DATA_CLICK_PATH) } } : row;
+  return facts.liveData ? { ...row, warning: { text: W.LiveData(), clickPath: clicks(LIVE_DATA_CLICK_PATH) } } : row;
 }
 
 /** The rows for where Studio stands now, in the order the person meets them. */
@@ -187,7 +187,7 @@ export function nowStep(facts: RobloxStepFacts): RobloxStepId | undefined {
 /** The card's extra words for a row: Studio's clicks, or where to choose the place (the panel is where). */
 function cardHint(row: RobloxRow): string | undefined {
   if (row.clickPath) return MESSAGE.Steps.OrInStudio(row.clickPath.join(CLICK_SEPARATOR));
-  return row.id === RobloxStepId.Place && !row.done ? MESSAGE.Steps.PlaceCardHint : undefined;
+  return row.id === RobloxStepId.Place && !row.done ? MESSAGE.Steps.PlaceCardHint() : undefined;
 }
 
 /** A row as the card shows it: the panel's words, with Studio's clicks or the place's button after them. */
@@ -202,6 +202,6 @@ function cardRow(row: RobloxRow): RobloxStep {
 export function robloxSteps(facts: RobloxStepFacts): RobloxSteps {
   const steps = robloxRows(facts).map(cardRow);
   const left = steps.filter((step) => !step.done).length;
-  const intro = left === 0 ? MESSAGE.Steps.AllDone : MESSAGE.Steps.Intro(left);
-  return { title: MESSAGE.Steps.Title, intro, steps, open: left > 0 };
+  const intro = left === 0 ? MESSAGE.Steps.AllDone() : MESSAGE.Steps.Intro(left);
+  return { title: MESSAGE.Steps.Title(), intro, steps, open: left > 0 };
 }

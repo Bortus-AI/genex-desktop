@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { realpath } from "node:fs/promises";
 import { ModelCatalog, CatalogError, CATALOG_DEADLINE_MS } from "./model-catalog.ts";
 import { ModelCatalogSource, ModelCatalogProblemCode } from "../../shared/model-catalog.ts";
+import { t } from "../../shared/i18n.ts";
 import { validateClaudeModels } from "./claude-telemetry.ts";
 import { supportedPreferences, type ModelPreferences } from "../../shared/model-preferences.ts";
 import type { ProviderUsage } from "../../shared/provider-usage.ts";
@@ -321,20 +322,31 @@ const JUDGE_DISALLOWED_TOOLS = [
   ...WEB_TOOLS,
 ];
 
-/** What this engine says to the user: statuses, remedies and errors. */
+/**
+ * What this engine says: statuses and remedies for Settings in the person's language (functions,
+ * since main sets its language after it starts), and errors in English, since the harness and the
+ * chat's model read them too.
+ */
 const MESSAGE = {
+  /** A sign-in error ends with it; Settings shows `SignInRemedy`, the same words translated. */
   LoginHint: "Sign in with your Claude subscription. The studio never sees your password.",
+  SignInRemedy: () => t("Sign in with your Claude subscription. The studio never sees your password."),
   AccessLostHint:
     "Sign in with a Claude account that has access, or ask your organization's admin to turn Claude Code back on.",
-  InstallRemedy: "Install Claude Code, then check again.",
-  SdkMissing: "the Claude Agent SDK is not installed",
-  SdkRemedy: "Reinstall the app; the SDK ships with it.",
-  FromEnvironment: "Claude Code is configured from the environment",
-  SystemLogin: "using your existing Claude Code sign-in on this Mac",
-  IsolatedLogin: "signed in for Studio only",
-  NotSignedIn: "Claude Code has not been signed in on this Mac",
-  CliNotSignedIn: "Claude Code is not signed in",
-  RecheckRemedy: "Recheck the external Claude CLI and sign-in.",
+  InstallRemedy: () => t("Install Claude Code, then check again."),
+  SdkMissing: () => t("the Claude Agent SDK is not installed"),
+  SdkRemedy: () => t("Reinstall the app; the SDK ships with it."),
+  FromEnvironment: () => t("Claude Code is configured from the environment"),
+  FromConfigDir: (home: string | null) => t("using CLAUDE_CONFIG_DIR ({home})", { home: String(home) }),
+  SystemLogin: () => t("using your existing Claude Code sign-in on this Mac"),
+  IsolatedLogin: () => t("signed in for Studio only"),
+  NotSignedIn: () => t("Claude Code has not been signed in on this Mac"),
+  CliNotSignedIn: () => t("Claude Code is not signed in"),
+  RecheckRemedy: () => t("Recheck the external Claude CLI and sign-in."),
+  /** The picker's row for whatever model the CLI picks itself. */
+  DefaultModel: () => t("{engine} default", { engine: "Claude Code" }),
+  DefaultModelNote: () => t("Uses the CLI default under Genex settings."),
+  DiscoverySlow: () => t("Model discovery timed out. Try again."),
   NoToolLoop: "Claude Code has no tool-loop completion; use engine.delegate to build",
   DiscoveryTimeout: "time budget exhausted during CLI discovery",
   JudgeLaunchTimeout: "time budget exhausted before judge launch",
@@ -723,17 +735,17 @@ export class ClaudeCodeEngine implements Engine {
     try {
       await this.#resolveCli(EngineId.ClaudeCode, this.#executable, undefined, false);
     } catch (error) {
-      return { code: EngineStatusCode.NotInstalled, detail: errorMessage(error), remedy: MESSAGE.InstallRemedy };
+      return { code: EngineStatusCode.NotInstalled, detail: errorMessage(error), remedy: MESSAGE.InstallRemedy() };
     }
     try {
       await import("@anthropic-ai/claude-agent-sdk");
     } catch {
-      return { code: EngineStatusCode.NotInstalled, detail: MESSAGE.SdkMissing, remedy: MESSAGE.SdkRemedy };
+      return { code: EngineStatusCode.NotInstalled, detail: MESSAGE.SdkMissing(), remedy: MESSAGE.SdkRemedy() };
     }
     // An ambient ANTHROPIC_API_KEY does NOT count as configured: D8 says subscription only, and
     // the key is stripped from every child environment anyway (subscriptionEnv).
     if (process.env.CLAUDE_CODE_OAUTH_TOKEN) {
-      return { code: EngineStatusCode.Ready, detail: MESSAGE.FromEnvironment };
+      return { code: EngineStatusCode.Ready, detail: MESSAGE.FromEnvironment() };
     }
     if (rememberFailure && this.#authFailure) {
       return { code: EngineStatusCode.NeedsLogin, detail: this.#authFailure, remedy: this.loginHint() };
@@ -741,19 +753,19 @@ export class ClaudeCodeEngine implements Engine {
     const login = await this.resolveLogin();
     switch (login.source) {
       case LoginSource.Env:
-        return { code: EngineStatusCode.Ready, detail: `using CLAUDE_CONFIG_DIR (${login.home})` };
+        return { code: EngineStatusCode.Ready, detail: MESSAGE.FromConfigDir(login.home) };
       case LoginSource.System:
-        return { code: EngineStatusCode.Ready, detail: MESSAGE.SystemLogin };
+        return { code: EngineStatusCode.Ready, detail: MESSAGE.SystemLogin() };
       case LoginSource.Isolated:
-        return { code: EngineStatusCode.Ready, detail: MESSAGE.IsolatedLogin };
+        return { code: EngineStatusCode.Ready, detail: MESSAGE.IsolatedLogin() };
       default:
-        return { code: EngineStatusCode.NeedsLogin, detail: MESSAGE.NotSignedIn, remedy: this.loginHint() };
+        return { code: EngineStatusCode.NeedsLogin, detail: MESSAGE.NotSignedIn(), remedy: this.loginHint() };
     }
   }
 
   /** Shown in the UI. The login happens in Claude Code's own flow, with its own credential store. */
   loginHint(): string {
-    return MESSAGE.LoginHint;
+    return MESSAGE.SignInRemedy();
   }
 
   /**
@@ -784,8 +796,8 @@ export class ClaudeCodeEngine implements Engine {
       ((home) => claudeAuthStatus(home, { findBinary: async () => installation.path, env: installation.env }))
     )(cliHome);
     if (cli.loggedIn === null)
-      return { code: EngineStatusCode.Error, detail: cli.detail, remedy: MESSAGE.RecheckRemedy };
-    this.#authFailure = cli.loggedIn ? null : cli.detail || MESSAGE.CliNotSignedIn;
+      return { code: EngineStatusCode.Error, detail: cli.detail, remedy: MESSAGE.RecheckRemedy() };
+    this.#authFailure = cli.loggedIn ? null : cli.detail || MESSAGE.CliNotSignedIn();
     return this.status();
   }
 
@@ -916,7 +928,7 @@ export class ClaudeCodeEngine implements Engine {
         ...model,
         ...reportedDefault,
         id: DEFAULT_MODEL,
-        label: "Claude Code default",
+        label: MESSAGE.DefaultModel(),
       })),
       ...concrete.map((model) => (model === named ? { ...model, providerDefault: true } : model)),
     ];
@@ -971,8 +983,7 @@ export class ClaudeCodeEngine implements Engine {
             stream.supportedModels(),
             new Promise<never>((_, reject) => {
               timer = setTimeout(
-                () =>
-                  reject(new CatalogError(ModelCatalogProblemCode.Timeout, "Model discovery timed out. Try again.")),
+                () => reject(new CatalogError(ModelCatalogProblemCode.Timeout, MESSAGE.DiscoverySlow())),
                 CATALOG_DEADLINE_MS,
               );
             }),
@@ -1698,7 +1709,7 @@ export class ClaudeCodeEngine implements Engine {
 
   /** A sign-in failure in the CLI's words, with what the user can do about it. */
   #signInError(text: string): EngineError {
-    const hint = isAccessLost(text) ? MESSAGE.AccessLostHint : this.loginHint();
+    const hint = isAccessLost(text) ? MESSAGE.AccessLostHint : MESSAGE.LoginHint;
     return new EngineError(EngineFailureKind.Auth, this.id, `${text} — ${hint}`);
   }
 
@@ -2602,14 +2613,14 @@ function claudeModelCatalog(): EngineModel[] {
   return [
     {
       id: DEFAULT_MODEL,
-      label: "Claude Code default",
+      label: MESSAGE.DefaultModel(),
       contextWindow: 0,
       maxTokens: STANDARD_MAX_TOKENS,
       supportsTools: true,
       supportsVision: true,
       supportsThinking: true,
       efforts: [],
-      note: "Uses the CLI default under Genex settings.",
+      note: MESSAGE.DefaultModelNote(),
     },
   ];
 }

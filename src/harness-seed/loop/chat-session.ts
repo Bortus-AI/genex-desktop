@@ -34,6 +34,8 @@ import {
   unrealWithoutPlugin,
 } from "./project-prompts.ts";
 import { WORKERS_BRIEF_LINE } from "./workers/prompts.ts";
+import type { AppLanguage } from "./app-language.ts";
+import { languageRule } from "./language-prompts.ts";
 import { godotWorkHere, godotWorkspaceRule } from "./linked-project-prompts.ts";
 import { pluginWebBuilds, webBuildLine } from "./web-build.ts";
 import type { AnyRecord } from "../types/harness.d.ts";
@@ -438,10 +440,6 @@ function factRules(
   });
 }
 
-/**
- * The rules every chat build follows after the game's own, in the voice of the engine that reads
- * them: a tool is named once, spelled the way this session can actually call it (M4.8b).
- */
 /** Where the game's work happens: its Unreal project, its linked Godot project, or this workspace. */
 function workspaceRule(game: GameBuild): string {
   if (!servedAsWeb(game) && hasFact(game.facts, CoreFact.UnrealProject))
@@ -454,8 +452,14 @@ function workspaceRule(game: GameBuild): string {
 const linkedGodotProject = (game: GameBuild): string | null =>
   game.gameEngine === GameEngine.Godot ? game.engineProject : null;
 
-function contractorRules(engine: string | undefined, game: GameBuild): string[] {
+/**
+ * The rules every chat build follows after the game's own, in the voice of the engine that reads
+ * them: a tool is named once, spelled the way this session can actually call it (M4.8b). The first
+ * is the person's language, with Genex's own as the fallback (`language-prompts.ts`).
+ */
+function contractorRules(engine: string | undefined, game: GameBuild, app: AppLanguage | null): string[] {
   return [
+    languageRule(app),
     "Helper scripts of your own (an inspector, a syntax check, a probe) go under .studio/ (gitignored); source scripts for generated assets live under assets/src/.",
     "Before you build or change how the game looks, if the folder has a references/ or ref/ directory with stills, look at those pictures — they are the visual bar, not files to load as textures.",
     workspaceRule(game),
@@ -563,6 +567,8 @@ export function buildContractorBrief({
   holds = null,
   /** This turn's session may start workers (workers/chat-workers.ts): its brief says so in one line. */
   workers = false,
+  /** The language Genex speaks (`studio.language`): the agent's fallback for Genex's own messages. */
+  appLanguage = null,
 }: {
   ask?: string;
   messages?: readonly BriefMessage[];
@@ -589,6 +595,7 @@ export function buildContractorBrief({
   pluginsOff?: boolean;
   holds?: FolderHolds | null;
   workers?: boolean;
+  appLanguage?: AppLanguage | null;
 } = {}): string {
   const game = gameBuild(facts, { gameEngine, engineProject, pluginsOff, holds });
   const identity = appIdentity({ folderLabel, facts: game.facts, holds: game.holds });
@@ -603,6 +610,8 @@ export function buildContractorBrief({
   // A folder with no kind yet hears how its request picks one on every message, a resumed session's
   // too: a plugin turned on from the chat's card resumes the session that asked for it.
   const kindRule = !game.legacy && kindPending(game) ? pendingKindRule(engine, kinds, null, game.holds, false) : [];
+  // A resumed session was told the rules in its first brief; the language comes again, since the
+  // resume's own words are Genex's, in English, and the app's language may have changed since.
   if (resume)
     return [
       ask,
@@ -614,6 +623,7 @@ export function buildContractorBrief({
       workersLine,
       workHere,
       stills,
+      languageRule(appLanguage),
     ]
       .filter(Boolean)
       .join("\n");
@@ -625,7 +635,7 @@ export function buildContractorBrief({
   const rules = [
     ...engineQuestion(engine, game, engineChoice, kinds),
     ...factRules(engine, game, { ownShape, shape, contractMissing }, choice),
-    ...contractorRules(engine, game),
+    ...contractorRules(engine, game, appLanguage),
   ];
   const { head, followUp } = briefHead(ask, messages, {
     compacted,

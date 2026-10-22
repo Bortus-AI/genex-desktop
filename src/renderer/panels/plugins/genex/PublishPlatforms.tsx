@@ -11,6 +11,7 @@
 import type { JSX } from "react";
 import { useState } from "react";
 import type { GenexNativeRecord } from "../../../../shared/genex.ts";
+import { t } from "../../../../shared/i18n.ts";
 import { type PublishPlatform, PublishTarget } from "../../../../shared/publish-platforms.ts";
 import { composeInChat } from "../../../compose-in-chat.ts";
 import { useLibrary } from "../../../state/hooks.ts";
@@ -62,9 +63,9 @@ export function usePublishPlatforms(project: string): PublishPlatform[] | null {
 /** The quiet words a row ends with, by what it says: each with its words for a screen reader. */
 const NOTE: Partial<Record<PlatformEnd, { text: string; label: (name: string) => string }>> = {
   [PlatformEnd.Soon]: { text: WORDS.soon, label: WORDS.soonLabel },
-  [PlatformEnd.Sending]: { text: WORDS.sending, label: (name) => `${name}: ${WORDS.sending}` },
+  [PlatformEnd.Sending]: { text: WORDS.sending, label: (name) => t("{name}: {state}", { name, state: WORDS.sending }) },
   [PlatformEnd.Sent]: { text: WORDS.sent, label: WORDS.sentLabel },
-  [PlatformEnd.Failed]: { text: WORDS.failed, label: (name) => `${name}: ${WORDS.failed}` },
+  [PlatformEnd.Failed]: { text: WORDS.failed, label: (name) => t("{name}: {state}", { name, state: WORDS.failed }) },
 };
 
 /** The agent's presses a row may end with: making an app, or building one again. */

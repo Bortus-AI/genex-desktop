@@ -6,6 +6,7 @@
  */
 import type { JSX, ReactNode } from "react";
 import { GenexAction } from "../../../../shared/genex.ts";
+import { intlLocale } from "../../../../shared/i18n.ts";
 import { creditsPlansUrl } from "../../../../shared/play-credits.ts";
 import { CreditsShard } from "../../../play/CreditsShard.tsx";
 import { usePlayWeb } from "../../../state/hooks.ts";
@@ -27,7 +28,7 @@ import type { GenexLive } from "./use-genex-status.ts";
 const WORDS = GENEX_WORDS.account;
 
 /** Credits read with the reader's own digit grouping. */
-const NUMBER = new Intl.NumberFormat();
+const NUMBER = new Intl.NumberFormat(intlLocale());
 
 /** A state's title, its line and its actions, stacked in the band's side. */
 function Prompt({ title, children, actions }: { title: ReactNode; children?: ReactNode; actions?: ReactNode }) {

@@ -67,6 +67,7 @@ import { serial } from "./serial.ts";
 import { isInside, samePath, toPosixRelative } from "../../substrate/paths.ts";
 import { isEffectivelyBlack } from "../../substrate/pixel-stats.ts";
 import { errorMessage } from "../../shared/errors.ts";
+import { t } from "../../shared/i18n.ts";
 import { UiEvent } from "../../shared/ui-events.ts";
 import { setTimeout as sleep } from "node:timers/promises";
 import { ReadyPhase, CaptureSurface, GameClock, GameFront } from "../../shared/preview-contract.ts";
@@ -131,7 +132,13 @@ const STAND_IN_IDLE_MS = 2 * MINUTE_MS;
 /** How many of a too-large copy's largest folders its refusal names. */
 const COPY_FOLDERS_NAMED = 3;
 
-/** Errors the user reads when a build cannot be shown or landed, and why a reference is no still. */
+/**
+ * Errors the user reads when a build cannot be shown or landed, and why a reference is no still.
+ * The entries that call `t()` are the person's words, in their language; the bench, window and
+ * still words are a worker's or the harness's and stay English, as do the landing refusals
+ * `problemWords` reads by their English (`notCommitHash`, `notInHistory`, `contractorBuilding`,
+ * `uncommittedEdits`, `landingConflicted`).
+ */
 const MESSAGE = {
   // Every copy holds the whole game, whatever the task, and the person reads it when a build
   // cannot start: so it names no worker and no smaller task. What to do comes first: a lead's
@@ -154,8 +161,9 @@ const MESSAGE = {
   benchAfter:
     "Read the image files above to actually look at them. The window shows the bench page now: the computer tool loads your game again on its next action. Capture the game itself before you finish.",
   profilingNeedsStage: "profiling requires a stage preview",
-  previewChanged: "The selected preview changed while this build was preparing. Open the build again when ready.",
-  noGameInSnapshot: "that snapshot has no game to play",
+  previewChanged: () =>
+    t("The selected preview changed while this build was preparing. Open the build again when ready."),
+  noGameInSnapshot: () => t("that snapshot has no game to play"),
   sessionEnded: "the session ended before its window opened",
   viewportNeedsLease: "preview.viewport sizes one leased window: name its handle (never Live or the stand-in)",
   viewportInSession: (handle: string) =>
@@ -165,15 +173,18 @@ const MESSAGE = {
   notCommitHash: (commit: string) => `"${commit}" is not a commit hash`,
   notInHistory: (commit: string, project: string) => `commit ${commit} is not in "${project}"'s history`,
   claudeFolder: (commit: string, files: string[]) =>
-    `build ${commit} changes the game's .claude folder (${files.join(", ")}), Claude Code's own settings, so it was not landed`,
+    t("build {commit} changes the game's .claude folder ({files}), Claude Code's own settings, so it was not landed", {
+      commit,
+      files: files.join(", "),
+    }),
   contractorBuilding: (project: string) =>
     `a contractor is building in "${project}" right now — wait for it to finish before landing a build`,
   uncommittedEdits: (files: number) =>
     `the game folder has uncommitted edits (${files} file(s)) — commit or discard them before landing a build`,
   landingConflicted: (revision: string, excerpt: string) =>
     `landing ${revision} conflicted with the game folder; nothing was changed (${excerpt})`,
-  noSuchGame: (project: string) => `there is no game called "${project}"`,
-  noPackages: "this game has no package.json, so there is nothing to install",
+  noSuchGame: (project: string) => t('there is no game called "{game}"', { game: project }),
+  noPackages: () => t("this game has no package.json, so there is nothing to install"),
   stillUnreadable: "unreadable",
   stillTooLarge: `larger than ${REFERENCE_MAX_MB} MB`,
   stillNotJudgeable: (what: string) => `${what} — the reviewers cannot read it; re-save as JPEG or PNG`,
@@ -1280,7 +1291,7 @@ export class PreviewService {
       const port = this.pool().port(lease.handle);
       const candidate = await this.loadServed(port, project, showDir);
       if (candidate.problem) throw new Error(candidate.problem);
-      if (this.#x.servedRoots.get(LIVE_HANDLE) !== previous) throw new Error(MESSAGE.previewChanged);
+      if (this.#x.servedRoots.get(LIVE_HANDLE) !== previous) throw new Error(MESSAGE.previewChanged());
       liveAttempted = true;
       await this.loadPreview({ project, root: showDir });
     } catch (error) {
@@ -1469,7 +1480,7 @@ export class PreviewService {
    */
   async playGameSnapshot(snapshotId: string, project: string): Promise<{ dir: string; snapshotId: string }> {
     const record = this.#core.snapshotIndex.get(snapshotId);
-    if (!record?.git.game) throw new Error(MESSAGE.noGameInSnapshot);
+    if (!record?.git.game) throw new Error(MESSAGE.noGameInSnapshot());
     await this.#core.assertProjectAllowed(this.#core.games.dirFor(project));
     this.#core.snapshots.register({ name: project, dir: this.#core.games.dirFor(project) });
     const playDir = path.join(this.#core.layout.scratch, "review-play", project);
@@ -1581,7 +1592,7 @@ export class PreviewService {
     const source = { project, dir: descriptor.dir, shape: descriptor.shape };
     const guarded = await this.#core.scriptsGuarded(project);
     const result = guarded
-      ? ((await this.#core.builds.installGuarded(source)) ?? { ok: false, lines: [MESSAGE.noPackages] })
+      ? ((await this.#core.builds.installGuarded(source)) ?? { ok: false, lines: [MESSAGE.noPackages()] })
       : await this.#core.builds.install(source);
     if (result.ok) this.#x.buildProblems.delete(project);
     return result;

@@ -1,4 +1,5 @@
 import { type JSX, useEffect, useRef, useState } from "react";
+import { t } from "../../shared/i18n.ts";
 import { Popover, PopoverContent, PopoverTrigger } from "./popover.tsx";
 import { ComposerTip } from "./PickerPanel.tsx";
 import { Icon } from "./icons.tsx";
@@ -25,7 +26,7 @@ import { accountLabel, activeAccount, switchAccount, useSubscriptionAccounts } f
 export type { ContextUsage };
 /** The ring's circumference: a circle of radius 6. */
 const RING = 2 * Math.PI * 6;
-const ROLE_WORDS: Record<RoleKey, string> = { planner: "Main agent", builder: "Workers", judge: "Reviewers" };
+const ROLE_WORDS: Record<RoleKey, string> = { planner: t("Main agent"), builder: t("Workers"), judge: t("Reviewers") };
 /** A usage reading younger than this is not asked for again on hover. */
 const USAGE_FRESH_MS = 30 * SECOND_MS;
 /** While the panel is open, usage is read again this often. */
@@ -37,8 +38,8 @@ let lastReports: ProviderUsageReport[] | null = null;
 
 /** Which roles a plan serves: all of them, some by name, or none. */
 function rolesWords(roles: RoleKey[], allRoles: number): string {
-  if (!roles.length) return "Not in use";
-  return roles.length === allRoles ? "In use" : roles.map((role) => ROLE_WORDS[role]).join(" · ");
+  if (!roles.length) return t("Not in use");
+  return roles.length === allRoles ? t("In use") : roles.map((role) => ROLE_WORDS[role]).join(" · ");
 }
 
 /** Where a plan sorts: the orchestrator's first, then others in use, then the rest. */
@@ -51,7 +52,7 @@ function planRank(roles: RoleKey[] | undefined): number {
 function LimitWindow({ window }: { window: ProviderUsage["windows"][number] }) {
   const percent = window.percent === null ? null : Math.round(window.percent);
   const resets = resetWords(window.resetsAt);
-  const usedWords = percent === null ? "Not reported" : `${percent}% used`;
+  const usedWords = percent === null ? t("Not reported") : t("{percent}% used", { percent });
   return (
     <div className="usage-limit">
       <div className="usage-limit-head">
@@ -152,7 +153,7 @@ function PlanLimits({
             type="button"
             className="usage-plan-link"
             onClick={() => void window.studio.openUrl(page)}
-            aria-label={`${title}: open usage details`}
+            aria-label={t("{plan}: open usage details", { plan: title })}
           >
             <span className="truncate">{title}</span>
             <Icon name="chevron-right" size={12} />
@@ -172,7 +173,7 @@ function PlanLimits({
       {limits.map((window) => (
         <LimitWindow key={window.id} window={window} />
       ))}
-      {!usage?.windows.length && <p className="usage-note">Usage not reported</p>}
+      {!usage?.windows.length && <p className="usage-note">{t("Usage not reported")}</p>}
     </section>
   );
 }
@@ -233,7 +234,7 @@ function PendingPlans({ usedBy }: { usedBy: Record<string, RoleKey[]> }): JSX.El
   const allRoles = Object.values(usedBy).flat().length;
   const plans = pendingPlans(usedBy);
   return (
-    <div role="status" aria-busy="true" aria-label="Checking plan usage…" data-usage-pending>
+    <div role="status" aria-busy="true" aria-label={t("Checking plan usage…")} data-usage-pending>
       {plans.map((engine) => (
         <section key={engine ?? "plan"} className="usage-plan">
           <div className="usage-plan-head">
@@ -265,7 +266,7 @@ function PlanUsage({
   onSwitched: (reloadAccounts: () => void) => void;
 }): JSX.Element {
   if (reports === null && failed)
-    return <p className="usage-note usage-divider">Plan usage isn’t available right now.</p>;
+    return <p className="usage-note usage-divider">{t("Plan usage isn’t available right now.")}</p>;
   if (reports === null) return <PendingPlans usedBy={usedBy} />;
   // The orchestrator's plan first, then the others this setup draws on, then any left to switch to.
   const rank = (engineId: string) => planRank(usedBy[engineId]);
@@ -326,10 +327,13 @@ export function ComposerLimits({
   const compact = selectedCompact(models, modelKey, { compacting: Boolean(compacting), busy: Boolean(compactBusy) });
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <ComposerTip hidden={open} content={percent == null ? "Context and usage" : `Context · ${percent}% used`}>
+      <ComposerTip
+        hidden={open}
+        content={percent == null ? t("Context and usage") : t("Context · {percent}% used", { percent })}
+      >
         <PopoverTrigger
           render={<button type="button" />}
-          aria-label="Context and usage"
+          aria-label={t("Context and usage")}
           className="composer-icon composer-ring"
           onPointerEnter={() => refresh()}
           onFocus={() => refresh()}
@@ -354,11 +358,11 @@ export function ComposerLimits({
         align="end"
         sideOffset={8}
         className="picker-panel w-[360px] max-w-(--available-width) max-h-(--available-height) overflow-y-auto p-1.5"
-        aria-label="Context and usage"
+        aria-label={t("Context and usage")}
       >
         <section className="px-2.5 pt-1.5 pb-2">
           <div className="usage-limit-head text-chat">
-            <span>Context window</span>
+            <span>{t("Context window")}</span>
             <span className="usage-limit-value tabular-nums">
               {[used, capacity]
                 .filter((n): n is number => n != null && n > 0)
@@ -369,7 +373,7 @@ export function ComposerLimits({
           <div
             className="picker-meter"
             role="progressbar"
-            aria-label="Context used"
+            aria-label={t("Context used")}
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={percent ?? undefined}

@@ -131,7 +131,7 @@ export type InstallRefusal = (typeof InstallRefusal)[keyof typeof InstallRefusal
 export class InstallError extends Error {
   readonly code: InstallRefusal;
   constructor(code: InstallRefusal) {
-    super(MESSAGE.Install.Refused[code]);
+    super(MESSAGE.Install.Refused[code]());
     this.name = "InstallError";
     this.code = code;
   }
@@ -475,7 +475,7 @@ export async function afterInstall(
   throwIfStopped(signal);
   options.onPhase?.(InstallPhase.Opening);
   await deps.open(openLaunch(deps.platform, install));
-  const done: AfterInstallDone = { message: `${setUp} ${MESSAGE.Install.Reopened}`, reopened: true };
+  const done: AfterInstallDone = { message: `${setUp} ${MESSAGE.Install.Reopened()}`, reopened: true };
   if (install.version) done.version = install.version;
   return done;
 }

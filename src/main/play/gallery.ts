@@ -6,6 +6,7 @@
  */
 import { LibraryKind } from "../../shared/asset-library.ts";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
+import { t } from "../../shared/i18n.ts";
 import {
   isPlayCategory,
   isPlayShelf,
@@ -100,10 +101,11 @@ export const PlayRoute = {
   assetManifest: (slug: string) => `/api/projects/asset-manifest/${encodeURIComponent(slug)}`,
 } as const;
 
+/** Why a call is refused: a malformed request stays English for its developer; SignIn reaches a person's toast. */
 const MESSAGE = {
   BadCategory: "Unknown Play category",
   BadSlug: "Not a game address",
-  SignIn: "Connect Genex to do this",
+  SignIn: () => t("Connect Genex to do this"),
 } as const;
 
 /** An answer from the API: its status and its parsed JSON body (null when it had none). */
@@ -145,7 +147,7 @@ export class GalleryError extends Error {
 /** The thrown answer when a write needs the Genex account and none is unlocked. */
 export class SignInNeeded extends Error {
   constructor() {
-    super(MESSAGE.SignIn);
+    super(MESSAGE.SignIn());
   }
 }
 

@@ -1,5 +1,5 @@
 /** What a builder session is told about the host's side of its tools (`delegation.ts`). Model-facing. */
-import { sizeWords } from "../../shared/byte-size.ts";
+import { sizeWordsInEnglish } from "../../shared/byte-size.ts";
 import { CallCutOff, PluginAccountState, type PluginAppliedSet } from "../../shared/plugins.ts";
 import type { CutOffCall } from "./cut-off-calls.ts";
 import type { UnsavedFile } from "./unsaved-files.ts";
@@ -150,7 +150,7 @@ export function cutOffNotice(calls: readonly CutOffCall[]): string {
  */
 export function unsavedFilesNotice(files: readonly UnsavedFile[]): string {
   if (!files.length) return "";
-  const named = files.map((file) => `${file.file} (${sizeWords(file.bytes)})`);
+  const named = files.map((file) => `${file.file} (${sizeWordsInEnglish(file.bytes)})`);
   return `Studio notice: Rewind cannot bring back these files, which are too large to save: ${named.join(", ")}. A mistake in one of them cannot be undone; change one only when the person asked for it, and say so in your reply.`;
 }
 

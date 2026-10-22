@@ -11,6 +11,7 @@ import type { Dispatch, JSX, SetStateAction } from "react";
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { GENEX_PLUGIN_ID, GENEX_PUBLISH_PANEL } from "../../shared/genex.ts";
+import { t } from "../../shared/i18n.ts";
 import type { FactRef, FolderHolds, GameKind } from "../../shared/project-facts.ts";
 import {
   type PluginToolbarEntry,
@@ -171,7 +172,7 @@ function useToolbarStatus(entriesRef: { current: PluginToolbarEntry[] }, members
 /** What a finished action says: its own message when it returned one, else that it is done. */
 function actionMessage(result: unknown, label: string): string {
   const message = result && typeof result === "object" ? (result as { message?: unknown }).message : undefined;
-  return typeof message === "string" ? message : `${label}: done`;
+  return typeof message === "string" ? message : t("{action}: done", { action: label });
 }
 
 /** A button's glyph: one of the app's icons, the plugin's own character, or none. */

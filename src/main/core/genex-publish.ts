@@ -15,15 +15,17 @@ import { type ExportReview, type PluginBinding, PluginSourceKind } from "../../s
 import type { StudioCore } from "../studio-core.ts";
 import { pinnedCliSendsApps } from "../../plugins/genex/native-publish.ts";
 import { publishedApps } from "./publish-platforms.ts";
+import { t } from "../../shared/i18n.ts";
 
 /** Why Publish is refused before Genex is asked anything. */
 const MESSAGE = {
-  NoGame: "Open a game to publish it",
-  GenexUnavailable: "Publishing needs the Genex plugin, which isn't installed",
-  NoFileList: "Review the files before publishing",
-  UnrealGame: (title: string) => `${title} builds in Unreal; publishing an Unreal game isn't supported yet.`,
-  NotWebGame: (title: string) => `${title} isn't a web game, so Genex can't publish it yet.`,
-  NoApps: "This game has no Mac or Windows app ready to publish",
+  NoGame: () => t("Open a game to publish it"),
+  GenexUnavailable: () => t("Publishing needs the Genex plugin, which isn't installed"),
+  NoFileList: () => t("Review the files before publishing"),
+  UnrealGame: (title: string) =>
+    t("{title} builds in Unreal; publishing an Unreal game isn't supported yet.", { title }),
+  NotWebGame: (title: string) => t("{title} isn't a web game, so Genex can't publish it yet.", { title }),
+  NoApps: () => t("This game has no Mac or Windows app ready to publish"),
 } as const;
 
 /** Why a game can't be published at all, by code: callers act on it, never on its words. */
@@ -80,10 +82,10 @@ export async function assertPublishable(core: Pick<StudioCore, "games">, project
 
 /** The game the dialog names, bound as Studio allows it to be opened, while Studio's Genex is installed. */
 async function boundGame(core: DialogCore, project: unknown): Promise<PluginBinding> {
-  if (typeof project !== "string" || !project) throw new Error(MESSAGE.NoGame);
-  if (!core.plugins.list().some(isUsableGenex)) throw new Error(MESSAGE.GenexUnavailable);
+  if (typeof project !== "string" || !project) throw new Error(MESSAGE.NoGame());
+  if (!core.plugins.list().some(isUsableGenex)) throw new Error(MESSAGE.GenexUnavailable());
   const binding = await core.pluginBinding(project);
-  if (!binding) throw new Error(MESSAGE.NoGame);
+  if (!binding) throw new Error(MESSAGE.NoGame());
   return binding;
 }
 
@@ -112,7 +114,7 @@ export async function publishFromDialog(
   title?: unknown,
   sendsApps = pinnedCliSendsApps(),
 ): Promise<void> {
-  if (!isExportReview(review)) throw new Error(MESSAGE.NoFileList);
+  if (!isExportReview(review)) throw new Error(MESSAGE.NoFileList());
   const binding = await dialogBinding(core, project);
   const name = cleanGenexTitle(title);
   const native = await publishedApps(core, binding.project, sendsApps);
@@ -137,7 +139,7 @@ export async function publishAppsFromDialog(
 ): Promise<void> {
   const binding = await boundGame(core, project);
   const native = await publishedApps(core, binding.project, sendsApps);
-  if (native.length === 0) throw new Error(MESSAGE.NoApps);
+  if (native.length === 0) throw new Error(MESSAGE.NoApps());
   const name = cleanGenexTitle(title);
   await core.plugins.action(
     GENEX_PLUGIN_ID,

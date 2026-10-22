@@ -5,6 +5,7 @@
 import { memo, useMemo, useRef, useCallback, type JSX, type ReactNode } from "react";
 import { PerformanceBoundary } from "../performance.tsx";
 import { PerformanceComponent } from "../../shared/performance.ts";
+import { t } from "../../shared/i18n.ts";
 import { QueueState } from "../../shared/message-queue.ts";
 import { EntryKind } from "../chat-entries.ts";
 import { QueuedMessage, SendingMessage } from "../panels/QueuedMessage.tsx";
@@ -251,7 +252,7 @@ function ChatScroll({ follow, children }: { follow: FollowScroll; children: Reac
       // below it would jump past an expanded tool list and unmount its disclosure.
       style={{ overflowAnchor: "none" }}
       data-chat-scroll
-      aria-label="Conversation"
+      aria-label={t("Conversation")}
       tabIndex={0}
       // Nothing in the conversation is wider than its column: a long unbroken line wraps or scrolls
       // in its own box, never the whole conversation sideways.
@@ -266,9 +267,9 @@ function ChatScroll({ follow, children }: { follow: FollowScroll; children: Reac
 function EarlierFailed({ onRetry }: { onRetry: () => Promise<void> }): JSX.Element {
   return (
     <div role="alert" className="flex items-center justify-center gap-2 text-xs text-red">
-      Could not load earlier messages.
+      {t("Could not load earlier messages.")}
       <Button variant="ghost" onClick={() => void onRetry()}>
-        Try again
+        {t("Try again")}
       </Button>
     </div>
   );

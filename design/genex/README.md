@@ -6,7 +6,8 @@ Genex source application's visual language with local desktop behavior. See
 for principles and skill routing.
 
 - **Type:** Zalando Sans SemiExpanded for words, Geist Mono for actions and machine text;
-  restricted Geist fallback for Greek/Cyrillic. Chat/menu 14px, composer 15px, dialog title
+  TikTok Sans tuned to Zalando for Cyrillic/Greek, and the app language's script from LINE Seed JP,
+  Genex Hangul (Pretendard) or Noto Sans SC. Chat/menu 14px, composer 15px, dialog title
   20px. Use named roles rather than adding arbitrary font sizes.
 - **Color:** configurable semantic light/dark palettes on one shared lightness ramp. A first launch follows the
   system's light or dark, painted before the page's first frame (`appearance/first-paint.ts`); Genex dark is the dark default,
