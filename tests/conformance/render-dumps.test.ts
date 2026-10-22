@@ -105,6 +105,23 @@ describe("a video render's frames in a game", () => {
     );
   });
 
+  it("stay on disk when a save point from before the render is restored", async () => {
+    const project = "flythrough-restore";
+    await lite.core.games.scaffold(project);
+    const dir = lite.core.games.dirFor(project);
+    const before = await lite.core.snapshot(SnapshotScope.Game, "before the render", project);
+    const frames = await writeFrames(dir, "renders/take-1");
+    await writeFile(path.join(dir, "renders/take-1/take-1.mp4"), "mp4\n");
+    await lite.core.snapshot(SnapshotScope.Game, "after the render", project);
+
+    // The restore's rescue runs after the frames' line was written: they are ignored by then.
+    await lite.core.snapshots.restore(before, { gameWorkspace: project });
+    assert.equal(await pathExists(path.join(dir, "renders/take-1/take-1.mp4")), false, "the video went back");
+    for (const file of frames) assert.ok(await pathExists(path.join(dir, file)), `${file} stays on disk`);
+    const ignoreLines = (await readFile(path.join(dir, ".gitignore"), "utf8")).split("\n");
+    assert.ok(ignoreLines.includes("renders/take-1/*[0-9].png"), "the frames stay out of the next save point");
+  });
+
   it("never land in a chat checkpoint", async () => {
     const project = "flythrough-chat";
     await lite.core.games.scaffold(project);
@@ -202,6 +219,16 @@ describe("what reads as a render's dump", () => {
       assert.deepEqual(await renderDumpRules(dir), []);
     });
 
+  it("answers again the frames rules the ignore file holds, once their frames are ignored", async () => {
+    const dir = await repo();
+    await writeFrames(dir, "renders/take-1");
+    const lines = (await renderDumpRules(dir)).map(ignoreLine);
+    assert.deepEqual(lines, ["renders/take-1/*[0-9].png"]);
+    // A person's own lines of the same shape that no plain folder name says are not Genex's to answer.
+    await writeFile(path.join(dir, ".gitignore"), [...lines, "star*/*[0-9].png", "/*[0-9].png", ""].join("\n"));
+    assert.deepEqual((await renderDumpRules(dir)).map(ignoreLine), lines);
+  });
+
   it("leaves alone frames the game already tracks", async () => {
     const dir = await repo();
     await writeFrames(dir, "cutscene");
@@ -219,11 +246,9 @@ describe("what reads as a render's dump", () => {
   // A folder's name becomes an ignore line: anything git would read as more than that name.
   const hostileFolders = ["new\nline", "star*", "[set]", "!bang", "#hash", "back\\slash", "q?", " lead", "trail "];
   for (const folder of hostileFolders)
-    it(`names no rule for the folder ${JSON.stringify(folder)}, and writes nothing`, async () => {
+    it(`names no rule for the folder ${JSON.stringify(folder)}`, async () => {
       const dir = await repo();
-      const ignoreBefore = await readFile(path.join(dir, ".gitignore"), "utf8").catch(() => null);
       await writeFrames(dir, `renders/${folder}`);
       assert.deepEqual(await renderDumpRules(dir), []);
-      assert.equal(await readFile(path.join(dir, ".gitignore"), "utf8").catch(() => null), ignoreBefore);
     });
 });

@@ -11,6 +11,7 @@ import path from "node:path";
 import { assetFormat } from "../shared/game-assets.ts";
 import type { PlacedRule } from "../shared/project-workspace.ts";
 import { pathExists } from "./fsx.ts";
+import { ownIgnoreFile } from "./nested-repos.ts";
 import { gitOrNull } from "./snapshots.ts";
 
 /** The fewest numbered pictures in one folder that read as a render's frames (five seconds at 24 fps). */
@@ -24,6 +25,8 @@ const FILES_AT_ONCE = 64;
 const NUMBERED_STEM = /\d+$/;
 /** A picture's extension as an ignore line can say it. */
 const PLAIN_EXTENSION = /^[A-Za-z0-9]+$/;
+/** An ignore line a frames rule writes: `<folder>/*[0-9].<extension>`. */
+const FRAMES_LINE = /^(.+)\/\*\[0-9\]\.([^./]+)$/;
 /**
  * A folder name an ignore line says as itself: letters, digits, `.`, `_`, `-` and inner spaces.
  * Anything else (a glob, `!`, `#`, a backslash, a line break, an edge space) git would read as
@@ -90,11 +93,10 @@ async function isRenderDump(dir: string, frames: readonly string[]): Promise<boo
 }
 
 /**
- * The rules leaving out the numbered pictures of each folder of `dir` that holds a render's frames
- * the repository does not track yet: one rule per folder and extension, placed at the folder. The
- * folder's other files (the video, a poster) stay in history. None for a folder that is no repository.
+ * The rules for the frames of each folder of `dir` that holds a render's dump the repository does
+ * not track and does not ignore yet.
  */
-export async function renderDumpRules(dir: string): Promise<PlacedRule[]> {
+async function newFramesRules(dir: string): Promise<PlacedRule[]> {
   const pictures = (await untrackedFiles(dir)).filter(
     (rel) => isNumberedPicture(rel) && path.posix.dirname(rel) !== ".",
   );
@@ -107,4 +109,36 @@ export async function renderDumpRules(dir: string): Promise<PlacedRule[]> {
     }
   }
   return rules;
+}
+
+/**
+ * The frames rules the folder's `.gitignore` already holds. Their frames are ignored now, so no
+ * walk finds them again; a restore cleans what the rules it is answered leave out, and an older
+ * save point's ignore file may not have the line yet, so these are answered for as long as it stays.
+ */
+async function keptFramesRules(dir: string): Promise<PlacedRule[]> {
+  const text = (await ownIgnoreFile(dir)) ?? "";
+  return text.split("\n").flatMap((line) => {
+    const [, folder, extension] = FRAMES_LINE.exec(line.trim()) ?? [];
+    const rule = folder && extension ? framesRule(folder, extension) : null;
+    return rule ? [rule] : [];
+  });
+}
+
+/**
+ * The rules leaving out the numbered pictures of each folder of `dir` that holds a render's frames:
+ * one rule per folder and extension, placed at the folder, for frames found now and for those a
+ * rule already leaves out. The folder's other files (the video, a poster) stay in history. None for
+ * a folder that is no repository.
+ */
+export async function renderDumpRules(dir: string): Promise<PlacedRule[]> {
+  if (!(await pathExists(path.join(dir, ".git")))) return [];
+  const rules = [...(await keptFramesRules(dir)), ...(await newFramesRules(dir))];
+  const seen = new Set<string>();
+  return rules.filter((rule) => {
+    const key = `${rule.base}/${rule.pattern}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
