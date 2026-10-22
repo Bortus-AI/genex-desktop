@@ -5890,4 +5890,18 @@ export default {
   "×{count} during {phase}": "×{count} durante {phase}",
   "— the biggest of them: {problem}": "— o maior problema: {problem}",
   "… Preview truncated at 256 KiB; original unchanged.": "… Prévia cortada em 256 KiB; o original não muda.",
+  "On this computer": "Neste computador",
+  "On this computer · {size}": "Neste computador · {size}",
+  "Not for this computer": "Não é para este computador",
+  "Couldn’t install: free {size} on this computer and try again.":
+    "Não foi possível instalar: libere {size} neste computador e tente de novo.",
+  "Couldn’t install: this game doesn’t run on this computer.":
+    "Não foi possível instalar: este jogo não roda neste computador.",
+  "There’s no version of this game for this computer.": "Não há versão deste jogo para este computador.",
+  "It isn’t on this computer any more. Install it again.": "Ele não está mais neste computador. Instale de novo.",
+  "It couldn’t start on this computer.": "Ele não conseguiu iniciar neste computador.",
+  "Remove from this computer": "Remover deste computador",
+  "{title} is removed from this computer. Its saves stay.":
+    "{title} foi removido deste computador. Os saves ficam guardados.",
+  "Ready to play on this computer.": "Pronto para jogar neste computador.",
 } satisfies LocaleCatalog;

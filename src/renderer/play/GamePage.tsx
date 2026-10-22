@@ -28,7 +28,7 @@ import { richText } from "../rich-text.tsx";
 import { ToastTone } from "../state/toasts.ts";
 import { Button } from "../ui/Button.tsx";
 import { Icon } from "../ui/icons.tsx";
-import { NATIVE_WORDS, PLAY_CARD_MENU_WORDS, PLAY_WORDS } from "../words.ts";
+import { NATIVE_WORDS, nativeHereWords, PLAY_CARD_MENU_WORDS, PLAY_WORDS } from "../words.ts";
 import { formatCount } from "./play-model.ts";
 import { GamePhase, type GameStanding, gameStanding, installPercent, minutesSince } from "./native-model.ts";
 import { PlayPageFrame } from "./PlayPageFrame.tsx";
@@ -147,10 +147,11 @@ function Playing({ game, standing }: { game: PlayGameDetail; standing: GameStand
 function Failed({ game, standing }: { game: PlayGameDetail; standing: GameStanding }): JSX.Element {
   const failure = standing.failure;
   const needed = (standing.build?.sizeBytes ?? 0) + (standing.build?.installedBytes ?? 0);
+  const here = nativeHereWords(standing.here);
   const line = (() => {
-    if (!failure) return WORDS.installFailed[InstallFailure.Failed]();
-    if ("launch" in failure) return WORDS.launchFailed[failure.launch];
-    return WORDS.installFailed[failure.install](sizeWords(needed));
+    if (!failure) return WORDS.installFailed[InstallFailure.Failed]("", here);
+    if ("launch" in failure) return WORDS.launchFailed[failure.launch](here);
+    return WORDS.installFailed[failure.install](sizeWords(needed), here);
   })();
   const retry = () => {
     if (failure && "launch" in failure && standing.installed) void studio().play.launch(game.slug);
@@ -169,12 +170,13 @@ function Failed({ game, standing }: { game: PlayGameDetail; standing: GameStandi
 }
 
 /** No build for this computer: where it plays instead. */
-function Elsewhere({ game }: { game: PlayGameDetail }): JSX.Element {
+function Elsewhere({ game, here }: { game: PlayGameDetail; here: NativePlatform }): JSX.Element {
   const platforms = platformsOf(game);
-  const mac = platforms.includes(NativePlatform.Mac);
-  const title = mac ? WORDS.notForThisMac : WORDS.onlyOnTitle(platformNames(platforms));
-  const minOs = game.native?.builds.find((build) => build.platform === NativePlatform.Mac)?.minOs;
-  const line = mac && minOs ? WORDS.needsMacOs(minOs) : WORDS.noVersionFor(WORDS.platform.mac);
+  const builtForHere = platforms.includes(here);
+  const title = builtForHere ? nativeHereWords(here).notForHere : WORDS.onlyOnTitle(platformNames(platforms));
+  const macMinimum =
+    here === NativePlatform.Mac ? game.native?.builds.find((build) => build.platform === here)?.minOs : undefined;
+  const line = builtForHere && macMinimum ? WORDS.needsMacOs(macMinimum) : WORDS.noVersionFor(WORDS.platform[here]);
   return (
     <div className="game-elsewhere" data-game-note="elsewhere">
       <span className="game-elsewhere-title">{title}</span>
@@ -207,7 +209,7 @@ function PrimaryBlock({
     case GamePhase.Failed:
       return <Failed game={game} standing={standing} />;
     case GamePhase.Elsewhere:
-      return <Elsewhere game={game} />;
+      return <Elsewhere game={game} here={standing.here} />;
     case GamePhase.Ready:
       return (
         <>
@@ -223,7 +225,7 @@ function PrimaryBlock({
           </Button>
           <p className="game-primary-note" data-game-note="ready">
             <Icon name="check" size={13} className="game-check" />
-            {WORDS.readyHere(sizeWords(installed?.bytes ?? 0))}
+            {nativeHereWords(standing.here).readyHere(sizeWords(installed?.bytes ?? 0))}
           </p>
         </>
       );
@@ -331,7 +333,8 @@ function Tiles({ game, standing }: { game: PlayGameDetail; standing: GameStandin
   const platforms = platformsOf(game);
   const bytes = standing.installed?.bytes ?? standing.build?.installedBytes ?? 0;
   const engine = game.native?.engine ?? null;
-  const armOnly = standing.build?.arch === NativeArch.Arm64 ? ` · ${WORDS.appleSiliconOnly}` : "";
+  const appleSilicon = standing.build?.platform === NativePlatform.Mac && standing.build.arch === NativeArch.Arm64;
+  const armOnly = appleSilicon ? ` · ${WORDS.appleSiliconOnly}` : "";
   return (
     <div className="game-tiles">
       <Tile

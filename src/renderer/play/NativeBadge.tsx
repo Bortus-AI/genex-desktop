@@ -1,14 +1,14 @@
 /**
  * A native game's marks: the Apple, Windows and Linux marks of the systems it was built for, and the badge
  * on its card's cover (canvas board "Main"): the marks alone while it is not installed, how far its
- * download has come with a line along the cover's foot, On this Mac once installed, or an update
+ * download has come with a line along the cover's foot, On this Mac (or computer) once installed, or an update
  * waiting with its size. A game with a web build shows nothing new until it is installed here.
  */
 import type { JSX } from "react";
 import { sizeWords } from "../../shared/byte-size.ts";
 import { NativePlatform } from "../../shared/play-native.ts";
 import { Icon } from "../ui/icons.tsx";
-import { NATIVE_WORDS } from "../words.ts";
+import { NATIVE_WORDS, nativeHereWords } from "../words.ts";
 import { CardBadge, type CardBadgeState } from "./native-model.ts";
 
 const WORDS = NATIVE_WORDS;
@@ -69,7 +69,7 @@ export function CardNativeBadge({ badge }: { badge: CardBadgeState }): JSX.Eleme
       return (
         <span className="native-badge" data-native-badge="installed">
           <Icon name="check" size={13} />
-          {WORDS.installedHere}
+          {nativeHereWords(badge.platform).installedHere}
         </span>
       );
   }

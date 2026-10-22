@@ -173,14 +173,16 @@ is.
   (unpacked), `sha256` (hex of the archive), `url`, `entry` (what runs, from the archive's root: a
   `.app` bundle at the root for a Mac, an `.exe` for Windows, a plain path such as `Dust.x86_64` or
   `Dust/Binaries/Linux/Dust-Linux-Shipping` for Linux), optional `minOs` (`13.0`,
-  `10.0.19041`) and `publishedAt`. The archive is a zip; its `url` is https on a build host the app
+  `10.0.19041`; Linux has none to meet: a kernel's release says nothing of a build's C library) and
+  `publishedAt`. The archive is a zip; its `url` is https on a build host the app
   trusts (`NATIVE_BUILD_HOSTS`: `cdn.genex.technology` by exact name, so a game's own
   `<slug>.genex.technology` site never hands out an app), with no port or credentials, never
   redirecting elsewhere, and answers `Range`. A row with anything off is dropped, the rest kept.
 - The build a computer installs is its platform's for its own processor, else a universal Mac app,
   else, on Apple silicon with Rosetta installed, an Intel-only one, where its `minOs` is met
-  (`buildFor`). Nothing is launched on Windows until its sandbox can show a program's window, nor on
-Linux yet: a Linux build is published and listed, and played once Genex launches games there. A game with no web
+  (`buildFor`). Games launch on the Mac and on Linux; nothing is launched on Windows until its
+  sandbox can show a program's window. Play names the computer "this Mac" on a Mac and "this
+  computer" elsewhere (`nativeHereWords`). A game with no web
   build and no build for this computer is left out of the tabs and search; its maker's profile
   still lists it.
 - Installing (`main/play/native-installs.ts`, `studio:play.install`, progress as
@@ -191,14 +193,24 @@ Linux yet: a Linux build is published and listed, and played once Genex launches
   link, no more than the stated size), unpacked with `ditto --noqtn`, every link resolved inside it,
   its program made runnable (an app packed on Windows carries no execute bit), the app's signature
   (ad hoc is enough) and processor checked, then its bundle id set to
-  `games.genex.play.<slug>` and signed again ad hoc, so it can only write its own preferences. Each
+  `games.genex.play.<slug>` and signed again ad hoc, so it can only write its own preferences. A
+  Linux build is unpacked by the app itself (`unpackZip`: the same checks, each file no larger than
+  its record, execute bits kept, links last) and its `entry` must be a regular file, an ELF program
+  for this computer's processor, made runnable; the whole version folder is its app (`entry` `.`). Each
   game keeps `installed-games/<slug>/<version>/` and `saves/`; `index.json` lists them. Removing a
   game (refused while it runs) keeps its saves; an update keeps the running version until it quits.
 - Playing (`main/play/native-launch.ts`): one copy per game, in the game sandbox (`spawnNativeGame`:
   the app read-only, `saves/` its HOME and `CFFIXED_USER_HOME`, its own preference domain, its
   `NSIRD_` atomic-save folder, window, GPU and sound; its only network is its Genex gateway, below).
   Genex finds its window by pid and
-  brings it forward (macOS does not). A game opens full screen with its engine's own argument
+  brings it forward (macOS does not). On Linux (`spawnLinuxGame`, `substrate/plugins/linux-game.ts`)
+  the game runs in bubblewrap: `/usr`, `/etc` and the library folders read-only, its version folder
+  read-only, `saves/` its HOME, a fresh `/tmp`, `/run` and process table, and none of the person's
+  files; it gets the X11 socket and cookie or the Wayland socket, `/dev/dri`, NVIDIA's nodes, the
+  GPU's `/sys`, the PulseAudio or PipeWire socket and `/dev/input`, and a network namespace of its
+  own. Linux has no window list every session shares, so a game counts as on screen once it has
+  kept running for three seconds (`native-windows-linux.ts`), and the window manager brings it
+  forward. A game opens full screen with its engine's own argument
   (`launchArgs`: Unity `-screen-fullscreen 1`, Godot `--fullscreen`, Unreal `-fullscreen`; the
   engine is the catalog's, kept in the install record), unless its app sets `GenexWindowed` in its
   Info.plist (read at unpack, `WINDOWED_KEY`); the page's Quit asks it to quit, then ends its process tree;
@@ -209,7 +221,9 @@ Linux yet: a Linux build is published and listed, and played once Genex launches
   - **The gateway.** Each launch opens a gateway on 127.0.0.1: one port for Genex's API, and six for
     relays as answers name them (`relayHostsOf`: `relay[-<region>].<api's domain>`).
   - **The sandbox.** The game's profile allows outbound TCP to those ports only. Seatbelt names no
-    host but `localhost`, so the gateway is how "Genex only" is enforced.
+    host but `localhost`, so the gateway is how "Genex only" is enforced. On Linux the game's own
+    network namespace holds only loopback: socat inside listens on the gateway's ports on 127.0.0.1
+    and passes each connection through a unix socket to the gateway outside (no socat, no network).
   - **What goes through.** Requests and WebSockets go on to their own Genex host over TLS. Relay
     addresses in JSON answers (relay lists, a seat's `publicAddress`) are rewritten to their local
     port, so the next connection comes back through the gateway. Anything else is refused: a port

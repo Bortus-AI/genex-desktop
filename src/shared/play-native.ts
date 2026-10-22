@@ -18,10 +18,11 @@ export type NativeArch = (typeof NativeArch)[keyof typeof NativeArch];
 export const NATIVE_PLATFORMS: readonly NativePlatform[] = Object.values(NativePlatform);
 
 /**
- * Where Genex can run a native game today. Windows has no sandbox that gives a program a window
- * yet (`docs/windows-sandbox.md`), and no game runs outside one, so only the Mac launches.
+ * Where Genex can run a native game today: the Mac (Seatbelt) and Linux (bubblewrap). Windows has
+ * no sandbox that gives a program a window yet (`docs/windows-sandbox.md`), and no game runs
+ * outside one, so Windows does not launch.
  */
-const LAUNCH_PLATFORMS: ReadonlySet<NativePlatform> = new Set([NativePlatform.Mac]);
+const LAUNCH_PLATFORMS: ReadonlySet<NativePlatform> = new Set([NativePlatform.Mac, NativePlatform.Linux]);
 
 /**
  * The hosts a build archive downloads from: genex.games' CDN, which already serves Play's covers
@@ -255,9 +256,12 @@ export function compareOsVersions(a: string, b: string): number {
 /** Whether Genex launches native games on `host` at all. */
 export const launchesOn = (host: NativeHost): boolean => LAUNCH_PLATFORMS.has(host.platform);
 
-/** Whether `host` meets a build's minimum system. */
+/**
+ * Whether `host` meets a build's minimum system. A Linux build's minimum is the C library it was
+ * linked against, which the kernel's release says nothing about, so Linux has none to meet.
+ */
 const runsOn = (build: NativeBuild, host: NativeHost): boolean =>
-  !build.minOs || compareOsVersions(host.osVersion, build.minOs) >= 0;
+  !build.minOs || host.platform === NativePlatform.Linux || compareOsVersions(host.osVersion, build.minOs) >= 0;
 
 /** Whether `host` runs an Intel-only Mac app: an Apple silicon Mac with Rosetta. */
 const translatesIntel = (host: NativeHost): boolean => host.arch === NativeArch.Arm64 && host.rosetta === true;

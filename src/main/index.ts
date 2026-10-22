@@ -167,12 +167,14 @@ import { runTool } from "./play/native-unpack.ts";
 import { type GameGenex, type NativeSessions, type NativeSessionsDeps, nativeSessions } from "./play/native-launch.ts";
 import { nativePlays } from "./play/native-plays.ts";
 import { hasGameWindow, showGameWindow } from "./play/native-windows.ts";
+import { linuxGameWindows } from "./play/native-windows-linux.ts";
 import { spawnNativeGame } from "../substrate/plugins/native-process.ts";
+import { spawnLinuxGame } from "../substrate/plugins/linux-game.ts";
 import { psProbe, SYSTEM_CLOCK } from "../substrate/job-process.ts";
 import { killProcessTree } from "../substrate/process-tree.ts";
 import { prepareNativeGamesFixture } from "./dev/fixture-native-games.ts";
 import { fixtureNativeFetch } from "./dev/fixture-native.ts";
-import { launchesOn, nativeAppOffer } from "../shared/play-native.ts";
+import { launchesOn, nativeAppOffer, NativePlatform } from "../shared/play-native.ts";
 import type { PlayViewerDeps } from "./play/viewer.ts";
 import { createPlayManage, type PlayManage } from "./play/manage.ts";
 import { fixtureClone, gitClone, gitCloneCode, remixGame } from "./play/remix.ts";
@@ -1125,12 +1127,15 @@ function watchNativeUpdates(studio: StudioCore): void {
 function playSessionsFor(studio: StudioCore): NativeSessions | null {
   const installs = playInstallsFor(studio);
   if (!installs) return null;
+  // Linux runs a game in bubblewrap and has no window list to read; the Mac in Seatbelt.
+  const linux = process.platform === StudioPlatform.Linux;
+  const windows = linux ? linuxGameWindows() : { hasWindow: hasGameWindow, show: showGameWindow };
   nativeLauncher ??= nativeSessions({
     root: studio.layout.installedGames,
     record: (slug) => installs.record(slug),
-    spawn: spawnNativeGame,
-    hasWindow: hasGameWindow,
-    show: showGameWindow,
+    spawn: linux ? spawnLinuxGame : spawnNativeGame,
+    hasWindow: windows.hasWindow,
+    show: windows.show,
     kill: (pid, signal) => process.kill(pid, signal),
     killTree: (pid) => killProcessTree(pid),
     probe: psProbe(),
@@ -1210,7 +1215,9 @@ async function askNativeIdentity(game: string): Promise<boolean> {
 async function prepareNativeGames(studio: StudioCore): Promise<void> {
   const host = thisComputer();
   if (!host || !launchesOn(host)) return;
-  if (fixtureProviders && dev?.fixture === FixtureName.NativeGames) {
+  // The fixture's builds are Mac apps, made with the Mac's own tools.
+  const macFixture = host.platform === NativePlatform.Mac && dev?.fixture === FixtureName.NativeGames;
+  if (fixtureProviders && macFixture) {
     await prepareNativeGamesFixture({
       dir: path.join(userDataRoot, "fixture-native"),
       root: studio.layout.installedGames,

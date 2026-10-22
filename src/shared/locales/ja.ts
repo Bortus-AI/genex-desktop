@@ -5807,4 +5807,19 @@ export default {
   "— the biggest of them: {problem}": "— いちばん大きな問題：{problem}",
   "… Preview truncated at 256 KiB; original unchanged.":
     "… プレビューは256 KiBで切り詰めました。元のファイルは変わりません。",
+  "On this computer": "このコンピューターで",
+  "On this computer · {size}": "このコンピューター · {size}",
+  "Not for this computer": "このコンピューターには非対応",
+  "Couldn’t install: free {size} on this computer and try again.":
+    "インストールできませんでした。このコンピューターで{size}空けて、もう一度試してください。",
+  "Couldn’t install: this game doesn’t run on this computer.":
+    "インストールできませんでした。このゲームはこのコンピューターでは動きません。",
+  "There’s no version of this game for this computer.": "このコンピューター用のバージョンはありません。",
+  "It isn’t on this computer any more. Install it again.":
+    "このコンピューターにはもうありません。もう一度インストールしてください。",
+  "It couldn’t start on this computer.": "このコンピューターで起動できませんでした。",
+  "Remove from this computer": "このコンピューターから削除",
+  "{title} is removed from this computer. Its saves stay.":
+    "{title}をこのコンピューターから削除しました。セーブデータは残ります。",
+  "Ready to play on this computer.": "このコンピューターでプレイできます。",
 } satisfies LocaleCatalog;

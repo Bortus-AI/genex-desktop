@@ -5686,4 +5686,18 @@ export default {
   "×{count} during {phase}": "{phase} 중 ×{count}",
   "— the biggest of them: {problem}": "— 가장 큰 문제: {problem}",
   "… Preview truncated at 256 KiB; original unchanged.": "… 미리보기는 256KiB에서 잘렸어요. 원본은 그대로예요.",
+  "On this computer": "이 컴퓨터",
+  "On this computer · {size}": "이 컴퓨터에 있음 · {size}",
+  "Not for this computer": "이 컴퓨터용이 아님",
+  "Couldn’t install: free {size} on this computer and try again.":
+    "설치하지 못했어요. 이 컴퓨터에서 {size}를 확보하고 다시 시도하세요.",
+  "Couldn’t install: this game doesn’t run on this computer.":
+    "설치하지 못했어요. 이 게임은 이 컴퓨터에서 실행되지 않아요.",
+  "There’s no version of this game for this computer.": "이 컴퓨터용 버전이 없는 게임이에요.",
+  "It isn’t on this computer any more. Install it again.": "이제 이 컴퓨터에 없어요. 다시 설치하세요.",
+  "It couldn’t start on this computer.": "이 컴퓨터에서 시작하지 못했어요.",
+  "Remove from this computer": "이 컴퓨터에서 제거",
+  "{title} is removed from this computer. Its saves stay.":
+    "{title} 게임을 이 컴퓨터에서 제거했어요. 저장 데이터는 남아 있어요.",
+  "Ready to play on this computer.": "이 컴퓨터에서 플레이할 수 있어요.",
 } satisfies LocaleCatalog;
