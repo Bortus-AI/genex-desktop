@@ -114,7 +114,9 @@ export const CORE_FACT_RULES: readonly FactRule[] = [
 /** The glob grammar's limits. */
 const GLOB = {
   MaxChars: 120,
-  Chars: /^[A-Za-z0-9._*/-]+$/,
+  /** Plain characters, `*` and the one class it knows, `[0-9]` (a digit: a numbered frame's `*[0-9].png`). */
+  Chars: /^(?:[A-Za-z0-9._*/-]|\[0-9\])+$/,
+  Digit: "[0-9]",
   AnyDepth: "**/",
 } as const;
 
@@ -123,7 +125,7 @@ const ROOT = ".";
 
 /**
  * Whether `glob` is a file glob: an optional leading `**` + `/` (any depth, including none), then
- * `/`-separated segments where `*` matches within a segment. Plain characters only, no `..` or `.`
+ * `/`-separated segments where `*` matches within a segment and `[0-9]` one digit. Plain characters only, no `..` or `.`
  * segment, no leading `/`, no empty segment, `**` nowhere else.
  */
 export function isFileGlob(glob: unknown): glob is string {
@@ -147,7 +149,10 @@ function parseGlob(glob: string): ParsedGlob {
   const anyDepth = glob.startsWith(GLOB.AnyDepth);
   const rest = (anyDepth ? glob.slice(GLOB.AnyDepth.length) : glob).replace(/\/$/, "");
   const segments = rest.split("/").map((segment) => {
-    const pattern = segment.replace(/[.+?^${}()|[\]\\-]/g, "\\$&").replace(/\*/g, "[^/]*");
+    const pattern = segment
+      .split(GLOB.Digit)
+      .map((part) => part.replace(/[.+?^${}()|[\]\\-]/g, "\\$&").replace(/\*/g, "[^/]*"))
+      .join("[0-9]");
     return new RegExp(`^${pattern}$`);
   });
   return { anyDepth, segments };
