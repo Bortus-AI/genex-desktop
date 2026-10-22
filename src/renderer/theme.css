@@ -1192,6 +1192,62 @@
   padding-inline-end: calc(var(--window-controls-end) + 8px);
 }
 
+/* The stage strip (panels/stage/StageStrip.tsx): the views and the game's controls at its start, the
+ * plugin buttons at its end, on one row while they fit. Narrower, it makes room in steps
+ * (`strip-fold.ts`, `data-fold`): the views fold into one button, then the plugin buttons move to a
+ * second row, then Sound and Full screen join them there. Its last column keeps the first row clear
+ * of the window's own controls (Windows, Linux: `--window-controls-end`), so the second row, which
+ * spans it, runs to the strip's end; the line between the rows is the strip's own background. */
+.stage-strip {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto var(--window-controls-end, 0px);
+  grid-template-rows: 47px;
+  grid-template-areas: "start game . end .";
+  column-gap: 8px;
+  align-items: center;
+  overflow: hidden;
+  /* A control's name never wraps to make room: the strip folds instead. */
+  white-space: nowrap;
+}
+.stage-strip-start {
+  grid-area: start;
+  justify-self: start;
+}
+.stage-strip-game {
+  grid-area: game;
+}
+.stage-strip-end {
+  grid-area: end;
+  justify-self: end;
+}
+.stage-strip[data-fold="plugins"],
+.stage-strip[data-fold="game"] {
+  grid-template-rows: 47px 1px minmax(47px, auto);
+  background-image: linear-gradient(var(--line), var(--line));
+  background-size: 100% 1px;
+  background-position: 0 47px;
+  background-repeat: no-repeat;
+}
+.stage-strip[data-fold="plugins"] {
+  grid-template-areas: "start game . . ." ". . . . ." "end end end end end";
+}
+.stage-strip[data-fold="game"] {
+  grid-template-areas: "start start start start ." ". . . . ." "game . end end end";
+}
+/* On the second row (`data-row`) the plugin buttons may wrap, and end 8px from the strip's edge. */
+.stage-strip-end[data-row="second"] {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  row-gap: 8px;
+  padding-block: 7px;
+  padding-inline-end: 8px;
+}
+/* A game with no plugin buttons has nothing for a second row: the strip stays one row. */
+.stage-strip[data-fold="plugins"]:has(> .stage-strip-end:empty) {
+  grid-template-rows: 47px 0 0;
+  background-image: none;
+}
+
 /* Conversation-led shell. */
 .studio-shell {
   display: grid;

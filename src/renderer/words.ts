@@ -1856,6 +1856,10 @@ export const STAGE_WORDS = {
   play: t("Play game"),
   starting: t("Starting game"),
   fullScreen: t("Full screen"),
+  /** The view switcher's name. */
+  views: t("Game view"),
+  /** The folded views' button: the switcher's name and the view it shows ("Game view: Builds"). */
+  viewsButton: (view: string) => t("Game view: {view}", { view }),
   /** The view switcher's tabs; a folder with more than one Live view names each by what it shows. */
   tabs: { live: t("Live"), builds: t("Builds"), assets: t("Assets"), webGame: t("Web game"), unreal: "Unreal" },
 } as const;

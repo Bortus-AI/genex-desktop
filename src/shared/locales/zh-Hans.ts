@@ -1345,6 +1345,7 @@ export default {
   "Game sound": "游戏声音",
   "Game stopped": "游戏已停止",
   "Game view": "游戏视图",
+  "Game view: {view}": "游戏视图：{view}",
   Games: "游戏",
   "Games by {name}": "{name} 的游戏",
   "Games from Play": "来自“游玩”的游戏",
