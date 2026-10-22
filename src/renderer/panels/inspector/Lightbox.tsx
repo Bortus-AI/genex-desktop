@@ -50,8 +50,8 @@ export function Lightbox({
         {src ? (
           <img src={src} alt="" className="block max-h-full max-w-full object-contain" draggable={false} />
         ) : (
-          <Pending label={t("Loading…")} className="grid max-h-full max-w-full p-6">
-            <Skeleton width={480} height={320} radius={16} className="skeleton-on-dark max-h-full max-w-full" />
+          <Pending label={t("Loading…")}>
+            <Skeleton width={240} height={160} radius={14} className="skeleton-on-dark" />
           </Pending>
         )}
       </div>
