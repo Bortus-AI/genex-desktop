@@ -2260,7 +2260,6 @@ export const MESSAGES = [
   "Pay {amount}",
   "Paying…",
   "People",
-  "People playing in the Genex app can install it.",
   "Period",
   "Permission expansion requires confirmation",
   "Permission modes",

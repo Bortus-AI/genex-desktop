@@ -100,7 +100,13 @@ function sample() {
   const order = [...(content?.querySelectorAll<HTMLElement>(".genex-publish-primary, [data-genex-remix]") ?? [])].map(
     (el) => (el.matches("[data-genex-remix]") ? "remix" : "primary"),
   );
+  const primary = document.querySelector<HTMLElement>(".genex-publish-primary");
+  const lines = [...(content?.querySelectorAll<HTMLElement>(".genex-publish-hint, .genex-publish-reach") ?? [])];
+  const isAbove = (el: HTMLElement) =>
+    primary !== null && Boolean(el.compareDocumentPosition(primary) & Node.DOCUMENT_POSITION_FOLLOWING);
   return {
+    above: lines.filter(isAbove).map((el) => ({ text: el.textContent ?? "", align: getComputedStyle(el).textAlign })),
+    below: lines.filter((el) => !isAbove(el)).map((el) => el.textContent ?? ""),
     shown: Boolean(box),
     checked: box?.checked ?? null,
     line: line?.textContent ?? null,

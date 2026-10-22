@@ -107,7 +107,7 @@ app.whenReady().then(async()=>{
   assert.equal(only.primary,'Publish Mac app');
   assert.equal(only.reach,'Only Mac players can play it.');
   assert.deepEqual([only.rows[0].detail,only.rows[0].end],['Not made yet','Make with agent'],'the agent can make its web version');
-  assert.equal(only.hint,'People playing in the Genex app can install it.');
+  assert.equal(only.hint,null,'the line above the press says who plays it: no second line under it');
   report.appsOnly=await capture('dark-apps-only');
   const pressed=await step('appsOnlyPress','window.platformsRig.press()');
   assert.deepEqual(pressed.published,[{via:'apps',title:'Dust Runners'}],'the apps go, never a web copy');

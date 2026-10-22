@@ -221,6 +221,7 @@ function playCalls(bridge: BridgeCalls) {
     playSearch: (query, shelf) => invoke("studio:play.search", { query, shelf }),
     playCatalog: () => invoke("studio:play.catalog"),
     playRemix: (slug) => invoke("studio:play.remix", { slug }),
+    playRemixReady: (slugs) => invoke("studio:play.remix-ready", { slugs }),
     playOnline: (slugs) => invoke("studio:play.online", { slugs }),
     playOpen: (slug, title) => invoke("studio:play.open", { slug, title }),
     playGame: (slug) => invoke("studio:play.game", { slug }),

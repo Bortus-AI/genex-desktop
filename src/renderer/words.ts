@@ -3712,8 +3712,6 @@ export const PUBLISH_PLATFORM_WORDS = {
   publishApps: (apps: string) => t("Publish {apps}", { apps }),
   onlyPlayers: (players: string) => t("Only {players} players can play it.", { players }),
   held: t("Genex is reviewing the game before it shows in the gallery."),
-  /** The quiet line under the press of a game with only apps. */
-  appsHint: t("People playing in the Genex app can install it."),
   /** A game made in an engine with nothing Publish can send yet: no app, or none Studio can send. */
   makeFirst: t("Make a Mac or Windows app first, then publish it here."),
   makeAnyFirst: t("Make a web version or a Mac or Windows app first, then publish it here."),

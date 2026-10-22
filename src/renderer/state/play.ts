@@ -139,6 +139,8 @@ export interface PlayState {
   remixFailed: boolean;
   /** Why the failed remix made nothing, when Genex's answer named a reason; the shell says it in its words. */
   remixRefusal: PlayRemixRefusal | null;
+  /** Whether each looked-at game's source holds a game, by slug: a card shows Remix only once main says yes. */
+  remixReady: Record<string, boolean>;
   /** The viewer's guest card asked to sign in: the shell signs in to Genex once (`useGuestSignIn`). */
   installAsked: boolean;
   /** The Assets shelf's switchers: whose assets, and which kind; kept while other shelves show. */
@@ -183,6 +185,7 @@ export const initialPlay = (recent: PlayRecentEntry[] = []): PlayState => ({
   remixed: null,
   remixFailed: false,
   remixRefusal: null,
+  remixReady: {},
   installAsked: false,
   assetView: ALL_ASSETS,
   library: EMPTY_LIBRARY,
@@ -423,6 +426,12 @@ export function remixProgressed(state: PlayState, progress: RemixProgress): Play
 /** A card's remix was made: its name waits for the shell. */
 const remixAnswered = (state: PlayState, name: string): PlayState => ({ ...state, remixed: name });
 
+/** Main said which games' sources hold a game. */
+export const remixReadyRead = (state: PlayState, ready: Record<string, boolean>): PlayState => ({
+  ...state,
+  remixReady: { ...state.remixReady, ...ready },
+});
+
 /** A remix failed, for `refusal` when one was named: the shell says so once. */
 const remixRefused = (state: PlayState, refusal: PlayRemixRefusal | null = null): PlayState => ({
   ...state,
@@ -547,6 +556,8 @@ export interface PlayStore extends StoreApi<PlayState> {
   retry(): Promise<void>;
   /** Copy a card's game into a new game of the person's own; its name or its failure waits for the shell. */
   remix(game: PlayGame): Promise<void>;
+  /** Ask main, with the other cards shown at once, whether a remixable game's source holds a game. */
+  checkRemix(slug: string): void;
   /** Copy the viewer's game as a card's is: the viewer closes at once. */
   remixViewed(): Promise<void>;
   /** Turn the Assets shelf's switchers. */
@@ -584,6 +595,32 @@ export interface PlayStore extends StoreApi<PlayState> {
   quitGame(slug: string): Promise<void>;
 }
 
+/**
+ * The cards' asks of whether a game's source holds a game, made together: the cards shown in one
+ * moment become one ask. A game is asked of once; an ask that fails is made again by the next card
+ * that shows it.
+ */
+function remixChecks(api: PlayApi, store: StoreApi<PlayState>): (slug: string) => void {
+  const asked = new Set<string>();
+  let waiting: string[] = [];
+  const send = async (): Promise<void> => {
+    const slugs = waiting;
+    waiting = [];
+    try {
+      const ready = await api.playRemixReady(slugs);
+      store.setState((state) => remixReadyRead(state, ready), true);
+    } catch {
+      for (const slug of slugs) asked.delete(slug);
+    }
+  };
+  return (slug) => {
+    if (asked.has(slug) || slug in store.getState().remixReady) return;
+    asked.add(slug);
+    waiting.push(slug);
+    if (waiting.length === 1) queueMicrotask(() => void send());
+  };
+}
+
 type PlayApi = Pick<
   StudioApi,
   | "playFeed"
@@ -592,6 +629,7 @@ type PlayApi = Pick<
   | "playOpen"
   | "playClose"
   | "playRemix"
+  | "playRemixReady"
   | "playManage"
   | "assetLibrary"
   | "playCatalog"
@@ -725,6 +763,7 @@ export function createPlayStore(
   };
 
   const assets = assetReads(api, store, set, now);
+  const checkRemix = remixChecks(api, store);
   const shown = showing(store, storage, gone, onGameChanged);
   const manage = managing(api, shown);
 
@@ -746,6 +785,7 @@ export function createPlayStore(
       if (shown) await open(shown);
     },
     remix,
+    checkRemix,
     remixViewed: async () => {
       const shown = store.getState().viewer;
       if (!shown || store.getState().making) return;

@@ -2694,7 +2694,6 @@ export default {
   "Pay {amount}": "{amount}を支払う",
   "Paying…": "支払い中…",
   People: "ユーザー",
-  "People playing in the Genex app can install it.": "Genexアプリで遊んでいる人はゲームをインストールできます。",
   Period: "期間",
   "Permission expansion requires confirmation": "権限の拡大には確認が必要です",
   "Permission modes": "権限モード",

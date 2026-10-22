@@ -175,6 +175,7 @@ import { launchesOn, nativeAppOffer } from "../shared/play-native.ts";
 import type { PlayViewerDeps } from "./play/viewer.ts";
 import { createPlayManage, type PlayManage } from "./play/manage.ts";
 import { fixtureClone, gitClone, gitCloneCode, remixGame } from "./play/remix.ts";
+import { gitRemixReadiness, type RemixReadiness, readyFor, withReadyRemix } from "./play/remix-ready.ts";
 import { type MentionSources, vendorAssetModule } from "./core/mention-tags.ts";
 import type { PlayViewer } from "./play/viewer.ts";
 import { playMicStore } from "./play/mic-store.ts";
@@ -1321,6 +1322,25 @@ function mentionSourcesFor(core: () => StudioCore): MentionSources {
   };
 }
 
+/** Whether a game's source holds a game, kept across launches; made on first use. */
+let playRemixReadiness: RemixReadiness | undefined;
+
+/**
+ * Whether each named game's source holds a game, so Play shows its card's Remix: genex.games' git
+ * for a real launch, yes for every game of a fixture launch's (its remix is a local stand-in).
+ */
+function playRemixReadyFor(studio: StudioCore): (slugs: readonly unknown[]) => Promise<Record<string, boolean>> {
+  const readiness = playRemixReadinessFor(studio);
+  return (slugs) => readyFor(slugs, readiness, playCatalogFor(studio));
+}
+
+/** Whether one source holds a game: genex.games' git, or yes for a fixture launch's stand-ins. */
+function playRemixReadinessFor(studio: StudioCore): Pick<RemixReadiness, "ready"> {
+  if (fixtureNativePolicy) return { ready: async () => true };
+  playRemixReadiness ??= gitRemixReadiness(path.join(userDataRoot, "play-remix-ready.json"), studio.layout.scratch);
+  return playRemixReadiness;
+}
+
 /** A Play game's public source as a new game of the person's own; answers its library name. */
 function remixPlayGame(studio: StudioCore, world: PlayWorld): Promise<string> {
   return remixGame(world, {
@@ -1388,7 +1408,8 @@ function signInToGenex(studio: StudioCore): void {
 function attachPlay(studio: StudioCore, win: BrowserWindow): void {
   playView = wirePlayViewer({
     win,
-    gallery: playCatalogFor(studio),
+    // The viewer's Remix shows only for a game whose source holds a game, as a card's does.
+    gallery: withReadyRemix(playCatalogFor(studio), playRemixReadinessFor(studio)),
     emit: (payload) => pushUiEvent({ type: UiEvent.PlayViewer, payload }),
     openExternal: (url) => {
       if (!fixtureNativePolicy) void openOutside(studio, win, url);
@@ -1841,6 +1862,7 @@ function playIpcDeps(studio: StudioCore): PlayIpcDeps {
   return {
     gallery: playCatalogFor(studio),
     remix: (world) => remixPlayGame(studio, world),
+    remixReady: playRemixReadyFor(studio),
     viewer: () => playView,
     ...playAccountFor(studio),
     manage: playManageFor(studio),

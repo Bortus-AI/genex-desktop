@@ -63,6 +63,8 @@ app.whenReady().then(async()=>{
    assert.equal(apps.line,'Allow remixing·Rights');
    assert.equal(apps.lineOneRow,true);
    assert.deepEqual(apps.order,['primary','remix'],'under the press');
+   assert.deepEqual(apps.above,[{text:'Only Mac and Windows players can play it.',align:'center'}],'one centred line above the press');
+   assert.deepEqual(apps.below,[],'nothing else under it');
    report[theme+'Apps']=await capture(theme+'-apps');
    const rights=await step(theme+'Rights','window.remixRig.rights()');
    assert.equal(rights.page.title,'What remixers can do');
@@ -88,6 +90,8 @@ app.whenReady().then(async()=>{
   // A web game: the same checkbox under Publish to the web.
   const web=await step('web','window.remixRig.open({scene:"web"})');
   assert.equal(web.shown,true);
+  assert.deepEqual(web.above,[{text:'Anyone with the link can play it.',align:'center'}],'a web game says who plays it above the press too');
+  assert.deepEqual(web.below,[]);
   const webSent=await step('webPress','window.remixRig.press()');
   assert.deepEqual(webSent.published,[{via:'web',remix:true}]);
   report.web=await capture('dark-web');

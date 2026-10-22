@@ -11,15 +11,15 @@
  * as they download; a remix that fails says why in the log.
  */
 import { type ChildProcess, execFile } from "node:child_process";
-import type { Dirent } from "node:fs";
 import { randomBytes } from "node:crypto";
-import { lstat, mkdir, readdir, readFile, rename, rm, rmdir, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, rm, rmdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { MINUTE_MS } from "../../shared/duration.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { isPlaySlug, PlayRemixRefusal, type RemixProgress, RemixStep, remixTitle } from "../../shared/play.ts";
 import { HOST_GIT_CONFIG, hostGitEnv } from "../../substrate/git-policy.ts";
+import { ENGINE_PROJECT_DEPTH, sourceHoldsGame } from "./game-source.ts";
 import type { PlayWorld } from "./gallery.ts";
 import { downloadLfsFiles, type LfsDownloadDeps } from "./lfs.ts";
 
@@ -48,9 +48,7 @@ const STAGING_PREFIX = ".remix-";
 const STAGING_NAME = /^\.remix-[a-z0-9][a-z0-9-]*-[0-9a-f]{6}$/;
 /** Random bytes in a hidden folder's name: six hex digits. */
 const STAGING_RANDOM_BYTES = 3;
-/** How deep in a copy an engine's project may sit (`unity/ProjectSettings/…` is two folders down). */
-const ENGINE_PROJECT_DEPTH = 3;
-/** The most entries the look for an engine's project reads. */
+/** The most entries the look for a game's marks reads. */
 const ENGINE_LOOK_ENTRIES_MAX = 5_000;
 
 const MESSAGE = {
@@ -182,70 +180,53 @@ function routedIn(listing: string, byGitPath: Map<string, string>): Set<string> 
   return routed;
 }
 
-/** A file that marks an engine's project in its folder: Godot's or Unreal's. */
-const isEngineFile = (name: string): boolean => name === "project.godot" || name.endsWith(".uproject");
-/** Folders never looked in for a project: hidden ones and installed packages. */
+/** Folders never looked in for a game's marks: hidden ones and installed packages. */
 const passedOver = (name: string): boolean => name.startsWith(".") || name === "node_modules";
 
-/** Whether `folder`'s entries mark an engine's project (Unity's is its `ProjectSettings/ProjectVersion.txt`), and the folders to look in next. */
-async function lookIn(folder: string, entries: readonly Dirent[]): Promise<{ marked: boolean; below: string[] }> {
-  const below: string[] = [];
-  for (const entry of entries) {
-    if (entry.isFile() && isEngineFile(entry.name)) return { marked: true, below };
-    if (!entry.isDirectory() || passedOver(entry.name)) continue;
-    const at = path.join(folder, entry.name);
-    if (entry.name === "ProjectSettings" && (await isFile(path.join(at, "ProjectVersion.txt"))))
-      return { marked: true, below };
-    below.push(at);
-  }
-  return { marked: false, below };
-}
-
-/** Whether `dir` holds an engine's project within a few folders: Unity's, Godot's or Unreal's mark. Links are never followed. */
-async function holdsEngineProject(dir: string): Promise<boolean> {
-  let seen = 0;
-  let level = [dir];
-  for (let depth = 0; depth < ENGINE_PROJECT_DEPTH && level.length > 0; depth += 1) {
-    const next: string[] = [];
-    for (const folder of level) {
-      const entries = await readdir(folder, { withFileTypes: true }).catch(() => []);
-      seen += entries.length;
-      if (seen > ENGINE_LOOK_ENTRIES_MAX) return false;
-      const look = await lookIn(folder, entries);
-      if (look.marked) return true;
-      next.push(...look.below);
-    }
-    level = next;
-  }
-  return false;
-}
-
-/** Whether `file` is a plain file (a link is not). */
-const isFile = (file: string): Promise<boolean> =>
-  lstat(file).then(
-    (info) => info.isFile(),
-    () => false,
-  );
-
-/** Whether a package.json in `dir` runs anything: a game built with npm names its scripts. */
-async function packageRuns(dir: string): Promise<boolean> {
-  const text = await readFile(path.join(dir, "package.json"), "utf8").catch(() => "");
-  try {
-    const scripts = (JSON.parse(text) as { scripts?: unknown } | null)?.scripts;
-    return typeof scripts === "object" && scripts !== null && Object.keys(scripts).length > 0;
-  } catch {
-    return false;
-  }
+/** One folder's files (relative, `/` between parts) and the folders under it to look in next; links are never followed. */
+async function folderEntries(dir: string, rel: string): Promise<{ files: string[]; folders: string[]; read: number }> {
+  const entries = await readdir(path.join(dir, rel), { withFileTypes: true }).catch(() => []);
+  const at = (name: string) => (rel ? `${rel}/${name}` : name);
+  return {
+    files: entries.filter((entry) => entry.isFile()).map((entry) => at(entry.name)),
+    folders: entries.filter((entry) => entry.isDirectory() && !passedOver(entry.name)).map((entry) => at(entry.name)),
+    read: entries.length,
+  };
 }
 
 /**
- * Whether a copy holds a game: a Genex game's record, a page at its root, packages that build it, or
- * an engine's project. A README, ignore rules or a publish's bookkeeping alone are no game: such a
- * source is what a game whose creator never shared its project has on Genex.
+ * The files of `dir` a few folders deep (`ENGINE_PROJECT_DEPTH`), `/` between parts: enough to
+ * find a game's marks. The look reads a bounded number of entries.
+ */
+async function topFiles(dir: string): Promise<string[]> {
+  const files: string[] = [];
+  let seen = 0;
+  let level: string[] = [""];
+  for (let depth = 0; depth <= ENGINE_PROJECT_DEPTH && level.length > 0; depth += 1) {
+    const next: string[] = [];
+    for (const rel of level) {
+      const found = await folderEntries(dir, rel);
+      seen += found.read;
+      if (seen > ENGINE_LOOK_ENTRIES_MAX) return files;
+      files.push(...found.files);
+      next.push(...found.folders);
+    }
+    level = next;
+  }
+  return files;
+}
+
+/**
+ * Whether a copy holds a game (`game-source.ts`): a Genex game's record, a page at its root,
+ * packages that build it, or an engine's project. Such a source with none of these is what a game
+ * whose creator never shared its project has on Genex.
  */
 export async function holdsGame(dir: string): Promise<boolean> {
-  if ((await isFile(path.join(dir, "studio.json"))) || (await isFile(path.join(dir, "index.html")))) return true;
-  return (await packageRuns(dir)) || holdsEngineProject(dir);
+  const files = await topFiles(dir);
+  const packageJson = files.includes("package.json")
+    ? await readFile(path.join(dir, "package.json"), "utf8").catch(() => null)
+    : null;
+  return sourceHoldsGame(files, packageJson);
 }
 
 /** Hears a clone's models download: bytes so far, and their total when it is known. */

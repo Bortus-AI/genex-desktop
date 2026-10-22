@@ -161,6 +161,7 @@ const METHODS = [
   "playSearch",
   "playCatalog",
   "playRemix",
+  "playRemixReady",
   "playOnline",
   "playOpen",
   "playGame",

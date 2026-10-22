@@ -35,7 +35,7 @@ import { StepBar } from "../../../ui/StepBar.tsx";
 import { useAsyncEffect } from "../../../use-async-effect.ts";
 import { useCopy } from "../../../use-copy.ts";
 import { richText } from "../../../rich-text.tsx";
-import { ACCOUNT_WORDS, GENEX_WORDS, PUBLISH_PLATFORM_WORDS, problemWords } from "../../../words.ts";
+import { ACCOUNT_WORDS, GENEX_WORDS, problemWords } from "../../../words.ts";
 import { MakingArt } from "../../MakingArt.tsx";
 import { PluginApproval } from "../../PluginApproval.tsx";
 import { readGenexShot } from "./genex-cover-shot.ts";
@@ -62,7 +62,7 @@ import { CoverKind } from "./cover-asks.ts";
 import { type PublishCover, useElapsed, usePublishCover } from "./use-publish-cover.ts";
 import { Pressing, usePublishRecord } from "./use-publish-record.ts";
 import { PublishPlatforms, usePublishPlatforms } from "./PublishPlatforms.tsx";
-import { appsLabel, gateByPlugin, nothingToPublish, onlyApps } from "./publish-platforms-view.ts";
+import { appsLabel, gateByPlugin, makesApps, nothingToPublish, onlyApps } from "./publish-platforms-view.ts";
 import type { PublishPlatform } from "../../../../shared/publish-platforms.ts";
 import { PublishShareLine } from "./PublishShare.tsx";
 import { useShareWhenLive } from "./use-publish-share.ts";
@@ -858,6 +858,10 @@ function PublishBody({
         {view.running && <Progress view={view} />}
         {failure && !publishing && <p className="genex-publish-failure">{failure.text}</p>}
         <PublishShareLine share={share} celebrate={celebrate} />
+        <WhoPlays
+          project={project}
+          shown={pressShown && saysWhoPlays(view, publishing, Boolean(cover.making), Boolean(view.testLink))}
+        />
         {pressShown && (
           <Presses
             view={view}
@@ -880,15 +884,7 @@ function PublishBody({
           />
         )}
         {!publishing && <Links view={view} project={project} onOpen={open} opening={opening} />}
-        <Hint
-          testShown={Boolean(view.testLink) && !publishing}
-          view={view}
-          publishing={publishing}
-          making={Boolean(cover.making)}
-          record={record}
-          name={name}
-          apps={apps !== null}
-        />
+        <Hint view={view} publishing={publishing} making={Boolean(cover.making)} record={record} name={name} />
       </div>
     </div>
   );
@@ -917,20 +913,29 @@ function Links({
   );
 }
 
-/** The quiet line at the foot: that closing does not stop it, the way out of a slow test, or who can play it. */
+/** Whether the dialog says nothing of who can play it: a publish runs, a cover is on its way, it is live, it failed, or the test link speaks. */
+const saysWhoPlays = (view: PublishView, publishing: boolean, making: boolean, testShown: boolean): boolean =>
+  !publishing && !making && view.stage !== PublishStage.Public && !view.failure && !testShown;
+
+/**
+ * Who can play it, one centred line above the press, for a web game: a game made in an engine says
+ * it under its platform rows instead, so the dialog never has two.
+ */
+function WhoPlays({ project, shown }: { project: string; shown: boolean }): JSX.Element | null {
+  const facts = useLibrary((s) => s.games.find((g) => g.name === project)?.facts);
+  const engine = useLibrary((s) => Boolean(s.games.find((g) => g.name === project)?.engine));
+  if (!shown || engine || makesApps(facts ?? [])) return null;
+  return <p className="genex-publish-hint">{WORDS.intro}</p>;
+}
+
+/** The quiet line at the foot: that closing does not stop it, the way out of a slow test, or that a cover is coming. */
 function Hint({
   view,
   publishing,
   making,
   record,
   name,
-  testShown = false,
-  apps = false,
 }: {
-  /** The test link's own line stands in for the default intro, so the two never both show. */
-  testShown?: boolean;
-  /** The game has only apps: its players install it in the Genex app rather than follow a link. */
-  apps?: boolean;
   view: PublishView;
   publishing: boolean;
   /** Another cover is on its way: the line says where it shows. */
@@ -952,8 +957,7 @@ function Hint({
     );
   if (publishing) return <p className="genex-publish-hint">{WORDS.keepsGoing}</p>;
   if (making) return <p className="genex-publish-hint">{WORDS.coverMakingSoon}</p>;
-  if (view.stage === PublishStage.Public || view.failure || testShown) return null;
-  return <p className="genex-publish-hint">{apps ? PUBLISH_PLATFORM_WORDS.appsHint : WORDS.intro}</p>;
+  return null;
 }
 
 /** The busy button's words: the step at work and the attempt's clock. */

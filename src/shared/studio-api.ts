@@ -522,6 +522,8 @@ export interface StudioApi {
    * or why nothing was made (a source with no game in it).
    */
   playRemix(slug: string): Promise<PlayRemixAnswer>;
+  /** Play: whether each named game's source holds a game, so its card offers Remix. */
+  playRemixReady(slugs: string[]): Promise<Record<string, boolean>>;
   /** Play: players in each named game now; a game nobody counts is left out. */
   playOnline(slugs: string[]): Promise<Record<string, number>>;
   /** Play: open a game full screen in the viewer, its bar showing `title`; how it goes arrives as `UiEvent.PlayViewer`. */

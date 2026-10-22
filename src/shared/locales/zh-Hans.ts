@@ -2538,7 +2538,6 @@ export default {
   "Pay {amount}": "支付 {amount}",
   "Paying…": "正在支付…",
   People: "用户",
-  "People playing in the Genex app can install it.": "在 Genex 应用中游玩的玩家可以安装这款游戏。",
   Period: "时间段",
   "Permission expansion requires confirmation": "扩大权限需要确认",
   "Permission modes": "权限模式",

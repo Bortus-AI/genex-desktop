@@ -147,7 +147,10 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
   replaces its pointer only once its SHA-256 and size match; a download fails only once it stalls
   for a minute; a failed remix logs why in `studio.log`) into a
   hidden folder; a source with no game in it (no `studio.json`, root page, npm scripts or engine
-  project: a creator who never shared its project) makes nothing and says so (`PlayRemixRefusal`).
+  project: a creator who never shared its project, `game-source.ts`) makes nothing and says so
+  (`PlayRemixRefusal`). Cards and the viewer offer Remix only once main has looked at the source
+  (`studio:play.remix-ready`, `remix-ready.ts`: the head commit by `git ls-remote`, its file names by a
+  blobless shallow clone, kept by commit in `play-remix-ready.json`).
   A game reaches Genex with its project only from a Publish that allowed remixing (the dialog's
   Allow remixing, ticked by default; Rights says what remixers may do): Studio stages the files the
   game's git keeps, without history, packages, agent settings, secrets or an engine's caches and

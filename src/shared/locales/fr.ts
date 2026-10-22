@@ -2756,7 +2756,6 @@ export default {
   "Pay {amount}": "Payer {amount}",
   "Paying…": "Paiement…",
   People: "Personnes",
-  "People playing in the Genex app can install it.": "Les joueurs de l’app Genex peuvent installer le jeu.",
   Period: "Période",
   "Permission expansion requires confirmation": "L’extension des autorisations doit être confirmée",
   "Permission modes": "Modes d’autorisation",

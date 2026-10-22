@@ -1351,6 +1351,7 @@ button.genex-publish-banner-name:hover {
   color: var(--ink-3);
   font-size: 13px;
   line-height: 19px;
+  text-align: center;
 }
 /* The busy button: the step at work, then its clock. */
 .genex-publish-clock {

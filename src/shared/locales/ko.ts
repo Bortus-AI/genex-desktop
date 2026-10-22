@@ -2630,7 +2630,6 @@ export default {
   "Pay {amount}": "{amount} 결제",
   "Paying…": "결제 중…",
   People: "사람",
-  "People playing in the Genex app can install it.": "Genex 앱에서 플레이하는 사람은 게임을 설치할 수 있어요.",
   Period: "기간",
   "Permission expansion requires confirmation": "권한 확장은 확인이 필요해요",
   "Permission modes": "권한 모드",
