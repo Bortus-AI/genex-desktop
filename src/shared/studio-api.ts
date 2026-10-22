@@ -216,7 +216,7 @@ export interface StudioApi {
   pluginChooseFile(id: string, request: PluginFileRequest): Promise<string | null>;
   /** The files Publish would put online for a game, for Studio's Publish dialog to show. Uploads nothing. */
   genexPublishReview(project: string): Promise<ExportReview>;
-  /** The web, Mac and Windows rows of Studio's Publish dialog for a game, from what its folder holds. */
+  /** The web, Mac, Windows and Linux rows of Studio's Publish dialog for a game, from what its folder holds. */
   genexPublishPlatforms(project: string): Promise<PublishPlatform[]>;
   /**
    * Publish the game to the Genex gallery from Studio's Publish dialog: its Publish press approved

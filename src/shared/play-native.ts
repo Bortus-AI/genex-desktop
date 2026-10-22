@@ -1,6 +1,6 @@
 /**
- * Native builds of a Play game: a Mac app or a Windows program the author built in Unity, Godot or
- * Unreal, which Genex installs and runs in its own window. This is the app's copy of the draft
+ * Native builds of a Play game: a Mac app, a Windows program or a Linux one the author built in Unity,
+ * Godot or Unreal, which Genex installs and runs in its own window. This is the app's copy of the draft
  * contract genex.games serves (`docs/play.md`, "Native builds"): every field is optional on the
  * wire, and a game the API says nothing new about stays today's web game. Browser-safe: main parses
  * the API's answers with it and the renderer reads the same shapes.

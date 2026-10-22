@@ -3625,9 +3625,10 @@ export const PUBLISH_PLATFORM_WORDS = {
     [PublishTarget.Web]: t("Web"),
     [PublishTarget.Mac]: t("Mac app"),
     [PublishTarget.Windows]: t("Windows app"),
+    [PublishTarget.Linux]: t("Linux app"),
   } satisfies Record<PublishTarget, string>,
-  /** The players a native row is for, in the ask and the reach line: "Mac", "Windows". */
-  players: { [PublishTarget.Mac]: "Mac", [PublishTarget.Windows]: "Windows" },
+  /** The players a native row is for, in the ask and the reach line: "Mac", "Windows", "Linux". */
+  players: { [PublishTarget.Mac]: "Mac", [PublishTarget.Windows]: "Windows", [PublishTarget.Linux]: "Linux" },
   webReady: t("Plays right away"),
   webMissing: t("Not set up for the web"),
   /** An Unreal game: Unreal has no web export. */
@@ -3644,7 +3645,12 @@ export const PUBLISH_PLATFORM_WORDS = {
       [NativeArch.Arm64]: t("Arm PCs"),
       [NativeArch.X64]: t("64-bit PCs"),
     },
-  } satisfies Record<typeof PublishTarget.Mac | typeof PublishTarget.Windows, Record<NativeArch, string>>,
+    [PublishTarget.Linux]: {
+      [NativeArch.Universal]: t("64-bit PCs"),
+      [NativeArch.Arm64]: t("Arm PCs"),
+      [NativeArch.X64]: t("64-bit PCs"),
+    },
+  } satisfies Record<Exclude<PublishTarget, typeof PublishTarget.Web>, Record<NativeArch, string>>,
   /** When a build was made: "built just now", "built 5 min ago", "built 3 hours ago". */
   built: (at: string, now: number) => {
     const ms = Math.max(0, now - Date.parse(at));
@@ -3689,9 +3695,9 @@ export const PUBLISH_PLATFORM_WORDS = {
   /** The quiet line under the press of a game with only apps. */
   appsHint: t("People playing in the Genex app can install it."),
   /** A game made in an engine with nothing Publish can send yet: no app, or none Studio can send. */
-  makeFirst: t("Make a Mac or Windows app first, then publish it here."),
-  makeAnyFirst: t("Make a web version or a Mac or Windows app first, then publish it here."),
-  appsSoon: t("Publishing Mac and Windows apps comes with the next Genex update."),
+  makeFirst: t("Make a Mac, Windows or Linux app first, then publish it here."),
+  makeAnyFirst: t("Make a web version or a Mac, Windows or Linux app first, then publish it here."),
+  appsSoon: t("Publishing Mac, Windows and Linux apps comes with the next Genex update."),
   /** A built app older than the game's last change: the agent builds it again. */
   rebuild: t("Build again"),
   rebuildLabel: (name: string) => t("Build the {app} again with the agent", { app: name }),

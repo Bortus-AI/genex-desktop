@@ -1962,6 +1962,7 @@ export default {
   Lines: "라인",
   "Link copied": "링크를 복사했어요",
   "Linked files cannot be previewed.": "링크된 파일은 미리 볼 수 없어요.",
+  "Linux app": "Linux 앱",
   "Listed the hero cameras": "쇼케이스 카메라 목록을 가져왔어요",
   "Listed the toolsets": "도구 세트 목록을 가져왔어요",
   "Listing the hero cameras": "쇼케이스 카메라 목록을 가져오는 중",
@@ -2060,13 +2061,14 @@ export default {
   "Main agent: {model}": "메인 에이전트: {model}",
   "Main color": "메인 색상",
   "Main navigation": "기본 탐색",
-  "Make a Mac or Windows app first, then publish it here.": "먼저 Mac 또는 Windows 앱을 만든 다음 여기서 게시하세요.",
+  "Make a Mac, Windows or Linux app first, then publish it here.":
+    "먼저 Mac, Windows 또는 Linux 앱을 만든 다음 여기서 게시하세요.",
   "Make a community plugin": "커뮤니티 플러그인 만들기",
   "Make a profile, publish your games, play with friends.": "프로필을 만들고, 게임을 게시하고, 친구와 함께 플레이해요.",
   "Make a web version of {title} so I can publish it on the web.":
     "{title}의 웹 버전을 만들어 주세요. 웹에 게시하고 싶어요.",
-  "Make a web version or a Mac or Windows app first, then publish it here.":
-    "먼저 웹 버전이나 Mac 또는 Windows 앱을 만든 다음 여기서 게시하세요.",
+  "Make a web version or a Mac, Windows or Linux app first, then publish it here.":
+    "먼저 웹 버전이나 Mac, Windows 또는 Linux 앱을 만든 다음 여기서 게시하세요.",
   "Make a {players} app of {title} so I can publish it for {players} players.":
     "{title}의 {players} 앱을 만들어 주세요. {players} 플레이어에게 게시하고 싶어요.",
   "Make another Genex clip for this game: a different moment.":
@@ -2770,8 +2772,8 @@ export default {
   "Publish {apps}": "{apps} 게시하기",
   "Publish {name} to Roblox as a new game?": "{name} 플레이스를 새 게임으로 Roblox에 게시할까요?",
   Publishing: "게시",
-  "Publishing Mac and Windows apps comes with the next Genex update.":
-    "Mac 및 Windows 앱 게시는 다음 Genex 업데이트에서 지원돼요.",
+  "Publishing Mac, Windows and Linux apps comes with the next Genex update.":
+    "Mac, Windows 및 Linux 앱 게시는 다음 Genex 업데이트에서 지원돼요.",
   "Publishing needs git and git-lfs on this Mac (brew install git-lfs). Studio will not let the Genex CLI install software.":
     "게시하려면 이 Mac에 git과 git-lfs가 필요해요(brew install git-lfs). Studio는 Genex CLI가 소프트웨어를 설치하도록 두지 않아요.",
   "Publishing needs git on this Mac. Install git (Xcode command line tools or Homebrew) and try again.":
@@ -3942,8 +3944,10 @@ export default {
   "This game folder is no longer available.": "이 게임 폴더를 더 이상 사용할 수 없어요.",
   "This game has an unlisted draft page": "이 게임에는 일부 공개 초안 페이지가 있어요",
   "This game has more files than the canvas lists.": "이 게임에는 캔버스에 표시된 것보다 파일이 더 많아요.",
-  "This game has no Mac or Windows app ready to publish": "이 게임에는 게시할 준비가 된 Mac 또는 Windows 앱이 없어요",
-  "This game has no Mac or Windows app ready to publish.": "이 게임에는 게시할 준비가 된 Mac 또는 Windows 앱이 없어요.",
+  "This game has no Mac, Windows or Linux app ready to publish":
+    "이 게임에는 게시할 준비가 된 Mac, Windows 또는 Linux 앱이 없어요",
+  "This game has no Mac, Windows or Linux app ready to publish.":
+    "이 게임에는 게시할 준비가 된 Mac, Windows 또는 Linux 앱이 없어요.",
   "This game has no Unity project": "이 게임에는 Unity 프로젝트가 없어요",
   "This game has no Unity project.": "이 게임에는 Unity 프로젝트가 없어요.",
   "This game has no skills of its own.": "이 게임에는 자체 스킬이 없어요.",

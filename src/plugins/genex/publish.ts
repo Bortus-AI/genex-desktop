@@ -64,9 +64,9 @@ export const MESSAGE = {
     ),
   DraftFailedTest:
     "The new build did not pass its test on the draft page, so it was not made public. Players still get the previous version.",
-  NoApps: "This game has no Mac or Windows app ready to publish.",
+  NoApps: "This game has no Mac, Windows or Linux app ready to publish.",
   /** {@link MESSAGE.NoApps} as Publish's refusal. */
-  NoAppsRefusal: () => t("This game has no Mac or Windows app ready to publish."),
+  NoAppsRefusal: () => t("This game has no Mac, Windows or Linux app ready to publish."),
   ListingRefused: "Genex did not list the game in the gallery.",
 } as const;
 

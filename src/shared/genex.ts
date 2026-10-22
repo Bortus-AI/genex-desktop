@@ -598,7 +598,7 @@ export interface GenexPublishState {
    */
   cover?: GenexCoverRecord;
   /**
-   * The game's Mac and Windows apps as its last publish sent them, answered beside the record like
+   * The game's Mac, Windows and Linux apps as its last publish sent them, answered beside the record like
    * the cover. Absent from a Genex plugin older than native builds.
    */
   native?: GenexNativeRecord;

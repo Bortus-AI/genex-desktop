@@ -1,7 +1,7 @@
 {
   "apiVersion": 3,
   "id": "godot",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "icon": "icon.svg",
   "name": "Godot",
   "publisher": "Genex",
@@ -147,13 +147,13 @@
       "name": "export-templates",
       "timeoutMs": 540000,
       "facts": ["godot-project"],
-      "description": "Get Godot's export templates for this Godot version so Godot's own command line can export the game as an app: web, windows and mac (comma-separated; all three when left out). Genex fetches only those templates from Godot's own release (web 10 MB, Windows 40 MB, Mac 125 MB) into the person's templates folder; on Windows it also puts them where Genex's sandbox, and so your shell, reads them. For mac it sets project.godot to import ETC2/ASTC textures, which a Mac export needs. Call it once before exporting an app with godot --headless --export-release; for the web, call web-export instead, which fetches its own.",
+      "description": "Get Godot's export templates for this Godot version so Godot's own command line can export the game as an app: web, windows, mac and linux (comma-separated; all four when left out). Genex fetches only those templates from Godot's own release (web 10 MB, Windows 40 MB, Mac 125 MB, Linux 70 MB, 64-bit x86) into the person's templates folder; on Windows it also puts them where Genex's sandbox, and so your shell, reads them. For mac it sets project.godot to import ETC2/ASTC textures, which a Mac export needs. Call it once before exporting an app with godot --headless --export-release; for the web, call web-export instead, which fetches its own.",
       "parameters": {
         "type": "object",
         "properties": {
           "platforms": {
             "type": "string",
-            "description": "The platforms to export for: web, windows, mac, comma-separated. All three when left out."
+            "description": "The platforms to export for: web, windows, mac, linux, comma-separated. All four when left out."
           }
         }
       }

@@ -25,7 +25,7 @@ const MESSAGE = {
   UnrealGame: (title: string) =>
     t("{title} builds in Unreal; publishing an Unreal game isn't supported yet.", { title }),
   NotWebGame: (title: string) => t("{title} isn't a web game, so Genex can't publish it yet.", { title }),
-  NoApps: () => t("This game has no Mac or Windows app ready to publish"),
+  NoApps: () => t("This game has no Mac, Windows or Linux app ready to publish"),
 } as const;
 
 /** Why a game can't be published at all, by code: callers act on it, never on its words. */

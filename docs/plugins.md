@@ -3135,10 +3135,12 @@ Genex:
   before its consent card, and `export.stage` (a panel's or toolbar's publish) before it exports.
 - For a game linked to an engine, or one whose folder holds a player build, the dialog lists its
   platforms above the presses (`PublishPlatforms.tsx`, `publish-platforms-view.ts`; read by
-  `studio:plugins.genex-publish-platforms` from `main/core/publish-platforms.ts`): Web, Mac app and
-  Windows app. `main/core/native-builds.ts` finds the builds from the binaries themselves (a
-  `.app`'s Mach-O program, a PE `.exe` beside its data; never through a link, engine caches skipped,
-  the walk capped). A row says what its build runs on, when it was built and its size; "Built
+  `studio:plugins.genex-publish-platforms` from `main/core/publish-platforms.ts`): Web, Mac app,
+  Windows app and Linux app. `main/core/native-builds.ts` finds the builds from the binaries
+  themselves (a `.app`'s Mach-O program, a PE `.exe` beside its data, a 64-bit ELF program named
+  `<Game>.x86_64` or `.arm64` as Unity and Godot name it, or with no extension in an Unreal
+  package's `<Game>/Binaries/Linux`; never through a link, engine caches skipped, the walk capped).
+  A Linux build ships its program's folder, or for Unreal the whole package (`linuxBuildOf`). A row says what its build runs on, when it was built and its size; "Built
   before your last change" with Build again when the game's sources changed more than a minute after
   it (builds, caches, history, hidden files, notes and logs, and Unity's `UserSettings` do not count);
   or "Not made yet" with Make with agent, which sends "Make a <Platform> app
@@ -3149,6 +3151,8 @@ Genex:
   with Publish (`publishedApps`, passed as `native` in `publish-gallery`'s arguments; the line under
   the rows says "Publish also sends the Mac app."): once the web build is public, the plugin sends
   each with `genex native publish <the .app, or the .exe's folder> --json` in the publish workspace
+  (a Linux build: its folder with `--platform linux --entry <its program>`, which the CLI cannot
+  tell from the files; `nativePublishArgs`)
   (`publishApps`, `native-publish.ts`, one hour each), one at a time, after resolving each by real
   path inside the game folder. An app that fails never fails the publish; its row says "Not sent"
   and a line under the rows says why in the CLI's words. Each result is kept in the workspace's
@@ -3492,7 +3496,7 @@ runs, naming Godot's Template Manager. Only a 206 answer naming the range asked 
 that sends the whole archive is refused, its body cancelled); each request has a deadline by its
 size and the call's stop, and is tried up to three times. `web-export` fits the fetch, the copy and
 Godot's export in its one call, and starts no export with less than a minute left. Windows's Do it for me fetches the Web template with Godot, and its Stop stops that fetch too.
-`export-templates {platforms}` (web, windows, mac) does the same for an app export the agent runs
+`export-templates {platforms}` (web, windows, mac, linux: Godot's 64-bit x86 `linux_release.x86_64`) does the same for an app export the agent runs
 with Godot's command line, puts them where the sandbox user's Godot reads them on Windows, and for
 mac sets `textures/vram_compression/import_etc2_astc` (new games from either template have it).
 The tools that run Godot declare `timeoutMs` of nine minutes. `keep-web-build` at `turn.end` and `restore.after` makes it again

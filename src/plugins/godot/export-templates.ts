@@ -53,18 +53,23 @@ export const ExportTemplate = {
   WindowsX64: "windows_release_x86_64.exe",
   WindowsX64Console: "windows_release_x86_64_console.exe",
   Mac: "macos.zip",
+  LinuxX64: "linux_release.x86_64",
 } as const;
 export type ExportTemplate = (typeof ExportTemplate)[keyof typeof ExportTemplate];
 
 /** What an app or web build exports for, as the agent names it. Wire values: never rename one. */
-export const ExportPlatform = { Web: "web", Windows: "windows", Mac: "mac" } as const;
+export const ExportPlatform = { Web: "web", Windows: "windows", Mac: "mac", Linux: "linux" } as const;
 export type ExportPlatform = (typeof ExportPlatform)[keyof typeof ExportPlatform];
 
-/** The templates each export needs: a Windows app's release build with its console twin, a Mac app's one archive. */
+/**
+ * The templates each export needs: a Windows app's release build with its console twin, a Mac app's
+ * one archive, a Linux app's 64-bit x86 release build.
+ */
 export const PLATFORM_TEMPLATES: Readonly<Record<ExportPlatform, readonly ExportTemplate[]>> = {
   [ExportPlatform.Web]: [ExportTemplate.Web],
   [ExportPlatform.Windows]: [ExportTemplate.WindowsX64, ExportTemplate.WindowsX64Console],
   [ExportPlatform.Mac]: [ExportTemplate.Mac],
+  [ExportPlatform.Linux]: [ExportTemplate.LinuxX64],
 };
 
 /**

@@ -255,7 +255,7 @@ const MESSAGE = {
       t("Genex downloads Godot this way on Windows only; on a Mac, Do it for me installs it in Applications."),
   },
   Templates: {
-    BadPlatforms: `platforms is web, windows or mac, comma-separated (all three when left out).`,
+    BadPlatforms: `platforms is web, windows, mac or linux, comma-separated (all four when left out).`,
     Ready: (version: string, platforms: readonly string[], fetched: readonly string[], windows: boolean) =>
       [
         `Godot ${version}'s export templates for ${platforms.join(", ")} are in place${fetched.length ? ` (fetched now: ${fetched.join(", ")})` : ""}.`,
@@ -582,7 +582,7 @@ function ensureTemplates(
   return fetchTemplates((deps.install ?? systemInstallDeps(deps.env)).fetch, install, folder, names, signal);
 }
 
-/** The platforms an agent's `export-templates` names: web, windows, mac, comma-separated; all three when none. */
+/** The platforms an agent's `export-templates` names: web, windows, mac, linux, comma-separated; all four when none. */
 function platformsArg(value: unknown): ExportPlatform[] {
   const all = Object.values(ExportPlatform);
   if (value === undefined || value === "") return all;
