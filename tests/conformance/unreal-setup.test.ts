@@ -1342,12 +1342,22 @@ describe("On Windows, the Unreal plugin's console tools", () => {
 describe("a game's own Unreal project and the steps card", () => {
   type HostCall = [string, unknown];
   /** A backend whose host answers storage and the game.engine services, keeps the game's link, and records every call. */
-  async function linkFixture(overrides: Partial<SetupEnv> = {}, game: string | null = "valley") {
+  async function linkFixture(
+    overrides: Partial<SetupEnv> = {},
+    game: string | null = "valley",
+    onLaunch: (l: Launch) => void = () => {},
+  ) {
     const f = await setupFixture({ ini: USER_INI });
     await fakeEpic(f.home, "darwin", [[f.project.file, "2026.10.03-20.00.00"]]);
     const env = { ...f.env, xcode: async () => READY_XCODE, ...overrides };
     const launched: Launch[] = [];
-    const launch: LaunchEnv = { ...noLaunch(f.root), open: async (l) => void launched.push(l) };
+    const launch: LaunchEnv = {
+      ...noLaunch(f.root),
+      open: async (l) => {
+        launched.push(l);
+        onLaunch(l);
+      },
+    };
     const backend = createUnrealBackend({ env, helper: HELPER, launch });
     const calls: HostCall[] = [];
     let link: PluginEngineLink | null = null;
@@ -1552,18 +1562,95 @@ describe("a game's own Unreal project and the steps card", () => {
     assert.deepEqual(b.calls.at(-1), ["game.engine.link", { project: b.real }], "a set-up project links as before");
   });
 
-  it("the agent's use-project refuses a project open in Unreal, saying why in one line, and changes nothing", async () => {
-    const b = await linkFixture({ editorRunning: async () => true });
+  it("the agent's use-project on a project open in Unreal quits it, sets it up, links it and opens it again", async () => {
+    const live = { editors: 1 };
+    const quitting = (l: Launch) => l.command === "/usr/bin/osascript";
+    const b = await linkFixture({ editorRunning: async () => live.editors > 0 }, "valley", (l) => {
+      live.editors += quitting(l) ? -1 : 1;
+    });
+    await mkdir(path.join(b.home, "Engines", "UE_5.8", "Engine", "Binaries", "Mac", "UnrealEditor.app"), {
+      recursive: true,
+    });
+    const answer = String(await b.backend.tool?.("use-project", { project: b.project.file }, b.context));
+    assert.match(answer, /Unreal had Drift open, so Genex quit it/);
+    assert.match(answer, /unreal__editor-status/, "the agent waits for it itself");
+    assert.doesNotMatch(answer, /ask the user|Unreal button/i);
+    assert.deepEqual(
+      b.launched.map((l) => (quitting(l) ? "quit" : l.args.at(-1))),
+      ["quit", b.real],
+      "Unreal's own quit (it asks about unsaved work), then the set-up project opened again",
+    );
+    assert.deepEqual(b.calls, [["game.engine.link", { project: b.real, setUp: true }]]);
+    const state = await inspectProject(b.project.file, b.options);
+    assert.deepEqual([state.plugins, state.autoStart, state.undoable], [true, true, true]);
+  });
+
+  it("the agent's use-project changes nothing when Unreal won't quit the open project, and says what the person must do", async () => {
+    const b = await linkFixture({ editorRunning: async () => true, editorCount: async () => 2 });
     const before = await tree(b.root);
     const call = b.backend.tool?.("use-project", { project: b.project.file }, b.context) ?? Promise.reject();
     await assert.rejects(call, (error: Error) => {
-      assert.match(error.message, /Drift is open in Unreal Editor/);
-      assert.match(error.message, /quit Unreal Editor/);
+      assert.match(error.message, /Two Unreal editors are open/);
+      assert.match(error.message, /quit the one that has Drift open, then call unreal__use-project again/);
       assert.doesNotMatch(error.message, /Unreal button|\n/);
       return true;
     });
     assert.deepEqual(await tree(b.root), before, "no record, the .uproject and its settings untouched");
-    assert.deepEqual(b.calls, [], "nothing is linked");
+    assert.deepEqual([b.calls, b.launched], [[], []], "nothing is linked, quit or opened");
+  });
+
+  /**
+   * A game whose link came with it from another Genex profile, whose set-up record stayed in that
+   * profile's storage: the project's files are set up (and, unless `module`, it has no C++ module, so
+   * a reopen builds nothing), the link is in this profile's storage, and Unreal answers once opened.
+   */
+  async function linkedElsewhere(live: { running: boolean; answering: boolean }) {
+    const b = await linkFixture(
+      { editorRunning: async () => live.running, editorAnswers: async () => live.answering },
+      "valley",
+      (l) => {
+        if (l.command === "/usr/bin/osascript") live.running = false;
+        else Object.assign(live, { running: true, answering: true });
+      },
+    );
+    const blueprint = JSON.parse(UPROJECT) as Record<string, unknown>;
+    delete blueprint.Modules;
+    await writeFile(b.project.file, `${JSON.stringify(blueprint, null, "\t")}\n`);
+    const elsewhere = { ...b.options, storage: path.join(b.root, "other-profile") };
+    const there = await setUpProject(b.project.file, elsewhere);
+    await mkdir(path.join(b.storage, "links"), { recursive: true });
+    await writeFile(path.join(b.storage, "links", "valley.json"), JSON.stringify({ kind: "unreal", project: b.real }));
+    await mkdir(path.join(b.home, "Engines", "UE_5.8", "Engine", "Binaries", "Mac", "UnrealEditor.app"), {
+      recursive: true,
+    });
+    return { ...b, port: there.port };
+  }
+
+  it("open-for-run records a linked project another profile set up, touching none of its files, then opens it", async () => {
+    const b = await linkedElsewhere({ running: false, answering: false });
+    assert.deepEqual(await listSetUpProjects(b.storage), [], "no set-up record in this profile");
+    const project = await tree(b.project.directory);
+    const answer = (await b.backend.tool?.("open-for-run", {}, b.context)) as { block?: string };
+    assert.equal(answer.block, undefined, answer.block);
+    assert.deepEqual(await listSetUpProjects(b.storage), [{ project: b.real, name: "Drift", port: b.port }]);
+    assert.deepEqual(await tree(b.project.directory), project, "the project's files as they were");
+    assert.deepEqual(
+      b.launched.map((l) => l.args.at(-1)),
+      [b.real],
+      "opened, never quit",
+    );
+  });
+
+  it("the agent's use-project links a project another profile set up while Unreal has it open, quitting nothing", async () => {
+    const b = await linkedElsewhere({ running: true, answering: true });
+    const answer = String(await b.backend.tool?.("use-project", { project: b.project.file }, b.context));
+    assert.match(answer, /This game now builds in Drift/);
+    assert.deepEqual(b.launched, [], "Unreal stays open");
+    assert.deepEqual(
+      b.calls,
+      [["game.engine.link", { project: b.real }]],
+      "no set-up of its own for Undo to take back",
+    );
   });
 
   it("the agent's use-project takes its set-up back when the host refuses the link", async () => {

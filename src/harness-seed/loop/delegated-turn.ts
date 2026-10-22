@@ -838,24 +838,36 @@ function launchToolFor(options: DelegatedOptions, reopening: boolean): HarnessTo
 }
 
 /**
- * Auto (Loop off): Autopilot's launch, for a Loop the user asks for in words. Only in the chat's own
- * turn: never beside a Loop's own launch, after a run the chat led, in a run's turn or in the build
- * a finished run's coordinator handed on. An Auto chat once asked for a Loop said it had started
- * one, with no way to start it.
+ * Autopilot's launch, for a Loop the user asks for in words, whenever the turn has no Loop launch of
+ * its own: Loop off, or after a run the chat led (finished or paused), with the Loop switch on or off.
+ * Only in the chat's own turn: never in a run's turn or in the build a finished run's coordinator
+ * handed on, and never for words the chat wrote itself (a command's result): only the person asks.
+ * A chat asked for a Loop always has a way to start it.
  */
 function autoLaunchFor(options: DelegatedOptions, launchTool: HarnessTool | null): HarnessTool | null {
-  const loopOff = !launchTool && !options.autopilot && !options.loop;
-  const chatsOwnTurn = !options.afterLoopRun && !options.runId && !options.followupOf;
-  if (!loopOff || !chatsOwnTurn) return null;
+  const chatsOwnTurn = !options.runId && !options.followupOf;
+  if (launchTool || !chatsOwnTurn || chatWroteIt(options)) return null;
   const launch = launchToolset.find((t) => t.name === "start_autopilot");
   // A launch kept from before hours could reach it would turn every "3h Loop" into one until done.
   return launch?.parameters?.properties?.hours ? launch : null;
 }
 
-/** Auto: the Loop the user asked for in words, for the hours they named (none: until done), on this message's pictures. */
-function loopAskedInWords(hours: unknown, stills: readonly DelegateImage[]): AnyRecord {
+/** Is the message this turn answers one the chat wrote itself (its `origin`: a command's result), not the person's? */
+function chatWroteIt(options: DelegatedOptions): boolean {
+  const asked = options.asked;
+  return typeof asked === "object" && asked !== null && (asked as AnyRecord).origin != null;
+}
+
+/**
+ * The Loop the user asked for in words, for the hours they named, else the hours the message's Loop
+ * switch holds (none: until done), on this message's pictures.
+ */
+function loopAskedInWords(hours: unknown, options: DelegatedOptions): AnyRecord {
   const named = hoursNamed(hours);
-  return { ...(named > 0 ? { hours: named } : {}), ...(stills.length ? { frames: [...stills] } : {}) };
+  const switched = Number((options.autopilot ?? options.loop)?.hours);
+  const chosen = named > 0 ? named : switched;
+  const stills = messageStills(options);
+  return { ...(chosen > 0 ? { hours: chosen } : {}), ...(stills.length ? { frames: [...stills] } : {}) };
 }
 
 /** A number of hours, or minutes when it says so; NaN when it names none. */
@@ -1566,7 +1578,19 @@ async function launchFromChat(
   const summary = result.summary?.trim();
   if (summary) await sayInTurn(ctx, turnId, summary);
   if (!result.ok) await sayInTurn(ctx, turnId, MESSAGE.launchedAnyway(endingOf(result)));
-  return executeLaunch(ctx, options, handoff.project, launchTool, intakeId, args ?? {});
+  const inWords = launchTool === handoff.autoLaunch;
+  return executeLaunch(ctx, options, handoff.project, { tool: launchTool, inWords }, intakeId, args ?? {});
+}
+
+/** The launch a turn executes, and whether it is the one for a Loop asked for in words (`autoLaunchFor`). */
+type Launch = { tool: HarnessTool; inWords: boolean };
+
+/** The commission a launch reads: the words' for a Loop asked in words, else the message's Loop switch. */
+function launchCommission(options: DelegatedOptions, launch: Launch, args: AnyRecord): AnyRecord {
+  // The switch's own picks (its roles) go with it; the words' hours and the message's pictures win.
+  if (launch.inWords) return { autopilot: { ...(options.autopilot ?? {}), ...loopAskedInWords(args.hours, options) } };
+  if (options.loop) return { loop: options.loop, ...(options.autopilot ? { autopilot: options.autopilot } : {}) };
+  return { autopilot: options.autopilot ?? loopAskedInWords(args.hours, options) };
 }
 
 /** Execute the launch the chat recorded, logged as its own tool call. */
@@ -1574,11 +1598,12 @@ async function executeLaunch(
   ctx: HarnessCtx,
   options: DelegatedOptions,
   project: string,
-  launchTool: HarnessTool,
+  launch: Launch,
   intakeId: string,
   args: AnyRecord,
 ): Promise<TurnOutcome> {
   const { turnId, engine, model } = options;
+  const launchTool = launch.tool;
   await ctx.call(HostMethod.TurnAppend, {
     turnId,
     batch: [
@@ -1589,8 +1614,7 @@ async function executeLaunch(
   const toolResult = (await launchTool.execute(args, {
     engine,
     model,
-    ...(options.loop ? { loop: options.loop } : {}),
-    autopilot: options.autopilot ?? (options.loop ? undefined : loopAskedInWords(args.hours, messageStills(options))),
+    ...launchCommission(options, launch, args),
   } as ToolCtx)) as ToolOutcome;
   const content = toolResult.content ?? "";
   await ctx.call(HostMethod.TurnAppend, {

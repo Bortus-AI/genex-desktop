@@ -14828,6 +14828,43 @@ describe("the user's ask to finish a running build (director/wrap-up.ts)", () =>
     assert.equal(loopRun.state.workers.size, 0, "no worker started");
   });
 
+  it('FA1b. "stop it and start a new one": wrap_up records the new Loop with the ask, and the studio starts it once the run closes, unless Stop came', async () => {
+    const STOP_AND_RESTART = "stop this loop and start a new 1h loop for the dragon attack";
+    const { host, loopRun } = await askedRun([STOP_AND_RESTART]);
+    const answer = String(
+      await loopRun.handler("wrap_up", {
+        user_asked: "stop this loop and start a new 1h loop",
+        next_goal: "A Skyrim-style dragon attack on the village",
+        next_hours: "1h",
+      }),
+    );
+    assert.match(answer, /new Loop starts by itself/, answer);
+    const [ask] = finishAsks(host);
+    assert.deepEqual(ask?.next, {
+      goal: "A Skyrim-style dragon attack on the village",
+      direction: "A Skyrim-style dragon attack on the village",
+      hours: 1,
+    });
+
+    const { nextLoopOf } = await import("../../src/harness-seed/loop/next-loop-record.ts");
+    const { startNextLoop } = await import("../../src/harness-seed/loop/next-loop.ts");
+    const log = [{ data: { type: "custom", event_type: RunEvent.RunControl, payload: ask } }];
+    assert.equal(nextLoopOf(log as never, "run_j")?.hours, 1);
+    assert.equal(nextLoopOf(log as never, "run_other"), null, "another run's ask starts nothing");
+    const plain = [{ data: { type: "custom", event_type: RunEvent.RunControl, payload: { ...ask, next: undefined } } }];
+    assert.equal(nextLoopOf(plain as never, "run_j"), null, "a plain ask to finish starts nothing");
+
+    // A Stop pressed since the ask wins: the log is not even read.
+    const calls: string[] = [];
+    const studio = {
+      cancels: new Set(["thread-1"]),
+      host: { call: async (method: string) => (calls.push(method), log) },
+      scoped: () => ({}),
+    };
+    await startNextLoop(studio as never, "thread-1", { runId: "run_j", project: "seyda-neen" } as never);
+    assert.deepEqual(calls, [], "nothing starts after Stop");
+  });
+
   it("FA2. a running worker ends the round it is in once the user asks to finish; only the lead's stop or the run's close ends it mid-round", async () => {
     const { workerStopAsk } = await import("../../src/harness-seed/loop/director/workers.ts");
     const { stopSignal, stopsThisRound } = await import("../../src/harness-seed/loop/facet/rules.ts");

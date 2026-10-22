@@ -73,13 +73,13 @@ const MESSAGE = {
   UnknownTool: (name: string) => `Unknown tool ${name}.`,
   NoProject:
     "Genex has not found a Unity project in this game's folder (a folder holding ProjectSettings/ProjectVersion.txt). Tell the user; retrying will not help.",
-  [PipelineProblem.NotOpen]: `This game's Unity project is not open in Unity, or it has no Pipeline package (${PIPELINE_PACKAGE}). Ask the user to open the project in Unity with that package added, then call again.`,
+  [PipelineProblem.NotOpen]: `This game's Unity project is not open in Unity, or it has no Pipeline package (${PIPELINE_PACKAGE}). Call unity__open-editor, which opens it (when it says the project has no Pipeline package, call unity__setup first; the user confirms it), then call again.`,
   [PipelineProblem.NotAnswering]:
     "Unity did not answer. It may still be starting or reloading scripts: wait a little and call again, and if it stays silent ask the user to look at the editor.",
   [PipelineProblem.Busy]: (reason: string) =>
     `Unity stayed busy${reason ? ` (${reason})` : ""} for the whole wait. Call again in a moment; if it is showing a dialog, ask the user to answer it in the editor.`,
   [PipelineProblem.Refused]:
-    "Unity refused Genex's token. Ask the user to close and reopen the project in Unity, then call again.",
+    "Unity refused Genex's token. Call unity__restart-editor, which ends Unity and opens the project again (the user confirms it; say first that unsaved editor work is lost), then call again.",
   [PipelineProblem.Failed]: (command: string, detail: string) => `${command} failed: ${detail}`,
   [PipelineProblem.Unknown]: (command: string) =>
     `${command} was sent and Unity gave no answer, so whether it took effect is unknown. Look before you repeat it.`,

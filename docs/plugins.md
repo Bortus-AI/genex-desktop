@@ -661,7 +661,24 @@ one only for the harness (`PluginRegistry.tool`'s `caller`). `cpp-status` and `a
 agent tools for an `unreal-project` (`facts`), which the one Loop's lead calls; `add-cpp-module`
 asks the person first (its `confirmation`) and holds the `editor` lock. While its job restarts
 Unreal, `editor-state` reads as reopening, so Genex's health watch waits and a crash step starts no
-second editor or build (`editor-reopen.ts` `createReopenTools`). A step runs while the chat is in
+second editor or build (`editor-reopen.ts` `createReopenTools`). Agents manage the game's editor
+themselves and never ask the person to open, quit or restart it (`editor-control.ts`): `open-editor`
+answers `{answering}`, `{starting}` while Genex is already opening it, or `{started}` once a reopen
+job (no C++ build: Unreal's own Open builds a hot-reloaded module) ended what was left of a crashed
+editor and its crash reporter and opened the project; an editor of the game that runs without
+answering is `{busy}` and ended only with `restart: true` (or at once when its log says the port is
+blocked). `quit-editor` saves through the helper's `save_all`, then ends the editor and its crash
+reporter, and refuses an editor it can't save. `editor-status` answers what `editor-state` does,
+waiting up to `seconds` (at most 170) for an opening to end; `editor-state` stays the harness's, as a
+hooked tool must. `open-editor` and `quit-editor` hold the `editor` lock. `use-project` on a project
+that isn't set up and is open in Unreal sends Unreal's normal quit (Unreal asks about unsaved work:
+the project has no helper to save through), waits up to 90 s for it to close, sets it up and links
+it, then opens it again; two editors, or one that stays open, are refused in words for the person. A
+linked project with no set-up record in this profile (another profile set it up; its record stays in
+that profile's storage) is recorded as it is when its files are set up (`adoptSetUp`: plugins,
+toolsets, a port of Genex's block no other project here holds, a helper), touching nothing and
+quitting nothing; the editor queue's calls, `use-project`, `open-editor` and `open-for-run` all do
+this, and `open-editor` and `open-for-run` set up a project whose files aren't, as `use-project` does. A step runs while the chat is in
 Plan mode unless it writes (`checkpoint: true`), which waits. A held write answers the Unreal
 runner behind its switch the Plan answer (`blocker: "plan_mode"`, `PluginCallBlocker`), which
 `loop/unreal/lead-steps.ts` turns into a refusal. The seed calls no other Unreal tool by name: a
@@ -747,7 +764,7 @@ level without hero cameras has none.
 **The editor lock and Genex's moments** (plugin 0.7.0). The plugin declares one lock, `editor`
 (label "Unreal", per game, probe `editor-activity`), which its editor connector and its harness
 tools that work in the open editor need (`open-for-run`, `save-all`, `end-editor`, `reopen-editor`,
-`update-helper`, `add-cpp-module`, `add-motion-matching`, `export-reference`, `hero-shots`, `play-check`, `run-part`,
+`update-helper`, `open-editor`, `quit-editor`, `add-cpp-module`, `add-motion-matching`, `export-reference`, `hero-shots`, `play-check`, `run-part`,
 `rollback-part`, `reload-level`); lookups, the gate, the probe and the readers need none. While the
 person plays in the game's editor, the agents' and Genex's calls there wait. A play the agent
 started is not the person's: the connector marks the agent's `StartPIE` with `agent-play.json` in
@@ -2340,6 +2357,17 @@ true}` and no question; a project no longer set up answers nothing, and a refusa
 in Unreal) keeps the link and shows its reason (`setUpUndone` names the project when it worked).
 While another game's current link names the same project (by real path), the set-up stays and only
 the link is undone (no `setUpUndone`). A refused link changes nothing on disk.
+
+The link follows the game. A game opened from another Genex (another profile) brings only its
+`studio.json` mirror; when the plugin keeps no file for the game at all (an `{unlinkedAt}` from Undo
+or an unreadable record counts as one), the host adopts the mirror (`engineLinks.adopt`) on the
+game's first plugin binding (`StudioCore.pluginBinding`: every plugin action, harness plugin step
+such as `open-for-run`, hook and observer) and in `game.engine.read`. It writes `links/<game>.json`
+from the mirror, without `setUp` and without a chat line (there is nothing to undo), and only for a
+mirror of the plugin's own engine whose project is a regular file at exactly its real path inside
+the game's own real folder; a link swapped in, a `..` path, a project outside the folder or gone
+is never adopted. A record that appeared meanwhile wins (the record is linked into place, never
+replaced).
 
 A call to a `game-engine` plugin's MCP server never links a game: a game takes an engine project
 only through the person (Use in this game) or a tool that declares `makes` (`use-project`,

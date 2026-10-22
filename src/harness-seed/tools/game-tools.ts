@@ -363,7 +363,8 @@ export const tools: HarnessTool[] = [
       if (!loop || noHours) {
         return {
           ok: false,
-          content: "Loop is off in the composer. Ask the user to turn on Loop and set hours, then call this again.",
+          content:
+            "No Loop hours reached this call, so nothing started. Start the Loop with start_autopilot and the hours the user named instead.",
         };
       }
       const frames = attachedFrames(loop.frames);
@@ -423,7 +424,7 @@ export const tools: HarnessTool[] = [
         return {
           ok: false,
           content:
-            "No hours are set in the composer. Ask the user to pick hours there (∞ until satisfied, or a number of hours), then call this again.",
+            "No Loop hours reached this call, so nothing started. Call it again with hours: the hours the user named, or leave hours out for until done.",
         };
       }
       const frames = attachedFrames(autopilot.frames);
