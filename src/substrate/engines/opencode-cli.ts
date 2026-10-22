@@ -13,6 +13,7 @@ import type { EngineModel } from "./types.ts";
 import { ModelContextSource } from "./types.ts";
 import { ModelCatalogProblemCode } from "../../shared/model-catalog.ts";
 import { ReasoningEffort } from "../../shared/model-preferences.ts";
+import { t } from "../../shared/i18n.ts";
 
 /** A model whose context the listing does not give is assumed to have this much. */
 const DEFAULT_CONTEXT_TOKENS = 32_768;
@@ -50,8 +51,12 @@ const PROVIDER_HOSTS: Readonly<Record<string, readonly string[]>> = {
   vercel: ["ai-gateway.vercel.sh"],
 };
 
+/** What a model row and a failed listing say in Settings' picker, in the person's language. */
 const MESSAGE = {
-  Malformed: "OpenCode's model list could not be read.",
+  Malformed: () => t("OpenCode's model list could not be read."),
+  Free: (provider: string) => t("{provider} · Free", { provider }),
+  Price: (provider: string, input: string, output: string) =>
+    t("{provider} · {input} in / {output} out per M tokens", { provider, input, output }),
 } as const;
 
 /** The two command lines OpenCode has spoken: 1.18's, and 2.x's (a background service, `#variant`). */
@@ -149,8 +154,8 @@ const price = (value: unknown): number =>
 
 /** The price line a picker row shows (dollars per million tokens), or "Free". */
 function priceNote(provider: string, input: number, output: number): string {
-  if (input === 0 && output === 0) return `${provider} · Free`;
-  return `${provider} · $${input.toFixed(2)} in / $${output.toFixed(2)} out per M tokens`;
+  if (input === 0 && output === 0) return MESSAGE.Free(provider);
+  return MESSAGE.Price(provider, `$${input.toFixed(2)}`, `$${output.toFixed(2)}`);
 }
 
 /** The host of a provider's API URL, or null for a missing or non-HTTPS one. */
@@ -266,7 +271,7 @@ export function parseOpenCodeModels(stdout: string): OpenCodeModel[] {
     if (model) models.push(model);
     index = end;
   }
-  if (!found && stdout.trim()) throw new CatalogError(ModelCatalogProblemCode.Malformed, MESSAGE.Malformed);
+  if (!found && stdout.trim()) throw new CatalogError(ModelCatalogProblemCode.Malformed, MESSAGE.Malformed());
   return models;
 }
 
@@ -352,7 +357,7 @@ export function parseOpenCodeApiModels(stdout: string): OpenCodeModel[] {
   } catch {
     data = undefined;
   }
-  if (!Array.isArray(data)) throw new CatalogError(ModelCatalogProblemCode.Malformed, MESSAGE.Malformed);
+  if (!Array.isArray(data)) throw new CatalogError(ModelCatalogProblemCode.Malformed, MESSAGE.Malformed());
   return data.flatMap((entry) => {
     const model = openCodeApiModel(record(entry) as ApiModel);
     return model ? [model] : [];

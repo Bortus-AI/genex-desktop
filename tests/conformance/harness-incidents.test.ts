@@ -15876,3 +15876,16 @@ describe("a resumed chat session on a game with no kind yet", () => {
     assert.ok(bridged.includes("ask_user"), "the card is still there to call");
   });
 });
+
+describe("the language of Genex's own turns", () => {
+  it("AL1. a resume or continue is Genex's own English words, and the agent answered a Russian chat in English: the brief names the app's language as the fallback", async () => {
+    const { buildContractorBrief } = await import("../../src/harness-seed/loop/chat-session.ts");
+    const russian = { tag: "ru", name: "Русский" };
+    for (const resume of [false, true])
+      assert.match(
+        buildContractorBrief({ ask: "Continue", resume, appLanguage: russian }),
+        /Genex's own rather than the user's[\s\S]*Русский \(ru\)/,
+        resume ? "a resumed session" : "a new session",
+      );
+  });
+});

@@ -6,6 +6,7 @@
  */
 import { lstat, realpath } from "node:fs/promises";
 import path from "node:path";
+import { t } from "../../shared/i18n.ts";
 import type { PluginContext } from "../../plugin-sdk/index.d.ts";
 import { isInside } from "../../substrate/paths.ts";
 import { findGameProject, PROJECT_FILE, ProjectError } from "./game-project.ts";
@@ -15,11 +16,13 @@ export const LinkService = { Read: "game.engine.read", Link: "game.engine.link" 
 /** The engine a Godot link names. */
 const GODOT_KIND = "godot";
 
+/** Why a project couldn't be found (the agent's words) or linked (the panel's, translated when said). */
 const MESSAGE = {
   NoGame: "Open a game in Genex first: a Godot project is a game's.",
   NoProject:
     "This game has no Godot project (project.godot) yet. Make one with godot__new-game, or open a folder that has one.",
-  NotProject: (folder: string) => `${folder} isn't a Godot project folder (it has no project.godot).`,
+  NoGameToLink: () => t("Open a game in Genex first: a Godot project is a game's."),
+  NotProject: (folder: string) => t("{folder} isn't a Godot project folder (it has no project.godot).", { folder }),
 } as const;
 
 /** The folder of the Godot project the game is linked to, by its real path; null without one (or one no longer there). */
@@ -54,7 +57,7 @@ export async function outsideGame(gameDir: string, project: string): Promise<boo
 
 /** Links the calling game to the Godot project in `folder` (its real `project.godot`); refused unless it is one. */
 export async function linkProject(context: PluginContext, folder: string): Promise<string> {
-  if (!context.project) throw new ProjectError(MESSAGE.NoGame);
+  if (!context.project) throw new ProjectError(MESSAGE.NoGameToLink());
   const settings = path.join(folder, PROJECT_FILE);
   if (!path.isAbsolute(folder) || !(await lstat(settings).catch(() => null))?.isFile())
     throw new ProjectError(MESSAGE.NotProject(folder));

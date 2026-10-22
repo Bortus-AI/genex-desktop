@@ -38,6 +38,7 @@ import {
 } from "../../shared/genex.ts";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
 import { errorMessage } from "../../shared/errors.ts";
+import { t } from "../../shared/i18n.ts";
 import { PluginStillProblemCode } from "../../shared/plugins.ts";
 import { GenexCliStopped, runGenexCli, genexCliPath } from "./cli.ts";
 import { appClipCommit, listingOf, type NativeUpload, pinnedCliSendsApps, sendNativeBuild } from "./native-publish.ts";
@@ -230,20 +231,25 @@ type RemoteRead = (typeof RemoteRead)[keyof typeof RemoteRead];
 
 const DEVICE_ENDED = new Set<string>([DeviceStatus.Denied, DeviceStatus.Expired]);
 
+/**
+ * The adapter's words. The agent reads its tool answers and refusals in English; what a person
+ * reads (the account card, the toolbar badge, an action's refusal) is a function, translated when said.
+ */
 const MESSAGE = {
-  SignInCanceled: "Sign-in was canceled",
-  UnexpectedAuthorization: "Unexpected authorization URL",
-  ConnectBadge: "Connect Genex to use assets",
-  SignInExpired: "Genex sign-in expired. Reconnect your account.",
+  SignInCanceled: () => t("Sign-in was canceled"),
+  UnexpectedAuthorization: () => t("Unexpected authorization URL"),
+  ConnectBadgeWord: () => t("Connect"),
+  ConnectBadge: () => t("Connect Genex to use assets"),
+  SignInExpired: () => t("Genex sign-in expired. Reconnect your account."),
   StoppedBeforeSubmission: "Stopped before Genex submission",
   ConnectToGenerate: "Connect Genex to generate assets.",
   InspectWithStudioId: "Use the delivered Studio job id for an asset inspection",
   NotThisProject: "Asset job does not belong to this project",
   ApprovalNeedsSource: "Approval requires an existing concept or preview generation",
   ApprovalViewsMissing: "Approval cannot proceed: required candidate/preview views are unavailable",
-  InvalidApproval: "Invalid approval",
-  ApprovalNotPending: "Approval is no longer pending",
-  ChooseCandidate: "Choose candidate 1, 2, or 3",
+  InvalidApproval: () => t("Invalid approval"),
+  ApprovalNotPending: () => t("Approval is no longer pending"),
+  ChooseCandidate: () => t("Choose candidate 1, 2, or 3"),
   CredentialsUninitialized: "Genex credentials are not initialized",
   NoTimeToSubmit:
     "Waiting for Genex's terms used up this call, so nothing was submitted or charged. Make this request again now that they are accepted.",
@@ -304,7 +310,7 @@ function markSignedOut(result: GenexStatus): void {
   result.connected = false;
   result.enabled = false;
   result.accountVerified = false;
-  result.error = MESSAGE.SignInExpired;
+  result.error = MESSAGE.SignInExpired();
 }
 
 /** Whether a controller registered for `scope` belongs to the project and thread being cancelled. */
@@ -535,8 +541,8 @@ export class GenexTools {
       method: "POST",
       body: JSON.stringify({ label: DEVICE_LABEL }),
     });
-    if (epoch !== this.#authEpoch) throw new Error(MESSAGE.SignInCanceled);
-    if (!isGenexAuthorizationUrl(new URL(d.verifyUrl))) throw new Error(MESSAGE.UnexpectedAuthorization);
+    if (epoch !== this.#authEpoch) throw new Error(MESSAGE.SignInCanceled());
+    if (!isGenexAuthorizationUrl(new URL(d.verifyUrl))) throw new Error(MESSAGE.UnexpectedAuthorization());
     this.#auth = {
       deviceCode: d.deviceCode,
       userCode: d.userCode,
@@ -569,7 +575,8 @@ export class GenexTools {
     });
   }
   async setupBadge() {
-    if (!(await this.#token())) return { badge: "Connect", tone: "warn", title: MESSAGE.ConnectBadge };
+    if (!(await this.#token()))
+      return { badge: MESSAGE.ConnectBadgeWord(), tone: "warn", title: MESSAGE.ConnectBadge() };
     return {};
   }
   /**
@@ -642,8 +649,8 @@ export class GenexTools {
    * git-lfs is missing, so a machine without it is refused here, before the CLI is ever spawned.
    */
   async #gitReady(dir: string, home: string): Promise<void> {
-    if (!(await this.#run("git", ["--version"], dir, home))) throw new Error(PUBLISH_MESSAGE.NeedsGit);
-    if (!(await this.#run("git", ["lfs", "version"], dir, home))) throw new Error(PUBLISH_MESSAGE.NeedsGitLfs);
+    if (!(await this.#run("git", ["--version"], dir, home))) throw new Error(PUBLISH_MESSAGE.NeedsGit());
+    if (!(await this.#run("git", ["lfs", "version"], dir, home))) throw new Error(PUBLISH_MESSAGE.NeedsGitLfs());
   }
   /** What Studio knows about this game's pages. Read-only: it never starts or resumes an upload. */
   async publishStatus(project: string, force = false): Promise<GenexPublishState> {
@@ -743,9 +750,9 @@ export class GenexTools {
    */
   async publishAllowNewUpload(project: string, jobId: string): Promise<GenexPublishState> {
     return this.#account(async () => {
-      if (this.#publishJobs.has(project)) throw new Error(PUBLISH_MESSAGE.StillRunning);
+      if (this.#publishJobs.has(project)) throw new Error(PUBLISH_MESSAGE.StillRunning());
       const state = await this.publishStatus(project);
-      if (!state.job || state.job.id !== jobId) throw new Error(PUBLISH_MESSAGE.NotCurrent);
+      if (!state.job || state.job.id !== jobId) throw new Error(PUBLISH_MESSAGE.NotCurrent());
       if (state.job.state !== GenexPublishJobState.Unresolved) return state;
       finishJob(state.job, GenexPublishJobState.Failed, new Date().toISOString());
       state.job.error = PUBLISH_MESSAGE.AllowedNewUpload;
@@ -807,9 +814,9 @@ export class GenexTools {
     camera?: CoverCamera,
   ): Promise<GenexPublishState> {
     return this.#account(async () => {
-      if (!this.#sendsApps || apps.length === 0) throw new Error(PUBLISH_MESSAGE.NoApps);
+      if (!this.#sendsApps || apps.length === 0) throw new Error(PUBLISH_MESSAGE.NoAppsRefusal());
       const state = await this.publishStatus(project);
-      if (!state.connected) throw new Error(PUBLISH_MESSAGE.ConnectFirst);
+      if (!state.connected) throw new Error(PUBLISH_MESSAGE.ConnectFirstRefusal());
       if (!(await this.#termsAccepted(project, state))) return state;
       const busy =
         state.job?.state === GenexPublishJobState.Running || state.job?.state === GenexPublishJobState.Unresolved;
@@ -900,7 +907,7 @@ export class GenexTools {
     const legal = await this.#fetch(GenexRoute.LegalStatus).catch((error) => {
       const status = statusOf(error);
       if (status === HTTP_UNAUTHORIZED || status === HTTP_FORBIDDEN)
-        throw new Error(PUBLISH_MESSAGE.AuthorizationExpired);
+        throw new Error(PUBLISH_MESSAGE.AuthorizationExpired());
       throw error;
     });
     if (typeof legal?.accepted === "boolean") state.terms = { accepted: legal.accepted, acceptUrl: ACCEPT_URL };
@@ -919,7 +926,7 @@ export class GenexTools {
     }: { exportStage?: () => Promise<unknown>; title?: unknown; camera?: CoverCamera; apps?: readonly NativeUpload[] },
   ): Promise<GenexPublishState> {
     const state = await this.publishStatus(project);
-    if (!state.connected) throw new Error(PUBLISH_MESSAGE.ConnectFirst);
+    if (!state.connected) throw new Error(PUBLISH_MESSAGE.ConnectFirstRefusal());
     if (!(await this.#termsAccepted(project, state))) return state;
     const busy =
       state.job?.state === GenexPublishJobState.Running || state.job?.state === GenexPublishJobState.Unresolved;
@@ -1317,10 +1324,10 @@ export class GenexTools {
     const state = await this.publishStatus(project);
     const wanted = linkTarget(target);
     if (wanted === PublishLinkTarget.Gallery && state.status !== GenexHostedStatus.Published)
-      throw new Error(PUBLISH_MESSAGE.NotInGallery);
+      throw new Error(PUBLISH_MESSAGE.NotInGallery());
     const url = linkFor(state, wanted);
-    if (!url) throw new Error(PUBLISH_MESSAGE.NothingOnline);
-    if (!isGenexLink(url)) throw new Error(PUBLISH_MESSAGE.UnrecognizedLink);
+    if (!url) throw new Error(PUBLISH_MESSAGE.NothingOnline());
+    if (!isGenexLink(url)) throw new Error(PUBLISH_MESSAGE.UnrecognizedLink());
     return { target: wanted, verifyUrl: url };
   }
   // ── the game's Genex cover ───────────────────────────────────────────────────────────────
@@ -1475,7 +1482,7 @@ export class GenexTools {
   async coverPick(project: string, sha: unknown): Promise<GenexPublishState> {
     const dir = this.#coverDir(project);
     const picked = await this.#coverWrite(project, () => pickCandidate(dir, sha));
-    if (!picked) throw new Error(COVER_MESSAGE.NoSuchCandidate);
+    if (!picked) throw new Error(COVER_MESSAGE.NoSuchCandidate());
     return this.#withCover(project, await this.publishStatus(project));
   }
   /**
@@ -2174,17 +2181,17 @@ export class GenexTools {
     throw new Error(deliveredElsewhereMessage(job, sibling));
   }
   async approve(project: string, id: string, candidate?: number) {
-    if (!JOB_ID.test(id)) throw new Error(MESSAGE.InvalidApproval);
+    if (!JOB_ID.test(id)) throw new Error(MESSAGE.InvalidApproval());
     const data = await this.#account(async () => {
       const dir = path.join(await this.#workspace(project), "jobs", id);
       const job = await readJsonOr<GenexJob>(path.join(dir, "job.json"));
       if (job?.status !== GenexJobStatus.ApprovalRequired || !job.approval?.images?.length)
-        throw new Error(MESSAGE.ApprovalNotPending);
+        throw new Error(MESSAGE.ApprovalNotPending());
       const pending = await readJsonOr<{ root: string; request: GenexRequest }>(path.join(dir, "request.json"));
-      if (!pending) throw new Error(MESSAGE.ApprovalNotPending);
+      if (!pending) throw new Error(MESSAGE.ApprovalNotPending());
       if (pending.request.operation === GenexOperation.CharacterPreview) {
         if (candidate === undefined || !PREVIEW_CANDIDATES.includes(candidate))
-          throw new Error(MESSAGE.ChooseCandidate);
+          throw new Error(MESSAGE.ChooseCandidate());
         pending.request.options = { ...pending.request.options, candidate };
       }
       job.status = GenexJobStatus.Approved;

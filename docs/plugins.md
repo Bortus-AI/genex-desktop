@@ -1950,8 +1950,9 @@ by such a record (not by its plugin's `detect`, so the plugin may be off) as one
 are: it looks for the plugin first. With no question card, a folder with no kind yet is told each
 scaffold by its label, beside its own tool. A record that doesn't parse in full
 (`parseScaffoldRecord`) adds nothing. The sidebar shows a project that isn't a game by its kind
-beside its name: the scaffold's label while a fact its rules found is there, else `Unreal plugin`
-or `Blender assets` for a folder holding no game (`renderer/project-kind.ts`). The Unreal plugin
+beside its name: while a fact its scaffold's rules found is there, the app's word for that fact in
+the app's language (`Unreal plugin`) or else the scaffold's label; otherwise `Unreal plugin` or
+`Blender assets` for a folder holding no game (`renderer/project-kind.ts`). The Unreal plugin
 declares `game` (`Unreal game`, `new-game`) and `plugin` (`Unreal plugin`, `new-plugin`, a rule
 finding `**/*.uplugin` but not under the Genex editor helper's folder, so a host project's plugin
 in `Plugins/` is an `unreal-plugin` fact).
@@ -2857,7 +2858,8 @@ image data URLs are supported. Use `src/plugin-sdk/panel.js` for request/respons
 same host (`PluginPanelHost`) serves a panel opened from the Plugins page and one opened from a
 toolbar button.
 
-`studioPlugin.call('context')` returns the selected project, host API version (`3`) and theme tokens:
+`studioPlugin.call('context')` returns the selected project, host API version (`3`), the window's
+language (`locale`, from `panelContext` in `renderer/panels/panel-bridge.ts`) and theme tokens:
 `background`, `foreground`, the raw `accent`, and the readable button colours Studio's own primary
 buttons use (`accentFill` under `accentForeground` text, at least 5:1, and `accentHover`);
 `call('settings')` reads standard settings; `call('action', name, args)` invokes a declared action.
@@ -2866,6 +2868,24 @@ confirmation it also carries `code: "cancelled"`, so a panel can stay quiet with
 The parent validates source frame, opaque origin and request shape, and binds plugin/project
 itself. A game change under an open panel cancels a review still waiting and posts
 `studio-plugin-context-changed`; requests already asked are answered for their own game. Closing the panel removes the listener; the SDK bounds waiting promises.
+
+A panel's words follow that language through the SDK's `words.js`: `studioPlugin.t(english,
+params)` (the app's ICU syntax), `formatList`, `locale` and `ready`, and `data-t` marks in the page.
+The translations are the plugin's own `locales/<lang>.json`, keyed by the English, which
+`inlinePanelSdk` pastes into the panel as a JSON element (`plugin-sdk/panel-words.mjs`; the frame can
+load nothing); `locales/messages.json` lists the English each panel asks for, and
+`plugin-panel-words.test.ts` holds the bundled panels to it. A missing translation shows the
+English. See [panels in the plugin guide](PLUGIN_GUIDE.md#3-panels).
+
+The same catalogs hold the manifest's texts a person reads (`substrate/plugins/manifest-words.ts`,
+listed in `messages.json` too). The window's plugin list (`displayList`), a panel's title, an
+action's approval dialog and a tool's consent card show them in main's language, looked up when
+served and kept per package folder and language until a plugin changes. Only those texts change:
+the manifests the registry runs on, what agents read and every id stay English. A catalog read
+through a link out of the package, over 512 KiB or not an object of strings is no translations,
+and a translation that is not plain text of a fitting length, or names a strip button Studio's
+own, shows the English (`plugin-manifest-words.test.ts`). Each bundled plugin ships its `locales/`
+beside its plugin.json (`scripts/build-plugins.mjs`).
 
 `studioPlugin.chooseFile({ title, extensions })` opens Studio's own native file picker over its
 window, so a panel never asks the person to type a path. `title` is 1–80 characters on one line;
@@ -3052,8 +3072,10 @@ output and is never shown as plugin status.
 A panel places `<!-- STUDIO_PANEL_SDK -->` where the bridge goes; `plugin:new` (and the build, for
 the bundled example and Local Blender) replaces it with the current `panel.js` and `ui.js`
 (`src/plugin-sdk/inline-panel-sdk.mjs`, also runnable as `node inline-panel-sdk.mjs panel.html`).
-`<!-- STUDIO_PANEL_FONTS -->` takes Genex's two faces as `data:` fonts (`inlinePanelFonts`, used by
-the Unreal panel's build), the only fonts the panel CSP (`main/plugin-panel-csp.ts`) loads.
+`<!-- STUDIO_PANEL_FONTS -->` takes Genex's Latin and Cyrillic faces as `data:` fonts (`inlinePanelFonts`,
+used by the Unreal panel's build), the only fonts the panel CSP (`main/plugin-panel-csp.ts`) loads;
+Japanese, Korean and Chinese use the Mac's own face for the panel's `lang`, since those faces would
+add megabytes to every panel.
 The source example's panel therefore has no bridge until built or scaffolded.
 
 The scaffold itself needs nothing from Studio's tree: the panel carries the bridge and

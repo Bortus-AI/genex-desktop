@@ -7,6 +7,7 @@
  * finished build with Loop on, a reopen (reopen-run.ts) — is handed back for the chat to do once the
  * reply ends.
  */
+import { appLanguage } from "./app-language.ts";
 import { GIT_TIMEOUT_MS, MIN_DELEGATE_TIMEOUT_MS } from "./config.ts";
 import { GIT, gitAt } from "./git.ts";
 import {
@@ -1027,8 +1028,10 @@ async function briefWriter(
   // A reopen's rules live in the after-run note: a change goes to the build, not to a launch.
   const launch = handoff.reopening ? null : launchGrant(handoff);
   const workers = Object.keys(chatWorkersGrant(options.threadId, options.steer?.messageId));
+  const language = await appLanguage(ctx);
   return (resumed) =>
     buildContractorBrief({
+      appLanguage: language,
       ask,
       messages,
       resume: resumed,

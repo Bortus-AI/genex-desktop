@@ -1,5 +1,6 @@
 /** Play: genex.games' catalog for the dashboard, the full-screen viewer a game opens in, and people. */
 import { isAvatarVariant } from "../../shared/avatar-recipe.ts";
+import { t } from "../../shared/i18n.ts";
 import { isPlayShelf, isPlaySlug, PlayShelf, type PlayPoint, readPlayPoint } from "../../shared/play.ts";
 import { isAccountId, isAvatarStyle, isFriendAction, isPresenceVisibility } from "../../shared/play-people.ts";
 import { isStatsPeriod } from "../../shared/play-stats.ts";
@@ -18,6 +19,10 @@ import type { PlayPeople } from "../play/people.ts";
 import type { PlayViewer } from "../play/viewer.ts";
 import type { IpcHandle } from "./registrar.ts";
 
+/**
+ * Why a Play request from the renderer is refused. `noInstalls` and `notInstalled` are words the
+ * person reads; the rest answer only a malformed call from our own renderer, or a closed window.
+ */
 const MESSAGE = {
   badSlug: "not a game address",
   noWindow: "the window is not open",
@@ -32,9 +37,9 @@ const MESSAGE = {
   badGame: "not a published game",
   badChange: "not a change the card menu makes",
   badCoverType: "not a cover picture type",
-  noInstalls: "native games are not available on this computer",
+  noInstalls: () => t("native games are not available on this computer"),
   badSessionAction: "not something a running game is asked",
-  notInstalled: "that game is not installed",
+  notInstalled: () => t("that game is not installed"),
 } as const;
 
 /** What Play's channels answer from. */
@@ -133,7 +138,7 @@ export function registerPlayIpc(handle: IpcHandle, deps: PlayIpcDeps): void {
 function registerSessionsIpc(handle: IpcHandle, sessions: PlayIpcDeps["sessions"]): void {
   const launcher = (): NativeSessions => {
     const found = sessions();
-    if (!found) throw new Error(MESSAGE.noInstalls);
+    if (!found) throw new Error(MESSAGE.noInstalls());
     return found;
   };
   handle("studio:play.launch", (payload) => {
@@ -154,7 +159,7 @@ function registerGameIpc(handle: IpcHandle, deps: PlayIpcDeps): void {
   handle("studio:play.reveal-install", async (payload) => {
     if (!isPlaySlug(payload?.slug)) throw new Error(MESSAGE.badSlug);
     const app = await deps.installs()?.appOf(payload.slug);
-    if (!app) throw new Error(MESSAGE.notInstalled);
+    if (!app) throw new Error(MESSAGE.notInstalled());
     deps.reveal(app);
   });
   handle("studio:play.like", async (payload) => {
@@ -172,7 +177,7 @@ function registerInstallsIpc(
 ): void {
   const installer = (): NativeInstaller => {
     const found = installs();
-    if (!found) throw new Error(MESSAGE.noInstalls);
+    if (!found) throw new Error(MESSAGE.noInstalls());
     return found;
   };
   const slugOf = (payload: { slug?: unknown } | undefined): string => {

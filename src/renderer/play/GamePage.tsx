@@ -10,6 +10,7 @@ import type { JSX } from "react";
 import { useEffect, useState } from "react";
 import { sizeWords } from "../../shared/byte-size.ts";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
+import { intlLocale, t } from "../../shared/i18n.ts";
 import { type PlayGameDetail, PlayNote, playPageUrl, PlayShelf } from "../../shared/play.ts";
 import {
   InstallFailure,
@@ -23,6 +24,7 @@ import { usePlay, usePlayWeb } from "../state/hooks.ts";
 import { FeedStatus } from "./play-model.ts";
 import { PlayPage, type PlayView } from "../state/play.ts";
 import { studio } from "../state/studio.ts";
+import { richText } from "../rich-text.tsx";
 import { ToastTone } from "../state/toasts.ts";
 import { Button } from "../ui/Button.tsx";
 import { Icon } from "../ui/icons.tsx";
@@ -36,7 +38,7 @@ const WORDS = NATIVE_WORDS;
 /** How often the minutes played are counted again. */
 const PLAYED_TICK_MS = 30 * SECOND_MS;
 /** "2 days ago": how long ago a game changed, in the reader's own words. */
-const AGO = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+const AGO = new Intl.RelativeTimeFormat(intlLocale(), { numeric: "auto" });
 const AGO_STEPS: Array<[Intl.RelativeTimeFormatUnit, number]> = [
   ["year", 365 * 24 * 60],
   ["month", 30 * 24 * 60],
@@ -366,7 +368,7 @@ function Media({ game }: { game: PlayGameDetail }): JSX.Element {
               type="button"
               className="game-shot"
               aria-pressed={at === picked}
-              aria-label={`${game.title} ${at + 1}`}
+              aria-label={t("{game} {number}", { game: game.title, number: at + 1 })}
               onClick={() => setPicked(at)}
             >
               <img src={shot} alt="" draggable={false} />
@@ -384,6 +386,19 @@ function Media({ game }: { game: PlayGameDetail }): JSX.Element {
   );
 }
 
+/** "By" and the maker's name; with their account known, the name opens their profile. */
+function MadeBy({ name, authorId }: { name: string; authorId: string | null }): JSX.Element {
+  const maker = authorId ? (
+    <button type="button" className="game-by-link" onClick={() => studio().play.showProfile(authorId)}>
+      {name}
+    </button>
+  ) : (
+    name
+  );
+  // The name is someone else's words: the tag draws it from the game, never from the parsed sentence.
+  return <p className="game-by">{richText(t("By <maker>{name}</maker>"), { maker: () => maker })}</p>;
+}
+
 /** The right column: title, maker, facts, the primary block, the pills and the tiles. */
 function Side({ game }: { game: PlayGameDetail }): JSX.Element {
   const installs = usePlay((s) => s.installs);
@@ -399,24 +414,12 @@ function Side({ game }: { game: PlayGameDetail }): JSX.Element {
     }
     if (standing.phase === GamePhase.Failed) setPlayWhenReady(false);
   }, [playWhenReady, standing.phase, game.slug]);
-  const authorId = game.author.id;
   const stats = WORDS.stats(formatCount(game.plays), formatCount(game.likes), agoWords(game.updatedAt, Date.now()));
   return (
     <div className="game-side" data-game-phase={standing.phase}>
       <div className="game-head">
         <h1 className="game-title">{game.title}</h1>
-        {game.author.name && (
-          <p className="game-by">
-            {WORDS.by}{" "}
-            {authorId ? (
-              <button type="button" className="game-by-link" onClick={() => studio().play.showProfile(authorId)}>
-                {game.author.name}
-              </button>
-            ) : (
-              game.author.name
-            )}
-          </p>
-        )}
+        {game.author.name && <MadeBy name={game.author.name} authorId={game.author.id} />}
         <p className="game-stats">{stats}</p>
       </div>
       <div className="game-primary-block">

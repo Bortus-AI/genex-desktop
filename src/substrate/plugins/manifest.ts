@@ -89,6 +89,10 @@ const SENSITIVE_ACTIONS = new Set([
 ]);
 const reservedLower = new Set([...RESERVED_TOOLBAR_LABELS].map((l) => l.toLowerCase()));
 const SUPPORTED_API_VERSIONS = [1, 2, 3];
+/** The longest label a toolbar button shows on the stage strip, in characters. */
+export const TOOLBAR_LABEL_CHARS = 24;
+/** The longest aria label a toolbar button has, in characters. */
+export const TOOLBAR_ARIA_CHARS = 60;
 /** Declared limits, each the largest a manifest field may be. */
 const LIMIT = {
   NameChars: 200,
@@ -109,8 +113,8 @@ const LIMIT = {
   /** The longest raw tool name a server's `reads` may name. */
   McpToolNameChars: 128,
   ToolbarItems: 4,
-  ToolbarLabelChars: 24,
-  ToolbarAriaChars: 60,
+  ToolbarLabelChars: TOOLBAR_LABEL_CHARS,
+  ToolbarAriaChars: TOOLBAR_ARIA_CHARS,
   ToolbarGlyphChars: 4,
   TargetArgs: 16,
   ToolInputChars: 100000,
