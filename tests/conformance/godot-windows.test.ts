@@ -62,8 +62,6 @@ const action = async (fixture: Fixture, name: string, args = {}) =>
   (await fixture.backend.action?.(name, args, fixture.context())) as Answer;
 const card = async (fixture: Fixture) => (await action(fixture, GodotSetupAction.Steps)) as unknown as PluginSetupCard;
 const MB = 2 ** 20;
-/** The most event-loop turns a test waits for jobs that stage files on disk to reach their turn. */
-const HOLD_TURNS_MAX = 10_000;
 /** Godot's Windows build writes CRLF lines and colours its progress even into a file. */
 const windowsWords = (text: string) => `\u001b[92m[ DONE ]\u001b[39m\r\n${text.replaceAll("\n", "\r\n")}`;
 
@@ -573,9 +571,17 @@ describe("Godot on Windows: jobs in Genex's sandbox", () => {
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
+    let holdIn: () => void = () => undefined;
+    const bothHeld = new Promise<void>((resolve) => {
+      holdIn = resolve;
+    });
+    let holds = 0;
     const fixture = await windowsProject({
       sandbox: async (request) => {
-        if (request.args.includes("hold")) await gate;
+        if (!request.args.includes("hold")) return {};
+        holds += 1;
+        if (holds === 2) holdIn();
+        await gate;
         return {};
       },
     });
@@ -592,8 +598,8 @@ describe("Godot on Windows: jobs in Genex's sandbox", () => {
       timeoutMs: 8 * MINUTE,
       gpu: false,
     });
-    const scope = (budget?: GodotJobScope["budget"]): GodotJobScope => ({
-      signal: new AbortController().signal,
+    const scope = (budget?: GodotJobScope["budget"], signal = new AbortController().signal): GodotJobScope => ({
+      signal,
       host: fixture.context().host,
       game: fixture.gameDir,
       project: fixture.project,
@@ -606,16 +612,26 @@ describe("Godot on Windows: jobs in Genex's sandbox", () => {
     // its folders on disk before it asks for a turn, so the late job starts only once both holds
     // are in the sandbox: started with them, it could take a turn first, on the old clock.
     const holding = [run(OWN_GODOT, call("hold"), scope()), run(OWN_GODOT, call("hold"), scope())];
-    const holdsRunning = () => fixture.requests.filter((request) => request.args.includes("hold")).length;
-    for (let turns = 0; holdsRunning() < 2 && turns < HOLD_TURNS_MAX; turns += 1) await turnOver();
-    assert.equal(holdsRunning(), 2, "both turns are held");
-    // Its refusal is awaited from the start, so it never lands unawaited while the others end.
-    const refused = assert.rejects(run(OWN_GODOT, call("late"), scope(budget)), /no time left/);
-    for (let turns = 0; turns < 20; turns += 1) await turnOver();
+    await bothHeld;
+    // A job listens for a stop only while it waits its turn: then, and only then, the clock moves.
+    const lateStop = new AbortController();
+    const waiting = new Promise<"waiting">((resolve) => {
+      const listen = lateStop.signal.addEventListener.bind(lateStop.signal);
+      lateStop.signal.addEventListener = (...args: Parameters<typeof listen>) => {
+        resolve("waiting");
+        listen(...args);
+      };
+    });
+    const late = run(OWN_GODOT, call("late"), scope(budget, lateStop.signal));
+    const ended = late.then(
+      () => "ran" as const,
+      () => "ended" as const,
+    );
+    assert.equal(await Promise.race([waiting, ended]), "waiting", "the late job waits its turn behind both holds");
     clock.at = 1.5 * MINUTE;
     release();
     await Promise.all(holding);
-    await refused;
+    await assert.rejects(late, /no time left/);
     assert.equal(
       fixture.requests.some((request) => request.args.includes("late")),
       false,
