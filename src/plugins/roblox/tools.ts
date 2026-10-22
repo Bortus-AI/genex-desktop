@@ -61,6 +61,7 @@ export const RobloxTool = {
   QuitStudio: RobloxAction.QuitStudio,
   Places: RobloxAction.Places,
   AddLuauChecks: RobloxAction.AddLuauChecks,
+  FinishSetup: RobloxAction.FinishSetup,
 } as const;
 export type RobloxTool = (typeof RobloxTool)[keyof typeof RobloxTool];
 
