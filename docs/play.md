@@ -159,8 +159,8 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
 
 ## Native builds
 
-A game made in Unity, Godot or Unreal can carry a Mac app or a Windows program besides (or instead
-of) its web build. The app's copy of the contract is `src/shared/play-native.ts`; genex.games does
+A game made in Unity, Godot or Unreal can carry a Mac app, a Windows program or a Linux one besides
+(or instead of) its web build. The app's copy of the contract is `src/shared/play-native.ts`; genex.games does
 not serve it yet, and every field is optional, so a server that sends none of it leaves Play as it
 is.
 
@@ -171,14 +171,16 @@ is.
 - A build row: `platform` (`mac`, `windows`, `linux`), `arch` (`arm64`, `x64`, `universal` for a
   Mac app), `version` (the author's build id), `sizeBytes` (the archive), `installedBytes`
   (unpacked), `sha256` (hex of the archive), `url`, `entry` (what runs, from the archive's root: a
-  `.app` bundle at the root for a Mac, an `.exe` for Windows), optional `minOs` (`13.0`,
+  `.app` bundle at the root for a Mac, an `.exe` for Windows, a plain path such as `Dust.x86_64` or
+  `Dust/Binaries/Linux/Dust-Linux-Shipping` for Linux), optional `minOs` (`13.0`,
   `10.0.19041`) and `publishedAt`. The archive is a zip; its `url` is https on a build host the app
   trusts (`NATIVE_BUILD_HOSTS`: `cdn.genex.technology` by exact name, so a game's own
   `<slug>.genex.technology` site never hands out an app), with no port or credentials, never
   redirecting elsewhere, and answers `Range`. A row with anything off is dropped, the rest kept.
 - The build a computer installs is its platform's for its own processor, else a universal Mac app,
   else, on Apple silicon with Rosetta installed, an Intel-only one, where its `minOs` is met
-  (`buildFor`). Nothing is launched on Windows until its sandbox can show a program's window. A game with no web
+  (`buildFor`). Nothing is launched on Windows until its sandbox can show a program's window, nor on
+Linux yet: a Linux build is published and listed, and played once Genex launches games there. A game with no web
   build and no build for this computer is left out of the tabs and search; its maker's profile
   still lists it.
 - Installing (`main/play/native-installs.ts`, `studio:play.install`, progress as

@@ -226,6 +226,15 @@ const glyphs = {
       stroke="none"
     />
   ),
+  /** Linux's penguin: its body on its feet, with its belly, eyes and beak left open. */
+  linux: (
+    <path
+      d="M12 2C9.6 2 8.2 3.9 8.2 6.4c0 1.5.3 2.2-.6 3.5-1.3 1.8-3 3.7-3 6.5 0 .9.2 1.6.6 2.2l-1.8 1c-.6.4-.4 1.4.4 1.6l4.8.8c1 .1 1.6-.6 1.8-1.2h3.2c.2.6.8 1.3 1.8 1.2l4.8-.8c.8-.2 1-1.2.4-1.6l-1.8-1c.4-.6.6-1.3.6-2.2 0-2.8-1.7-4.7-3-6.5-.9-1.3-.6-2-.6-3.5C15.8 3.9 14.4 2 12 2zM12 10.6c-2.1 0-3.6 2.4-3.6 5 0 2.2 1.6 3.8 3.6 3.8s3.6-1.6 3.6-3.8c0-2.6-1.5-5-3.6-5zM10.6 5.1a.75 1 0 1 0 0 2 .75 1 0 1 0 0-2zM13.4 5.1a.75 1 0 1 0 0 2 .75 1 0 1 0 0-2zM10.7 8.1h2.6L12 9.5z"
+      fill="currentColor"
+      fillRule="evenodd"
+      stroke="none"
+    />
+  ),
   /** A download: an arrow falling onto a tray. */
   download: (
     <>

@@ -41,7 +41,14 @@ import { errorMessage } from "../../shared/errors.ts";
 import { t } from "../../shared/i18n.ts";
 import { PluginStillProblemCode } from "../../shared/plugins.ts";
 import { GenexCliStopped, runGenexCli, genexCliPath } from "./cli.ts";
-import { appClipCommit, listingOf, type NativeUpload, pinnedCliSendsApps, sendNativeBuild } from "./native-publish.ts";
+import {
+  appClipCommit,
+  listingOf,
+  type NativeUpload,
+  nativePublishArgs,
+  pinnedCliSendsApps,
+  sendNativeBuild,
+} from "./native-publish.ts";
 import {
   adviceLines,
   type CoverAnswer,
@@ -782,7 +789,7 @@ export class GenexTools {
    * the public version, creating the hosted project and the gallery listing the first time. `title`
    * is the name it is listed under: the last one Studio listed, else its folder name, as words.
    * `camera` shoots the genex-cover demo again; that frame is sent once the publish is recorded.
-   * `apps` are the game's Mac and Windows builds, sent once its web build is public.
+   * `apps` are the game's Mac, Windows and Linux builds, sent once its web build is public.
    */
   async publishGallery(
     project: string,
@@ -1636,8 +1643,8 @@ export class GenexTools {
     await atomicWriteJson(file, record);
     for (const app of apps) {
       const listing = gallery && !record.listing ? ["--gallery", "--title", gallery.title] : [];
-      const outcome = await sendNativeBuild(app, (target) =>
-        this.#spawnCli(dir, ["native", "publish", target, ...listing], signal, {
+      const outcome = await sendNativeBuild(app, () =>
+        this.#spawnCli(dir, [...nativePublishArgs(app), ...listing], signal, {
           timeoutMs: NATIVE_PUBLISH_TIMEOUT_MS,
           parse: true,
           home: path.join(dir, "home"),

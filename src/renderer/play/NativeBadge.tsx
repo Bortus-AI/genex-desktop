@@ -1,5 +1,5 @@
 /**
- * A native game's marks: the Apple and Windows marks of the systems it was built for, and the badge
+ * A native game's marks: the Apple, Windows and Linux marks of the systems it was built for, and the badge
  * on its card's cover (canvas board "Main"): the marks alone while it is not installed, how far its
  * download has come with a line along the cover's foot, On this Mac once installed, or an update
  * waiting with its size. A game with a web build shows nothing new until it is installed here.
@@ -13,10 +13,11 @@ import { CardBadge, type CardBadgeState } from "./native-model.ts";
 
 const WORDS = NATIVE_WORDS;
 
-/** The marks each system is drawn with; Linux has none of its own yet. */
-const MARK: Partial<Record<NativePlatform, "apple" | "windows">> = {
+/** The marks each system is drawn with. */
+const MARK: Record<NativePlatform, "apple" | "windows" | "linux"> = {
   [NativePlatform.Mac]: "apple",
   [NativePlatform.Windows]: "windows",
+  [NativePlatform.Linux]: "linux",
 };
 
 /** The systems' names as one phrase: "Mac and Windows". */
@@ -27,10 +28,9 @@ export const platformNames = (platforms: readonly NativePlatform[]): string =>
 export function PlatformMarks({ platforms, size = 15 }: { platforms: readonly NativePlatform[]; size?: number }) {
   return (
     <span className="native-marks" aria-hidden="true">
-      {platforms.map((platform) => {
-        const mark = MARK[platform];
-        return mark ? <Icon key={platform} name={mark} size={size} /> : null;
-      })}
+      {platforms.map((platform) => (
+        <Icon key={platform} name={MARK[platform]} size={size} />
+      ))}
     </span>
   );
 }

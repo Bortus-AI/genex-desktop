@@ -2017,6 +2017,7 @@ export default {
   Lines: "Линии",
   "Link copied": "Ссылка скопирована",
   "Linked files cannot be previewed.": "Файлы-ссылки нельзя просмотреть.",
+  "Linux app": "Linux-приложение",
   "Listed the hero cameras": "Получен список обзорных камер",
   "Listed the toolsets": "Список наборов инструментов получен",
   "Listing the hero cameras": "Получает список обзорных камер",
@@ -2116,14 +2117,14 @@ export default {
   "Main agent: {model}": "Главный агент: {model}",
   "Main color": "Основной цвет",
   "Main navigation": "Основная навигация",
-  "Make a Mac or Windows app first, then publish it here.":
-    "Сначала сделай приложение для Mac или Windows, потом опубликуй его здесь.",
+  "Make a Mac, Windows or Linux app first, then publish it here.":
+    "Сначала сделай приложение для Mac, Windows или Linux, потом опубликуй его здесь.",
   "Make a community plugin": "Сделай плагин для сообщества",
   "Make a profile, publish your games, play with friends.": "Создай профиль, публикуй игры, играй с друзьями.",
   "Make a web version of {title} so I can publish it on the web.":
     "Сделай веб-версию «{title}», чтобы её можно было опубликовать в вебе.",
-  "Make a web version or a Mac or Windows app first, then publish it here.":
-    "Сначала сделай веб-версию или приложение для Mac или Windows, потом опубликуй здесь.",
+  "Make a web version or a Mac, Windows or Linux app first, then publish it here.":
+    "Сначала сделай веб-версию или приложение для Mac, Windows или Linux, потом опубликуй здесь.",
   "Make a {players} app of {title} so I can publish it for {players} players.":
     "Сделай приложение «{title}» для {players}, чтобы его можно было опубликовать для игроков на {players}.",
   "Make another Genex clip for this game: a different moment.":
@@ -2829,8 +2830,8 @@ export default {
   "Publish {apps}": "Опубликовать {apps}",
   "Publish {name} to Roblox as a new game?": "Опубликовать «{name}» в Roblox как новую игру?",
   Publishing: "Публикация",
-  "Publishing Mac and Windows apps comes with the next Genex update.":
-    "Публикация приложений для Mac и Windows появится в следующем обновлении Genex.",
+  "Publishing Mac, Windows and Linux apps comes with the next Genex update.":
+    "Публикация приложений для Mac, Windows и Linux появится в следующем обновлении Genex.",
   "Publishing needs git and git-lfs on this Mac (brew install git-lfs). Studio will not let the Genex CLI install software.":
     "Для публикации нужны git и git-lfs на этом Mac (brew install git-lfs). Studio не позволит Genex CLI устанавливать программы.",
   "Publishing needs git on this Mac. Install git (Xcode command line tools or Homebrew) and try again.":
@@ -4020,8 +4021,10 @@ export default {
   "This game folder is no longer available.": "Этой папки игры больше нет.",
   "This game has an unlisted draft page": "У этой игры есть скрытая черновая страница",
   "This game has more files than the canvas lists.": "В этой игре больше файлов, чем показано на холсте.",
-  "This game has no Mac or Windows app ready to publish": "У этой игры нет готового приложения для Mac или Windows",
-  "This game has no Mac or Windows app ready to publish.": "У этой игры нет готового приложения для Mac или Windows.",
+  "This game has no Mac, Windows or Linux app ready to publish":
+    "У этой игры нет готового приложения для Mac, Windows или Linux",
+  "This game has no Mac, Windows or Linux app ready to publish.":
+    "У этой игры нет готового приложения для Mac, Windows или Linux.",
   "This game has no Unity project": "У этой игры нет проекта Unity",
   "This game has no Unity project.": "У этой игры нет проекта Unity.",
   "This game has no skills of its own.": "У этой игры нет своих навыков.",

@@ -2070,6 +2070,7 @@ export default {
   Lines: "Lignes",
   "Link copied": "Lien copié",
   "Linked files cannot be previewed.": "Les fichiers liés n’ont pas d’aperçu.",
+  "Linux app": "App Linux",
   "Listed the hero cameras": "Caméras de présentation listées",
   "Listed the toolsets": "Jeux d’outils listés",
   "Listing the hero cameras": "Liste les caméras de présentation",
@@ -2169,13 +2170,14 @@ export default {
   "Main agent: {model}": "Agent principal : {model}",
   "Main color": "Couleur principale",
   "Main navigation": "Navigation principale",
-  "Make a Mac or Windows app first, then publish it here.": "Crée d’abord une app Mac ou Windows, puis publie-la ici.",
+  "Make a Mac, Windows or Linux app first, then publish it here.":
+    "Crée d’abord une app Mac, Windows ou Linux, puis publie-la ici.",
   "Make a community plugin": "Crée un plugin pour la communauté",
   "Make a profile, publish your games, play with friends.": "Crée un profil, publie tes jeux, joue avec tes amis.",
   "Make a web version of {title} so I can publish it on the web.":
     "Fais une version web de {title} pour que je puisse la publier sur le web.",
-  "Make a web version or a Mac or Windows app first, then publish it here.":
-    "Crée d’abord une version web ou une app Mac ou Windows, puis publie-la ici.",
+  "Make a web version or a Mac, Windows or Linux app first, then publish it here.":
+    "Crée d’abord une version web ou une app Mac, Windows ou Linux, puis publie-la ici.",
   "Make a {players} app of {title} so I can publish it for {players} players.":
     "Fais une app {players} de {title} pour que je puisse la publier pour les joueurs {players}.",
   "Make another Genex clip for this game: a different moment.":
@@ -2898,8 +2900,8 @@ export default {
   "Publish {apps}": "Publier : {apps}",
   "Publish {name} to Roblox as a new game?": "Publier {name} sur Roblox comme nouveau jeu ?",
   Publishing: "Publication",
-  "Publishing Mac and Windows apps comes with the next Genex update.":
-    "La publication d’apps Mac et Windows arrive avec la prochaine mise à jour de Genex.",
+  "Publishing Mac, Windows and Linux apps comes with the next Genex update.":
+    "La publication d’apps Mac, Windows et Linux arrive avec la prochaine mise à jour de Genex.",
   "Publishing needs git and git-lfs on this Mac (brew install git-lfs). Studio will not let the Genex CLI install software.":
     "Publier nécessite git et git-lfs sur ce Mac (brew install git-lfs). Studio ne laissera pas la CLI Genex installer de logiciels.",
   "Publishing needs git on this Mac. Install git (Xcode command line tools or Homebrew) and try again.":
@@ -4108,8 +4110,10 @@ export default {
   "This game folder is no longer available.": "Ce dossier de jeu n’est plus disponible.",
   "This game has an unlisted draft page": "Ce jeu a une page brouillon non listée",
   "This game has more files than the canvas lists.": "Ce jeu contient plus de fichiers que le canevas n’en affiche.",
-  "This game has no Mac or Windows app ready to publish": "Ce jeu n’a pas d’app Mac ou Windows prête à publier",
-  "This game has no Mac or Windows app ready to publish.": "Ce jeu n’a aucune app Mac ou Windows prête à publier.",
+  "This game has no Mac, Windows or Linux app ready to publish":
+    "Ce jeu n’a pas d’app Mac, Windows ou Linux prête à publier",
+  "This game has no Mac, Windows or Linux app ready to publish.":
+    "Ce jeu n’a aucune app Mac, Windows ou Linux prête à publier.",
   "This game has no Unity project": "Ce jeu n’a pas de projet Unity",
   "This game has no Unity project.": "Ce jeu n’a pas de projet Unity.",
   "This game has no skills of its own.": "Ce jeu n’a pas de compétences à lui.",

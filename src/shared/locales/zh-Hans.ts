@@ -1889,6 +1889,7 @@ export default {
   Lines: "线条",
   "Link copied": "链接已复制",
   "Linked files cannot be previewed.": "链接的文件无法预览。",
+  "Linux app": "Linux 应用",
   "Listed the hero cameras": "已列出展示摄像机",
   "Listed the toolsets": "已列出工具集",
   "Listing the hero cameras": "正在列出展示摄像机",
@@ -1987,13 +1988,14 @@ export default {
   "Main agent: {model}": "主智能体：{model}",
   "Main color": "主色",
   "Main navigation": "主导航",
-  "Make a Mac or Windows app first, then publish it here.": "请先制作 Mac 或 Windows 应用，再在这里发布。",
+  "Make a Mac, Windows or Linux app first, then publish it here.":
+    "请先制作 Mac、Windows 或 Linux 应用，再在这里发布。",
   "Make a community plugin": "制作社区插件",
   "Make a profile, publish your games, play with friends.": "创建个人主页，发布你的游戏，和好友一起玩。",
   "Make a web version of {title} so I can publish it on the web.":
     "为 {title} 制作一个网页版，这样我就能把它发布到网上。",
-  "Make a web version or a Mac or Windows app first, then publish it here.":
-    "请先制作网页版或 Mac、Windows 应用，再在这里发布。",
+  "Make a web version or a Mac, Windows or Linux app first, then publish it here.":
+    "请先制作网页版或 Mac、Windows、Linux 应用，再在这里发布。",
   "Make a {players} app of {title} so I can publish it for {players} players.":
     "为 {title} 制作一个 {players} 应用，这样我就能把它发布给 {players} 玩家。",
   "Make another Genex clip for this game: a different moment.": "为这个游戏再做一个 Genex 片段：换一个场景。",
@@ -2679,8 +2681,8 @@ export default {
   "Publish {apps}": "发布 {apps}",
   "Publish {name} to Roblox as a new game?": "要把 {name} 作为新游戏发布到 Roblox 吗？",
   Publishing: "发布",
-  "Publishing Mac and Windows apps comes with the next Genex update.":
-    "下一次 Genex 更新将支持发布 Mac 和 Windows 应用。",
+  "Publishing Mac, Windows and Linux apps comes with the next Genex update.":
+    "下一次 Genex 更新将支持发布 Mac、Windows 和 Linux 应用。",
   "Publishing needs git and git-lfs on this Mac (brew install git-lfs). Studio will not let the Genex CLI install software.":
     "发布需要这台 Mac 上有 git 和 git-lfs（brew install git-lfs）。Studio 不会让 Genex CLI 安装软件。",
   "Publishing needs git on this Mac. Install git (Xcode command line tools or Homebrew) and try again.":
@@ -3801,8 +3803,8 @@ export default {
   "This game folder is no longer available.": "这个游戏文件夹已不可用。",
   "This game has an unlisted draft page": "此游戏有一个不公开列出的草稿页面",
   "This game has more files than the canvas lists.": "此游戏的文件比画布列出的更多。",
-  "This game has no Mac or Windows app ready to publish": "这个游戏还没有可发布的 Mac 或 Windows 应用",
-  "This game has no Mac or Windows app ready to publish.": "此游戏没有可发布的 Mac 或 Windows 应用。",
+  "This game has no Mac, Windows or Linux app ready to publish": "这个游戏还没有可发布的 Mac、Windows 或 Linux 应用",
+  "This game has no Mac, Windows or Linux app ready to publish.": "此游戏没有可发布的 Mac、Windows 或 Linux 应用。",
   "This game has no Unity project": "这个游戏没有 Unity 项目",
   "This game has no Unity project.": "这个游戏没有 Unity 项目。",
   "This game has no skills of its own.": "此游戏没有自己的技能。",
