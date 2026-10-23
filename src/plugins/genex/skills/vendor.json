@@ -59,9 +59,18 @@
       "bytes": 5466
     },
     "genex-monetization/SKILL.md": {
-      "source": "@genex-ai/cli-demo/templates/skills/genex-monetization/SKILL.md",
-      "sha256": "24b4b798c597ce452af4bfa394cd4ca655710750d9f6e749c2b4ed8dd540e844",
-      "bytes": 16958
+      "source": "genex-demo@claude/marketplace(c61f99a86):apps/cli/templates/skills/genex-monetization/SKILL.md",
+      "sha256": "058581a7f0a2b83e0c510b1e8f01aa169a9be98ee963b2428389d4d466319f19",
+      "bytes": 17212,
+      "version": "1.36.14",
+      "pending": "CLI 1.36.14 is not on npm yet: vendored from genex-demo@claude/marketplace(c61f99a86):apps/cli. Re-vendor from the published CLI (npm run genex:skills) once the package.json pin moves to 1.36.14."
+    },
+    "genex-items/SKILL.md": {
+      "source": "genex-demo@claude/marketplace(c61f99a86):apps/cli/templates/skills/genex-items/SKILL.md",
+      "sha256": "6585169758272eb71f550760e11129539e1e4e69396a6021b8f00b90419622f2",
+      "bytes": 7884,
+      "version": "1.36.14",
+      "pending": "CLI 1.36.14 is not on npm yet: vendored from genex-demo@claude/marketplace(c61f99a86):apps/cli. Re-vendor from the published CLI (npm run genex:skills) once the package.json pin moves to 1.36.14."
     },
     "genex-tool-publish/SKILL.md": {
       "source": "@genex-ai/cli-demo/templates/skills/genex-tool-publish/SKILL.md",

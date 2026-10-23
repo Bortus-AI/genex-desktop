@@ -6048,15 +6048,17 @@ export default {
     "Genex n’a pas pu utiliser son modèle 3D. Demande à l’agent de le corriger.",
   "Genex couldn’t use its files. Ask the agent to fix them.":
     "Genex n’a pas pu utiliser ses fichiers. Demande à l’agent de les corriger.",
-  "Genex couldn’t use its picture. Ask the agent for a new one.":
-    "Genex n’a pas pu utiliser son image. Demandes-en une nouvelle à l’agent.",
+  "Genex couldn’t use its picture. Ask the agent to upload the picture.":
+    "Genex n’a pas pu utiliser son image. Demande à l’agent d’envoyer l’image.",
   "Genex took this item off sale.": "Genex a retiré cet objet de la vente.",
   "It isn’t on sale anymore.": "Il n’est plus en vente.",
-  "It needs a picture first. Ask the agent to make one.":
-    "Il lui faut d’abord une image. Demande à l’agent d’en faire une.",
+  "It needs a picture first. Ask the agent to upload the picture.":
+    "Il lui faut d’abord une image. Demande à l’agent d’envoyer l’image.",
   "Items couldn’t load.": "Impossible de charger les objets.",
   "Items other creators made. Free to add to your game, and you get 15% of every sale in it.":
     "Des objets créés par d’autres créateurs. Gratuits à ajouter à ton jeu, et tu touches 15 % de chaque vente dedans.",
+  "Items other creators made. Free to add to your game, and you get {share} of every sale in it.":
+    "Des objets créés par d’autres créateurs. Gratuits à ajouter à ton jeu, et tu touches {share} de chaque vente dedans.",
   "Items you make show up here. Ask your game’s agent for one.":
     "Les objets que tu crées apparaissent ici. Demandes-en un à l’agent de ton jeu.",
   "Its files are too large. Ask the agent to make them smaller.":
@@ -6091,6 +6093,7 @@ export default {
   "The item store is off right now.": "La boutique d’objets est fermée pour le moment.",
   "This game sells as many items as it can.": "Ce jeu vend déjà autant d’objets que possible.",
   "You get per sale": "Tu touches par vente",
+  "You get per sale ({share})": "Tu touches par vente ({share})",
   "Your agent puts it in the game.": "Ton agent l’ajoute au jeu.",
   "You’ve put a lot on sale today. Try again tomorrow.":
     "Tu as déjà mis beaucoup en vente aujourd’hui. Réessaie demain.",

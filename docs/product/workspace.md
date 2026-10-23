@@ -3,7 +3,7 @@
 ## What the user sees
 
 The sidebar holds Search, Notifications, Send feedback
-([what it sends](../../PRIVACY.md#send-feedback)), the Play/Create switch, New game, Plugins,
+([data](../../PRIVACY.md#send-feedback)), the Play/Create switch, New game, Plugins,
 Items ([Browse, Selling](../play.md#the-item-store)), Harness, Settings, Games, Friends and, once they wait, **Genex terms updated**,
 **plugin updates** and **Relaunch to update** (Linux: **Download**). Pinned games lead, then recent activity. Every launch
 opens **home** (also the wordmark): one composer over an optional picture. A game opens its
@@ -17,8 +17,8 @@ The bell keeps unanswered questions, plans, permission requests, then build endi
 sign-outs, each opening where answered; unfocused, macOS notifications and the Dock badge carry
 them.
 
-**Play** shows genex.games' games, the Genex account and nickname (kept offline), **Friends**
-with invites, profiles and **Stats** ([Play](../play.md)).
+**Play** shows genex.games' games and their [Stores](../play.md#the-item-store), the Genex account and
+nickname (kept offline), **Friends** with invites, profiles and **Stats** ([Play](../play.md)).
 
 ## First launch
 
@@ -26,7 +26,7 @@ An empty, never-welcomed profile opens a full-window welcome that ends connectin
 ChatGPT, a local model, OpenRouter or OpenCode; Skip or Start building opens home, keeping a typed
 idea.
 
-Then a Genex plugin card offers **Connect Genex plugin** once.
+A Genex card then offers **Connect Genex plugin** once.
 
 A sandbox that cannot start opens **Set up the protected workspace** (Windows: one
 administrator prompt, two if Secondary Logon is off).

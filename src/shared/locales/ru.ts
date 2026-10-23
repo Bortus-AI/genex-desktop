@@ -5985,14 +5985,17 @@ export default {
     "Genex не смог использовать его 3D-модель. Попроси агента исправить её.",
   "Genex couldn’t use its files. Ask the agent to fix them.":
     "Genex не смог использовать его файлы. Попроси агента исправить их.",
-  "Genex couldn’t use its picture. Ask the agent for a new one.":
-    "Genex не смог использовать его картинку. Попроси агента сделать новую.",
+  "Genex couldn’t use its picture. Ask the agent to upload the picture.":
+    "Genex не смог использовать его картинку. Попроси агента загрузить картинку.",
   "Genex took this item off sale.": "Genex снял этот предмет с продажи.",
   "It isn’t on sale anymore.": "Он больше не продаётся.",
-  "It needs a picture first. Ask the agent to make one.": "Сначала нужна картинка. Попроси агента сделать её.",
+  "It needs a picture first. Ask the agent to upload the picture.":
+    "Сначала нужна картинка. Попроси агента загрузить картинку.",
   "Items couldn’t load.": "Не удалось загрузить предметы.",
   "Items other creators made. Free to add to your game, and you get 15% of every sale in it.":
     "Предметы других авторов. Их можно бесплатно добавить в свою игру, и ты получаешь 15% с каждой продажи в ней.",
+  "Items other creators made. Free to add to your game, and you get {share} of every sale in it.":
+    "Предметы других авторов. Их можно бесплатно добавить в свою игру, и ты получаешь {share} с каждой продажи в ней.",
   "Items you make show up here. Ask your game’s agent for one.":
     "Здесь появятся предметы, которые ты создашь. Попроси агента своей игры сделать первый.",
   "Its files are too large. Ask the agent to make them smaller.":
@@ -6027,6 +6030,7 @@ export default {
   "The item store is off right now.": "Магазин предметов сейчас выключен.",
   "This game sells as many items as it can.": "В этой игре уже продаётся максимум предметов.",
   "You get per sale": "Ты получаешь с продажи",
+  "You get per sale ({share})": "Ты получаешь с продажи ({share})",
   "Your agent puts it in the game.": "Агент добавит его в игру.",
   "You’ve put a lot on sale today. Try again tomorrow.": "Ты сегодня выставил много предметов. Попробуй завтра.",
   "or ask for changes below": "или попроси изменения ниже",

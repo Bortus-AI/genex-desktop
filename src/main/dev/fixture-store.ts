@@ -595,7 +595,9 @@ async function browse(state: StoreState, call: Call): Promise<GalleryAnswer> {
   const limit = Math.min(Math.max(asked, 1), BROWSE_LIMIT_MAX);
   const page = found.slice(from, from + limit);
   const nextCursor = from + limit < found.length ? `o${from + limit}` : null;
-  return ok({ items: await Promise.all(page.map((one) => browseView(state, one))), nextCursor });
+  const items = await Promise.all(page.map((one) => browseView(state, one)));
+  // The share genex.games configures for a selling game (contract: Browse names it).
+  return ok({ items, nextCursor, sellerShareBps: SELLING_GAME_BPS });
 }
 
 /** An allowance as genex.games serves one. */
@@ -628,7 +630,8 @@ async function browseDetail(state: StoreState, call: Call): Promise<GalleryAnswe
     }),
   );
   const files = one.files.map((file) => ({ ...file, sha256: "fixture" }));
-  return ok({ item: await browseView(state, one), packageManifest: files.length > 0 ? { files } : null, addedTo });
+  const packageManifest = files.length > 0 ? { files } : null;
+  return ok({ item: await browseView(state, one), packageManifest, addedTo, sellerShareBps: SELLING_GAME_BPS });
 }
 
 /** Why `one` cannot be added to `game` (genex.games' order), or null when it can. */

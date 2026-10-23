@@ -6018,14 +6018,17 @@ export default {
     "O Genex não conseguiu usar o modelo 3D. Peça ao agente para corrigir.",
   "Genex couldn’t use its files. Ask the agent to fix them.":
     "O Genex não conseguiu usar os arquivos. Peça ao agente para corrigir.",
-  "Genex couldn’t use its picture. Ask the agent for a new one.":
-    "O Genex não conseguiu usar a imagem. Peça uma nova ao agente.",
+  "Genex couldn’t use its picture. Ask the agent to upload the picture.":
+    "O Genex não conseguiu usar a imagem. Peça ao agente para enviar a imagem.",
   "Genex took this item off sale.": "O Genex tirou este item da venda.",
   "It isn’t on sale anymore.": "Ele não está mais à venda.",
-  "It needs a picture first. Ask the agent to make one.": "Primeiro ele precisa de uma imagem. Peça uma ao agente.",
+  "It needs a picture first. Ask the agent to upload the picture.":
+    "Primeiro ele precisa de uma imagem. Peça ao agente para enviar a imagem.",
   "Items couldn’t load.": "Não foi possível carregar os itens.",
   "Items other creators made. Free to add to your game, and you get 15% of every sale in it.":
     "Itens que outros criadores fizeram. É grátis adicioná-los ao seu jogo, e você ganha 15% de cada venda nele.",
+  "Items other creators made. Free to add to your game, and you get {share} of every sale in it.":
+    "Itens que outros criadores fizeram. É grátis adicioná-los ao seu jogo, e você ganha {share} de cada venda nele.",
   "Items you make show up here. Ask your game’s agent for one.":
     "Os itens que você criar aparecem aqui. Peça um ao agente do seu jogo.",
   "Its files are too large. Ask the agent to make them smaller.":
@@ -6060,6 +6063,7 @@ export default {
   "The item store is off right now.": "A loja de itens está desligada agora.",
   "This game sells as many items as it can.": "Este jogo já vende o máximo de itens possível.",
   "You get per sale": "Você recebe por venda",
+  "You get per sale ({share})": "Você recebe por venda ({share})",
   "Your agent puts it in the game.": "Seu agente coloca no jogo.",
   "You’ve put a lot on sale today. Try again tomorrow.": "Você colocou muita coisa à venda hoje. Tente amanhã.",
   "or ask for changes below": "ou peça mudanças abaixo",

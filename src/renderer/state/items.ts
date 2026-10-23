@@ -78,6 +78,8 @@ export interface BrowseView {
   /** The next page is being read. */
   more: boolean;
   selectedId: string | null;
+  /** The selling game's share genex.games configures, in basis points; absent until a page names it. */
+  sellerShareBps?: number;
 }
 
 /** Selling: the account's items and the strip. */
@@ -169,6 +171,8 @@ export function browseAnswered(
   const items = [...listed, ...answer.items.filter((item) => !known.has(item.id))];
   const kept = items.some((item) => item.id === state.browse.selectedId);
   const selectedId = kept ? state.browse.selectedId : (items[0]?.id ?? null);
+  // A page that names no share (an older API) leaves the one Browse already knows.
+  const sellerShareBps = answer.sellerShareBps ?? state.browse.sellerShareBps;
   const browse: BrowseView = {
     ...state.browse,
     read: ItemsRead.Ready,
@@ -176,6 +180,7 @@ export function browseAnswered(
     nextCursor: answer.nextCursor,
     more: false,
     selectedId,
+    ...(sellerShareBps === undefined ? {} : { sellerShareBps }),
   };
   return { ...state, browse };
 }

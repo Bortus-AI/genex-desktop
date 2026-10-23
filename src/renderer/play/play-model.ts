@@ -342,6 +342,35 @@ export const nativeViewsUp = (viewer: ViewerShown | null): boolean => viewer !==
 export const escapeLeaves = (viewer: ViewerShown | null): boolean =>
   viewer !== null && viewer.phase !== PlayViewerPhase.Playing;
 
+/** Whether the game's Store is open in its place, where the app's page draws it (main hides the game). */
+export const storeOverGame = (viewer: ViewerShown | null): boolean => viewer?.bar?.store?.open === true;
+
+/** What an Esc in the app's page does while a game is open. */
+export const ViewerEscape = {
+  /** Leave the cover or the failure. */
+  Leave: "leave",
+  /** Give the game being played the keyboard back. */
+  Resume: "resume",
+  /** Close the game's Store, back to the game. */
+  CloseStore: "close-store",
+} as const;
+export type ViewerEscape = (typeof ViewerEscape)[keyof typeof ViewerEscape];
+
+/**
+ * What a fresh Esc in the app's page does: nothing for a held key or one a dialog over the page took
+ * (an item's sheet); otherwise it closes the open Store first, then leaves the cover or the failure,
+ * then gives a game being played the keyboard back.
+ */
+export function viewerEscape(
+  viewer: ViewerShown | null,
+  key: { repeat: boolean; handled: boolean },
+): ViewerEscape | null {
+  if (!viewer || key.repeat || key.handled) return null;
+  if (storeOverGame(viewer)) return ViewerEscape.CloseStore;
+  if (escapeLeaves(viewer)) return ViewerEscape.Leave;
+  return viewer.phase === PlayViewerPhase.Playing ? ViewerEscape.Resume : null;
+}
+
 /** How a header button wears a note in place of its label: confirming (a check), or just saying it. */
 export const NoteLook = { Done: "done", Said: "said" } as const;
 export type NoteLook = (typeof NoteLook)[keyof typeof NoteLook];

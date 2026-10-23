@@ -6083,15 +6083,17 @@ export default {
     "Genex konnte das 3D-Modell nicht verwenden. Bitte den Agent, es zu reparieren.",
   "Genex couldn’t use its files. Ask the agent to fix them.":
     "Genex konnte die Dateien nicht verwenden. Bitte den Agent, sie zu reparieren.",
-  "Genex couldn’t use its picture. Ask the agent for a new one.":
-    "Genex konnte das Bild nicht verwenden. Bitte den Agent um ein neues.",
+  "Genex couldn’t use its picture. Ask the agent to upload the picture.":
+    "Genex konnte das Bild nicht verwenden. Bitte den Agent, das Bild hochzuladen.",
   "Genex took this item off sale.": "Genex hat dieses Item aus dem Verkauf genommen.",
   "It isn’t on sale anymore.": "Es wird nicht mehr verkauft.",
-  "It needs a picture first. Ask the agent to make one.":
-    "Es braucht zuerst ein Bild. Bitte den Agent, eins zu machen.",
+  "It needs a picture first. Ask the agent to upload the picture.":
+    "Es braucht zuerst ein Bild. Bitte den Agent, das Bild hochzuladen.",
   "Items couldn’t load.": "Items konnten nicht geladen werden.",
   "Items other creators made. Free to add to your game, and you get 15% of every sale in it.":
     "Items von anderen Creators. Kostenlos für dein Spiel, und du bekommst 15 % von jedem Verkauf darin.",
+  "Items other creators made. Free to add to your game, and you get {share} of every sale in it.":
+    "Items von anderen Creators. Kostenlos für dein Spiel, und du bekommst {share} von jedem Verkauf darin.",
   "Items you make show up here. Ask your game’s agent for one.":
     "Items, die du machst, erscheinen hier. Bitte den Agent deines Spiels um eins.",
   "Its files are too large. Ask the agent to make them smaller.":
@@ -6126,6 +6128,7 @@ export default {
   "The item store is off right now.": "Der Item-Shop ist gerade aus.",
   "This game sells as many items as it can.": "Dieses Spiel verkauft schon so viele Items wie möglich.",
   "You get per sale": "Du bekommst pro Verkauf",
+  "You get per sale ({share})": "Du bekommst pro Verkauf ({share})",
   "Your agent puts it in the game.": "Dein Agent baut es ins Spiel ein.",
   "You’ve put a lot on sale today. Try again tomorrow.":
     "Du hast heute schon viel angeboten. Versuch es morgen wieder.",

@@ -7,22 +7,26 @@ unchanged. Where it disagrees with this preface, this preface wins.
   They need no CLI call, no `genex shop add` and no item catalog.
 - Studio's `@genex-ai/embed-sdk` already exports them. Add the package with
   `genex__package {"package":"@genex-ai/embed-sdk"}` if the game does not have it yet; never run
-  the card's `npm install @genex-ai/embed-sdk@latest`. In a game made from Studio's template,
-  import them from `"@genex-ai/embed-sdk"` and never call `initEmbed()`: Studio's connect module
-  does, as the `genex-threejs-embed-auth` skill describes.
+  `npm install` for it. In a game made from Studio's template, import them from
+  `"@genex-ai/embed-sdk"` and never call `initEmbed()`: Studio's connect module does, as the
+  `genex-threejs-embed-auth` skill describes.
 - Studio's preview runs in local test mode, which has no wallet: a payment there never opens the
   platform sheet. Check the buttons, layout and delivery code with the game's own test fixtures.
   A real payment needs a build published on Genex (`genex__publish`), a signed-in player and that
   player's confirmation: tell the user where to try it rather than claiming it works.
+- Items for the Genex store (a picture, a description, a draft the person puts on sale, items
+  other games can use, another creator's item) follow the `genex-items` skill
+  (`genex__skill {"name":"genex-items"}`), which says how Studio runs `genex shop add … --json` and
+  `genex items add`.
 - Only a game that already sells catalog items keeps the card's "Existing catalog items" commands:
   `npx genex shop list` is `genex__cli {"command":"shop list"}`, and
   `npx genex shop add|set|remove|test` is `genex__cli-paid` with the item name or sku in `args` and
   the flags by name in `options`. The user approves each paid call, because it changes what the
-  game sells.
+  game sells. `genex shop publish` is not available: the person puts an item on sale.
 - Other commands map onto Studio tools as the `genex` skill describes
   (`genex__skill {"name":"genex"}`).
 
-<!-- upstream @genex-ai/cli-demo/templates/skills/genex-monetization/SKILL.md v1.36.13 sha256 24b4b798c597ce452af4bfa394cd4ca655710750d9f6e749c2b4ed8dd540e844 -->
+<!-- upstream genex-demo@claude/marketplace(c61f99a86):apps/cli/templates/skills/genex-monetization/SKILL.md v1.36.14 sha256 058581a7f0a2b83e0c510b1e8f01aa169a9be98ee963b2428389d4d466319f19 -->
 ---
 name: genex-monetization
 description: Add dynamic coin payments for game goods or actions — platform consent, recoverable receipts, and idempotent delivery without a required product catalog. Use when the player asks to sell things, add a shop, monetize, or make the game earn. Carries the hard rules: no paid randomness, no gambling in coin, no donation mechanics, and a real-money price beside every coin price.
@@ -140,15 +144,7 @@ currency without touching balance.
 
 ## Dynamic payment requests
 
-Requires `@genex-ai/embed-sdk` **>= 0.33.0**. Earlier versions, including
-`^0.32.0`, do not export these payment helpers. Update the game's dependency
-before wiring them, then rebuild and publish the game:
-
-```bash
-npm install @genex-ai/embed-sdk@latest
-```
-
-After `initEmbed()` and player identity are ready:
+From `@genex-ai/embed-sdk`, after `initEmbed()` and player identity are ready:
 
 ```ts
 import { requestPayment, getPayment, getPayments } from '@genex-ai/embed-sdk';
@@ -281,7 +277,14 @@ npx genex shop test <sku-id>  # owner-only free entitlement; no coin moves
 the grid printed by `genex shop list`. Render `name`, `iconUrl`, `priceCoins`
 and `priceDisplayUsdCents`; use an image of the actual item for its icon.
 `genex shop set` edits a listing and `genex shop remove` retires it without
-removing a buyer's ownership.
+removing a buyer's ownership. When the Genex store is on, `genex shop add`
+makes a draft: `getShop()` leaves it out of the live game and `buy()` cannot
+sell it until the person puts it on sale. Add `--json` so the Genex app shows
+its **Put on sale** card, and never put it on sale yourself.
+
+Items for the Genex store — a picture, a description, a draft the person puts
+on sale, items other games can use, and adding another creator's item — are
+`$genex-items`. Its rules add to these; they never replace them.
 
 Re-list `getEntitlements({ excludeConsumed: true })` on boot. Branch on
 `skuType` (`consumable`/`durable`), never `type` (purchase/gift/test/free).

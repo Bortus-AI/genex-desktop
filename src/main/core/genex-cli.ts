@@ -9,7 +9,10 @@
  * with HOME at that folder (the CLI's contract healing stops at HOME), and the folder is removed
  * afterwards. A project command sees only the hosted project's id and slug, mirrored from the
  * publish workspace. The token reaches the CLI on stdin through Studio's preload, never argv,
- * environment or disk; the sandbox opens the Genex API alone for the length of the run.
+ * environment or disk; the sandbox opens the Genex API alone for the length of the run. A store
+ * item's picture, model and package are files of the bound game: Studio checks each by real path
+ * inside it and copies it into the run folder first; `items add` writes `genex-items/<id>/` in the
+ * run folder, and Studio moves it into the game afterwards (`genex-game-paths.ts`).
  */
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -21,6 +24,7 @@ import { type RunRequest, type RunResult, shellQuote } from "../../substrate/spa
 import { assertNativeActionAllowed, type NativeStep } from "../dev/native-policy.ts";
 import { type GenexCliRequest, genexCliConsentArgs, genexCliRequest } from "./genex-cli-policy.ts";
 import { GENEX_CLI_PROMPT } from "./genex-cli-prompts.ts";
+import { deliverSharedItem, ItemNotDelivered, resolveGamePath, stageGamePaths } from "./genex-game-paths.ts";
 import { type GenexPackageService, genexPackageConsentArgs } from "./genex-package.ts";
 import { draftInCliAnswer } from "./item-draft.ts";
 import type { ListingDraft } from "../../shared/item-draft.ts";
@@ -67,6 +71,13 @@ export interface GenexCliDeps {
   genexStorage: string;
   /** Folders a run may never write, on top of the sandbox's own denies: the games root and every game. */
   protectedWrites: () => string[] | Promise<string[]>;
+  /**
+   * The bound game's real folder (`genex-bound-game.ts`), for a call that reads the game's files or
+   * writes a shared item into it; without it, such a call is refused.
+   */
+  boundGame?: (binding: PluginBinding) => Promise<string>;
+  /** The clock an earlier copy of a shared item is stamped with when it moves aside. */
+  now?: () => number;
   /** The Genex API origin; tests point it at a fixture. */
   api?: string;
   /** The Node that runs the CLI: Electron as node in the app. */
@@ -104,21 +115,72 @@ export class GenexCliService {
     options: { paid: boolean; signal?: AbortSignal },
   ): Promise<GenexCliAnswer> {
     const request = genexCliRequest(args, { paid: options.paid });
+    const game = await this.#checkedGame(request, binding);
     const project = request.project ? await this.#hostedProject(binding.project) : null;
     const credential = await this.#deps.credentialFile();
     if (!credential) throw new Error(GENEX_CLI_PROMPT.Locked);
     const root = path.join(this.#deps.runsRoot, randomUUID().replaceAll("-", "").slice(0, RUN_ID_CHARS));
     try {
       const work = await this.#prepare(root, project);
+      const argv =
+        game && request.gamePaths ? await stageGamePaths(game, request.gamePaths, request.argv, work) : request.argv;
       const denyWrite = await this.#deps.protectedWrites();
       const result = await this.#deps.run(
-        this.#runRequest(request, { root, work, denyWrite }, credential, options.signal),
+        this.#runRequest({ ...request, argv }, { root, work, denyWrite }, credential, options.signal),
       );
-      const answer = this.#answer(request, result, credential, options.signal);
+      const answer = await this.#deliver(
+        this.#answer(request, result, credential, options.signal),
+        request,
+        work,
+        game,
+      );
       await this.#announceDraft(answer, binding, project);
       return answer;
     } finally {
       await rm(root, { recursive: true, force: true });
+    }
+  }
+
+  /**
+   * What the consent card shows for a paid call, once the files it names are in the game: a call
+   * Studio would refuse throws here, so nobody is asked about it. Nothing runs or is copied.
+   */
+  async preflight(
+    args: Record<string, unknown>,
+    binding: PluginBinding,
+    tool: { paid: boolean },
+  ): Promise<Record<string, string>> {
+    await this.#checkedGame(genexCliRequest(args, tool), binding);
+    return genexCliConsentArgs(args, tool);
+  }
+
+  /**
+   * The bound game's real folder for a call that reads the game's files or writes a shared item into
+   * it, with every file it names checked there; null for any other call.
+   */
+  async #checkedGame(request: GenexCliRequest, binding: PluginBinding): Promise<string | null> {
+    if (!request.gamePaths && !request.delivers) return null;
+    if (!this.#deps.boundGame) throw new Error(GENEX_CLI_PROMPT.ForeignFolder);
+    const game = await this.#deps.boundGame(binding);
+    for (const arg of request.gamePaths ?? []) await resolveGamePath(game, arg);
+    return game;
+  }
+
+  /** After `items add`, its folder moves into the game; the agent reads why when it could not. */
+  async #deliver(
+    answer: GenexCliAnswer,
+    request: GenexCliRequest,
+    work: string,
+    game: string | null,
+  ): Promise<GenexCliAnswer> {
+    const itemId = request.delivers;
+    if (!itemId || !game || !answer.ok) return answer;
+    try {
+      await deliverSharedItem(work, game, itemId, (this.#deps.now ?? Date.now)());
+      return answer;
+    } catch (error) {
+      const why = error instanceof ItemNotDelivered ? error.message : GENEX_CLI_PROMPT.ItemFolderUnwritable;
+      return { command: answer.command, ok: false, output: GENEX_CLI_PROMPT.ItemNotDelivered(itemId, why) };
     }
   }
 
@@ -276,8 +338,11 @@ export function genexHostConsent(
   return genexCliConsentArgs(args, { paid: host === PluginHostTool.GenexCliPaid });
 }
 
-/** Validate package prerequisites before showing a consent card; execution checks them again. */
-export function genexHostPreflight(packages: GenexPackageService) {
+/**
+ * Validate a call's prerequisites before showing a consent card: a package's folder, and the game's
+ * files a CLI call names. Execution checks them again.
+ */
+export function genexHostPreflight(packages: GenexPackageService, cli?: GenexCliService) {
   return async (
     id: string,
     host: PluginHostTool,
@@ -285,6 +350,7 @@ export function genexHostPreflight(packages: GenexPackageService) {
     binding: PluginBinding,
   ): Promise<Record<string, string>> => {
     if (host === PluginHostTool.GenexPackage) await packages.preflight(args, binding);
+    else if (cli) return cli.preflight(args, binding, { paid: host === PluginHostTool.GenexCliPaid });
     return genexHostConsent(id, host, args);
   };
 }

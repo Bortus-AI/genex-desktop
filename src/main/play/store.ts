@@ -49,6 +49,7 @@ import {
   normalizeItemTags,
   type OwnedGameRef,
   type PlayerItem,
+  SALE_BPS,
   type Selling,
   type SellingRow,
   type ShelfItem,
@@ -587,6 +588,15 @@ function playerCalls(deps: StoreDeps, local: boolean) {
   return { items, myItems, itemGames, shelf, report, purchase, claim };
 }
 
+/**
+ * The selling game's share of a sale as an answer names it (`sellerShareBps`): a whole number of basis
+ * points under the whole sale, or nothing, so the app says the design's words instead.
+ */
+function shareOf(body: Record<string, unknown>): { sellerShareBps?: number } {
+  const bps = body.sellerShareBps;
+  return wholeIn(bps, 0, SALE_BPS - 1) ? { sellerShareBps: bps } : {};
+}
+
 /** The creator's calls: Browse, adding a shared item to a game, Selling and the author's actions. */
 function creatorCalls(deps: StoreDeps, local: boolean) {
   const { signed } = caller(deps);
@@ -596,7 +606,7 @@ function creatorCalls(deps: StoreDeps, local: boolean) {
     return readWith(route, await signed(route, { method: "GET" }), (body) => {
       const items = isRecord(body) ? listOf(body.items, BROWSE_PAGE_MAX, (item) => browseItemOf(item, local)) : null;
       if (!items || !isRecord(body)) return null;
-      return { items, nextCursor: isCursor(body.nextCursor) ? body.nextCursor : null };
+      return { items, nextCursor: isCursor(body.nextCursor) ? body.nextCursor : null, ...shareOf(body) };
     });
   };
 
@@ -606,7 +616,7 @@ function creatorCalls(deps: StoreDeps, local: boolean) {
       const item = isRecord(body) ? browseItemOf(body.item, local) : null;
       if (!item || item.id !== itemId || !isRecord(body)) return null;
       const addedTo = listOf(body.addedTo, ADDED_TO_MAX, addedToOf) ?? [];
-      return { item, package: packageOf(body.packageManifest), addedTo };
+      return { item, package: packageOf(body.packageManifest), addedTo, ...shareOf(body) };
     });
   };
 

@@ -1186,6 +1186,16 @@
 .play-viewer-bar-remix:hover:enabled {
   background: color-mix(in srgb, var(--play-selected, var(--play-blue)) 22%, transparent);
 }
+/* The Store door, pressed while the game's Store is open in its place: Play's selected look. */
+.play-viewer-bar-store[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--play-selected, var(--play-blue)) 12%, transparent);
+  box-shadow: inset 0 0 0 1px
+    var(--play-selected-edge, color-mix(in srgb, var(--play-selected, var(--play-blue)) 40%, transparent));
+  color: var(--play-selected-text, var(--ink));
+}
+.play-viewer-bar-store[aria-pressed="true"]:hover:enabled {
+  background: color-mix(in srgb, var(--play-selected, var(--play-blue)) 22%, transparent);
+}
 /* The game's voice chat: the mic switch and its menu of microphones, joined, beside the name. On,
    it wears Play's selected look; off, the game's own voice chat hears nothing from the person. */
 .play-viewer-bar-mic {

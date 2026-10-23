@@ -3329,10 +3329,23 @@ Genex:
   `genex__cli` and `genex-cli-paid` backs `genex__cli-paid`: Studio's pinned CLI runs in
   ProcessSandbox in a fresh `<userData>/genex-cli/<id>` folder (also its `HOME`), never a game
   folder, so the CLI's skill sync and contract healing touch only that folder, which is removed
-  afterwards. `main/core/genex-cli-policy.ts` allows doctor, budget, `llm models|status|cancel`
-  and `shop list` free, and `llm bench` and `shop add|set|remove|test` paid; everything else,
-  `budget --assets` (its allowance would live only in the removed run folder) and every flag Studio
-  sets itself is refused with a typed reason naming the tool to use instead. Studio adds `--env`,
+  afterwards. `main/core/genex-cli-policy.ts` allows doctor, budget, `llm models|status|cancel`,
+  `shop list` and `items list|search` free, and `llm bench`, `shop add|set|remove|test` and
+  `items add|remove` paid; everything else, `shop publish|unpublish` (only the person puts an item
+  on sale, D40), `budget --assets` (its allowance would live only in the removed run folder) and
+  every flag Studio sets itself is refused with a typed reason naming the tool to use instead. A
+  store item's `shop add|set` takes `price` (0 is Free), `type`, `description` (≤ 1000, `""` clears
+  it on `set`), `tag` (one or a list, ≤ 10 × 32), `shared` (`--shared`/`--no-shared`) and `image`,
+  `model` and `package`: paths inside the bound game (`main/core/genex-game-paths.ts`), refused as
+  text when absolute, `~`, `..` or the game itself, then by real path when they lead out of the game
+  (a link), are missing or are the wrong kind, all before consent and again before the run, which
+  gets a copy in the run folder (a package without links, `.git`, `node_modules`, `.genex` or
+  `genex-items`, at most 2,000 files and 200 MiB). `items add <id>` (an item id, never a path) runs
+  in the run folder too; Studio then moves its `genex-items/<id>/` into the bound game, refusing a
+  link or a file at `genex-items`, the item's folder or `.genex/replaced-items` (where an earlier
+  copy goes, stamped), so the CLI never writes a game. The bound folder is the game's or its Studio
+  worktree (`genex-bound-game.ts`, shared with `genex__package`); `genex-cli-game-paths.test.ts`
+  holds the hostile table. Studio adds `--env`,
   `--api-url https://api.genex.games`, `--no-auth` and `--json`, and `--user-approved` only for an
   approved bench. The consent card shows Studio's summary of the validated call (the command, what
   it spends first, the agent's text last and clipped), and a call Studio would refuse asks nobody. The token reaches the
@@ -3354,10 +3367,18 @@ Genex:
   its description says which (the `model` lanes are Tripo; `character` and `creature` are Meshy;
   `character.import` is Uthana), with Local Blender first for hard-surface models when it is on; a
   chat's coordinator promises no provider a lane lacks (`coordinator-prompts.ts`).
-- Genex's guide, seven platform cards and five lane cards (model, character, texture, audio,
+- Genex's guide, nine platform cards and five lane cards (model, character, texture, audio,
   image) are vendored behind Studio-written prefaces in
   `src/plugins/genex/skills` (`vendor.json` pins each source and hash; `npm run genex:skills`
-  refreshes them; `genex-skills-vendor.test.ts` catches drift) and served as file skills.
+  refreshes them; `genex-skills-vendor.test.ts` catches drift) and served as file skills. A card a
+  CLI release not yet on npm changed is vendored ahead of the pin (`--ahead-from <apps/cli> --ahead
+  <cards> --ahead-source <label>`): its files record that `version` and a `pending` note, plain
+  refreshes keep them, and the test fails once the pin reaches that version until a refresh takes
+  them from the published CLI. Today `genex-monetization` and `genex-items` come from CLI 1.36.14
+  (genex-demo `claude/marketplace`) while the pin stays 1.36.13. Follow-up: when 1.36.14 is on npm,
+  bump the pin (the CLI follow below does, with the refresh): until then `shop add --json` prints
+  no `kind` (no Listing draft card), `--tag`, `--shared` and `--package` are unknown options and
+  `items` is an unknown command, each a plain CLI error the agent reads.
 - The bundled CLI follows npm: every 6 hours `.github/workflows/genex-cli-follow.yml` compares
   npm's `latest` `@genex-ai/cli-demo` with the pin. When npm is ahead, `scripts/follow-genex-cli.ts`
   opens one bump PR against `dev` with the exact pin, refreshed skills, the plugin's next patch

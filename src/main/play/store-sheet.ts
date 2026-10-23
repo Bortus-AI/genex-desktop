@@ -56,6 +56,7 @@ const IDLE_BAR: PlayBarState = {
   remixing: false,
   nativeApp: null,
   purchase: null,
+  store: null,
 };
 
 /** How a sheet that closed on each step ended for its buyer. */

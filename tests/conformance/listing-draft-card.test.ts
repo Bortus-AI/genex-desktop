@@ -111,6 +111,20 @@ describe("what the card offers", () => {
     assert.equal(view({ state: ItemState.OffSale }).sale, ListingSale.Offer, "its author took it off: offered again");
   });
 
+  it("says On sale, with no Put on sale, for an item a store that is off put on sale as it was made (D7)", () => {
+    const card = listingCardView({ ...FROST_AXE, state: ItemState.OnSale }, undefined, undefined, undefined);
+    assert.equal(card.sale, ListingSale.OnSale);
+    assert.equal(card.canPutOnSale, false);
+    assert.equal(card.canShare, true, "sharing stays the author's to change");
+  });
+
+  it("offers Put on sale for a draft and an item its author took off sale, and for nothing else", () => {
+    const offered = Object.values(ItemState).filter(
+      (state) => listingCardView({ ...FROST_AXE, state }, undefined, undefined, undefined).canPutOnSale,
+    );
+    assert.deepEqual(offered.sort(), [ItemState.Draft, ItemState.OffSale].sort());
+  });
+
   it("offers nothing for an item an admin took off sale", () => {
     const card = view({ state: ItemState.TakenDown });
     assert.equal(card.sale, ListingSale.TakenDown);

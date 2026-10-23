@@ -1,7 +1,7 @@
 /**
  * Browse's detail panel (marketplace P10, screen 07): the item's render, its name, By \<author>, its
  * description, what players pay and what the selling game gets per sale (genex.games' own number,
- * never computed here), then the split button Add to \<game> ▾, whose arrow picks which of the
+ * never computed here, with the share genex.games configures when it names one), then the split button Add to \<game> ▾, whose arrow picks which of the
  * account's games on Genex takes it, and "Your agent puts it in the game." Add allows the item in
  * that game and hands the game's chat agent the prompt that puts it in (`ItemsPage`).
  */
@@ -20,6 +20,7 @@ import {
 } from "../../ui/dropdown-menu.tsx";
 import { Icon } from "../../ui/icons.tsx";
 import { ITEMS_WORDS, PLAY_STORE_WORDS } from "../../words.ts";
+import { youGetLabel } from "./browse-model.ts";
 
 const WORDS = ITEMS_WORDS;
 
@@ -101,6 +102,7 @@ export function ItemDetail({
   games,
   target,
   busy,
+  sellerShareBps,
   refusal,
   onChoose,
   onAdd,
@@ -109,6 +111,8 @@ export function ItemDetail({
   games: readonly OfferedGame[];
   target: OfferedGame | null;
   busy: boolean;
+  /** The selling game's share genex.games configures, in basis points; absent from an older API. */
+  sellerShareBps: number | undefined;
   refusal: string | null;
   onChoose: (game: string) => void;
   onAdd: (item: BrowseItem, game: string) => void;
@@ -135,7 +139,7 @@ export function ItemDetail({
           </dd>
         </div>
         <div>
-          <dt>{WORDS.youGet}</dt>
+          <dt>{youGetLabel(sellerShareBps)}</dt>
           <dd className="items-gain">{WORDS.gain(coinNumber(item.youGetPerSale))}</dd>
         </div>
       </dl>

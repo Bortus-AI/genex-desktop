@@ -220,6 +220,11 @@ export const PlayControl = {
   NativeApp: "native-app",
   /** Full screen: the game's page takes the whole window, as its own full screen does; Esc brings the bar back. */
   FullScreen: "full-screen",
+  /**
+   * The game's Store, for a game that sells items: it opens in the game's place below the bar (the
+   * game hidden, never closed) and closes again on a second press, Back to game or Esc.
+   */
+  Store: "store",
 } as const;
 export type PlayControl = (typeof PlayControl)[keyof typeof PlayControl];
 
@@ -301,6 +306,14 @@ export interface PlayBarState {
   nativeApp: PlayBarNative | null;
   /** The game asked to be paid: Studio's purchase sheet covers it. Null with none open. */
   purchase: PlayPurchaseSheet | null;
+  /** The game sells items: the bar's Store door, and whether its Store is open. Null with no store. */
+  store: PlayBarStore | null;
+}
+
+/** The bar's Store door for a game that sells items. */
+export interface PlayBarStore {
+  /** The Store is open in the game's place, the game hidden under it. */
+  open: boolean;
 }
 
 /** A remix's name in the library, from the game it copies: what main adopts it as and Create shows while it is made. */

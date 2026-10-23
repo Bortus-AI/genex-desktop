@@ -25,7 +25,9 @@ import {
   sellingAnswered,
   targetChosen,
 } from "../../src/renderer/state/items.ts";
+import { browseIntro, youGetLabel } from "../../src/renderer/panels/items/browse-model.ts";
 import { rowMenu, SellingStatus, sellingStatus } from "../../src/renderer/panels/items/selling-model.ts";
+import { ITEMS_WORDS } from "../../src/renderer/words.ts";
 import { GENEX_PLUGIN_ID, GenexAction } from "../../src/shared/genex.ts";
 import {
   type BrowseItem,
@@ -112,6 +114,27 @@ describe("Browse", () => {
     assert.equal(again.browse.selectedId, "b");
     const gone = browseAnswered(browseAsked(again, "crown"), "crown", page(["d"]));
     assert.equal(gone.browse.selectedId, "d");
+  });
+
+  it("keeps the selling game's share Browse's pages name, which a page without one leaves as it was", () => {
+    const first = browseAnswered(browseAsked(initialItems(), ""), "", { ...page(["a"], "next"), sellerShareBps: 1500 });
+    assert.equal(first.browse.sellerShareBps, 1500);
+    const later = browseAnswered(first, "", page(["b"]), true);
+    assert.equal(later.browse.sellerShareBps, 1500);
+    const older = browseAnswered(browseAsked(initialItems(), ""), "", page(["a"]));
+    assert.equal(older.browse.sellerShareBps, undefined, "an older API names none");
+  });
+
+  it("says the selling game's share from genex.games, and the design's words when it names none", () => {
+    assert.equal(browseIntro(undefined), ITEMS_WORDS.intro);
+    assert.equal(
+      browseIntro(1500),
+      "Items other creators made. Free to add to your game, and you get 15% of every sale in it.",
+    );
+    assert.match(browseIntro(1250), /you get 12\.5% of every sale/);
+    assert.match(browseIntro(2000), /you get 20% of every sale/);
+    assert.equal(youGetLabel(undefined), ITEMS_WORDS.youGet);
+    assert.equal(youGetLabel(1500), "You get per sale (15%)");
   });
 
   it("drops the answer to a search the person already typed past", () => {

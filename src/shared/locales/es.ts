@@ -6032,14 +6032,17 @@ export default {
     "Genex no pudo usar su modelo 3D. Pide al agente que lo arregle.",
   "Genex couldn’t use its files. Ask the agent to fix them.":
     "Genex no pudo usar sus archivos. Pide al agente que los arregle.",
-  "Genex couldn’t use its picture. Ask the agent for a new one.":
-    "Genex no pudo usar su imagen. Pide una nueva al agente.",
+  "Genex couldn’t use its picture. Ask the agent to upload the picture.":
+    "Genex no pudo usar su imagen. Pide al agente que suba la imagen.",
   "Genex took this item off sale.": "Genex retiró este objeto de la venta.",
   "It isn’t on sale anymore.": "Ya no está a la venta.",
-  "It needs a picture first. Ask the agent to make one.": "Primero necesita una imagen. Pide al agente que haga una.",
+  "It needs a picture first. Ask the agent to upload the picture.":
+    "Primero necesita una imagen. Pide al agente que suba la imagen.",
   "Items couldn’t load.": "No se pudieron cargar los objetos.",
   "Items other creators made. Free to add to your game, and you get 15% of every sale in it.":
     "Objetos que hicieron otros creadores. Añadirlos a tu juego es gratis, y te llevas el 15% de cada venta en él.",
+  "Items other creators made. Free to add to your game, and you get {share} of every sale in it.":
+    "Objetos que hicieron otros creadores. Añadirlos a tu juego es gratis, y te llevas el {share} de cada venta en él.",
   "Items you make show up here. Ask your game’s agent for one.":
     "Aquí aparecen los objetos que hagas. Pide uno al agente de tu juego.",
   "Its files are too large. Ask the agent to make them smaller.":
@@ -6074,6 +6077,7 @@ export default {
   "The item store is off right now.": "La tienda de objetos está apagada ahora mismo.",
   "This game sells as many items as it can.": "Este juego ya vende todos los objetos que puede.",
   "You get per sale": "Recibes por venta",
+  "You get per sale ({share})": "Recibes por venta ({share})",
   "Your agent puts it in the game.": "Tu agente lo pone en el juego.",
   "You’ve put a lot on sale today. Try again tomorrow.": "Hoy has puesto mucho a la venta. Inténtalo mañana.",
   "or ask for changes below": "o pide cambios abajo",

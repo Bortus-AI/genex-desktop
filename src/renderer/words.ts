@@ -5176,6 +5176,8 @@ export const PLAY_WORDS = {
     failedText: t("Check your connection, then try again."),
     retry: t("Try again"),
     back: t("Back to Play"),
+    /** The game's Store, opened in its place from the bar: back to the game hidden under it. */
+    backToGame: t("Back to game"),
   },
   /** The viewer's header across the window's top. */
   bar: {
@@ -5186,6 +5188,8 @@ export const PLAY_WORDS = {
     share: t("Share"),
     invite: t("Invite a friend"),
     remix: t("Remix"),
+    /** The door to the game's Store, for a game that sells items (the web's game bar has the same). */
+    store: t("Store"),
     fullScreen: t("Full screen"),
     exit: t("Exit"),
     playing: (count: number) => t("{count} playing", { count }),
@@ -5383,12 +5387,18 @@ export const ITEMS_WORDS = {
   browse: t("Browse"),
   selling: t("Selling"),
   // Browse (screen 07).
+  /** The design's intro, for an API that does not name the selling game's share. */
   intro: t("Items other creators made. Free to add to your game, and you get 15% of every sale in it."),
+  /** The intro with the selling game's share as genex.games configures it ("15%"). */
+  introShare: (share: string) =>
+    t("Items other creators made. Free to add to your game, and you get {share} of every sale in it.", { share }),
   search: t("Search items"),
   inGames: (count: number) => t("{count, plural, one {in # game} other {in # games}}", { count }),
   by: (name: string) => t("By {name}", { name }),
   playersPay: t("Players pay"),
   youGet: t("You get per sale"),
+  /** "You get per sale" with the selling game's share genex.games configures ("15%"). */
+  youGetShare: (share: string) => t("You get per sale ({share})", { share }),
   /** The selling game's share of one sale, as genex.games computed it: "+1,200". */
   gain: (amount: string) => t("+{amount}", { amount }),
   addTo: (game: string) => t("Add to {game}", { game }),
@@ -5438,8 +5448,9 @@ export const ITEMS_WORDS = {
 
 /** Why genex.games refused a press on an item, in the person's words; any other reads as `unknown`. */
 export const ITEM_REFUSAL_WORDS: Partial<Record<StoreRefusal, string>> & { unknown: string } = {
-  [StoreRefusal.PictureMissing]: t("It needs a picture first. Ask the agent to make one."),
-  [StoreRefusal.PictureInvalid]: t("Genex couldn’t use its picture. Ask the agent for a new one."),
+  // Put on sale reads the picture from Genex's own storage (D62): the fix is always an upload.
+  [StoreRefusal.PictureMissing]: t("It needs a picture first. Ask the agent to upload the picture."),
+  [StoreRefusal.PictureInvalid]: t("Genex couldn’t use its picture. Ask the agent to upload the picture."),
   [StoreRefusal.ModelInvalid]: t("Genex couldn’t use its 3D model. Ask the agent to fix it."),
   [StoreRefusal.PackageInvalid]: t("Genex couldn’t use its files. Ask the agent to fix them."),
   [StoreRefusal.PackageTooLarge]: t("Its files are too large. Ask the agent to make them smaller."),

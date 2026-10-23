@@ -149,6 +149,7 @@ import { makeBackdropShader } from "./core/backdrop-generation.ts";
 import { GENEX_PLUGIN_ID, GenexCliService, genexHostPreflight, genexHostTool } from "./core/genex-cli.ts";
 import type { ListingDraft } from "../shared/item-draft.ts";
 import { GenexPackageService } from "./core/genex-package.ts";
+import { boundGameFolder } from "./core/genex-bound-game.ts";
 import { assertPublishable } from "./core/genex-publish.ts";
 import { GENEX_ACCOUNT_ACTIONS } from "../shared/genex.ts";
 import { GameThreadService } from "./core/game-threads.ts";
@@ -1050,8 +1051,9 @@ export class StudioCore {
    * package on Windows), which keeps its scratch in the sandbox's own scratch folder.
    */
   #wirePluginPrograms(): void {
-    this.plugins.hostTool = genexHostTool({ cli: this.#genexCli(), packages: this.#genexPackages() });
-    this.plugins.hostToolConsent = genexHostPreflight(this.#genexPackages());
+    const genex = { cli: this.#genexCli(), packages: this.#genexPackages() };
+    this.plugins.hostTool = genexHostTool(genex);
+    this.plugins.hostToolConsent = genexHostPreflight(genex.packages, genex.cli);
     this.plugins.sandboxJobs = new PluginSandboxJobs({
       run: (request) => this.sandbox.run(request),
       scratch: path.join(this.layout.scratch, PLUGIN_JOBS_FOLDER),
@@ -1174,7 +1176,8 @@ export class StudioCore {
 
   /**
    * `genex__cli`: Studio's pinned Genex CLI, run in the sandbox in a folder under userData that no
-   * agent can write, never in a game, which it may not write either.
+   * agent can write, never in a game, which it may not write either. Studio itself copies a store
+   * item's files in from the bound game and moves a shared item's folder into it.
    */
   #genexCli(): GenexCliService {
     return new GenexCliService({
@@ -1186,6 +1189,9 @@ export class StudioCore {
       genexStorage: this.pluginServices.root(GENEX_PLUGIN_ID),
       protectedWrites: async () => [this.games.root, ...(await this.games.list()).map((game) => game.dir)],
       onListingDraft: (draft, binding) => this.#recordListingDraft(draft, binding.threadId),
+      // A store item's files and a shared item's folder: the bound game's own folder or its Studio worktree.
+      boundGame: (binding) =>
+        boundGameFolder(binding, { gameDir: (project) => this.games.dirFor(project), scratch: this.layout.scratch }),
       ...(this.options.execPath ? { execPath: this.options.execPath } : {}),
     });
   }

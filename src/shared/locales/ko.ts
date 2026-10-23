@@ -5810,14 +5810,17 @@ export default {
     "Genex에서 3D 모델을 쓸 수 없었어요. 에이전트에게 고쳐 달라고 하세요.",
   "Genex couldn’t use its files. Ask the agent to fix them.":
     "Genex에서 파일을 쓸 수 없었어요. 에이전트에게 고쳐 달라고 하세요.",
-  "Genex couldn’t use its picture. Ask the agent for a new one.":
-    "Genex에서 그림을 쓸 수 없었어요. 에이전트에게 새 그림을 요청하세요.",
+  "Genex couldn’t use its picture. Ask the agent to upload the picture.":
+    "Genex에서 그림을 쓸 수 없었어요. 에이전트에게 그림을 업로드해 달라고 하세요.",
   "Genex took this item off sale.": "Genex가 이 아이템의 판매를 중단했어요.",
   "It isn’t on sale anymore.": "더 이상 판매하지 않아요.",
-  "It needs a picture first. Ask the agent to make one.": "먼저 그림이 필요해요. 에이전트에게 만들어 달라고 하세요.",
+  "It needs a picture first. Ask the agent to upload the picture.":
+    "먼저 그림이 필요해요. 에이전트에게 그림을 업로드해 달라고 하세요.",
   "Items couldn’t load.": "아이템을 불러오지 못했어요.",
   "Items other creators made. Free to add to your game, and you get 15% of every sale in it.":
     "다른 크리에이터가 만든 아이템이에요. 내 게임에 무료로 추가할 수 있고, 그 게임에서 팔릴 때마다 15%를 받아요.",
+  "Items other creators made. Free to add to your game, and you get {share} of every sale in it.":
+    "다른 크리에이터가 만든 아이템이에요. 내 게임에 무료로 추가할 수 있고, 그 게임에서 팔릴 때마다 {share}를 받아요.",
   "Items you make show up here. Ask your game’s agent for one.":
     "만든 아이템은 여기에 나타나요. 게임의 에이전트에게 하나 요청해 보세요.",
   "Its files are too large. Ask the agent to make them smaller.": "파일이 너무 커요. 에이전트에게 줄여 달라고 하세요.",
@@ -5849,6 +5852,7 @@ export default {
   "The item store is off right now.": "지금은 아이템 스토어가 꺼져 있어요.",
   "This game sells as many items as it can.": "이 게임은 이미 최대한 많은 아이템을 팔고 있어요.",
   "You get per sale": "판매당 받는 금액",
+  "You get per sale ({share})": "판매당 받는 금액 ({share})",
   "Your agent puts it in the game.": "에이전트가 게임에 넣어 줘요.",
   "You’ve put a lot on sale today. Try again tomorrow.": "오늘은 이미 많이 판매에 올렸어요. 내일 다시 시도하세요.",
   "or ask for changes below": "또는 아래에서 변경을 요청하세요",

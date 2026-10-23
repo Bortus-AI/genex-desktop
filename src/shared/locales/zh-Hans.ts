@@ -5617,13 +5617,16 @@ export default {
   "Genex couldn’t do that. Try again in a moment.": "Genex 没能完成。请稍后再试。",
   "Genex couldn’t use its 3D model. Ask the agent to fix it.": "Genex 无法使用它的 3D 模型。请让智能体修复。",
   "Genex couldn’t use its files. Ask the agent to fix them.": "Genex 无法使用它的文件。请让智能体修复。",
-  "Genex couldn’t use its picture. Ask the agent for a new one.": "Genex 无法使用它的图片。请让智能体重新做一张。",
+  "Genex couldn’t use its picture. Ask the agent to upload the picture.":
+    "Genex 无法使用它的图片。请让智能体上传图片。",
   "Genex took this item off sale.": "Genex 已将此物品下架。",
   "It isn’t on sale anymore.": "它已不再出售。",
-  "It needs a picture first. Ask the agent to make one.": "需要先有一张图片。请让智能体做一张。",
+  "It needs a picture first. Ask the agent to upload the picture.": "需要先有一张图片。请让智能体上传图片。",
   "Items couldn’t load.": "物品加载失败。",
   "Items other creators made. Free to add to your game, and you get 15% of every sale in it.":
     "其他创作者制作的物品。可免费添加到你的游戏，在你的游戏中每卖出一件，你都能获得 15%。",
+  "Items other creators made. Free to add to your game, and you get {share} of every sale in it.":
+    "其他创作者制作的物品。可免费添加到你的游戏，在你的游戏中每卖出一件，你都能获得 {share}。",
   "Items you make show up here. Ask your game’s agent for one.": "你制作的物品会显示在这里。让你游戏的智能体做一个吧。",
   "Its files are too large. Ask the agent to make them smaller.": "它的文件太大了。请让智能体把文件变小。",
   "Its maker doesn’t let other games use it anymore.": "作者已不再允许其他游戏使用它。",
@@ -5653,6 +5656,7 @@ export default {
   "The item store is off right now.": "物品商店目前已关闭。",
   "This game sells as many items as it can.": "这个游戏出售的物品已达上限。",
   "You get per sale": "每笔销售你获得",
+  "You get per sale ({share})": "每笔销售你获得（{share}）",
   "Your agent puts it in the game.": "智能体会把它加入游戏。",
   "You’ve put a lot on sale today. Try again tomorrow.": "你今天已上架了很多物品。请明天再试。",
   "or ask for changes below": "或在下方请求修改",

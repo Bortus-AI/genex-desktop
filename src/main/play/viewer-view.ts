@@ -122,6 +122,8 @@ export interface PlayViewDeps {
   comments: PlayComments;
   /** A web game's native app on this computer, for the bar's pill; absent where Genex plays no native game. */
   nativeApp?: PlayViewerDeps["nativeApp"];
+  /** Whether a game sells items, for the bar's Store door; the Store itself is drawn by the studio's page. */
+  storeShown?: (slug: string) => Promise<boolean>;
   /** genex.games' coin, for a game's purchase sheet. */
   coin: ViewerCoin;
   /** The app's Genex account: the purchase sheet's Sign in. */
@@ -491,6 +493,17 @@ export function wirePlayViewer(deps: PlayViewDeps): PlayViewer {
     bar,
     comments: deps.comments,
     ...(deps.nativeApp ? { nativeApp: deps.nativeApp } : {}),
+    // The Store opens in the game's place on the studio's own page, which takes the keyboard for it.
+    ...(deps.storeShown
+      ? {
+          store: {
+            shown: deps.storeShown,
+            focusPage: () => {
+              if (!win.isDestroyed()) win.webContents.focus();
+            },
+          },
+        }
+      : {}),
     coin: deps.coin,
     account: deps.account,
     openPage: deps.openPage,

@@ -5935,14 +5935,17 @@ export default {
     "Genexで3Dモデルを使えませんでした。エージェントに修正を頼んでください。",
   "Genex couldn’t use its files. Ask the agent to fix them.":
     "Genexでファイルを使えませんでした。エージェントに修正を頼んでください。",
-  "Genex couldn’t use its picture. Ask the agent for a new one.":
-    "Genexで画像を使えませんでした。エージェントに新しい画像を頼んでください。",
+  "Genex couldn’t use its picture. Ask the agent to upload the picture.":
+    "Genexで画像を使えませんでした。エージェントに画像をアップロードしてもらいましょう。",
   "Genex took this item off sale.": "Genexがこのアイテムの販売を停止しました。",
   "It isn’t on sale anymore.": "もう販売されていません。",
-  "It needs a picture first. Ask the agent to make one.": "まず画像が必要です。エージェントに作ってもらいましょう。",
+  "It needs a picture first. Ask the agent to upload the picture.":
+    "まず画像が必要です。エージェントに画像をアップロードしてもらいましょう。",
   "Items couldn’t load.": "アイテムを読み込めませんでした。",
   "Items other creators made. Free to add to your game, and you get 15% of every sale in it.":
     "ほかのクリエイターが作ったアイテム。無料でゲームに追加でき、そのゲームでの売上ごとに15%を受け取れます。",
+  "Items other creators made. Free to add to your game, and you get {share} of every sale in it.":
+    "ほかのクリエイターが作ったアイテム。無料でゲームに追加でき、そのゲームでの売上ごとに{share}を受け取れます。",
   "Items you make show up here. Ask your game’s agent for one.":
     "作ったアイテムはここに表示されます。ゲームのエージェントに頼んでみましょう。",
   "Its files are too large. Ask the agent to make them smaller.":
@@ -5977,6 +5980,7 @@ export default {
   "The item store is off right now.": "アイテムストアは現在停止中です。",
   "This game sells as many items as it can.": "このゲームはすでに上限までアイテムを販売しています。",
   "You get per sale": "1回の売上での受け取り",
+  "You get per sale ({share})": "1回の売上での受け取り（{share}）",
   "Your agent puts it in the game.": "エージェントがゲームに組み込みます。",
   "You’ve put a lot on sale today. Try again tomorrow.": "今日はたくさん出品しました。明日また試してください。",
   "or ask for changes below": "または下で変更を頼む",

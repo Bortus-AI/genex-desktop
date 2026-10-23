@@ -14,6 +14,7 @@ import { itemChosen, ItemsRead } from "../../state/items.ts";
 import { studio } from "../../state/studio.ts";
 import { Button } from "../../ui/Button.tsx";
 import { ITEMS_WORDS, itemRefusalWords, PLAY_STORE_WORDS } from "../../words.ts";
+import { browseIntro } from "./browse-model.ts";
 import { ItemDetail, type OfferedGame } from "./ItemDetail.tsx";
 import { ReadNote } from "./ReadNote.tsx";
 
@@ -80,7 +81,7 @@ export function BrowseTab({
       <div className="items-browse-main">
         {head}
         <div id={panel} role="tabpanel" className="items-browse-list">
-          <p className="items-intro">{WORDS.intro}</p>
+          <p className="items-intro">{browseIntro(browse.sellerShareBps)}</p>
           {!listed && <ReadNote read={browse.read} onRetry={onRetry} />}
           {listed && browse.items.length === 0 && (
             <p className="items-note">{browse.query ? WORDS.noMatch : WORDS.noneShared}</p>
@@ -110,6 +111,7 @@ export function BrowseTab({
           games={add.games}
           target={add.target}
           busy={busy !== undefined}
+          sellerShareBps={browse.sellerShareBps}
           refusal={refused ? itemRefusalWords(refused) : null}
           onChoose={add.onChoose}
           onAdd={add.onAdd}

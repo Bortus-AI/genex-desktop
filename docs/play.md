@@ -308,13 +308,28 @@ frame only, `STUDIO_UI_ONLY`); prices, shares and counts are genex.games' own, n
   follows the coin; ⋯ reports the item (Copy, Doesn't work, Inappropriate, Scam). Drag to turn loads
   the item's GLB only from Genex's asset hosts, the only ones main passes on and the window's
   `connect-src` allows. A profile shows up to five owned items over its stats (`play/ItemShelf.tsx`),
-  each with **Get in \<game>** and that game's cover.
+  each with **Get in \<game>** and that game's cover, which opens the game's page.
+- A web game's card opens the viewer, not its page (a web game's page is the game, as on
+  genex.games), so the viewer's bar has the **Store** door, after Share, for a game whose Store tab
+  has items (`PlayViewerDeps.store`; none while the store is off, empty or unreadable). It opens
+  the same `GameStore` in the game's place on the app's own page (`PlayViewerLayer.tsx`), never over
+  the game in the bar's layer: main hides the game's view and never closes it, so the game keeps its
+  session (a player mid-run loses nothing; an item bought here reaches the game when it reads its
+  entitlements again), and the item sheet, its purchase machine and `STUDIO_UI_ONLY` stay the studio
+  window's. The keyboard goes to the page; the door again, **Back to game** or Esc closes it and
+  gives the game its place and keyboard back (an item sheet's own Esc closes only the sheet,
+  `viewerEscape`). While it is open, a game that finishes loading stays hidden, and Full screen and
+  Resume do nothing. A native game's card still opens its page, with its Store under it.
 - **Create › Items** (sidebar row `[data-sidebar-room="items"]`, `panels/items/`,
   `state/items.ts`) is a room over the workspace, like Plugins. **Browse** lists other creators'
-  shared items with a search, read once the typing pauses; the panel shows Players pay, You get per sale and **Add to \<game> ▾**,
+  shared items with a search, read once the typing pauses; the intro and You get per sale name the
+  selling game's share genex.games sends (`sellerShareBps`, `panels/items/browse-model.ts`), else the
+  design's words; the panel shows Players pay, You get per sale and **Add to \<game> ▾**,
   which offers the account's local games whose Genex publish record names a project: it adds the
   allowance, then opens that game's chat and sends the prompt that has the agent run
-  `genex items add <id>` (`panels/items/items-prompts.ts`, `composeInChatWhenOpen`). **Selling**
+  `genex items add <id>` (`panels/items/items-prompts.ts`, `composeInChatWhenOpen`): the agent calls
+  `genex__cli-paid` `items add`, and Studio moves the CLI's `genex-items/<id>/` into the game
+  ([host tools](plugins.md#first-party-privileges)). **Selling**
   shows Ready to use and On hold for N days, then the account's items (Draft, put on sale; Report
   under review; Off sale, dimmed) with Put on sale, Take off sale, Other games can use it and Ask the
   agent to change it, which leaves words in the item's game's composer. **New item** opens the chosen
@@ -326,12 +341,20 @@ frame only, `STUDIO_UI_ONLY`); prices, shares and counts are genex.games' own, n
   card goes up after the turn's reply, one per item (a newer draft replaces it), with the price,
   **Other games can use it** and **Put on sale** ("or ask for changes below"); its presses call
   `itemSetShared` and `itemPutOnSale` from main, so only the person puts an item on sale. Studio's
-  CLI runs never publish (`shop publish` is not in its command table).
+  CLI runs never publish (`shop publish` is not in its command table). Put on sale shows only for a
+  draft or an item its author took off sale: an item a store that is off put on sale at once (D7)
+  says On sale, and `picture_missing` / `picture_invalid` ask the agent to upload the picture. The
+  agent's `shop add|set` takes the description, tags, sharing, Free and the game's picture, model
+  and package files ([host tools](plugins.md#first-party-privileges)). The card needs CLI 1.36.14
+  (`kind`/`version` in `--json`); the pin is 1.36.13 until it is on npm.
 
 Fixtures: with `STUDIO_FIXTURE_GENEX_ACCOUNT=1`, `dev/fixture-store.ts` answers the store (Stick &
 Steel's store; the account's Snowball items); `--fixture items-store` makes the fixture game the
 account's Snowball on Genex and puts Frost Axe's Listing draft card in its chat (`dev/fixture-items.ts`).
-Selectors: `[data-sidebar-room="items"]`; `[data-items-page="browse|selling"]` with
+Selectors: the viewer's door `[data-play-bar="store"]` (`aria-pressed` while open), its Store
+`[data-play-viewer-store="<slug>"]` with `[data-play-viewer-store-back]`, a page's Store
+`[data-game-store="<slug>"]` (`[data-game-store-view="store|my-items"]`, `[data-store-item="<id>"]`);
+`[data-sidebar-room="items"]`; `[data-items-page="browse|selling"]` with
 `[data-items-tab="<tab>"]`, `[data-items-search]`, `[data-items-browse]`, `[data-items-grid]`,
 `[data-items-card="<id>"]`, `[data-items-detail="<id>"]`, `[data-items-add-to="<game>"]`,
 `[data-items-choose-game]` (`[data-items-game="<game>"]`), `[data-items-selling]`, `[data-items-held]`,

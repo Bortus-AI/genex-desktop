@@ -1510,6 +1510,8 @@ function attachPlay(studio: StudioCore, win: BrowserWindow): void {
     barArguments: pageLanguageArguments,
     comments: playCommentsFor(studio),
     ...(playInstallsFor(studio) ? { nativeApp: nativeAppFor(studio) } : {}),
+    // The bar's Store door: only a game whose Store tab has items (the store off reads as none).
+    storeShown: async (slug) => (await storeFor(studio).store.items(slug)).items.length > 0,
     coin: playCoinFor(studio),
     account: { signIn: () => signInToGenex(studio) },
     // Get coin: genex.games in the browser; a fixture launch opens nothing and tops its balance up.

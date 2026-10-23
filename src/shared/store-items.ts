@@ -132,6 +132,8 @@ export const ITEM_DESCRIPTION_MAX = 1000;
 /** The most tags an item has, and the longest one. */
 export const ITEM_TAGS_MAX = 10;
 export const ITEM_TAG_LENGTH_MAX = 32;
+/** A whole sale in basis points: a selling game's share is always less (the author's leg comes first). */
+export const SALE_BPS = 10_000;
 /** The longest message a complaint may carry. */
 export const ITEM_REPORT_MESSAGE_MAX = 500;
 /** "Works in N games" shows at most this many covers beside the total. */
@@ -315,6 +317,11 @@ export interface BrowsePage {
   items: BrowseItem[];
   /** The next page's cursor; null on the last. */
   nextCursor: string | null;
+  /**
+   * What a game that sells another creator's item gets of each sale, in basis points, as genex.games
+   * configures it (`crossGameSellerBps`); absent from an API that does not send it.
+   */
+  sellerShareBps?: number;
 }
 
 /** One of the account's games a shared item was added to. */
@@ -332,6 +339,8 @@ export interface BrowseDetail {
   /** What the item's package holds, when it has one: its files and their bytes together. */
   package: { files: number; bytes: number } | null;
   addedTo: ItemAddedTo[];
+  /** As Browse's page carries it; absent from an API that does not send it. */
+  sellerShareBps?: number;
 }
 
 /** A shared item's place in one of the account's games. */

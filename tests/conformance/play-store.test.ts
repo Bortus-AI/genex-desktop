@@ -573,6 +573,30 @@ describe("Create › Items: Browse", () => {
     assert.equal(page.nextCursor, null);
   });
 
+  it("reads the selling game's share genex.games configures, and none from an older API or a value that is no share", async () => {
+    const rows: Array<[string, unknown, number | undefined]> = [
+      ["the configured share", 1500, 1500],
+      ["no share at all", 0, 0],
+      ["an older API that sends none", undefined, undefined],
+      ["null", null, undefined],
+      ["text", "1500", undefined],
+      ["a fraction", 1500.5, undefined],
+      ["below nothing", -1, undefined],
+      ["the whole sale", 10_000, undefined],
+      ["past the whole sale", 1e9, undefined],
+    ];
+    for (const [name, sent, read] of rows) {
+      const body = { items: [browseItem()], nextCursor: null, ...(sent === undefined ? {} : { sellerShareBps: sent }) };
+      const page = await rig(() => ok(body)).store.browse({ query: "", cursor: null, tags: [] });
+      assert.ok(!("refused" in page));
+      assert.equal(page.sellerShareBps, read, `Browse: ${name}`);
+      const detailBody = { item: browseItem(), addedTo: [], ...(sent === undefined ? {} : { sellerShareBps: sent }) };
+      const detail = await rig(() => ok(detailBody)).store.browseDetail("sku5");
+      assert.ok(!("refused" in detail));
+      assert.equal(detail.sellerShareBps, read, `detail: ${name}`);
+    }
+  });
+
   it("answers a signed-out account and a store that is off by their codes", async () => {
     assert.deepEqual(await rig(() => ok({}), null).store.browse({ query: "", cursor: null, tags: [] }), {
       refused: StoreRefusal.Unauthorized,

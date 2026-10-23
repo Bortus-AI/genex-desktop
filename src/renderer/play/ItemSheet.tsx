@@ -677,7 +677,7 @@ function SheetDialog({
   return (
     <Dialog.Root open>
       <Dialog.Portal>
-        <Dialog.Overlay className="play-purchase-scrim" />
+        <Dialog.Overlay className="play-purchase-scrim item-sheet-scrim" />
         <Dialog.Content
           className="item-sheet"
           aria-busy={busy || undefined}
