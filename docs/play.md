@@ -287,6 +287,59 @@ is.
 - `studio:play.game` reads a game's own page (`StudioApi.playGame`): its card, likes, comments,
   description, screenshots and when it changed.
 
+## The item store
+
+Games sell items for coin (marketplace plan; genex.games' `/api/store`, off while `STORE_MODE` is).
+An item is a SKU: a name, a description, a picture (maybe a 3D model), a price or Free, and
+consumable or durable. A **shared item** is a durable its author lets other games use; a game that
+adds one holds an **allowance** for it, and sells it once a live build made after the add is promoted.
+Main reads every store answer as hostile input as the app's Genex account (`main/play/store.ts`,
+channels `studio:store.*` and `studio:items.*` in `main/ipc/store.ts`, answered for Studio's main
+frame only, `STUDIO_UI_ONLY`); prices, shares and counts are genex.games' own, never computed here.
+
+- A game's page has a **Store** section with **Store / My items N** (`play/GameStore.tsx`): cards
+  with the render, the name and the price, Free or Owned, a shared item's "N games" badge; My items
+  marks each owned item Works here, N left, or dimmed Not in this game. It hides while the store is
+  off, unreadable or empty. A card opens the item's sheet (`play/ItemSheet.tsx`): Works in N games,
+  the price, Balance X → Y and one button: Pay N runs Play's purchase sheet in the studio window
+  (`main/play/store-sheet.ts`, confirmed on `STUDIO_CONFIRM_SURFACE`; `followStudioWindow` makes Pay
+  wait again when the window loses or regains focus, and a reload, a dead page or a closed window
+  cancels a purchase still unpaid), Get claims a Free item, Get coin opens genex.games and Review
+  follows the coin; ⋯ reports the item (Copy, Doesn't work, Inappropriate, Scam). Drag to turn loads
+  the item's GLB only from Genex's asset hosts, the only ones main passes on and the window's
+  `connect-src` allows. A profile shows up to five owned items over its stats (`play/ItemShelf.tsx`),
+  each with **Get in \<game>** and that game's cover.
+- **Create › Items** (sidebar row `[data-sidebar-room="items"]`, `panels/items/`,
+  `state/items.ts`) is a room over the workspace, like Plugins. **Browse** lists other creators'
+  shared items with a search, read once the typing pauses; the panel shows Players pay, You get per sale and **Add to \<game> ▾**,
+  which offers the account's local games whose Genex publish record names a project: it adds the
+  allowance, then opens that game's chat and sends the prompt that has the agent run
+  `genex items add <id>` (`panels/items/items-prompts.ts`, `composeInChatWhenOpen`). **Selling**
+  shows Ready to use and On hold for N days, then the account's items (Draft, put on sale; Report
+  under review; Off sale, dimmed) with Put on sale, Take off sale, Other games can use it and Ask the
+  agent to change it, which leaves words in the item's game's composer. **New item** opens the chosen
+  game's chat, its composer asking "Ask for an item or a change…".
+- The **Listing draft card**: when `genex__cli-paid` runs `shop add` or `shop set` and the pinned
+  CLI answers its `--json` draft (`kind: "genex.item_draft"`, version 1) for the game's own hosted
+  project, main records `item_drafted` in the chat (`main/core/item-draft.ts`) and announces
+  `item.drafted`. The harness may write neither, and a draft an agent writes in words is text. The
+  card goes up after the turn's reply, one per item (a newer draft replaces it), with the price,
+  **Other games can use it** and **Put on sale** ("or ask for changes below"); its presses call
+  `itemSetShared` and `itemPutOnSale` from main, so only the person puts an item on sale. Studio's
+  CLI runs never publish (`shop publish` is not in its command table).
+
+Fixtures: with `STUDIO_FIXTURE_GENEX_ACCOUNT=1`, `dev/fixture-store.ts` answers the store (Stick &
+Steel's store; the account's Snowball items); `--fixture items-store` makes the fixture game the
+account's Snowball on Genex and puts Frost Axe's Listing draft card in its chat (`dev/fixture-items.ts`).
+Selectors: `[data-sidebar-room="items"]`; `[data-items-page="browse|selling"]` with
+`[data-items-tab="<tab>"]`, `[data-items-search]`, `[data-items-browse]`, `[data-items-grid]`,
+`[data-items-card="<id>"]`, `[data-items-detail="<id>"]`, `[data-items-add-to="<game>"]`,
+`[data-items-choose-game]` (`[data-items-game="<game>"]`), `[data-items-selling]`, `[data-items-held]`,
+`[data-items-new]`, `[data-items-row="<id>"]`, `[data-items-status="draft|under-review|off-sale"]`,
+`[data-items-put-on-sale="<id>"]`, `[data-items-actions="<id>"]` → `[data-items-action="<action>"]`;
+in the chat `[data-listing-draft="<id>"][data-listing-sale="offer|pressing|on-sale|taken-down"]`,
+`[data-listing-share="<id>"]`, `[data-listing-put-on-sale="<id>"]`, `[data-listing-on-sale]`.
+
 ## Where to work
 
 `src/renderer/play/`, `src/renderer/state/play.ts` and `people.ts`, `src/renderer/avatars/`,

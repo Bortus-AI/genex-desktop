@@ -375,6 +375,26 @@ const FIXTURE_SAFE = [
   // socket opens.
   "studio:play.manage",
   "studio:play.cover",
+  // The store and Create › Items: a fixture launch answers every store and creator route, a page
+  // purchase and its coin from its own data (`dev/fixture-store.ts` over `dev/fixture-play.ts`),
+  // signed out unless it asks for its fixture account; a purchase, a claim, an allowance or Put on
+  // sale lasts the launch, and Get coin opens no page, so no socket opens.
+  "studio:store.items",
+  "studio:store.my-items",
+  "studio:store.item-games",
+  "studio:store.buy",
+  "studio:store.answer",
+  "studio:store.claim",
+  "studio:store.shelf",
+  "studio:store.report",
+  "studio:items.browse",
+  "studio:items.detail",
+  "studio:items.add",
+  "studio:items.remove",
+  "studio:items.selling",
+  "studio:items.put-on-sale",
+  "studio:items.take-off-sale",
+  "studio:items.shared",
   // The app's Genex account: a fixture launch's is its own (`dev/fixture-genex-account.ts`), signed
   // in as the fixture account it asked for; its sign-in opens no page and its sign-out lasts the launch.
   "studio:genex-account.read",

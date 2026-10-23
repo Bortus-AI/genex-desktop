@@ -201,6 +201,23 @@ const METHODS = [
   "playShare",
   "playManage",
   "playCover",
+  "storeItems",
+  "storeMyItems",
+  "storeItemGames",
+  "storeBuy",
+  "storeAnswer",
+  "onStoreSheet",
+  "storeClaim",
+  "storeShelf",
+  "storeReport",
+  "itemsBrowse",
+  "itemsBrowseDetail",
+  "itemsAddToGame",
+  "itemsRemoveFromGame",
+  "itemsSelling",
+  "itemPutOnSale",
+  "itemTakeOffSale",
+  "itemSetShared",
   "genexAccount",
   "genexSignIn",
   "genexCancelSignIn",
@@ -292,6 +309,7 @@ type TerminalEvent = Parameters<Parameters<StudioApi["onTerminal"]>[0]>[0];
 type ClaudeLogin = Parameters<Parameters<StudioApi["onClaudeLogin"]>[0]>[0];
 type CodexLogin = Parameters<Parameters<StudioApi["onCodexLogin"]>[0]>[0];
 type RunSummary = Parameters<Parameters<StudioApi["onRunSummary"]>[2]>[0];
+type StoreSheetPush = Parameters<Parameters<StudioApi["onStoreSheet"]>[0]>[0];
 
 export interface FakeStudioApi {
   /** The object to hand to the code under test (or install as `window.studio`). */
@@ -306,13 +324,27 @@ export interface FakeStudioApi {
   emitClaudeLogin(state: ClaudeLogin): void;
   emitCodexLogin(state: CodexLogin): void;
   emitRunSummary(project: string, runId: string, summary: RunSummary): void;
+  /** Push the store's purchase sheet (or null once it closes), as main does in the studio window. */
+  emitStoreSheet(sheet: StoreSheetPush): void;
   /** Subscribed listeners per `on*` call — 0 after a component unmounts proves it unsubscribed. */
-  listeners(method: "onEvent" | "onTerminal" | "onClaudeLogin" | "onCodexLogin" | "onRunSummary"): number;
+  listeners(
+    method: "onEvent" | "onTerminal" | "onClaudeLogin" | "onCodexLogin" | "onRunSummary" | "onStoreSheet",
+  ): number;
 }
 
 export interface FakeStudioOptions {
   /** Unstubbed calls reject instead of answering a default, to find every call a flow makes. */
   strict?: boolean;
+}
+
+/** The store's reads a game's page and a profile make on mount: a store that sells nothing, a bare shelf. */
+function storeDefaults(): Partial<Record<StudioMethod, () => unknown>> {
+  return {
+    storeItems: () => ({ items: [], myItemsCount: null }),
+    storeMyItems: () => [],
+    storeItemGames: () => ({ total: 0, games: [] }),
+    storeShelf: () => [],
+  };
 }
 
 /** Defaults for the calls a screen makes on mount; everything else resolves `undefined`. */
@@ -399,6 +431,7 @@ function defaults(): Partial<Record<StudioMethod, () => unknown>> {
     playPeople: () => ({ people: [], unavailable: false }),
     playStats: () => null,
     playCreators: () => null,
+    ...storeDefaults(),
     makeBackdrop: () => ({ ok: false, failure: ShaderFailure.NoModel }),
   };
 }
@@ -415,6 +448,7 @@ export function fakeStudioApi(overrides: Partial<StudioApi> = {}, options: FakeS
     onClaudeLogin: new Set<(state: ClaudeLogin) => void>(),
     onCodexLogin: new Set<(state: CodexLogin) => void>(),
     onRunSummary: new Set<{ project: string; runId: string; listener: (summary: RunSummary) => void }>(),
+    onStoreSheet: new Set<(sheet: StoreSheetPush) => void>(),
   };
   const subscribe = <T>(set: Set<T>, entry: T) => {
     set.add(entry);
@@ -427,6 +461,7 @@ export function fakeStudioApi(overrides: Partial<StudioApi> = {}, options: FakeS
     onCodexLogin: ((listener: (state: CodexLogin) => void) => subscribe(sets.onCodexLogin, listener)) as never,
     onRunSummary: ((project: string, runId: string, listener: (summary: RunSummary) => void) =>
       subscribe(sets.onRunSummary, { project, runId, listener })) as never,
+    onStoreSheet: ((listener: (sheet: StoreSheetPush) => void) => subscribe(sets.onStoreSheet, listener)) as never,
     // Answered by the preload, not main: synchronous, and no file of a test has a place on disk.
     pathOfFile: (() => "") as never,
     systemLanguages: () => [],
@@ -462,6 +497,9 @@ export function fakeStudioApi(overrides: Partial<StudioApi> = {}, options: FakeS
     emitRunSummary: (project, runId, summary) => {
       for (const entry of [...sets.onRunSummary])
         if (entry.project === project && entry.runId === runId) entry.listener(summary);
+    },
+    emitStoreSheet: (sheet) => {
+      for (const listener of [...sets.onStoreSheet]) listener(sheet);
     },
     listeners: (method) => sets[method].size,
   };

@@ -22,6 +22,8 @@ import { assertNativeActionAllowed, type NativeStep } from "../dev/native-policy
 import { type GenexCliRequest, genexCliConsentArgs, genexCliRequest } from "./genex-cli-policy.ts";
 import { GENEX_CLI_PROMPT } from "./genex-cli-prompts.ts";
 import { type GenexPackageService, genexPackageConsentArgs } from "./genex-package.ts";
+import { draftInCliAnswer } from "./item-draft.ts";
+import type { ListingDraft } from "../../shared/item-draft.ts";
 
 /** How long one CLI command may run before it is stopped. */
 export const GENEX_CLI_TIMEOUT_MS = 90 * SECOND_MS;
@@ -70,6 +72,12 @@ export interface GenexCliDeps {
   /** The Node that runs the CLI: Electron as node in the app. */
   execPath?: string;
   parentEnv?: NodeJS.ProcessEnv;
+  /**
+   * A store item the game's agent made or changed (`genex shop add|set --json`), read from the
+   * CLI's own answer (`item-draft.ts`): the chat draws its Listing draft card. Its failure never
+   * fails the call.
+   */
+  onListingDraft?: (draft: ListingDraft, binding: PluginBinding) => Promise<void>;
 }
 
 /** What an agent reads back: the command, whether it succeeded, and its (parsed) output. */
@@ -106,10 +114,19 @@ export class GenexCliService {
       const result = await this.#deps.run(
         this.#runRequest(request, { root, work, denyWrite }, credential, options.signal),
       );
-      return this.#answer(request, result, credential, options.signal);
+      const answer = this.#answer(request, result, credential, options.signal);
+      await this.#announceDraft(answer, binding, project);
+      return answer;
     } finally {
       await rm(root, { recursive: true, force: true });
     }
+  }
+
+  /** A listing draft in the answer, for the game's own hosted project: its card goes up in the chat. */
+  async #announceDraft(answer: GenexCliAnswer, binding: PluginBinding, project: { id: string } | null): Promise<void> {
+    const announce = this.#deps.onListingDraft;
+    const draft = announce ? draftInCliAnswer(answer, binding.project, project?.id ?? null) : null;
+    if (announce && draft) await announce(draft, binding).catch(() => undefined);
   }
 
   /** The hosted project's id and slug from the publish workspace; never its apiUrl. */

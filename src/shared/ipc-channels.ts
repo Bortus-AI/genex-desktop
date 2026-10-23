@@ -24,6 +24,7 @@ import type { PlayPurchaseAnswer } from "./play-purchase.ts";
 import type { PlayCoverType, PlayGameChange } from "./play-manage.ts";
 import type { AvatarStyle, FriendActionRequest, PresenceVisibility } from "./play-people.ts";
 import type { StatsPeriod } from "./play-stats.ts";
+import type { ItemReportReason } from "./store-items.ts";
 import type { MentionRef, MentionRetry } from "./prompt-mention.ts";
 
 type Arg<M extends keyof StudioApi, I extends number> = Parameters<StudioApi[M]>[I];
@@ -226,6 +227,22 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:assets.file": "assetLibraryFile",
   "studio:play.manage": "playManage",
   "studio:play.cover": "playCover",
+  "studio:store.items": "storeItems",
+  "studio:store.my-items": "storeMyItems",
+  "studio:store.item-games": "storeItemGames",
+  "studio:store.buy": "storeBuy",
+  "studio:store.answer": "storeAnswer",
+  "studio:store.claim": "storeClaim",
+  "studio:store.shelf": "storeShelf",
+  "studio:store.report": "storeReport",
+  "studio:items.browse": "itemsBrowse",
+  "studio:items.detail": "itemsBrowseDetail",
+  "studio:items.add": "itemsAddToGame",
+  "studio:items.remove": "itemsRemoveFromGame",
+  "studio:items.selling": "itemsSelling",
+  "studio:items.put-on-sale": "itemPutOnSale",
+  "studio:items.take-off-sale": "itemTakeOffSale",
+  "studio:items.shared": "itemSetShared",
   "studio:genex-account.read": "genexAccount",
   "studio:genex-account.sign-in": "genexSignIn",
   "studio:genex-account.cancel": "genexCancelSignIn",
@@ -487,6 +504,22 @@ export interface StudioInvokePayloads {
   "studio:play.share": { url: string; at?: PlayPoint };
   "studio:play.manage": { gameId: string; change: PlayGameChange };
   "studio:play.cover": { gameId: string; image: Uint8Array; contentType: PlayCoverType };
+  "studio:store.items": { slug: string };
+  "studio:store.my-items": { slug: string };
+  "studio:store.item-games": { itemId: string };
+  "studio:store.buy": { itemId: string; slug: string };
+  "studio:store.answer": PlayPurchaseAnswer;
+  "studio:store.claim": { itemId: string; slug: string };
+  "studio:store.shelf": { userId: string };
+  "studio:store.report": { itemId: string; reason: ItemReportReason; message: string | null };
+  "studio:items.browse": { query: string; cursor: string | null; tags: string[] };
+  "studio:items.detail": { itemId: string };
+  "studio:items.add": { itemId: string; projectId: string };
+  "studio:items.remove": { itemId: string; projectId: string };
+  "studio:items.selling": undefined;
+  "studio:items.put-on-sale": { itemId: string };
+  "studio:items.take-off-sale": { itemId: string };
+  "studio:items.shared": { itemId: string; shared: boolean };
   "studio:genex-account.read": undefined;
   "studio:genex-account.sign-in": undefined;
   "studio:genex-account.cancel": undefined;
@@ -571,6 +604,7 @@ export const STUDIO_PUSH_CHANNELS = {
   "studio:terminal": "onTerminal",
   "studio:claude-login": "onClaudeLogin",
   "studio:codex-login": "onCodexLogin",
+  "studio:store.sheet": "onStoreSheet",
 } as const satisfies Record<`studio:${string}`, keyof StudioApi>;
 
 export type StudioPushChannel = keyof typeof STUDIO_PUSH_CHANNELS;

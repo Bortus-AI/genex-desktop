@@ -147,6 +147,7 @@ import { GameFileService } from "./core/game-files.ts";
 import { nameFromIdea, nameGame } from "./core/game-naming.ts";
 import { makeBackdropShader } from "./core/backdrop-generation.ts";
 import { GENEX_PLUGIN_ID, GenexCliService, genexHostPreflight, genexHostTool } from "./core/genex-cli.ts";
+import type { ListingDraft } from "../shared/item-draft.ts";
 import { GenexPackageService } from "./core/genex-package.ts";
 import { assertPublishable } from "./core/genex-publish.ts";
 import { GENEX_ACCOUNT_ACTIONS } from "../shared/genex.ts";
@@ -1184,8 +1185,19 @@ export class StudioCore {
       resources: this.options.paths.resources,
       genexStorage: this.pluginServices.root(GENEX_PLUGIN_ID),
       protectedWrites: async () => [this.games.root, ...(await this.games.list()).map((game) => game.dir)],
+      onListingDraft: (draft, binding) => this.#recordListingDraft(draft, binding.threadId),
       ...(this.options.execPath ? { execPath: this.options.execPath } : {}),
     });
+  }
+
+  /**
+   * A store item the game's agent made or changed through `genex__cli-paid`: its Listing draft card
+   * in the chat that asked (`item_drafted`, a record only the host writes), and a nudge for Create ›
+   * Items. The card's buttons call genex.games from main; the agent never presses them (D40).
+   */
+  async #recordListingDraft(draft: ListingDraft, threadId: string | undefined): Promise<void> {
+    if (threadId) await this.append([customEventData(CustomEvent.ItemDrafted, { ...draft })], threadId);
+    this.emit(UiEvent.ItemDrafted, { project: draft.project, itemId: draft.itemId, ...(threadId ? { threadId } : {}) });
   }
 
   /** `genex__package`: a pinned Genex SDK install into the bound game or its Studio worktree. */

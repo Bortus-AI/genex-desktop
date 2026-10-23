@@ -120,6 +120,7 @@ import { registerPluginsIpc } from "./ipc/plugins.ts";
 import { type PreviewBoundsRecord, registerPreviewIpc } from "./ipc/preview.ts";
 import { registerProjectsIpc } from "./ipc/projects.ts";
 import { type PlayIpcDeps, registerPlayIpc } from "./ipc/play.ts";
+import { registerStoreIpc, type StoreIpcDeps } from "./ipc/store.ts";
 import { registerGenexAccountIpc } from "./ipc/genex-account.ts";
 import {
   createGenexAccount,
@@ -131,6 +132,7 @@ import { devStandAccountPort } from "./dev/dev-stand-account.ts";
 import { fixtureAccountPort } from "./dev/fixture-genex-account.ts";
 import { openGenexPage } from "./genex-browser.ts";
 import { fixtureGamePage, fixtureGetCoin, fixtureNativeGames, fixturePlayRequest } from "./dev/fixture-play.ts";
+import { createFixtureStore } from "./dev/fixture-store.ts";
 import { FIXTURE_CONFIRM_ORIGIN } from "./dev/fixture-coin.ts";
 import { launchFixtureAccount } from "./dev/fixture-people.ts";
 import {
@@ -186,6 +188,8 @@ import { playViewsOf, wirePlayViewer } from "./play/viewer-view.ts";
 import { purchaseConfirmOrigin } from "./play/purchase-window.ts";
 import { type PlayComments, playComments } from "./play/comments.ts";
 import { type PlayCoin, playCoin } from "./play/coin.ts";
+import { playStore } from "./play/store.ts";
+import { followStudioWindow, type StoreSheetControl, storeSheet } from "./play/store-sheet.ts";
 import { playOrigins } from "./play/origins.ts";
 import { PLAY_ORIGIN, type PlayPoint } from "../shared/play.ts";
 import { registerRunsIpc } from "./ipc/runs.ts";
@@ -540,6 +544,8 @@ let playAccount: { people: PlayPeople; creators: CreatorStats; credits: GenexCre
   null;
 let gameLibrary: LibrarySharing | null = null;
 let playManage: PlayManage | null = null;
+/** The store on the Genex account and its purchase sheet in the studio window, made on first use (`storeFor`). */
+let playStoreDeps: (StoreIpcDeps & { sheet: StoreSheetControl }) | null = null;
 /** Play's native installs and the games being played, made on first use (`playInstallsFor`, `playSessionsFor`). */
 let nativeInstaller: NativeInstaller | null = null;
 let nativeLauncher: NativeSessions | null = null;
@@ -1437,6 +1443,45 @@ function playCoinFor(studio: StudioCore): PlayCoin {
   });
 }
 
+/**
+ * The store on the Genex account (marketplace plan 10.1): its client, and the purchase sheet a game's
+ * page shows in the studio window, confirmed as the viewer's is. A fixture launch answers both from
+ * its own store over its other fixture answers (`dev/fixture-store.ts`), so no socket opens.
+ */
+function storeFor(studio: StudioCore): StoreIpcDeps & { sheet: StoreSheetControl } {
+  if (playStoreDeps) return playStoreDeps;
+  const account = genexAccountFor(studio);
+  const deps = {
+    request: fixtureNativePolicy
+      ? createFixtureStore({ now: Date.now, fallback: fixturePlayRequest })
+      : networkRequest(globalThis.fetch, playOrigin.api),
+    token: account.token,
+    now: Date.now,
+    localImages: fixtureNativePolicy,
+    refused: account.refused,
+  };
+  const store = playStore(deps);
+  const sheet = storeSheet({
+    purchase: store.purchase,
+    world: (slug) => playCatalogFor(studio).world(slug),
+    coin: playCoin(deps),
+    account: { signIn: () => signInToGenex(studio) },
+    // Get coin: genex.games in the browser; a fixture launch opens nothing and tops its balance up.
+    openPage: (url) => {
+      if (fixtureNativePolicy) fixtureGetCoin();
+      else if (window) void openOutside(studio, window, url);
+    },
+    web: playOrigin.web,
+    clock: SYSTEM_CLOCK,
+    push: (shown) => {
+      const page = livePage();
+      if (page) pushToRenderer(page, "studio:store.sheet", shown);
+    },
+  });
+  playStoreDeps = { store, sheet };
+  return playStoreDeps;
+}
+
 /** The purchase sheet's Sign in: the app's own Genex sign-in in the browser; how it went shows on the sheet's next read. */
 function signInToGenex(studio: StudioCore): void {
   void genexAccountFor(studio)
@@ -1446,6 +1491,8 @@ function signInToGenex(studio: StudioCore): void {
 
 /** Play's full-screen viewer in `win`: a published game, the studio's bar over its top edge. */
 function attachPlay(studio: StudioCore, win: BrowserWindow): void {
+  // The store's purchase sheet is drawn in this window: Pay waits again on focus, and it goes with the page.
+  followStudioWindow(win, storeFor(studio).sheet);
   playView = wirePlayViewer({
     win,
     // The viewer's Remix shows only for a game whose source holds a game, as a card's does.
@@ -1993,6 +2040,7 @@ function registerIpc(studio: StudioCore, engines: EngineBoot): void {
   registerDataFolderIpc(handle, dataFolderIpc(studio));
   registerGenexAccountIpc(handle, { account: genexAccountFor(studio) });
   registerPlayIpc(handle, playIpcDeps(studio));
+  registerStoreIpc(handle, storeFor(studio));
   const { library } = playAccountFor(studio);
   registerAssetLibraryIpc(handle, { library, sharing: librarySharingFor(studio), pictureFile: pictureFileFor() });
   registerNotificationsIpc(handle, {

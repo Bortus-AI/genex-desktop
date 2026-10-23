@@ -46,6 +46,19 @@ is product copy, not this glossary.
 - **Colour tweaker**: the developer panel for tuning colour presets live, hidden in code between
   tuning sessions (`COLOR_TWEAKER_ON` in `src/renderer/appearance/tweaker/ColorTweakerHost.tsx`;
   how to use it in [design](design.md)).
+- **Item**: what a game sells for coin in genex.games' store: one SKU (name, description, picture,
+  maybe a 3D model and a package, a price or Free, consumable or durable) whose id the game passes to
+  `buy({ skuId })`. It has no category; the game decides what it does (`src/shared/store-items.ts`,
+  [store](../play.md#the-item-store)).
+- **Shared item**: a durable item its author lets other games use ("Other games can use it", the
+  `shareable` field). A game that adds one sells it at the author's price and gets the selling game's
+  share; turning sharing off stops new adds only.
+- **Allowance**: one game's permission to sell and support a shared item, made by Create › Items'
+  Add to \<game> (`itemsAddToGame`); not a purchase or a copy. It is sold there once that game
+  promotes a live build made after the add (`ItemAllowance`, `AllowanceState`).
+- **Listing draft card**: the chat card for an item the game's agent made, recorded by main from a
+  real `genex shop add|set --json` result only (`item_drafted`, `src/main/core/item-draft.ts`); its Put
+  on sale is the person's press, never the agent's.
 
 ## Runs
 

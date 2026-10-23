@@ -50,6 +50,7 @@ import {
 import { PublishTarget } from "../shared/publish-platforms.ts";
 import { CreditKind } from "../shared/play-credits.ts";
 import { PurchaseProblem } from "../shared/play-purchase.ts";
+import { ItemReportReason, StoreRefusal } from "../shared/store-items.ts";
 import { AvatarBody, AvatarEyes, AvatarGear, BlockState } from "../shared/avatar-recipe.ts";
 import { HANDLE_LENGTH, HandleState } from "../shared/handle.ts";
 import { MakingKind } from "../shared/asset-making.ts";
@@ -5299,6 +5300,167 @@ export const PLAY_WORDS = {
     dismiss: t("Close"),
   },
 } as const;
+
+/**
+ * A game's Store section, its items' purchase sheet and the profile's item shelf (`play/GameStore.tsx`,
+ * `play/ItemSheet.tsx`, `play/ItemShelf.tsx`; marketplace screens 01–06). Money is coin here, and only
+ * here (P24); the words match genex.games' own store.
+ */
+export const PLAY_STORE_WORDS = {
+  title: t("Store"),
+  storeTab: t("Store"),
+  myItemsTab: t("My items"),
+  /** The Store / My items toggle, read aloud. */
+  tabsLabel: t("Store and my items"),
+  free: t("Free"),
+  owned: t("Owned"),
+  worksHere: t("Works here"),
+  notHere: t("Not in this game"),
+  left: (count: number) => t("{count, number} left", { count }),
+  /** A shared item's badge: "4 games". */
+  games: (count: number) => t("{count, plural, one {# game} other {# games}}", { count }),
+  /** No design screen: My items while signed out, and with nothing owned yet (the website's words). */
+  signInForItems: t("Sign in to see the items you own."),
+  noItems: t("Items you own show up here."),
+  itemsFailed: t("Your items couldn’t load."),
+  // The purchase sheet (screens 03–05).
+  dragToTurn: t("Drag to turn"),
+  worksIn: (count: number) => t("{count, plural, one {Works in # game} other {Works in # games}}", { count }),
+  price: t("Price"),
+  balanceAfter: (now: string, after: string) => t("Balance {now} → {after}", { now, after }),
+  balance: (amount: string) => t("Balance {amount}", { amount }),
+  short: (have: string, more: string) => t("You have {have} · {more} more needed", { have, more }),
+  pay: (amount: string) => t("Pay {amount}", { amount }),
+  get: t("Get"),
+  yours: t("It's yours. Find it under Store › My items in every game it works in."),
+  done: t("Done"),
+  close: t("Close"),
+  more: t("More"),
+  /** genex.games already ended the purchase for want of coin: it is started again from the card. */
+  overNote: t("Try again once the coin lands."),
+  pendingBody: t("Genex hasn’t confirmed it yet. It shows under My items once it does. You won’t be charged twice."),
+  /** How a purchase from the page that ended unpaid (or refunded) reads; its titles are the in-game sheet's. */
+  failedBody: {
+    [PurchaseProblem.Expired]: t("No coin was reserved or charged."),
+    [PurchaseProblem.Canceled]: t("No coin was charged."),
+    [PurchaseProblem.Refused]: t("No coin was charged."),
+    [PurchaseProblem.Refunded]: t("The coin went back to your balance."),
+  } satisfies Record<PurchaseProblem, string>,
+  /** The item is no longer sold on this page. */
+  goneTitle: t("This item isn’t sold here anymore"),
+  goneBody: t("It may be back later. No coin was charged."),
+  // The item report (P22), from the sheet's ⋯ menu.
+  reportItem: t("Report item…"),
+  reportTitle: t("Report item"),
+  reasons: {
+    /** A copy of someone else's work, not the verb. */
+    [ItemReportReason.Copy]: tc("item report", "Copy"),
+    [ItemReportReason.Broken]: t("Doesn't work"),
+    [ItemReportReason.Inappropriate]: t("Inappropriate"),
+    [ItemReportReason.Scam]: t("Scam"),
+  } satisfies Record<ItemReportReason, string>,
+  reasonsLabel: t("Why are you reporting it?"),
+  reportMessage: t("Anything else we should know? (optional)"),
+  sendReport: t("Send report"),
+  reportSent: t("Report sent"),
+  reportFailed: t("The report didn’t send. Try again in a moment."),
+  reportLimited: t("Too many reports for now. Try again later."),
+  back: t("Back"),
+  // The profile's item shelf (screen 06).
+  shelfLabel: t("Items"),
+  itemTag: t("Item"),
+  getIn: (game: string) => t("Get in {game}", { game }),
+} as const;
+
+/**
+ * Create › Items (`panels/items/`; marketplace screens 07–08) and the chat's Listing draft card
+ * (`chat/ListingDraftCard.tsx`; screen 09). Money is coin here (P24); every number is genex.games'
+ * own. Lines marked "no design copy" have no screen of their own.
+ */
+export const ITEMS_WORDS = {
+  title: t("Items"),
+  tabsLabel: t("Browse and selling"),
+  browse: t("Browse"),
+  selling: t("Selling"),
+  // Browse (screen 07).
+  intro: t("Items other creators made. Free to add to your game, and you get 15% of every sale in it."),
+  search: t("Search items"),
+  inGames: (count: number) => t("{count, plural, one {in # game} other {in # games}}", { count }),
+  by: (name: string) => t("By {name}", { name }),
+  playersPay: t("Players pay"),
+  youGet: t("You get per sale"),
+  /** The selling game's share of one sale, as genex.games computed it: "+1,200". */
+  gain: (amount: string) => t("+{amount}", { amount }),
+  addTo: (game: string) => t("Add to {game}", { game }),
+  chooseGame: t("Choose a game"),
+  agentPutsIt: t("Your agent puts it in the game."),
+  /** No design copy: none of the account's games on this computer is on Genex yet. */
+  noGame: t("Publish a game to Genex first, then add items to it."),
+  /** No design copy: a search that found nothing, and Browse with nothing shared yet. */
+  noMatch: t("No items match."),
+  noneShared: t("No one has shared an item yet."),
+  more: t("Show more"),
+  // Selling (screen 08).
+  newItem: t("New item"),
+  readyToUse: t("Ready to use"),
+  onHold: (days: number) => t("{days, plural, one {On hold for # day} other {On hold for # days}}", { days }),
+  coinNote: t("Coin you earn is spent in games, like any coin."),
+  item: t("Item"),
+  price: t("Price"),
+  sold: t("Sold"),
+  earned: t("Earned"),
+  gameLine: (game: string, games: string) => t("{game} · {games}", { game, games }),
+  /** Selling's draft row: one press puts it on sale (P12). */
+  draftPutOnSale: t("Draft, put on sale"),
+  underReview: t("Report under review"),
+  offSale: t("Off sale"),
+  status: t("Status"),
+  actionsColumn: t("Actions"),
+  actions: (name: string) => t("Actions for {name}", { name }),
+  putOnSale: t("Put on sale"),
+  takeOffSale: t("Take off sale"),
+  shared: t("Other games can use it"),
+  askAgent: t("Ask the agent to change it"),
+  /** No design copy: Selling with nothing made yet. */
+  noItems: t("Items you make show up here. Ask your game’s agent for one."),
+  // The Listing draft card (screen 09).
+  orAsk: t("or ask for changes below"),
+  /** No design copy: the card once its item is on sale. */
+  onSale: t("On sale"),
+  listingLabel: (name: string) => t("Listing draft: {name}", { name }),
+  // Every read.
+  failed: t("Items couldn’t load."),
+  /** No design copy: the app's Genex account is signed out, or genex.games' store is off. */
+  signedOut: t("Sign in to Genex to see items."),
+  storeOff: t("The item store is off right now."),
+  tryAgain: t("Try again"),
+} as const;
+
+/** Why genex.games refused a press on an item, in the person's words; any other reads as `unknown`. */
+export const ITEM_REFUSAL_WORDS: Partial<Record<StoreRefusal, string>> & { unknown: string } = {
+  [StoreRefusal.PictureMissing]: t("It needs a picture first. Ask the agent to make one."),
+  [StoreRefusal.PictureInvalid]: t("Genex couldn’t use its picture. Ask the agent for a new one."),
+  [StoreRefusal.ModelInvalid]: t("Genex couldn’t use its 3D model. Ask the agent to fix it."),
+  [StoreRefusal.PackageInvalid]: t("Genex couldn’t use its files. Ask the agent to fix them."),
+  [StoreRefusal.PackageTooLarge]: t("Its files are too large. Ask the agent to make them smaller."),
+  [StoreRefusal.PriceOffGrid]: t("That price isn’t one the store takes. Ask the agent to pick another."),
+  [StoreRefusal.NameRefused]: t("Genex can’t sell it under that name. Ask the agent for another."),
+  [StoreRefusal.DescriptionRefused]: t("Genex can’t sell it with that description. Ask the agent to change it."),
+  [StoreRefusal.NotDurable]: t("Only an item players keep can be used in other games."),
+  [StoreRefusal.TakenDown]: t("Genex took this item off sale."),
+  [StoreRefusal.TooManySkus]: t("This game sells as many items as it can."),
+  [StoreRefusal.PublishRateLimited]: t("You’ve put a lot on sale today. Try again tomorrow."),
+  [StoreRefusal.Unauthorized]: t("Sign in to Genex first."),
+  [StoreRefusal.ProjectNotFound]: t("Only the item’s maker can change it."),
+  [StoreRefusal.NotShareable]: t("Its maker doesn’t let other games use it anymore."),
+  [StoreRefusal.ItemOffSale]: t("It isn’t on sale anymore."),
+  [StoreRefusal.HomeGame]: t("It’s already this game’s own item."),
+  [StoreRefusal.NotFound]: t("The item store is off right now."),
+  unknown: t("Genex couldn’t do that. Try again in a moment."),
+};
+
+/** The words for a refusal. */
+export const itemRefusalWords = (code: StoreRefusal): string => ITEM_REFUSAL_WORDS[code] ?? ITEM_REFUSAL_WORDS.unknown;
 
 /** A Play card's ⋯ menu and its dialogs: genex.games' card menu, in the app (`play/card-menu/`). */
 export const PLAY_CARD_MENU_WORDS = {
