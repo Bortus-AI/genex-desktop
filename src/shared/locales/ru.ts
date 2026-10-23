@@ -1913,8 +1913,8 @@ export default {
     "Пакеты ещё не установлены — «{install}» запускается одним нажатием.",
   "Its packages aren’t installed yet.": "Пакеты игры ещё не установлены.",
   "Its project didn’t go, so no one can remix it yet.": "Проект не отправился, поэтому ремиксить игру пока нельзя.",
-  "Its project is too big to remix: Genex keeps up to 2 GB and 5,000 files.":
-    "Проект слишком большой для ремикса: Genex хранит до 2 ГБ и 5 000 файлов.",
+  "Its project is too big to remix: Genex keeps up to 5 GB and 5,000 files.":
+    "Проект слишком большой для ремикса: Genex хранит до 5 ГБ и 5 000 файлов.",
   "Its session failed before it delivered anything.": "Сессия упала, ничего не доставив.",
   "Its source is your own repository: run genex make-remixable in the game’s folder to allow remixing.":
     "Исходники лежат в твоём собственном репозитории: чтобы разрешить ремиксы, запусти genex make-remixable в папке игры.",

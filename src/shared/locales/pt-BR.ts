@@ -1957,8 +1957,8 @@ export default {
   "Its packages aren’t installed yet.": "Os pacotes ainda não estão instalados.",
   "Its project didn’t go, so no one can remix it yet.":
     "O projeto não foi enviado, então ninguém pode fazer remix dele ainda.",
-  "Its project is too big to remix: Genex keeps up to 2 GB and 5,000 files.":
-    "O projeto é grande demais para remix: a Genex guarda até 2 GB e 5.000 arquivos.",
+  "Its project is too big to remix: Genex keeps up to 5 GB and 5,000 files.":
+    "O projeto é grande demais para remix: a Genex guarda até 5 GB e 5.000 arquivos.",
   "Its session failed before it delivered anything.": "A sessão falhou antes de entregar qualquer coisa.",
   "Its source is your own repository: run genex make-remixable in the game’s folder to allow remixing.":
     "O código-fonte está no seu próprio repositório: execute genex make-remixable na pasta do jogo para permitir remixes.",

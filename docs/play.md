@@ -154,7 +154,12 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
   A game reaches Genex with its project only from a Publish that allowed remixing (the dialog's
   Allow remixing, ticked by default; Rights says what remixers may do): Studio stages the files the
   game's git keeps, without history, packages, agent settings, secrets or an engine's caches and
-  builds, an Unreal plugin's too (`remix-source.ts`), and the CLI pushes that folder as the source
+  builds, an Unreal plugin's too, its packaged apps (`Builds/`) included; an engine game whose project
+sits in a folder of its own also leaves out `assets/` (its models, already imported) and `docs/proof/`
+screenshots (`remix-source.ts`; at most
+5 GB and 5,000 files, as genex.games keeps; every model, picture, sound, video and Unreal package, and
+any file of 50 MB or more, goes to Git LFS, whose blobs Genex keeps in R2 rather than on the git
+server's disk), and the CLI pushes that folder as the source
   (`--source`; a game with only apps sends it with `make-remixable` once they are live). The copy
   goes once its push is over, and a draft carries none. Otherwise, or when the project can't
   go (too big, no repository), the publish turns remixing off on Genex.

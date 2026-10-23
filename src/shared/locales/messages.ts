@@ -1607,7 +1607,7 @@ export const MESSAGES = [
   "Its packages aren’t installed yet — “{install}” runs on one press.",
   "Its packages aren’t installed yet.",
   "Its project didn’t go, so no one can remix it yet.",
-  "Its project is too big to remix: Genex keeps up to 2 GB and 5,000 files.",
+  "Its project is too big to remix: Genex keeps up to 5 GB and 5,000 files.",
   "Its session failed before it delivered anything.",
   "Its source is your own repository: run genex make-remixable in the game’s folder to allow remixing.",
   "Its steps at Genex's moments changed (hooks, observers, locks, folders or harness tools), so it wasn't reloaded: load it again with Load local plugin… to review them",

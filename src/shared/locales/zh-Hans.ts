@@ -1787,8 +1787,8 @@ export default {
   "Its packages aren’t installed yet — “{install}” runs on one press.": "依赖包还没安装——点一下即可运行“{install}”。",
   "Its packages aren’t installed yet.": "依赖包尚未安装。",
   "Its project didn’t go, so no one can remix it yet.": "项目没有发送成功，所以暂时没人能改编它。",
-  "Its project is too big to remix: Genex keeps up to 2 GB and 5,000 files.":
-    "项目太大，无法改编：Genex 最多保存 2 GB、5,000 个文件。",
+  "Its project is too big to remix: Genex keeps up to 5 GB and 5,000 files.":
+    "项目太大，无法改编：Genex 最多保存 5 GB、5,000 个文件。",
   "Its session failed before it delivered anything.": "它的会话在交付任何内容之前就失败了。",
   "Its source is your own repository: run genex make-remixable in the game’s folder to allow remixing.":
     "它的源码在你自己的仓库里：在游戏文件夹中运行 genex make-remixable 即可允许改编。",
