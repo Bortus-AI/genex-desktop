@@ -146,6 +146,39 @@ describe("a game's project staged for remixing", () => {
     ]);
   });
 
+  it("leaves an engine game's asset copies and proof screenshots out, but never a web game's or a Godot project's at the top", async () => {
+    const unreal = {
+      "unreal/Arena.uproject": "{}",
+      "unreal/Content/Crate.uasset": "package",
+      "assets/blender/crate.glb": "the model, already imported",
+      "assets/genex/hero.glb": "a generation, already imported",
+      "docs/proof/shot-01.png": "proof",
+      "docs/design.md": "notes",
+      "NOTES.md": "notes",
+    };
+    const one = await gameWith(unreal);
+    await stageRemixSource(one.game, one.dest, listing(Object.keys(unreal)));
+    assert.deepEqual(await filesIn(one.dest), [
+      ".gitattributes",
+      "NOTES.md",
+      "docs/design.md",
+      "unreal/Arena.uproject",
+      "unreal/Content/Crate.uasset",
+    ]);
+    const web = {
+      "index.html": "<html>",
+      "assets/hero.glb": "the game loads it",
+      "unity/ProjectSettings/ProjectVersion.txt": "6000.2",
+    };
+    const two = await gameWith(web);
+    await stageRemixSource(two.game, two.dest, listing(Object.keys(web)));
+    assert.ok((await filesIn(two.dest)).includes("assets/hero.glb"), "a web page at the top loads its assets");
+    const godot = { "project.godot": "[application]", "assets/hero.glb": "res://assets/hero.glb" };
+    const three = await gameWith(godot);
+    await stageRemixSource(three.game, three.dest, listing(Object.keys(godot)));
+    assert.ok((await filesIn(three.dest)).includes("assets/hero.glb"), "a Godot project at the top owns assets/");
+  });
+
   it("copies only real files inside the game: links and paths out of it stay behind, and nothing outside is touched", async () => {
     const { root, game, dest } = await gameWith({ "studio.json": "{}", "src/main.js": "ok" });
     await writeFile(path.join(root, "secret.txt"), "outside the game");

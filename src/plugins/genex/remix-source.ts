@@ -2,7 +2,8 @@
  * A game's project as remixers get it: the files its own git would keep (tracked, or new and not
  * ignored), copied out of the game folder into a folder of Studio's that the Genex CLI pushes as the
  * game's source. Never part of it: history, Studio's and Genex's own folders, installed packages, agent
- * settings, secrets, and an engine's caches and builds. The folder is written by agents, so only a
+ * settings, secrets, and an engine's caches and builds (and, for an engine game, Genex's copies of its
+ * assets and the agents' proof screenshots). The folder is written by agents, so only a
  * real file inside it is copied: a link, or a path that leads out of it, is left behind. A project too
  * big for Genex's source store is refused before anything is pushed. A model, picture, sound, video or
  * Unreal package, and any file big enough to trip the upload's request limit, is named in the copy's
@@ -134,6 +135,28 @@ function engineCaches(files: readonly string[]): string[] {
   );
 }
 
+/**
+ * What an engine game's remixers never need beside its engine project: Genex's copies of the game's
+ * assets (`assets/`, models and sounds already imported into the project) and the screenshots agents
+ * keep as proof (`docs/proof/`). Only while every engine project sits in a folder of its own (a Godot
+ * project at the top keeps its `assets/`) and no web page is at the top (there the assets are the game).
+ */
+const ENGINE_GAME_EXTRAS = ["assets/", "docs/proof/"];
+const WEB_PAGE = "index.html";
+
+/** The engine projects' folders among `files` (`""` for one at the top). */
+const engineRoots = (files: readonly string[]): string[] =>
+  files.flatMap((file) =>
+    ENGINE_CACHES.map((engine) => engine.marks(file)).filter((root): root is string => root !== null),
+  );
+
+/** `ENGINE_GAME_EXTRAS` as prefixes to leave out, or none for a web game or one without an engine project in a folder. */
+function engineGameExtras(files: readonly string[]): string[] {
+  const roots = engineRoots(files);
+  const engineGame = roots.length > 0 && !roots.includes("") && !files.includes(WEB_PAGE);
+  return engineGame ? ENGINE_GAME_EXTRAS : [];
+}
+
 /** Whether `file` (relative, `/` between parts) may be part of the game's project. */
 function isProjectFile(file: string, caches: readonly string[]): boolean {
   const parts = file.split("/");
@@ -196,7 +219,7 @@ export async function stageRemixSource(
 ): Promise<StagedSource> {
   const root = await realpath(gameDir);
   const listed = await deps.listFiles(root);
-  const caches = engineCaches(listed);
+  const caches = [...engineCaches(listed), ...engineGameExtras(listed)];
   const files: Array<{ file: string; at: string; bytes: number; mode: number }> = [];
   for (const file of listed.filter((candidate) => isProjectFile(candidate, caches))) {
     const real = await realFile(root, file);
