@@ -293,7 +293,9 @@ function shelfItemOf(value: unknown, local: boolean): ShelfItem | null {
   const name = line(value.name, ITEM_NAME_MAX);
   if (!name) return null;
   const game = itemGameOf(value.game, local);
-  return { id: value.id, name, iconUrl: imageUrl(value.iconUrl, local), modelUrl: modelUrl(value.modelUrl), game };
+  const iconUrl = imageUrl(value.iconUrl, local);
+  // Only a plain false takes Get in <game> away: an API that does not send it still sells it there.
+  return { id: value.id, name, iconUrl, modelUrl: modelUrl(value.modelUrl), game, onSale: value.onSale !== false };
 }
 
 /** A Browse item, or null: one with no author it can name is left out. */

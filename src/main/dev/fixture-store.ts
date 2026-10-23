@@ -9,7 +9,6 @@
  * picture yet, items on sale, off sale, taken down and one under review. Coin spent here comes off
  * the fixture coin's balance. State lives for the launch.
  */
-import { DAY_MS } from "../../shared/duration.ts";
 import { handleBaseFromName } from "../../shared/handle.ts";
 import {
   AllowanceState,
@@ -21,6 +20,7 @@ import {
 } from "../../shared/store-items.ts";
 import { CoinFailure, CoinIntentStatus, CoinRoute, ConfirmSurface } from "../play/coin.ts";
 import { type GalleryAnswer, type GalleryRequest, isRecord, PlayRoute } from "../play/gallery.ts";
+import { FIXTURE_EARNED_HOLD } from "./fixture-coin.ts";
 import { FIXTURE_ME_ID, fixtureAuthorId, takenAccount } from "./fixture-people.ts";
 
 /** The game whose page has the fixture store: Stick & Steel, by Simeon M. */
@@ -40,8 +40,12 @@ const BROWSE_LIMIT_MAX = 48;
 /** "Works in N games" lists at most this many games; the shelf at most this many items. */
 const GAMES_PREVIEW_MAX = 8;
 const SHELF_MAX = 5;
-/** Selling's strip, as the design shows it. */
-const STRIP = { earnedReady: 48_200, earnedHeld: 36_800, holdDays: 7 } as const;
+/** Selling's strip, as the design shows it; its held coin is the fixture coin's balance's own. */
+const STRIP = {
+  earnedReady: 48_200,
+  earnedHeld: FIXTURE_EARNED_HOLD.earnedHeld,
+  holdDays: FIXTURE_EARNED_HOLD.holdDays,
+} as const;
 
 /** The fixture's items, by id. Values are SKU ids as genex.games hands them out. */
 export const FixtureStoreItem = {
@@ -61,6 +65,7 @@ export const FixtureStoreItem = {
   SnowMitten: "fxi-snow-mitten",
   IceCrown: "fxi-ice-crown",
   SnowShovel: "fxi-snow-shovel",
+  SnowBadge: "fxi-snow-badge",
   HotCocoa: "fxi-hot-cocoa",
   YetiHelmet: "fxi-yeti-helmet",
   OakSled: "fxi-oak-sled",
@@ -224,6 +229,8 @@ function creatorItems(): FixtureItem[] {
       earned: 35_000,
     }),
     item(I.SnowShovel, "Snow Shovel", { ...mine, priceCoins: 1200, hue: 210, sold: 12, earned: 12_240 }),
+    // A Free item: Selling's price says Free, as the Store card does; claims count as sold.
+    item(I.SnowBadge, "Snow Badge", { ...mine, priceCoins: 0, hue: 205, sold: 9, earned: 0 }),
     item(I.HotCocoa, "Hot Cocoa × 3", {
       ...mine,
       type: ItemType.Consumable,
@@ -538,13 +545,14 @@ async function shelf(state: StoreState, call: Call): Promise<GalleryAnswer> {
   const items = await Promise.all(
     picks.slice(0, SHELF_MAX).map(async (one) => {
       const game = await gameOf(state, one.home);
-      // Get in <game> draws the game's cover (D48).
+      // Get in <game> draws the game's cover (D48), while that game (its home) still sells it.
       return {
         id: one.id,
         name: one.name,
         iconUrl: picture(one.hue),
         modelUrl: null,
         game: game && { ...refOf(game), coverUrl: game.coverUrl },
+        onSale: one.state === ItemState.OnSale,
       };
     }),
   );
@@ -708,7 +716,7 @@ async function selling(state: StoreState, call: Call): Promise<GalleryAnswer> {
       };
     }),
   );
-  return ok({ ...STRIP, nextReleaseAt: iso(state.deps.now() + 3 * DAY_MS), items });
+  return ok({ ...STRIP, nextReleaseAt: iso(state.deps.now() + FIXTURE_EARNED_HOLD.readyInMs), items });
 }
 
 /** An item as its author reads it back (`CreatorSku`). */

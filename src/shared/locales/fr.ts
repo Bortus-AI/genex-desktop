@@ -1929,6 +1929,7 @@ export default {
     "Ça ratait à chaque fois, alors tout s’est arrêté pour économiser tes crédits.",
   "It leaves Play and genex.games and goes back to drafts. The direct link still works, and plays and likes stay if it’s published again.":
     "Il quitte « Jouer » et genex.games et retourne dans les brouillons. Le lien direct marche toujours, et les parties et les j’aime restent s’il est republié.",
+  "It leaves the game’s Store. Players who own it keep it.": "Il quitte la boutique du jeu. Ceux qui l’ont le gardent.",
   "It may need the setup scripts its packages came with, which didn’t run.":
     "Il a peut-être besoin des scripts d’installation fournis avec ses paquets, qui ne se sont pas lancés.",
   "It merged this part's work without a reviewer's verdict. The reviewers score parts that build in steps; this one was built in one session.":
@@ -1945,6 +1946,7 @@ export default {
     "Il s’exécute avec tes accès : Genex n’isole pas son code.",
   "It runs, but no reviewer compared it with the game you had.":
     "Ça tourne, mais aucun vérificateur ne l’a comparé au jeu que tu avais.",
+  "It shows in the game after its next release.": "Il apparaît dans le jeu après sa prochaine sortie.",
   "It shows up here as soon as it runs.": "Il s’affichera ici dès qu’il tournera.",
   "It starts off: turn it on in Plugins; each of its tools asks you before it runs.":
     "Il démarre désactivé : active-le dans Plugins ; chacun de ses outils te demandera avant de s’exécuter.",
@@ -3030,6 +3032,7 @@ export default {
   "Remove the waiting messages first: this harness cannot take them back.":
     "Retire d’abord les messages en attente : ce Harness ne peut pas les reprendre.",
   "Remove this row": "Retirer cette ligne",
+  "Remove {item} from {game}?": "Retirer {item} de {game} ?",
   "Remove {name}": "Retirer {name}",
   Removed: "Supprimés",
   "Removed {actor}": "Supprimé : {actor}",
@@ -5380,6 +5383,7 @@ export default {
   "{chart}: {readings}": "{chart} : {readings}",
   "{check}: {name} · {status}": "{check} : {name} · {status}",
   "{chosen} of {total}": "{chosen} sur {total}",
+  "{coins} of your coin is on hold until {date}.": "{coins} de tes pièces sont bloquées jusqu’au {date}.",
   "{command} (exit {code})": "{command} (sortie : {code})",
   "{command} failed": "Échec de {command}",
   "{commit} (cataloged, not audited)": "{commit} (au catalogue, non audité)",
@@ -5938,6 +5942,7 @@ export default {
   "It isn’t on this computer any more. Install it again.": "Il n’est plus sur cet ordinateur. Réinstalle-le.",
   "It couldn’t start on this computer.": "Il n’a pas pu démarrer sur cet ordinateur.",
   "Remove from this computer": "Retirer de cet ordinateur",
+  "Remove from {game}": "Retirer de {game}",
   "{title} is removed from this computer. Its saves stay.":
     "{title} est retiré de cet ordinateur. Ses sauvegardes restent.",
   "Ready to play on this computer.": "Prêt à jouer sur cet ordinateur.",

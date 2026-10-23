@@ -259,6 +259,20 @@ export function storeBalanceLine(sheet: PlayPurchaseSheet): string | null {
   return STORE.balance(coinNumber(view.now));
 }
 
+/** A day as the app's language writes it short: "Oct 30". */
+const dayText = (at: number): string =>
+  new Date(at).toLocaleDateString(intlLocale(), { month: "short", day: "numeric" });
+
+/**
+ * The line under a short balance when part of the account's coin is earned coin still on hold:
+ * `7,500 of your coin is on hold until Oct 30.`; null with none on hold, or a balance that is not short.
+ */
+export function storeHeldLine(sheet: PlayPurchaseSheet): string | null {
+  const { held } = sheet;
+  if (!held || balanceView(sheet)?.line !== BalanceLine.Short) return null;
+  return STORE.held(coinNumber(held.coins), dayText(held.releaseAt));
+}
+
 /** The small line under the store sheet's button: where Get coin or Sign in leads, and what comes after. */
 export function storeSheetNote(sheet: Pick<PlayPurchaseSheet, "step" | "recovery">): string | null {
   if (sheet.step === PurchaseStep.NotEnough && sheet.recovery === PurchaseRecovery.Over) return STORE.overNote;

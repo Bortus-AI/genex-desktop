@@ -606,7 +606,11 @@ export function createPeopleStore(api: PeopleApi, storage: KeyValueStorage | nul
     const me = await api.playMe().catch(() => undefined);
     // Asked after: a refused token reads as a sign-in that ended only once genex.games refused it.
     const view = await api.genexAccount().catch(() => null);
-    set((state) => accountRead(state, view, me));
+    // A sign-in can finish inside that second read (a development stand's does): who it is was read
+    // before there was a token, so it is read again rather than left empty until some other event.
+    const signedInSince = me === null && view?.status === GenexAccountStatus.SignedIn;
+    const who = signedInSince ? await api.playMe().catch(() => undefined) : me;
+    set((state) => accountRead(state, view, who));
   };
 
   /** A write answered with the account, or with none (genex.games refused it): then main says where it stands. */

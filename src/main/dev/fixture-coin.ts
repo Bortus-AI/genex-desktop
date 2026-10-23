@@ -6,7 +6,7 @@
  * first time Studio reads it, named by its case, a nonce and the game's slug; each case is one of the
  * sheet's states: what it sells, how long it stays open, and how genex.games answers its Pay.
  */
-import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
+import { DAY_MS, MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
 import { CoinFailure, CoinIntentStatus, CoinRoute, ConfirmSurface, PaymentPolicy } from "../play/coin.ts";
 import { type GalleryAnswer, type GalleryRequest, isRecord } from "../play/gallery.ts";
 import { takenAccount } from "./fixture-people.ts";
@@ -252,6 +252,12 @@ interface FixtureIntent {
   landsAt: number | null;
 }
 
+/**
+ * The fixture account's earned coin still inside genex.games' spend hold (Create › Items › Selling's
+ * strip, `fixture-store.ts`): never spendable, so a short sheet says how much and until when.
+ */
+export const FIXTURE_EARNED_HOLD = { earnedHeld: 36_800, readyInMs: 3 * DAY_MS, holdDays: 7 } as const;
+
 /** One launch's coin: the balance and every purchase made so far. */
 interface CoinState {
   deps: FixtureCoinDeps;
@@ -373,19 +379,23 @@ function cancel(intent: FixtureIntent): GalleryAnswer {
   return ok(view(intent));
 }
 
-/** The account's coin, as `GET /api/coin/balance` answers it. */
+/** The account's coin, as `GET /api/coin/balance` answers it: what it bought, and what it earned still on hold. */
 function balanceAnswer(state: CoinState): GalleryAnswer {
   settle(state);
   const spendable = state.balance;
+  const { earnedHeld, readyInMs, holdDays } = FIXTURE_EARNED_HOLD;
   return ok({
     purchased: spendable,
-    earned: 0,
+    earned: earnedHeld,
     promo: 0,
     traded: 0,
     spendable,
-    earnedHeld: 0,
+    earnedHeld,
     earnedEligible: 0,
     displayUsdCents: spendable,
+    earnedReady: 0,
+    nextReleaseAt: new Date(state.deps.now() + readyInMs).toISOString(),
+    holdDays,
   });
 }
 

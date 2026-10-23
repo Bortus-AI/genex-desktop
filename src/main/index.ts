@@ -34,7 +34,7 @@ import {
   utilityProcess,
 } from "electron";
 import { spawn } from "node:child_process";
-import { appendFileSync, existsSync, mkdtempSync, mkdirSync } from "node:fs";
+import { appendFileSync, existsSync, mkdtempSync, mkdirSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -190,7 +190,8 @@ import { type PlayComments, playComments } from "./play/comments.ts";
 import { type PlayCoin, playCoin } from "./play/coin.ts";
 import { playStore } from "./play/store.ts";
 import { followStudioWindow, type StoreSheetControl, storeSheet } from "./play/store-sheet.ts";
-import { playOrigins } from "./play/origins.ts";
+import { devStand, websitePageOpener } from "./play/origins.ts";
+import { devGamesTrust } from "./play/dev-games-trust.ts";
 import { PLAY_ORIGIN, type PlayPoint } from "../shared/play.ts";
 import { registerRunsIpc } from "./ipc/runs.ts";
 import { registerSettingsIpc } from "./ipc/settings.ts";
@@ -505,11 +506,17 @@ for (const [name, value] of testLanguageSwitches(
 ))
   app.commandLine.appendSwitch(name, value);
 /**
- * Where Play talks to genex.games in this launch: genex.games itself, or a local or test copy that a
- * development profile names (`play/origins.ts`); never in a packaged app, and never in a fixture
- * launch, which answers Play from its own data.
+ * Where Play talks to genex.games in this launch: genex.games itself, or a local or test copy (a
+ * stand) that a development profile names (`play/origins.ts`), with its game host, the Genex host
+ * tools' API and its own CA; never in a packaged app, and never in a fixture launch, which answers
+ * Play from its own data.
  */
-const playOrigin = playOrigins(process.env, dev !== null && !app.isPackaged && !fixtureNativePolicy);
+const stand = devStand(process.env, {
+  developerProfile: dev !== null,
+  packaged: app.isPackaged,
+  fixture: fixtureNativePolicy,
+});
+const playOrigin = stand.origins;
 // Human review is an explicit opt-in; automated fixture windows stay parked and unfocusable.
 const interactiveFixture = process.env.STUDIO_FIXTURE_INTERACTIVE === "1";
 const parkedFixtureWindow = isSmoke || (fixtureProviders && !interactiveFixture);
@@ -850,6 +857,10 @@ async function createCore(userData: string): Promise<StudioCore> {
     neverTouch: otherProfiles(userData),
     // The normal profile keeps its games outside its data: another launch's workers never reach them.
     neverTouchGames: normalGamesElsewhere(launch.gamesRoot, app.getPath("home")),
+    // A development profile on a stand: the Genex host tools' CLI goes to the stand as the account it signed in to.
+    ...(stand.hostToolsApi
+      ? { genexStand: { api: stand.hostToolsApi, token: () => genexAccountFor(studio).token() } }
+      : {}),
     ...launch,
     ...(ollamaHost ? { ollamaHost } : {}),
     // Electron's binary doubles as node for the harness child process.
@@ -1469,7 +1480,7 @@ function storeFor(studio: StudioCore): StoreIpcDeps & { sheet: StoreSheetControl
     // Get coin: genex.games in the browser; a fixture launch opens nothing and tops its balance up.
     openPage: (url) => {
       if (fixtureNativePolicy) fixtureGetCoin();
-      else if (window) void openOutside(studio, window, url);
+      else if (window) openGenexWebsitePage(studio, window, url);
     },
     web: playOrigin.web,
     clock: SYSTEM_CLOCK,
@@ -1480,6 +1491,18 @@ function storeFor(studio: StudioCore): StoreIpcDeps & { sheet: StoreSheetControl
   });
   playStoreDeps = { store, sheet };
   return playStoreDeps;
+}
+
+/**
+ * A genex.games page the app links to (Get coin): a page of Play's website opens as a sign-in page
+ * does, which takes a development website's plain http; anything else as every other link does.
+ */
+function openGenexWebsitePage(studio: StudioCore, win: BrowserWindow, url: string): void {
+  websitePageOpener(
+    playOrigin.web,
+    (page) => void openGenexPage(fixtureNativePolicy, page, playOrigin.web).catch(() => openOutside(studio, win, page)),
+    (other) => void openOutside(studio, win, other),
+  )(url);
 }
 
 /** The purchase sheet's Sign in: the app's own Genex sign-in in the browser; how it went shows on the sheet's next read. */
@@ -1502,6 +1525,8 @@ function attachPlay(studio: StudioCore, win: BrowserWindow): void {
       if (!fixtureNativePolicy) void openOutside(studio, win, url);
     },
     web: playOrigin.web,
+    origins: playOrigin,
+    ...devGamesCertificates(),
     offline: fixtureNativePolicy ? { gamePage: fixtureGamePage } : null,
     micPreload: path.join(distRoot, "preload", "play-mic.cjs"),
     micStore: playMicStore(path.join(userDataRoot, "play-mic.json")),
@@ -1517,11 +1542,29 @@ function attachPlay(studio: StudioCore, win: BrowserWindow): void {
     // Get coin: genex.games in the browser; a fixture launch opens nothing and tops its balance up.
     openPage: (url) => {
       if (fixtureNativePolicy) fixtureGetCoin();
-      else void openOutside(studio, win, url);
+      else openGenexWebsitePage(studio, win, url);
     },
     // A fixture launch's stand-in game confirms on a website that resolves nowhere (`fixture-coin.ts`).
     confirmOrigin: fixtureNativePolicy ? FIXTURE_CONFIRM_ORIGIN : purchaseConfirmOrigin(playOrigin),
   });
+}
+
+/**
+ * A development stand's own CA for the viewer, trusted for the stand's game hosts only
+ * (`play/dev-games-trust.ts`); nothing in any other launch, or when the CA file cannot be read.
+ */
+function devGamesCertificates(): Pick<Parameters<typeof wirePlayViewer>[0], "certificates"> {
+  if (!stand.gamesCaFile) return {};
+  let pem: string;
+  try {
+    pem = readFileSync(stand.gamesCaFile, "utf8");
+  } catch (error) {
+    studioLog.write("main", `stand CA not read: ${errorMessage(error)}`);
+    return {};
+  }
+  const trust = devGamesTrust(playOrigin.games, pem, Date.now);
+  if (!trust) studioLog.write("main", "stand CA is not a certificate: nothing is trusted");
+  return trust ? { certificates: trust } : {};
 }
 
 /**

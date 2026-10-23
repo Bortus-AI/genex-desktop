@@ -438,6 +438,14 @@
 .item-sheet-balance[data-short] {
   color: var(--purchase-short-ink);
 }
+/* Under a short balance: the earned coin still on hold, and when it is ready. */
+.item-sheet-held {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 13px;
+  line-height: 18px;
+  text-align: end;
+}
 .item-sheet-status {
   display: flex;
   align-items: center;

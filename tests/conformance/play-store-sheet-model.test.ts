@@ -10,6 +10,7 @@ import { describe, it } from "node:test";
 import {
   StoreFocus,
   storeBalanceLine,
+  storeHeldLine,
   storeNotice,
   storePayLabel,
   storeSheetAction,
@@ -108,6 +109,17 @@ describe("the balance line under the price", () => {
 
   it("shows what the player has and how much more paying needs", () => {
     assert.equal(storeBalanceLine(short(PurchaseRecovery.Waiting)), "You have 12,450 · 37,550 more needed");
+  });
+
+  it("says under a short balance how much earned coin is on hold, and until when", () => {
+    const held = { coins: 7500, releaseAt: Date.parse("2026-10-30T12:00:00.000Z") };
+    assert.equal(
+      storeHeldLine({ ...short(PurchaseRecovery.Waiting), held }),
+      "7,500 of your coin is on hold until Oct 30.",
+    );
+    assert.equal(storeHeldLine(short(PurchaseRecovery.Waiting)), null, "nothing on hold: nothing more to say");
+    assert.equal(storeHeldLine({ ...ASK, held }), null, "a balance that covers the price says nothing of it");
+    assert.equal(storeHeldLine({ ...PAID, held }), null);
   });
 
   it("shows the balance left once paid", () => {

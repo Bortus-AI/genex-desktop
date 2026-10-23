@@ -3,14 +3,19 @@
  * description, what players pay and what the selling game gets per sale (genex.games' own number,
  * never computed here, with the share genex.games configures when it names one), then the split button Add to \<game> ▾, whose arrow picks which of the
  * account's games on Genex takes it, and "Your agent puts it in the game." Add allows the item in
- * that game and hands the game's chat agent the prompt that puts it in (`ItemsPage`).
+ * that game and hands the game's chat agent the prompt that puts it in (`ItemsPage`). An item already
+ * in that game says Added to \<game> instead (with when players see it, Q5) and offers Remove from
+ * \<game>, which asks first.
  */
-import type { JSX } from "react";
+import type { JSX, RefObject } from "react";
+import { useRef, useState } from "react";
 import type { BrowseItem } from "../../../shared/store-items.ts";
+import { DialogFoot } from "../../play/card-menu/DialogFoot.tsx";
 import { CoinMark } from "../../play/CoinMark.tsx";
 import { ItemRender } from "../../play/ItemRender.tsx";
 import { coinNumber, coinText, gameText } from "../../play/purchase-model.ts";
 import { Button } from "../../ui/Button.tsx";
+import { DialogSurface } from "../../ui/dialog.tsx";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -42,38 +47,54 @@ function Coin({ coins, className }: { coins: number; className?: string }): JSX.
   );
 }
 
-/** Add to \<game> with its game picker; nothing to add to says so. */
+/** Where the item stands in the game Add to acts on: added there (and sold there yet), or null. */
+export type AddedIn = { live: boolean } | null;
+
+/** Add to \<game>, or Added to \<game> for an item already in it, with the game picker; nothing to add to says so. */
 function AddTo({
   item,
   games,
   target,
+  added,
   busy,
+  chooser,
   onChoose,
   onAdd,
 }: {
   item: BrowseItem;
   games: readonly OfferedGame[];
   target: OfferedGame | null;
+  added: AddedIn;
   busy: boolean;
+  /** The game picker's button: the focus comes back to it, which stays whether the item is added or not. */
+  chooser: RefObject<HTMLButtonElement | null>;
   onChoose: (game: string) => void;
   onAdd: (item: BrowseItem, game: string) => void;
 }): JSX.Element {
   if (!target) return <p className="items-detail-note">{WORDS.noGame}</p>;
   return (
     <div className="items-split">
-      <Button
-        variant="default"
-        className="items-split-main"
-        busy={busy}
-        data-items-add-to={target.name}
-        onClick={() => onAdd(item, target.name)}
-      >
-        <span className="truncate">{WORDS.addTo(gameText(target.title))}</span>
-      </Button>
+      {added ? (
+        <span className="items-split-main items-added control-quiet font-mono text-sm" data-items-added={target.name}>
+          <Icon name="check" size={14} />
+          <span className="truncate">{WORDS.addedTo(gameText(target.title))}</span>
+        </span>
+      ) : (
+        <Button
+          variant="default"
+          className="items-split-main"
+          busy={busy}
+          data-items-add-to={target.name}
+          onClick={() => onAdd(item, target.name)}
+        >
+          <span className="truncate">{WORDS.addTo(gameText(target.title))}</span>
+        </Button>
+      )}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
-            variant="default"
+            ref={chooser}
+            variant={added ? "secondary" : "default"}
             className="items-split-more"
             aria-label={WORDS.chooseGame}
             data-items-choose-game
@@ -96,27 +117,114 @@ function AddTo({
   );
 }
 
+/** Remove from \<game>, asked first: the game's Store stops selling it, and its owners keep it. */
+function RemoveDialog({
+  item,
+  game,
+  returnFocus,
+  onClose,
+  onRemove,
+}: {
+  item: BrowseItem;
+  game: OfferedGame;
+  returnFocus: RefObject<HTMLElement | null>;
+  onClose: () => void;
+  onRemove: (item: BrowseItem, game: string) => void;
+}): JSX.Element {
+  return (
+    <DialogSurface
+      title={WORDS.removeTitle(gameText(item.name), gameText(game.title))}
+      description={WORDS.removeBody}
+      onDismiss={onClose}
+      returnFocus={returnFocus}
+    >
+      <DialogFoot problem={null} busy={false} onCancel={onClose}>
+        <Button
+          variant="destructive"
+          data-items-remove-confirm={game.name}
+          onClick={() => {
+            onClose();
+            onRemove(item, game.name);
+          }}
+        >
+          {WORDS.remove}
+        </Button>
+      </DialogFoot>
+    </DialogSurface>
+  );
+}
+
+/** What an item already in the game says under Added: when players see it, and Remove from \<game>. */
+function Added({
+  item,
+  target,
+  added,
+  busy,
+  returnFocus,
+  onRemove,
+}: {
+  item: BrowseItem;
+  target: OfferedGame;
+  added: { live: boolean };
+  busy: boolean;
+  returnFocus: RefObject<HTMLElement | null>;
+  onRemove: (item: BrowseItem, game: string) => void;
+}): JSX.Element {
+  const [asking, setAsking] = useState(false);
+  return (
+    <>
+      {!added.live && <p className="items-detail-note">{WORDS.addedNextRelease}</p>}
+      <Button
+        variant="ghost"
+        className="items-remove"
+        busy={busy}
+        data-items-remove-from={target.name}
+        onClick={() => setAsking(true)}
+      >
+        <span className="truncate">{WORDS.removeFrom(gameText(target.title))}</span>
+      </Button>
+      {asking && (
+        <RemoveDialog
+          item={item}
+          game={target}
+          returnFocus={returnFocus}
+          onClose={() => setAsking(false)}
+          onRemove={onRemove}
+        />
+      )}
+    </>
+  );
+}
+
 /** The panel for the item on show. */
 export function ItemDetail({
   item,
   games,
   target,
+  added,
   busy,
   sellerShareBps,
   refusal,
   onChoose,
   onAdd,
+  onRemove,
 }: {
   item: BrowseItem;
   games: readonly OfferedGame[];
   target: OfferedGame | null;
-  busy: boolean;
+  /** The item in the game Add to acts on: added there (and sold there yet), or null. */
+  added: AddedIn;
+  /** A press under way on the item: Add to, or Remove from. */
+  busy: { add: boolean; remove: boolean };
   /** The selling game's share genex.games configures, in basis points; absent from an older API. */
   sellerShareBps: number | undefined;
   refusal: string | null;
   onChoose: (game: string) => void;
   onAdd: (item: BrowseItem, game: string) => void;
+  onRemove: (item: BrowseItem, game: string) => void;
 }): JSX.Element {
+  const chooser = useRef<HTMLButtonElement | null>(null);
+  const pressing = busy.add || busy.remove;
   return (
     <aside className="items-detail" data-items-detail={item.id} aria-label={gameText(item.name)}>
       <ItemRender item={item} turnable className="items-detail-render" />
@@ -144,13 +252,32 @@ export function ItemDetail({
         </div>
       </dl>
       <div className="items-detail-add">
-        <AddTo item={item} games={games} target={target} busy={busy} onChoose={onChoose} onAdd={onAdd} />
+        <AddTo
+          item={item}
+          games={games}
+          target={target}
+          added={added}
+          busy={pressing}
+          chooser={chooser}
+          onChoose={onChoose}
+          onAdd={onAdd}
+        />
+        {target && added && (
+          <Added
+            item={item}
+            target={target}
+            added={added}
+            busy={busy.remove}
+            returnFocus={chooser}
+            onRemove={onRemove}
+          />
+        )}
         {refusal ? (
           <p role="alert" className="items-detail-refusal">
             {refusal}
           </p>
         ) : (
-          target && <p className="items-detail-note">{WORDS.agentPutsIt}</p>
+          target && !added && <p className="items-detail-note">{WORDS.agentPutsIt}</p>
         )}
       </div>
     </aside>

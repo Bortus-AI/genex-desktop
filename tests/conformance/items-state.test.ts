@@ -21,15 +21,18 @@ import {
   itemChosen,
   ItemsRead,
   type ItemsState,
+  ItemsTab,
   localGameOf,
   sellingAnswered,
   targetChosen,
 } from "../../src/renderer/state/items.ts";
-import { browseIntro, youGetLabel } from "../../src/renderer/panels/items/browse-model.ts";
-import { rowMenu, SellingStatus, sellingStatus } from "../../src/renderer/panels/items/selling-model.ts";
-import { ITEMS_WORDS } from "../../src/renderer/words.ts";
+import { addedIn, browseIntro, youGetLabel } from "../../src/renderer/panels/items/browse-model.ts";
+import { rowMenu, sellingPrice, SellingStatus, sellingStatus } from "../../src/renderer/panels/items/selling-model.ts";
+import { REREAD_GAP_MS } from "../../src/renderer/state/refresher.ts";
+import { ITEMS_WORDS, PLAY_STORE_WORDS } from "../../src/renderer/words.ts";
 import { GENEX_PLUGIN_ID, GenexAction } from "../../src/shared/genex.ts";
 import {
+  type BrowseDetail,
   type BrowseItem,
   type CreatorItem,
   ItemState,
@@ -311,6 +314,137 @@ describe("the items store over Studio's calls", () => {
   });
 });
 
+/** Browse's detail of `id`, added to the games named (project id → live). */
+const detail = (id: string, added: Record<string, boolean> = {}): BrowseDetail => ({
+  item: browseItem(id),
+  package: null,
+  addedTo: Object.entries(added).map(([projectId, live]) => ({ projectId, slug: projectId, title: projectId, live })),
+});
+
+/** The calls Create › Items reads with, every one recorded. */
+const reads = (fake: ReturnType<typeof fakeStudioApi>) => ({
+  browse: fake.callsOf("itemsBrowse").length,
+  selling: fake.callsOf("itemsSelling").length,
+  detail: fake.callsOf("itemsBrowseDetail").map(([id]) => id),
+});
+
+describe("Create › Items read again", () => {
+  it("reads the tab chosen, and a tab chosen back and forth only once its last read is old", async () => {
+    const { clock, advance } = fakeClock();
+    const fake = fakeStudioApi({ itemsSelling: async () => selling(), itemsBrowse: async () => page(["a"]) });
+    const items = createItemsStore(fake.api, clock);
+    await items.chooseTab(ItemsTab.Selling);
+    assert.equal(items.getState().tab, ItemsTab.Selling);
+    await items.chooseTab(ItemsTab.Browse);
+    await items.chooseTab(ItemsTab.Selling);
+    await items.chooseTab(ItemsTab.Browse);
+    assert.deepEqual([reads(fake).selling, reads(fake).browse], [1, 1], "a quick back and forth reads each once");
+    advance(REREAD_GAP_MS);
+    await items.chooseTab(ItemsTab.Selling);
+    assert.deepEqual([reads(fake).selling, reads(fake).browse], [2, 1], "a tab chosen again later is read again");
+  });
+
+  it("reads the tab on show once for a burst of window focus, and again after the gap", async () => {
+    const { clock, advance } = fakeClock();
+    const fake = fakeStudioApi({ itemsSelling: async () => selling() });
+    const items = createItemsStore(fake.api, clock);
+    items.setState((state) => ({ ...state, tab: ItemsTab.Selling }), true);
+    await Promise.all([items.refresh(), items.refresh(), items.refresh()]);
+    assert.equal(reads(fake).selling, 1);
+    assert.equal(reads(fake).browse, 0, "the tab not on show is not read");
+    advance(REREAD_GAP_MS - 1);
+    await items.refresh();
+    assert.equal(reads(fake).selling, 1);
+    advance(1);
+    await items.refresh();
+    assert.equal(reads(fake).selling, 2);
+  });
+
+  it("reads Selling again after Put on sale, Take off sale or sharing, however recently it was read", async () => {
+    const { clock } = fakeClock();
+    const fake = fakeStudioApi({
+      itemsSelling: async () => selling(),
+      itemPutOnSale: async () => creatorItem({ state: ItemState.OnSale }),
+      itemTakeOffSale: async () => ({ refused: StoreRefusal.TakenDown }),
+    });
+    const items = createItemsStore(fake.api, clock);
+    await items.readSelling();
+    await items.change("sku_frost", ItemAction.PutOnSale);
+    await settle();
+    assert.equal(reads(fake).selling, 2, "Sold, Earned and the strip move with the sale");
+    await items.change("sku_frost", ItemAction.TakeOffSale);
+    await settle();
+    assert.equal(reads(fake).selling, 2, "a refused press changed nothing to read");
+  });
+
+  it("reads the detail of the item on show, and again after Add to and Remove from", async () => {
+    const { clock } = fakeClock();
+    let added = false;
+    const fake = fakeStudioApi({
+      pluginAction: async () => ({ projectId: "proj_snow" }),
+      itemsBrowse: async () => page(["a", "b"]),
+      itemsBrowseDetail: async (id) => detail(id, added ? { proj_snow: false } : {}),
+      itemsAddToGame: async () => {
+        added = true;
+        return {
+          allowance: { itemId: "a", projectId: "proj_snow", state: "active", addedAt: 1, liveAt: null },
+          replayed: false,
+        };
+      },
+      itemsRemoveFromGame: async () => {
+        added = false;
+        return { itemId: "a", projectId: "proj_snow", state: "removed", addedAt: 1, liveAt: null };
+      },
+    });
+    const items = createItemsStore(fake.api, clock);
+    await items.readHosted(["snowball"]);
+    await items.search("");
+    await settle();
+    assert.deepEqual(reads(fake).detail, ["a"], "the first item shows, with where it was added");
+    await items.choose("b");
+    assert.equal(items.getState().browse.selectedId, "b");
+    await items.choose("a");
+    assert.deepEqual(reads(fake).detail, ["a", "b", "a"]);
+    await items.addToGame("a", "snowball");
+    await settle();
+    assert.deepEqual(
+      items.getState().browse.details.a?.addedTo.map((game) => game.projectId),
+      ["proj_snow"],
+    );
+    await items.removeFromGame("a", "snowball");
+    await settle();
+    assert.deepEqual(fake.callsOf("itemsRemoveFromGame"), [["a", "proj_snow"]]);
+    assert.deepEqual(items.getState().browse.details.a?.addedTo, []);
+    assert.deepEqual(items.getState().busy, {});
+    assert.deepEqual(reads(fake).detail, ["a", "b", "a", "a", "a"]);
+  });
+
+  it("keeps genex.games' refusal of a Remove on the item, and removes nothing from a game not on Genex", async () => {
+    const fake = fakeStudioApi({
+      pluginAction: async (_id, _name, _args, project) => (project === "snowball" ? { projectId: "proj_snow" } : {}),
+      itemsRemoveFromGame: async () => ({ refused: StoreRefusal.AllowanceNotFound }),
+    });
+    const items = createItemsStore(fake.api);
+    await items.readHosted(["snowball", "fixture-game"]);
+    assert.deepEqual(await items.removeFromGame("a", "fixture-game"), { refused: StoreRefusal.ProjectNotFound });
+    assert.deepEqual(fake.callsOf("itemsRemoveFromGame"), []);
+    await items.removeFromGame("a", "snowball");
+    assert.equal(items.getState().refused.a, StoreRefusal.AllowanceNotFound);
+    assert.deepEqual(items.getState().busy, {});
+  });
+});
+
+describe("Browse's detail for the game Add to acts on", () => {
+  it("says whether the item is in that game, and whether players can get it there yet", () => {
+    const shown = detail("a", { proj_snow: false, proj_dog: true });
+    assert.deepEqual(addedIn(shown, "proj_snow"), { live: false });
+    assert.deepEqual(addedIn(shown, "proj_dog"), { live: true });
+    assert.equal(addedIn(shown, "proj_other"), null);
+    assert.equal(addedIn(shown, null), null);
+    assert.equal(addedIn(undefined, "proj_snow"), null, "not read yet: Add to stays");
+  });
+});
+
 describe("a Selling row", () => {
   const row = (state: ItemState, fields: { underReview?: boolean; type?: ItemType } = {}) => ({
     state,
@@ -342,5 +476,10 @@ describe("a Selling row", () => {
 
   it("offers nothing on an item an admin took off sale", () => {
     assert.equal(rowMenu(row(ItemState.TakenDown), true), null);
+  });
+
+  it("prices a Free item Free, as the Store card and the sheet say", () => {
+    assert.equal(sellingPrice({ priceCoins: 0 }), PLAY_STORE_WORDS.free);
+    assert.equal(sellingPrice({ priceCoins: 1200 }), "1,200");
   });
 });

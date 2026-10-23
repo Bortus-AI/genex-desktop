@@ -1,8 +1,10 @@
 /**
  * Selling's rows (marketplace P10, screen 08), pure: the status each row shows, the line under its
- * name, and what its ⋯ menu offers for the item's state.
+ * name, its price, and what its ⋯ menu offers for the item's state.
  */
 import { ItemState, ItemType, type SellingRow } from "../../../shared/store-items.ts";
+import { coinNumber } from "../../play/purchase-model.ts";
+import { PLAY_STORE_WORDS } from "../../words.ts";
 
 /** A row's status, as the design names it. */
 export const SellingStatus = {
@@ -41,3 +43,7 @@ export function rowMenu(row: Pick<SellingRow, "state" | "type">, local: boolean)
     ask: local,
   };
 }
+
+/** A row's price: Free for an item that costs nothing, as the Store card and the sheet say, else its coin. */
+export const sellingPrice = (row: Pick<SellingRow, "priceCoins">): string =>
+  row.priceCoins === 0 ? PLAY_STORE_WORDS.free : coinNumber(row.priceCoins);

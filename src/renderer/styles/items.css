@@ -215,6 +215,21 @@
   border-start-start-radius: 0;
   border-end-start-radius: 0;
 }
+/* Added to <game>: where Add to was, a quiet fill that says so, beside the game picker. */
+.items-added {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 40px;
+  padding-inline: 12px;
+  border-radius: var(--radius-button);
+  color: var(--ink-2);
+}
+.items-remove {
+  align-self: center;
+  max-width: 100%;
+}
 .items-detail-note {
   color: var(--ink-3);
   font-size: 13px;

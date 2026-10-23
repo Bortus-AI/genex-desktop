@@ -344,6 +344,10 @@ function storeDefaults(): Partial<Record<StudioMethod, () => unknown>> {
     storeMyItems: () => [],
     storeItemGames: () => ({ total: 0, games: [] }),
     storeShelf: () => [],
+    // Create › Items with nothing in it: no item to show, nothing made yet.
+    itemsBrowse: () => ({ items: [], nextCursor: null }),
+    itemsBrowseDetail: () => ({ refused: "sku_not_found" }),
+    itemsSelling: () => ({ earnedReady: 0, earnedHeld: 0, nextReleaseAt: null, holdDays: 0, items: [] }),
   };
 }
 

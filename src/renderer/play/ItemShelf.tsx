@@ -2,8 +2,8 @@
  * The profile's item shelf (marketplace P8, screen 06): under the handle and above the stats, a
  * decorative row of up to five items the person owns, as renders with no backgrounds. Hovering one,
  * focusing it or pressing it shows a small card: the item's name, an "Item" tag, and **Get in
- * \<game>** with that game's cover, which opens that game's page. Nothing draws while it is read, when it cannot be, or
- * when the person owns none.
+ * \<game>** with that game's cover, which opens that game's page (only while that game still sells it).
+ * Nothing draws while it is read, when it cannot be, or when the person owns none.
  */
 import type { JSX } from "react";
 import { useEffect, useState } from "react";
@@ -12,14 +12,15 @@ import { studio } from "../state/studio.ts";
 import { PLAY_STORE_WORDS } from "../words.ts";
 import { ItemRender } from "./ItemRender.tsx";
 import { gameText } from "./purchase-model.ts";
-import { shelfShown } from "./store-model.ts";
+import { shelfGetIn, shelfShown } from "./store-model.ts";
 
 const WORDS = PLAY_STORE_WORDS;
 
 /** One item on the shelf, and its card while hovered, focused or pressed open. */
 function ShelfEntry({ item }: { item: ShelfItem }): JSX.Element {
   const [open, setOpen] = useState(false);
-  const { game } = item;
+  // An item its game no longer sells stays on the shelf, with no way to get it there.
+  const game = shelfGetIn(item);
   return (
     <li
       className="item-shelf-entry"

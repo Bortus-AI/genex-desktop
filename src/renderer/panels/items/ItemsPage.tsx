@@ -20,7 +20,6 @@ import {
   ItemsRead,
   ItemsTab,
   localGameOf,
-  tabChosen,
   targetChosen,
 } from "../../state/items.ts";
 import { studio } from "../../state/studio.ts";
@@ -60,7 +59,10 @@ function useLocalGames(): { games: OfferedGame[]; open: string | null } {
   return { games: sorted, open };
 }
 
-/** Read Browse, Selling and which local games are on Genex: on opening, and when the account changes. */
+/**
+ * Read Browse, Selling and which local games are on Genex: on opening, and when the account changes;
+ * and the tab on show again when the window comes back to the front (a burst of them reads once).
+ */
 function useItemsReads(names: readonly string[]): { retryBrowse: () => void; retrySelling: () => void } {
   const account = usePeople((s) => s.me?.id ?? null);
   const key = names.join("\n");
@@ -74,6 +76,11 @@ function useItemsReads(names: readonly string[]): { retryBrowse: () => void; ret
   useEffect(() => {
     void studio().items.readHosted(key ? key.split("\n") : []);
   }, [key]);
+  useEffect(() => {
+    const refresh = () => void studio().items.refresh();
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
+  }, []);
   return { retryBrowse, retrySelling };
 }
 
@@ -104,6 +111,8 @@ function useGameActions(onOpenGame: Props["onOpenGame"], onNewGame: () => void) 
           return onOpenGame(game, false);
         });
     },
+    // Asked first in the panel; what genex.games refuses shows under it.
+    onRemove: (item: BrowseItem, game: string) => void studio().items.removeFromGame(item.id, game),
   };
   const newItem = () => {
     if (!chosen) return onNewGame();
@@ -120,9 +129,9 @@ function useGameActions(onOpenGame: Props["onOpenGame"], onNewGame: () => void) 
   return { add, newItem, askAgent, askable, ...reads };
 }
 
-/** Browse and Selling, as a pair of tabs; the arrow keys move between them. */
+/** Browse and Selling, as a pair of tabs; the arrow keys move between them. A tab chosen is read again when its last read is old. */
 function Tabs({ tab, panel }: { tab: ItemsTab; panel: string }): JSX.Element {
-  const choose = (next: ItemsTab) => studio().items.setState((state) => tabChosen(state, next), true);
+  const choose = (next: ItemsTab) => void studio().items.chooseTab(next);
   return (
     <div className="no-drag store-tabs items-tabs" role="tablist" aria-label={WORDS.tabsLabel}>
       {TABS.map((one) => (

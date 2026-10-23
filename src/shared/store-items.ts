@@ -277,6 +277,11 @@ export interface ShelfItem {
   iconUrl: string | null;
   modelUrl: string | null;
   game: ItemGame | null;
+  /**
+   * `game` still sells it (on sale there). Owned items stay on the shelf when it does not (P21), with
+   * no Get in \<game>; an API that does not say reads as true.
+   */
+  onSale: boolean;
 }
 
 /** A Free item claimed: a replay answers the same claim. */

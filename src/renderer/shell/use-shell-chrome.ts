@@ -104,13 +104,17 @@ export function useShellChrome(app: Studio, dialogs: Dialogs, sidebarOpen: boole
     setPlayOpen(false);
     setDrawerOpen(false);
   }, [setPluginsOpen, setDrawerOpen]);
-  /** Create › Items, from its sidebar row: over the workspace, in Plugins' place. */
+  /**
+   * Create › Items, from its sidebar row: over the workspace, in Plugins' place. Pressed again while it
+   * is open, the tab on show is read again (once its last read is old); opening it reads it anyway.
+   */
   const openItems = useCallback(() => {
+    if (itemsOpen) void app.items.refresh();
     setPluginsOpen(false);
     setPlayOpen(false);
     setItemsOpen(true);
     setDrawerOpen(false);
-  }, [setPluginsOpen, setDrawerOpen]);
+  }, [app, itemsOpen, setPluginsOpen, setDrawerOpen]);
   /** Play or Create, from the sidebar's switch. Play closes Plugins and Items; the drawer stays. */
   const choosePlay = useCallback(
     (play: boolean) => {

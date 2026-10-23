@@ -5334,6 +5334,8 @@ export const PLAY_STORE_WORDS = {
   balanceAfter: (now: string, after: string) => t("Balance {now} → {after}", { now, after }),
   balance: (amount: string) => t("Balance {amount}", { amount }),
   short: (have: string, more: string) => t("You have {have} · {more} more needed", { have, more }),
+  /** Under a short balance, when part of the coin is earned coin still on hold (web and desktop say the same). */
+  held: (coins: string, date: string) => t("{coins} of your coin is on hold until {date}.", { coins, date }),
   pay: (amount: string) => t("Pay {amount}", { amount }),
   get: t("Get"),
   yours: t("It's yours. Find it under Store › My items in every game it works in."),
@@ -5404,6 +5406,13 @@ export const ITEMS_WORDS = {
   addTo: (game: string) => t("Add to {game}", { game }),
   chooseGame: t("Choose a game"),
   agentPutsIt: t("Your agent puts it in the game."),
+  /** No design copy: an item already in the chosen game (Q5: players see it once the game releases a build). */
+  addedTo: (game: string) => t("Added to {game}", { game }),
+  addedNextRelease: t("It shows in the game after its next release."),
+  removeFrom: (game: string) => t("Remove from {game}", { game }),
+  removeTitle: (item: string, game: string) => t("Remove {item} from {game}?", { item, game }),
+  removeBody: t("It leaves the game’s Store. Players who own it keep it."),
+  remove: t("Remove"),
   /** No design copy: none of the account's games on this computer is on Genex yet. */
   noGame: t("Publish a game to Genex first, then add items to it."),
   /** No design copy: a search that found nothing, and Browse with nothing shared yet. */

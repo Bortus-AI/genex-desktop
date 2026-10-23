@@ -373,3 +373,37 @@ describe("another creator's item, into the game (`items add`)", () => {
     assert.deepEqual(await tree(p.gamesRoot), before);
   });
 });
+
+describe("the network a run that moves an item's files opens", () => {
+  // Genex hands out signed links to its object storage (Cloudflare R2) for an item's picture, model
+  // and package; a run whose network reached the API alone could never move those bytes.
+  const API_ONLY = ["api.genex.games"];
+  const WITH_STORAGE = ["api.genex.games", "*.r2.cloudflarestorage.com"];
+  const calls: Array<[string, { command: string; args?: string; options?: Record<string, unknown> }, string[]]> = [
+    ["shop add with a picture", shopAdd({ image: ".genex/scratch/frost-axe.png" }), WITH_STORAGE],
+    [
+      "shop set with a model",
+      { command: "shop set", args: ITEM, options: { model: "assets/frost-axe.glb" } },
+      WITH_STORAGE,
+    ],
+    [
+      "shop set with a package",
+      { command: "shop set", args: ITEM, options: { package: "items/frost-axe" } },
+      WITH_STORAGE,
+    ],
+    ["items add", itemsAdd, WITH_STORAGE],
+    ["shop add without files", shopAdd({}), API_ONLY],
+    ["shop set without files", { command: "shop set", args: ITEM, options: { price: 300 } }, API_ONLY],
+    ["items remove", { command: "items remove", args: ITEM }, API_ONLY],
+  ];
+  for (const [name, call, domains] of calls) {
+    it(`opens ${domains === WITH_STORAGE ? "Genex's item storage beside the API" : "the API alone"} for ${name}`, async () => {
+      const p = await profile();
+      const sandbox = fakeSandbox({ stdout: ADDED, write: cliWritesItem });
+      await service(p, sandbox).run(call, bound(p), { paid: true });
+      const [run] = sandbox.seen;
+      assert.ok(run, "the CLI ran");
+      assert.deepEqual(run.request.policy?.allowedDomains, domains);
+    });
+  }
+});

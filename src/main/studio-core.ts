@@ -146,7 +146,14 @@ import { DelegationService } from "./core/delegation.ts";
 import { GameFileService } from "./core/game-files.ts";
 import { nameFromIdea, nameGame } from "./core/game-naming.ts";
 import { makeBackdropShader } from "./core/backdrop-generation.ts";
-import { GENEX_PLUGIN_ID, GenexCliService, genexHostPreflight, genexHostTool } from "./core/genex-cli.ts";
+import {
+  GENEX_PLUGIN_ID,
+  GenexCliService,
+  type GenexStand,
+  genexHostPreflight,
+  genexHostTool,
+  standCredentialFile,
+} from "./core/genex-cli.ts";
 import type { ListingDraft } from "../shared/item-draft.ts";
 import { GenexPackageService } from "./core/genex-package.ts";
 import { boundGameFolder } from "./core/genex-bound-game.ts";
@@ -447,6 +454,12 @@ export interface StudioCoreOptions {
   onLog?: (line: string, stream: "stdout" | "stderr") => void;
   /** Where a message's @ tags are fetched from: genex.games, the account and git (`core/mention-tags.ts`). */
   mentionSources?: MentionSources;
+  /**
+   * A development profile's stand (`main/play/origins.ts`): the Genex host tools' CLI runs against its
+   * API with the account the profile signed in to there, never the Genex plugin's genex.games account.
+   * Absent: genex.games, with the Genex plugin's account.
+   */
+  genexStand?: GenexStand;
 }
 
 export type { CoreInternals };
@@ -1180,9 +1193,11 @@ export class StudioCore {
    * item's files in from the bound game and moves a shared item's folder into it.
    */
   #genexCli(): GenexCliService {
+    const stand = this.options.genexStand;
     return new GenexCliService({
       run: (request) => this.sandbox.run(request),
-      credentialFile: () => this.plugins.hostCredentialFile(GENEX_PLUGIN_ID),
+      credentialFile: stand ? standCredentialFile(stand) : () => this.plugins.hostCredentialFile(GENEX_PLUGIN_ID),
+      ...(stand ? { api: stand.api } : {}),
       heldCredentials: () => this.plugins.heldCredentials(),
       runsRoot: path.join(this.options.paths.userData, "genex-cli"),
       resources: this.options.paths.resources,

@@ -1823,6 +1823,8 @@ export default {
   "It kept getting this wrong, so it stopped to save your credits.": "계속 잘 안 돼서 크레딧을 아끼려고 멈췄어요.",
   "It leaves Play and genex.games and goes back to drafts. The direct link still works, and plays and likes stay if it’s published again.":
     "플레이와 genex.games에서 내려가고 초안으로 돌아가요. 직접 링크는 계속 작동하고, 다시 게시하면 플레이 수와 좋아요도 그대로 남아요.",
+  "It leaves the game’s Store. Players who own it keep it.":
+    "게임 스토어에서 빠져요. 이미 가진 플레이어는 계속 가져요.",
   "It may need the setup scripts its packages came with, which didn’t run.":
     "패키지와 함께 온 설정 스크립트가 실행되지 않았는데, 그게 필요할 수도 있어요.",
   "It merged this part's work without a reviewer's verdict. The reviewers score parts that build in steps; this one was built in one session.":
@@ -1839,6 +1841,7 @@ export default {
     "사용자 권한으로 실행돼요. Genex는 이 코드를 샌드박스에 격리하지 않아요.",
   "It runs, but no reviewer compared it with the game you had.":
     "실행은 되지만, 리뷰어가 이전 게임과 비교하지 않았어요.",
+  "It shows in the game after its next release.": "게임의 다음 릴리스 후에 보여요.",
   "It shows up here as soon as it runs.": "실행되면 바로 여기에 나타나요.",
   "It starts off: turn it on in Plugins; each of its tools asks you before it runs.":
     "처음에는 꺼져 있어요. ‘플러그인’에서 켜 주세요. 각 도구는 실행 전에 확인을 요청해요.",
@@ -2898,6 +2901,7 @@ export default {
   "Remove the waiting messages first: this harness cannot take them back.":
     "먼저 대기 중인 메시지를 지워 주세요. 이 Harness는 메시지를 되돌릴 수 없어요.",
   "Remove this row": "이 줄 삭제",
+  "Remove {item} from {game}?": "{item}을(를) {game}에서 뺄까요?",
   "Remove {name}": "{name} 삭제",
   Removed: "제거됨",
   "Removed {actor}": "{actor} 제거했어요",
@@ -5181,6 +5185,7 @@ export default {
   "{chart}: {readings}": "{chart}: {readings}",
   "{check}: {name} · {status}": "{check}: {name} · {status}",
   "{chosen} of {total}": "{chosen}/{total}",
+  "{coins} of your coin is on hold until {date}.": "코인 중 {coins}은(는) {date}까지 보류 중이에요.",
   "{command} (exit {code})": "{command} (종료: {code})",
   "{command} failed": "{command} 실패",
   "{commit} (cataloged, not audited)": "{commit} (카탈로그 등록, 검수 안 됨)",
@@ -5702,6 +5707,7 @@ export default {
   "It isn’t on this computer any more. Install it again.": "이제 이 컴퓨터에 없어요. 다시 설치하세요.",
   "It couldn’t start on this computer.": "이 컴퓨터에서 시작하지 못했어요.",
   "Remove from this computer": "이 컴퓨터에서 제거",
+  "Remove from {game}": "{game}에서 빼기",
   "{title} is removed from this computer. Its saves stay.":
     "{title} 게임을 이 컴퓨터에서 제거했어요. 저장 데이터는 남아 있어요.",
   "Ready to play on this computer.": "이 컴퓨터에서 플레이할 수 있어요.",

@@ -1753,6 +1753,7 @@ export default {
   "It kept getting this wrong, so it stopped to save your credits.": "这里一直出错，为了节省你的积分已停止。",
   "It leaves Play and genex.games and goes back to drafts. The direct link still works, and plays and likes stay if it’s published again.":
     "它会从“游玩”和 genex.games 下架，回到草稿。直接链接仍然有效，重新发布后游玩次数和点赞都会保留。",
+  "It leaves the game’s Store. Players who own it keep it.": "它会离开游戏的商店。已拥有的玩家会继续保留。",
   "It may need the setup scripts its packages came with, which didn’t run.":
     "它可能需要依赖包自带的安装脚本，这些脚本没有运行。",
   "It merged this part's work without a reviewer's verdict. The reviewers score parts that build in steps; this one was built in one session.":
@@ -1766,6 +1767,7 @@ export default {
     "它会在 Genex 的这些时刻运行：{steps}；这些步骤不会事先询问你。",
   "It runs with your access: Genex doesn't sandbox its code.": "它以你的权限运行：Genex 不会把它的代码放进沙盒。",
   "It runs, but no reviewer compared it with the game you had.": "可以运行，但没有审查员把它和你之前的游戏比较过。",
+  "It shows in the game after its next release.": "它会在游戏下次发布后出现。",
   "It shows up here as soon as it runs.": "游戏一运行就会显示在这里。",
   "It starts off: turn it on in Plugins; each of its tools asks you before it runs.":
     "它默认关闭：请在“插件”中启用；它的每个工具在运行前都会询问你。",
@@ -2805,6 +2807,7 @@ export default {
   "Remove the waiting messages first: this harness cannot take them back.":
     "请先移除排队中的消息：这个 Harness 无法撤回它们。",
   "Remove this row": "移除此行",
+  "Remove {item} from {game}?": "要把 {item} 从 {game} 移除吗？",
   "Remove {name}": "移除 {name}",
   Removed: "已移除",
   "Removed {actor}": "已移除 {actor}",
@@ -5007,6 +5010,7 @@ export default {
   "{chart}: {readings}": "{chart}：{readings}",
   "{check}: {name} · {status}": "{check}：{name} · {status}",
   "{chosen} of {total}": "{chosen}/{total}",
+  "{coins} of your coin is on hold until {date}.": "你的金币中有 {coins} 冻结至 {date}。",
   "{command} (exit {code})": "{command}（退出码 {code}）",
   "{command} failed": "{command} 失败",
   "{commit} (cataloged, not audited)": "{commit}（已收录，未审计）",
@@ -5515,6 +5519,7 @@ export default {
   "It isn’t on this computer any more. Install it again.": "它已不在这台电脑上。请重新安装。",
   "It couldn’t start on this computer.": "它无法在这台电脑上启动。",
   "Remove from this computer": "从这台电脑移除",
+  "Remove from {game}": "从 {game} 移除",
   "{title} is removed from this computer. Its saves stay.": "{title} 已从这台电脑移除。存档仍会保留。",
   "Ready to play on this computer.": "可以在这台电脑上游玩了。",
   "Can’t play on {platform}": "无法在 {platform} 上玩",

@@ -159,6 +159,17 @@ describe("The fixture store: a game's page", () => {
     assert.deepEqual(await made.store.shelf("not-a-fixture-person"), []);
   });
 
+  it("keeps an owned item on the shelf once its game stops selling it, without Get in <game> (P21)", async () => {
+    const made = launch();
+    const started = answered(await made.store.purchase(FixtureStoreItem.SnowShovel, "snowball"));
+    await made.coin.confirm(await made.coin.intent(started.id));
+    const before = (await made.store.shelf(FIXTURE_ME_ID)).find((item) => item.id === FixtureStoreItem.SnowShovel);
+    assert.deepEqual([before?.game?.slug, before?.onSale], ["snowball", true]);
+    answered(await made.store.takeOffSale(FixtureStoreItem.SnowShovel));
+    const after = (await made.store.shelf(FIXTURE_ME_ID)).find((item) => item.id === FixtureStoreItem.SnowShovel);
+    assert.deepEqual([after?.game?.slug, after?.onSale], ["snowball", false]);
+  });
+
   it("gives each shelf item's Get in <game> that game's cover, as genex.games does (D48)", async () => {
     const made = launch();
     const [skateboard] = (await made.store.shelf(FIXTURE_ME_ID)).filter((item) => item.game?.slug === "skate-dog");

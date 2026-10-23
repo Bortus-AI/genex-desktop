@@ -70,6 +70,8 @@ interface RigOptions {
   /** What reading it back answers; an Error rejects, and "hangs" never answers. */
   read?: CoinIntent | Error | "hangs";
   balance?: number;
+  /** The earned coin on hold the balance answers with; absent: a coin client that reads the balance only. */
+  held?: { coins: number; releaseAt: number } | null;
 }
 
 /** The store sheet over recording fakes: the log holds every call to genex.games and the browser. */
@@ -98,6 +100,14 @@ function rig(options: RigOptions = {}) {
         log.push("coin.balance");
         return balance;
       },
+      ...(options.held === undefined
+        ? {}
+        : {
+            wallet: async () => {
+              log.push("coin.balance");
+              return { spendable: balance, held: options.held ?? null };
+            },
+          }),
       confirm: async (intent) => {
         log.push(`coin.confirm ${intent.id}`);
         balance -= intent.totalCoins;
@@ -195,6 +205,26 @@ describe("Buying from a game's page", () => {
     assert.ok(made.log.includes(`open ${playCoinPageUrl(WEB)}`));
     made.answer(PurchaseAnswer.Cancel);
     assert.deepEqual(await result, { outcome: StoreBuyOutcome.NotPaid });
+  });
+});
+
+describe("A short sheet and coin on hold", () => {
+  const held = { coins: 7500, releaseAt: Date.parse("2026-10-30T12:00:00.000Z") };
+
+  it("carries the earned coin still on hold, and when it is ready", async () => {
+    const made = rig({ balance: 12_450, held });
+    await opened(made);
+    assert.equal(made.last()?.step, PurchaseStep.NotEnough);
+    assert.deepEqual(made.last()?.held, held);
+    made.answer(PurchaseAnswer.Cancel);
+  });
+
+  it("carries nothing when no coin is on hold", async () => {
+    const made = rig({ balance: 12_450, held: null });
+    await opened(made);
+    assert.equal(made.last()?.step, PurchaseStep.NotEnough);
+    assert.equal(made.last() && "held" in made.last()!, false);
+    made.answer(PurchaseAnswer.Cancel);
   });
 });
 

@@ -20,6 +20,7 @@ import {
   myItemsRead,
   SheetPhase,
   sheetOpens,
+  shelfGetIn,
   shelfShown,
   storeLine,
   storeOffer,
@@ -265,16 +266,27 @@ describe("the soft gradient behind an item's render", () => {
 });
 
 describe("the profile shelf (P8)", () => {
-  const shelfItem = (id: string): ShelfItem => ({
+  const shelfItem = (id: string, onSale = true): ShelfItem => ({
     id,
     name: id,
     iconUrl: null,
     modelUrl: null,
     game: { slug: "stick-steel", title: "Stick & Steel", coverUrl: null },
+    onSale,
+  });
+
+  it("offers Get in <game> only while that game still sells the item, which stays on the shelf (P21)", () => {
+    assert.deepEqual(shelfGetIn(shelfItem("a")), { slug: "stick-steel", title: "Stick & Steel", coverUrl: null });
+    assert.equal(shelfGetIn(shelfItem("a", false)), null);
+    assert.equal(shelfGetIn({ ...shelfItem("a"), game: null }), null);
+    assert.deepEqual(
+      shelfShown([shelfItem("a", false)]).map((item) => item.id),
+      ["a"],
+    );
   });
 
   it("shows at most five items, in genex.games' order", () => {
-    const items = ["a", "b", "c", "d", "e", "f", "g"].map(shelfItem);
+    const items = ["a", "b", "c", "d", "e", "f", "g"].map((id) => shelfItem(id));
     assert.deepEqual(
       shelfShown(items).map((item) => item.id),
       ["a", "b", "c", "d", "e"],

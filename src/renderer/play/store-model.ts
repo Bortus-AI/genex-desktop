@@ -217,3 +217,7 @@ export function itemHue(id: string): number {
 
 /** The profile shelf's items: genex.games' first five, newest first (P8, Q3); none draws nothing. */
 export const shelfShown = (items: readonly ShelfItem[]): ShelfItem[] => items.slice(0, ITEM_SHELF_MAX);
+
+/** The game a shelf item's Get in \<game> opens: only while that game still sells it; else none. */
+export const shelfGetIn = (item: Pick<ShelfItem, "game" | "onSale">): ShelfItem["game"] =>
+  item.onSale ? item.game : null;

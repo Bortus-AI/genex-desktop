@@ -25,7 +25,7 @@ import { closePage, closeWithWindow, dropGameView } from "../../src/main/play/vi
 import { NOTE_MS, SHOW_GAME_AFTER_MS } from "../../src/main/play/viewer.ts";
 import type { PlayComment } from "../../src/shared/play-comments.ts";
 import { NativeAppOffer, NativePlatform, type PlayBarNative } from "../../src/shared/play-native.ts";
-import { PLAY_BAR_HEIGHT, PlayControl, PlayNote, PlayViewerPhase } from "../../src/shared/play.ts";
+import { PLAY_BAR_HEIGHT, PLAY_ORIGIN, PlayControl, PlayNote, PlayViewerPhase } from "../../src/shared/play.ts";
 import {
   esc,
   MINTED,
@@ -849,6 +849,35 @@ describe("Play addresses", () => {
     for (const [url, allowed] of cases) assert.equal(playNavigationAllowed(url, false), allowed, url);
     assert.equal(playNavigationAllowed("data:text/html,<h1>fixture</h1>", true), true);
     assert.equal(playNavigationAllowed("https://lost-cathedral.genex.technology/", true), false);
+  });
+
+  it("plays a development stand's game from the stand's game host, and lets it hop only to the stand's website", () => {
+    const stand = { api: "http://localhost:3000", web: "http://localhost:5173", games: "https://localhost:8443" };
+    assert.equal(
+      playAddress("stick-steel", "t.k", stand.games),
+      "https://stick-steel.localhost:8443/?genex_r=1#genex_ticket=t.k",
+    );
+    const cases: Array<[string, boolean]> = [
+      ["https://stick-steel.localhost:8443/", true],
+      ["https://preview--stick-steel.localhost:8443/level-2", true],
+      ["http://localhost:5173/play/authorize?returnTo=x&guest=ok", true],
+      ["http://localhost:5173/play/authorize?returnTo=x", false],
+      ["http://localhost:5173/", false],
+      ["https://stick-steel.localhost:8444/", false],
+      ["http://stick-steel.localhost:8443/", false],
+      ["https://localhost:8443/", false],
+      ["https://stick-steel.localhost.evil.example:8443/", false],
+      ["https://user@stick-steel.localhost:8443/", false],
+      // genex.games' own games and hop belong to genex.games' account, not the stand's.
+      ["https://lost-cathedral.genex.technology/", false],
+      ["https://genex.games/play/authorize?returnTo=x&guest=ok", false],
+    ];
+    for (const [url, allowed] of cases) assert.equal(playNavigationAllowed(url, false, stand), allowed, url);
+    // A stand with genex.games' game hosts keeps genex.games' rules.
+    const games = { ...stand, games: PLAY_ORIGIN.games };
+    assert.equal(playNavigationAllowed("https://lost-cathedral.genex.technology/", false, games), true);
+    assert.equal(playNavigationAllowed("https://genex.games/play/authorize?guest=ok", false, games), true);
+    assert.equal(playNavigationAllowed("https://stick-steel.localhost:8443/", false, games), false);
   });
 
   it("sends a game's links to the browser without their fragment, https only, one at a time", () => {

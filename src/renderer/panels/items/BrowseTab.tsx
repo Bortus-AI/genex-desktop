@@ -10,11 +10,11 @@ import { CoinMark } from "../../play/CoinMark.tsx";
 import { ItemRender } from "../../play/ItemRender.tsx";
 import { coinNumber, coinText, gameText } from "../../play/purchase-model.ts";
 import { useItems } from "../../state/hooks.ts";
-import { itemChosen, ItemsRead } from "../../state/items.ts";
+import { ItemAction, ItemsRead } from "../../state/items.ts";
 import { studio } from "../../state/studio.ts";
 import { Button } from "../../ui/Button.tsx";
 import { ITEMS_WORDS, itemRefusalWords, PLAY_STORE_WORDS } from "../../words.ts";
-import { browseIntro } from "./browse-model.ts";
+import { addedIn, browseIntro } from "./browse-model.ts";
 import { ItemDetail, type OfferedGame } from "./ItemDetail.tsx";
 import { ReadNote } from "./ReadNote.tsx";
 
@@ -28,7 +28,7 @@ function Card({ item, selected }: { item: BrowseItem; selected: boolean }): JSX.
       className="store-card items-card"
       data-items-card={item.id}
       aria-pressed={selected}
-      onClick={() => studio().items.setState((state) => itemChosen(state, item.id), true)}
+      onClick={() => void studio().items.choose(item.id)}
     >
       <ItemRender item={item} className="store-card-render" />
       <span className="store-card-name" dir="auto">
@@ -50,12 +50,13 @@ function Card({ item, selected }: { item: BrowseItem; selected: boolean }): JSX.
   );
 }
 
-/** What Add to needs from the page: the games it offers, the one it adds to, and the press. */
+/** What Add to needs from the page: the games it offers, the one it adds to, and the presses. */
 export interface AddToGame {
   games: readonly OfferedGame[];
   target: OfferedGame | null;
   onChoose: (game: string) => void;
   onAdd: (item: BrowseItem, game: string) => void;
+  onRemove: (item: BrowseItem, game: string) => void;
 }
 
 /** Browse: the page's head, the intro and the grid, with the detail panel of the item on show beside them. */
@@ -74,7 +75,9 @@ export function BrowseTab({
   const browse = useItems((s) => s.browse);
   const busy = useItems((s) => (browse.selectedId ? s.busy[browse.selectedId] : undefined));
   const refused = useItems((s) => (browse.selectedId ? s.refused[browse.selectedId] : undefined));
+  const targetProject = useItems((s) => (add.target ? (s.hosted[add.target.name] ?? null) : null));
   const shown = browse.items.find((item) => item.id === browse.selectedId) ?? null;
+  const added = shown ? addedIn(browse.details[shown.id], targetProject) : null;
   const listed = browse.read === ItemsRead.Ready || browse.items.length > 0;
   return (
     <div className="items-browse" data-items-browse>
@@ -110,11 +113,13 @@ export function BrowseTab({
           item={shown}
           games={add.games}
           target={add.target}
-          busy={busy !== undefined}
+          added={added}
+          busy={{ add: busy === ItemAction.Add, remove: busy === ItemAction.Remove }}
           sellerShareBps={browse.sellerShareBps}
           refusal={refused ? itemRefusalWords(refused) : null}
           onChoose={add.onChoose}
           onAdd={add.onAdd}
+          onRemove={add.onRemove}
         />
       )}
     </div>

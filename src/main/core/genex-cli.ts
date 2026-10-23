@@ -9,7 +9,8 @@
  * with HOME at that folder (the CLI's contract healing stops at HOME), and the folder is removed
  * afterwards. A project command sees only the hosted project's id and slug, mirrored from the
  * publish workspace. The token reaches the CLI on stdin through Studio's preload, never argv,
- * environment or disk; the sandbox opens the Genex API alone for the length of the run. A store
+ * environment or disk; the sandbox opens the Genex API alone for the length of the run, and Genex's
+ * object storage beside it only for a call that moves a store item's files. A store
  * item's picture, model and package are files of the bound game: Studio checks each by real path
  * inside it and copies it into the run folder first; `items add` writes `genex-items/<id>/` in the
  * run folder, and Studio moves it into the game afterwards (`genex-game-paths.ts`).
@@ -37,6 +38,11 @@ const TRUNCATED_NOTE = "\n[output truncated]";
 const REDACTED = "[redacted]";
 /** Genex's production API, the one origin a run may reach. */
 const GENEX_API = "https://api.genex.games";
+/**
+ * Genex's object storage (Cloudflare R2): the API hands out signed links there for a store item's
+ * picture, model and package, so a run that moves those bytes reaches it too.
+ */
+const ITEM_STORAGE_DOMAIN = "*.r2.cloudflarestorage.com";
 /** The virtual env path Studio's preload serves the sign-in record beside (`src/genex-host/preload.mjs`). */
 const CREDENTIALS_ENV_FILE = "/__studio_genex_credentials__";
 /** The sandbox pipes stdio 0-2 only, so the preload reads the credential from stdin. */
@@ -47,6 +53,8 @@ const CLI_IN_RESOURCES = "plugins/genex/node_modules/@genex-ai/cli-demo/dist/ind
 /** A game name as the Genex adapter names its publish workspace. */
 const PROJECT_NAME = /^[a-zA-Z0-9_-]+$/;
 const RUN_ID_CHARS = 12;
+/** A token the credential line can carry whole: no whitespace and no control character. */
+const LINE_TOKEN = /^[^\s\u0000-\u001f\u007f]+$/;
 
 /** The one plugin whose manifest may declare host tools. */
 export const GENEX_PLUGIN_ID = "genex";
@@ -98,6 +106,30 @@ export interface GenexCliAnswer {
   exitCode?: number | null;
   output: unknown;
 }
+
+/**
+ * A development profile's stand (`main/play/origins.ts`): the API its CLI runs reach, and the token of
+ * the account the profile signed in to there.
+ */
+export interface GenexStand {
+  api: string;
+  token(): Promise<string | undefined>;
+}
+
+/**
+ * The credential a run on `stand` hands the CLI (`GENEX_TOKEN=…`), from the stand's own account;
+ * undefined (locked) while the profile is not signed in there, or for a token that is not one line.
+ */
+export function standCredentialFile(stand: GenexStand): () => Promise<string | undefined> {
+  return async () => {
+    const token = await stand.token().catch(() => undefined);
+    return token && LINE_TOKEN.test(token) ? `GENEX_TOKEN=${token}\n` : undefined;
+  };
+}
+
+/** Whether a call moves a store item's files: it uploads a picture, model or package, or adds a shared item. */
+const movesItemFiles = (request: GenexCliRequest): boolean =>
+  (request.gamePaths?.length ?? 0) > 0 || request.delivers !== undefined;
 
 /** Runs one allowed Genex CLI command at a time per call, each in a folder of its own. */
 export class GenexCliService {
@@ -243,7 +275,7 @@ export class GenexCliService {
       maxOutputBytes: OUTPUT_MAX_CHARS,
       label: `genex-cli:${request.command}`,
       policy: {
-        allowedDomains: [new URL(this.#api).hostname],
+        allowedDomains: [new URL(this.#api).hostname, ...(movesItemFiles(request) ? [ITEM_STORAGE_DOMAIN] : [])],
         allowWrite: [root],
         denyWrite,
       },

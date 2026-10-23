@@ -1865,6 +1865,8 @@ export default {
     "何度もうまくいかなかったので、クレジットを節約するために止めました。",
   "It leaves Play and genex.games and goes back to drafts. The direct link still works, and plays and likes stay if it’s published again.":
     "「プレイ」とgenex.gamesから消えて、下書きに戻ります。直接リンクはそのまま使えて、もう一度公開すればプレイ数といいねも残ります。",
+  "It leaves the game’s Store. Players who own it keep it.":
+    "ゲームのストアから外れます。持っているプレイヤーはそのまま使えます。",
   "It may need the setup scripts its packages came with, which didn’t run.":
     "パッケージ付属のセットアップスクリプトが必要かもしれません（まだ実行されていません）。",
   "It merged this part's work without a reviewer's verdict. The reviewers score parts that build in steps; this one was built in one session.":
@@ -1881,6 +1883,7 @@ export default {
     "あなたの権限で動作します。Genexはこのコードをサンドボックス化しません。",
   "It runs, but no reviewer compared it with the game you had.":
     "動作はしますが、レビュアーは前のゲームと比較していません。",
+  "It shows in the game after its next release.": "次のリリース後にゲームに表示されます。",
   "It shows up here as soon as it runs.": "動くようになったら、すぐここに表示されます。",
   "It starts off: turn it on in Plugins; each of its tools asks you before it runs.":
     "最初はオフです。「プラグイン」でオンにしてください。各ツールは実行前に確認します。",
@@ -2968,6 +2971,7 @@ export default {
   "Remove the waiting messages first: this harness cannot take them back.":
     "先に待機中のメッセージを削除してください。このHarnessはそれを取り消せません。",
   "Remove this row": "この行を削除",
+  "Remove {item} from {game}?": "{item}を{game}から外しますか？",
   "Remove {name}": "{name}を削除",
   Removed: "削除済み",
   "Removed {actor}": "{actor}を削除しました",
@@ -5298,6 +5302,7 @@ export default {
   "{chart}: {readings}": "{chart}：{readings}",
   "{check}: {name} · {status}": "{check}：{name} · {status}",
   "{chosen} of {total}": "{chosen}/{total}",
+  "{coins} of your coin is on hold until {date}.": "コインのうち{coins}は{date}まで保留中です。",
   "{command} (exit {code})": "{command}（終了コード{code}）",
   "{command} failed": "{command}が失敗しました",
   "{commit} (cataloged, not audited)": "{commit}（カタログ掲載、未監査）",
@@ -5826,6 +5831,7 @@ export default {
     "このコンピューターにはもうありません。もう一度インストールしてください。",
   "It couldn’t start on this computer.": "このコンピューターで起動できませんでした。",
   "Remove from this computer": "このコンピューターから削除",
+  "Remove from {game}": "{game}から外す",
   "{title} is removed from this computer. Its saves stay.":
     "{title}をこのコンピューターから削除しました。セーブデータは残ります。",
   "Ready to play on this computer.": "このコンピューターでプレイできます。",

@@ -382,6 +382,25 @@ describe("Works in N games, the shelf and a complaint", () => {
     await assert.rejects(store.shelf("../me"));
   });
 
+  it("reads whether the shelf's game still sells each item, and an API that does not say as still selling it", async () => {
+    const shelfItem = (onSale: unknown) => ({
+      id: "sku1",
+      name: "Rage Potion",
+      iconUrl: ICON,
+      modelUrl: null,
+      game: { slug: "stick-steel", title: "Stick & Steel" },
+      ...(onSale === undefined ? {} : { onSale }),
+    });
+    // At most five: the shelf's own limit.
+    const answers = [false, true, undefined, "false", null];
+    const { store } = rig(() => ok({ items: answers.map(shelfItem) }));
+    const shelf = await store.shelf("user1");
+    assert.deepEqual(
+      shelf.map((item) => item.onSale),
+      [false, true, true, true, true],
+    );
+  });
+
   it("keeps a shelf item's game cover for Get in <game> only from a host the app loads pictures from", async () => {
     const shelfItem = (coverUrl: unknown) => ({
       id: "sku1",

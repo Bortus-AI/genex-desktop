@@ -6,32 +6,41 @@
  * never computed. The store also keeps which of the account's local games are on Genex (each game's
  * Genex project, from its publish record), the game Add to and New item act on, and the item actions
  * Selling and the chat's Listing draft card share: Put on sale, Take off sale and Other games can
- * use it, each pressed by the person and carried out by main (D40). Pure actions; the store's
- * commands call `StudioApi`.
+ * use it, each pressed by the person and carried out by main (D40). Browse's detail says which of the
+ * account's games each item was added to, for Added and Remove from. A tab chosen and the window
+ * coming back read the tab on show again, a burst of them once (`REREAD_GAP_MS`); a press that
+ * changed something reads what it changed again at once. Pure actions; the store's commands call
+ * `StudioApi`.
  */
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { GENEX_PLUGIN_ID, GenexAction, GenexPublishStatusOperation } from "../../shared/genex.ts";
 import { isPlayGameId } from "../../shared/play-manage.ts";
 import {
+  type BrowseDetail,
   type BrowseItem,
   type BrowsePage,
+  BROWSE_PAGE_SIZE,
   BROWSE_QUERY_MAX,
   type CreatorItem,
   isStoreRefused,
   type ItemAdded,
+  type ItemAllowance,
   type Selling,
   type StoreRefused,
   StoreRefusal,
 } from "../../shared/store-items.ts";
 import type { StudioApi } from "../../shared/studio-api.ts";
+import { rereadDue } from "./refresher.ts";
 
 /** How long Browse waits after the person's last key before it searches: one read per pause, not one per key. */
 export const BROWSE_TYPING_MS = SECOND_MS / 4;
 
-/** The one timer the items store keeps: Browse's wait for the typing to pause. */
+/** The items store's timer (Browse's wait for the typing to pause) and the clock re-reads are paced on. */
 export interface ItemsTimers {
   setTimeout(run: () => void, ms: number): unknown;
+  /** The wall clock; absent reads `Date.now`. */
+  now?(): number;
 }
 
 const browserTimers: ItemsTimers = { setTimeout: (run, ms) => globalThis.setTimeout(run, ms) };
@@ -63,11 +72,13 @@ export const ItemAction = {
   Unshare: "unshare",
   /** Add to \<game>. */
   Add: "add",
+  /** Remove from \<game>. */
+  Remove: "remove",
 } as const;
 export type ItemAction = (typeof ItemAction)[keyof typeof ItemAction];
 
 /** The actions that change the item itself, as genex.games answers them with the item. */
-export type ItemChange = Exclude<ItemAction, typeof ItemAction.Add>;
+export type ItemChange = Exclude<ItemAction, typeof ItemAction.Add | typeof ItemAction.Remove>;
 
 /** Browse: the search, its items, and the one on show (each item carries all its panel shows). */
 export interface BrowseView {
@@ -80,6 +91,8 @@ export interface BrowseView {
   selectedId: string | null;
   /** The selling game's share genex.games configures, in basis points; absent until a page names it. */
   sellerShareBps?: number;
+  /** Each item's detail as last read, by item id: which of the account's games it was added to. */
+  details: Record<string, BrowseDetail>;
 }
 
 /** Selling: the account's items and the strip. */
@@ -116,6 +129,7 @@ export const initialItems = (): ItemsState => ({
     nextCursor: null,
     more: false,
     selectedId: null,
+    details: {},
   },
   selling: { read: ItemsRead.Idle, selling: null },
   hosted: {},
@@ -195,6 +209,12 @@ export function browseFailed(state: ItemsState, query: string): ItemsState {
 export const itemChosen = (state: ItemsState, itemId: string): ItemsState => ({
   ...state,
   browse: { ...state.browse, selectedId: itemId },
+});
+
+/** An item's detail came: what its panel says of the account's games it was added to. */
+export const detailRead = (state: ItemsState, detail: BrowseDetail): ItemsState => ({
+  ...state,
+  browse: { ...state.browse, details: { ...state.browse.details, [detail.item.id]: detail } },
 });
 
 /** Selling is read (again): what it showed stays while it is. */
@@ -279,6 +299,9 @@ export function addTarget(state: Pick<ItemsState, "hosted" | "target">, games: r
 /** How a press on an item ended: the item as it is now, or why not. */
 export type ItemOutcome = { item: CreatorItem } | StoreRefused;
 
+/** Browse holds no more than its first page: a re-read of that page loses nothing "Show more" added. */
+const firstPageOnly = (browse: BrowseView): boolean => browse.items.length <= BROWSE_PAGE_SIZE;
+
 /** The call each change makes: Studio main asks genex.games as the app's account. */
 const CHANGE_CALL: Record<ItemChange, (api: StudioApi, itemId: string) => Promise<CreatorItem | StoreRefused>> = {
   [ItemAction.PutOnSale]: (api, itemId) => api.itemPutOnSale(itemId),
@@ -304,40 +327,70 @@ export interface ItemsStore extends StoreApi<ItemsState> {
   more(): Promise<void>;
   /** Read Selling (again). */
   readSelling(): Promise<void>;
+  /** Show a tab, read again when its last read is old. */
+  chooseTab(tab: ItemsTab): Promise<void>;
+  /** The page came back to the front: the tab on show is read again when its last read is old. */
+  refresh(): Promise<void>;
+  /** Show an item in Browse's detail panel, with the games it was added to read afresh. */
+  choose(itemId: string): Promise<void>;
   /** Read which of these local games are on Genex. */
   readHosted(games: readonly string[]): Promise<void>;
   /** Press Put on sale, Take off sale, or Other games can use it on an item. */
   change(itemId: string, action: ItemChange): Promise<ItemOutcome>;
   /** Add to \<game>: allow the item in a local game that is on Genex. */
   addToGame(itemId: string, game: string): Promise<ItemAdded | StoreRefused>;
+  /** Remove from \<game>: take a shared item out of a local game that is on Genex. */
+  removeFromGame(itemId: string, game: string): Promise<ItemAllowance | StoreRefused>;
 }
 
-/** The store and its commands over `api`; `timers` paces Browse's search while the person types. */
-export function createItemsStore(api: StudioApi, timers: ItemsTimers = browserTimers): ItemsStore {
-  const store = createStore<ItemsState>()(initialItems);
+/** What the store's reads and presses share: the store, its setter, Studio's calls and the clock. */
+interface ItemsContext {
+  store: StoreApi<ItemsState>;
+  set(next: (state: ItemsState) => ItemsState): void;
+  api: StudioApi;
+  timers: ItemsTimers;
+  now(): number;
+  /** When each tab was last read, for the re-reads a focus or a tab asks for. */
+  lastRead: Partial<Record<ItemsTab, number>>;
+}
+
+/** Browse's reads: a search, the typing that waits for a pause, the next page, an item's detail and a re-read. */
+function browseReads(ctx: ItemsContext) {
+  const { store, set, api } = ctx;
   /** Each key typed in the search: only the read the last one asked for goes out. */
   let keys = 0;
-  const set = (next: (state: ItemsState) => ItemsState): void => store.setState(next, true);
+  /** The detail of `itemId`, read again; a refusal or an outage keeps what it showed. */
+  const readDetail = async (itemId: string): Promise<void> => {
+    const answer = await api.itemsBrowseDetail(itemId).catch(() => null);
+    if (answer && !isStoreRefused(answer)) set((state) => detailRead(state, answer));
+  };
   const readPage = async (query: string, cursor: string | null, later: boolean): Promise<void> => {
     try {
       const answer = await api.itemsBrowse(query, cursor);
+      const shown = store.getState().browse.selectedId;
       set((state) => browseAnswered(state, query, answer, later));
+      // A first page shows its first item: read where that one was added.
+      const selected = store.getState().browse.selectedId;
+      if (selected && (selected !== shown || !later)) await readDetail(selected);
     } catch {
       set((state) => browseFailed(state, query));
     }
   };
-  return Object.assign(store, {
-    search: async (typed: string) => {
-      const query = browseQuery(typed);
-      set((state) => browseAsked(state, query));
-      await readPage(query, null, false);
-    },
+  const search = async (typed: string): Promise<void> => {
+    const query = browseQuery(typed);
+    ctx.lastRead[ItemsTab.Browse] = ctx.now();
+    set((state) => browseAsked(state, query));
+    await readPage(query, null, false);
+  };
+  return {
+    search,
+    readDetail,
     searchTyped: (typed: string) => {
       const query = browseQuery(typed);
       set((state) => browseAsked(state, query));
       keys += 1;
       const key = keys;
-      timers.setTimeout(() => {
+      ctx.timers.setTimeout(() => {
         if (key === keys) void readPage(query, null, false);
       }, BROWSE_TYPING_MS);
     },
@@ -347,14 +400,92 @@ export function createItemsStore(api: StudioApi, timers: ItemsTimers = browserTi
       set(moreAsked);
       await readPage(query, nextCursor, true);
     },
-    readSelling: async () => {
-      set(sellingAsked);
-      try {
-        const answer = await api.itemsSelling();
-        set((state) => sellingAnswered(state, answer));
-      } catch {
-        set(sellingFailed);
-      }
+    /** Browse again: its first page, unless Show more added to it, and the item on show. */
+    reread: async (): Promise<void> => {
+      const { browse } = store.getState();
+      if (firstPageOnly(browse)) return search(browse.query);
+      ctx.lastRead[ItemsTab.Browse] = ctx.now();
+      if (browse.selectedId) await readDetail(browse.selectedId);
+    },
+  };
+}
+
+/** Selling read (again): what it showed stays while it is. */
+async function readSellingOf(ctx: ItemsContext): Promise<void> {
+  const { set } = ctx;
+  ctx.lastRead[ItemsTab.Selling] = ctx.now();
+  set(sellingAsked);
+  try {
+    const answer = await ctx.api.itemsSelling();
+    set((state) => sellingAnswered(state, answer));
+  } catch {
+    set(sellingFailed);
+  }
+}
+
+/**
+ * Add to and Remove from \<game>, each by the game's Genex project from its publish record; what
+ * genex.games refuses stays on the item, and what it did is read again in the item's detail.
+ */
+function gamePresses(ctx: ItemsContext, readDetail: (itemId: string) => Promise<void>) {
+  const { store, set } = ctx;
+  const press = async <T>(
+    itemId: string,
+    game: string,
+    action: typeof ItemAction.Add | typeof ItemAction.Remove,
+    call: (projectId: string) => Promise<T | StoreRefused>,
+  ): Promise<T | StoreRefused> => {
+    const projectId = store.getState().hosted[game];
+    if (!projectId) return { refused: StoreRefusal.ProjectNotFound };
+    set((state) => actionStarted(state, itemId, action));
+    const answer = await call(projectId).catch((): StoreRefused => ({ refused: StoreRefusal.Unknown }));
+    if (isStoreRefused(answer)) set((state) => itemRefused(state, itemId, answer.refused));
+    else {
+      set((state) => actionEnded(state, itemId));
+      void readDetail(itemId);
+    }
+    return answer;
+  };
+  return {
+    addToGame: (itemId: string, game: string) =>
+      press(itemId, game, ItemAction.Add, (projectId) => ctx.api.itemsAddToGame(itemId, projectId)),
+    removeFromGame: (itemId: string, game: string) =>
+      press(itemId, game, ItemAction.Remove, (projectId) => ctx.api.itemsRemoveFromGame(itemId, projectId)),
+  };
+}
+
+/** The store and its commands over `api`; `timers` paces Browse's search while the person types, and the re-reads. */
+export function createItemsStore(api: StudioApi, timers: ItemsTimers = browserTimers): ItemsStore {
+  const store = createStore<ItemsState>()(initialItems);
+  const ctx: ItemsContext = {
+    store,
+    set: (next) => store.setState(next, true),
+    api,
+    timers,
+    now: () => (timers.now ?? Date.now)(),
+    lastRead: {},
+  };
+  const { set } = ctx;
+  const browse = browseReads(ctx);
+  const readSelling = () => readSellingOf(ctx);
+  /** The tab `tab` read again, once its last read is old. */
+  const reread = async (tab: ItemsTab): Promise<void> => {
+    if (!rereadDue(ctx.lastRead[tab], ctx.now())) return;
+    await (tab === ItemsTab.Selling ? readSelling() : browse.reread());
+  };
+  return Object.assign(store, {
+    search: browse.search,
+    searchTyped: browse.searchTyped,
+    more: browse.more,
+    readSelling,
+    chooseTab: async (tab: ItemsTab) => {
+      set((state) => tabChosen(state, tab));
+      await reread(tab);
+    },
+    refresh: () => reread(store.getState().tab),
+    choose: async (itemId: string) => {
+      set((state) => itemChosen(state, itemId));
+      await browse.readDetail(itemId);
     },
     readHosted: async (games: readonly string[]) => {
       const read = await Promise.all(games.map(async (game) => [game, await hostedProject(api, game)] as const));
@@ -368,17 +499,10 @@ export function createItemsStore(api: StudioApi, timers: ItemsTimers = browserTi
         return answer;
       }
       set((state) => itemChanged(state, answer));
+      // Sold, Earned and the strip move with a sale or its end: Selling is read again at once.
+      void readSelling();
       return { item: answer };
     },
-    addToGame: async (itemId: string, game: string): Promise<ItemAdded | StoreRefused> => {
-      const projectId = store.getState().hosted[game];
-      if (!projectId) return { refused: StoreRefusal.ProjectNotFound };
-      set((state) => actionStarted(state, itemId, ItemAction.Add));
-      const answer = await api.itemsAddToGame(itemId, projectId).catch(() => ({ refused: StoreRefusal.Unknown }));
-      set((state) =>
-        isStoreRefused(answer) ? itemRefused(state, itemId, answer.refused) : actionEnded(state, itemId),
-      );
-      return answer;
-    },
+    ...gamePresses(ctx, browse.readDetail),
   });
 }

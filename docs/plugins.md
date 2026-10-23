@@ -3346,10 +3346,11 @@ Genex:
   copy goes, stamped), so the CLI never writes a game. The bound folder is the game's or its Studio
   worktree (`genex-bound-game.ts`, shared with `genex__package`); `genex-cli-game-paths.test.ts`
   holds the hostile table. Studio adds `--env`,
-  `--api-url https://api.genex.games`, `--no-auth` and `--json`, and `--user-approved` only for an
-  approved bench. The consent card shows Studio's summary of the validated call (the command, what
+  `--api-url https://api.genex.games` (a development profile's stand API instead, with the stand
+  account's token: `GenexStand`, [play](play.md)), `--no-auth` and `--json`, and `--user-approved`
+  only for an approved bench. The consent card shows Studio's summary of the validated call (the command, what
   it spends first, the agent's text last and clipped), and a call Studio would refuse asks nobody. The token reaches the
-  preload on stdin; the network is `api.genex.games` only; the games root and every game are
+  preload on stdin; the network is that API's host only; the games root and every game are
   write-denied; a run stops after 90 s; output is redacted and capped at 64 KiB. A project
   command sees only `{id, slug}` from the publish workspace. `genex-package` backs
   `genex__package`: it adds `@genex-ai/multiplayer` or `@genex-ai/embed-sdk` at the exact pin in

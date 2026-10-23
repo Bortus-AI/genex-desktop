@@ -1876,6 +1876,8 @@ export default {
     "Это раз за разом не получалось, поэтому работа остановлена, чтобы сберечь твои кредиты.",
   "It leaves Play and genex.games and goes back to drafts. The direct link still works, and plays and likes stay if it’s published again.":
     "Игра пропадёт из «Играть» и с genex.games и вернётся в черновики. Прямая ссылка продолжит работать, а запуски и лайки сохранятся, если опубликуешь её снова.",
+  "It leaves the game’s Store. Players who own it keep it.":
+    "Он пропадёт из магазина игры. У игроков, которые его купили, он останется.",
   "It may need the setup scripts its packages came with, which didn’t run.":
     "Возможно, ей нужны скрипты установки из её пакетов — они не запускались.",
   "It merged this part's work without a reviewer's verdict. The reviewers score parts that build in steps; this one was built in one session.":
@@ -1892,6 +1894,7 @@ export default {
     "Он работает с твоими правами: Genex не изолирует его код.",
   "It runs, but no reviewer compared it with the game you had.":
     "Эта версия работает, но проверяющие не сравнивали её с прежней игрой.",
+  "It shows in the game after its next release.": "Он появится в игре после её следующего релиза.",
   "It shows up here as soon as it runs.": "Она появится здесь, как только запустится.",
   "It starts off: turn it on in Plugins; each of its tools asks you before it runs.":
     "Сначала он выключен: включи его в «Плагинах»; каждый его инструмент спросит тебя перед запуском.",
@@ -2959,6 +2962,7 @@ export default {
   "Remove the waiting messages first: this harness cannot take them back.":
     "Сначала убери сообщения из очереди: эта версия Harness не умеет забирать их обратно.",
   "Remove this row": "Удалить строку",
+  "Remove {item} from {game}?": "Убрать {item} из «{game}»?",
   "Remove {name}": "Удалить {name}",
   Removed: "Удалённые",
   "Removed {actor}": "Удалён {actor}",
@@ -5277,6 +5281,7 @@ export default {
   "{chart}: {readings}": "{chart}: {readings}",
   "{check}: {name} · {status}": "{check}: {name} · {status}",
   "{chosen} of {total}": "{chosen} из {total}",
+  "{coins} of your coin is on hold until {date}.": "{coins} твоих монет удерживается до {date}.",
   "{command} (exit {code})": "{command} (код выхода {code})",
   "{command} failed": "{command}: ошибка",
   "{commit} (cataloged, not audited)": "{commit} (есть в каталоге, не проверен)",
@@ -5876,6 +5881,7 @@ export default {
   "It isn’t on this computer any more. Install it again.": "Игры больше нет на этом компьютере. Установи её снова.",
   "It couldn’t start on this computer.": "Не удалось запустить игру на этом компьютере.",
   "Remove from this computer": "Удалить с этого компьютера",
+  "Remove from {game}": "Убрать из «{game}»",
   "{title} is removed from this computer. Its saves stay.":
     "Игра «{title}» удалена с этого компьютера. Сохранения остались.",
   "Ready to play on this computer.": "Можно играть на этом компьютере.",

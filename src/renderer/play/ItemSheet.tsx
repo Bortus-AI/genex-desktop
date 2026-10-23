@@ -40,6 +40,7 @@ import {
   StoreFocus,
   type StoreNotice,
   storeBalanceLine,
+  storeHeldLine,
   storeNotice,
   storePayLabel,
   storeSheetAction,
@@ -79,7 +80,8 @@ interface FaceParts {
   notice: StoreNotice | null;
   worksIn: boolean;
   /** The price and the line under it, while it can still be paid; null shows none. */
-  price: { coins: number; usdCents: number | null; line: string | null; short: boolean } | null;
+  /** `held`: the line under a short balance about earned coin still on hold, when there is some. */
+  price: { coins: number; usdCents: number | null; line: string | null; short: boolean; held: string | null } | null;
   /** The row that stands for the price once it is the player's (Paid, Owned) or cannot be had here. */
   status: { text: string; tone: "done" | "quiet"; right: string | null } | null;
   action: FaceAction;
@@ -110,7 +112,12 @@ function mainParts(sheet: PlayPurchaseSheet, answer: (said: PurchaseAnswer) => v
     worksIn: notice === null,
     price:
       payable && sheet.price
-        ? { ...sheet.price, line, short: sheet.step === PurchaseStep.NotEnough && line !== null }
+        ? {
+            ...sheet.price,
+            line,
+            short: sheet.step === PurchaseStep.NotEnough && line !== null,
+            held: storeHeldLine(sheet),
+          }
         : null,
     status: paid ? { text: PURCHASE.paid, tone: "done", right: line } : null,
     action: buttonAction(storeSheetAction(sheet), answer),
@@ -126,6 +133,7 @@ const itemPrice = (item: PlayerItem): FaceParts["price"] => ({
   usdCents: item.priceCoins > 0 ? item.priceDisplayUsdCents : null,
   line: null,
   short: false,
+  held: null,
 });
 
 /** What the local phases' buttons do. */
@@ -264,6 +272,11 @@ function PriceRows({ price }: { price: NonNullable<FaceParts["price"]> }): JSX.E
       {price.line && (
         <p className="item-sheet-balance" data-short={price.short || undefined}>
           {price.line}
+        </p>
+      )}
+      {price.held && (
+        <p className="item-sheet-held" data-item-sheet-held>
+          {price.held}
         </p>
       )}
     </dl>

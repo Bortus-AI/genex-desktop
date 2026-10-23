@@ -26,7 +26,7 @@ import {
 import { Icon } from "../../ui/icons.tsx";
 import { ITEMS_WORDS, itemRefusalWords } from "../../words.ts";
 import { ReadNote } from "./ReadNote.tsx";
-import { rowMenu, SellingStatus, sellingStatus } from "./selling-model.ts";
+import { rowMenu, sellingPrice, SellingStatus, sellingStatus } from "./selling-model.ts";
 
 const WORDS = ITEMS_WORDS;
 /** What Selling shows for a number an item has none of yet (a draft's sales). */
@@ -190,7 +190,7 @@ function Row({ row, onAsk }: { row: SellingRow; onAsk: ((row: SellingRow) => voi
       <td className="items-row-status">
         <Status row={row} busy={busy} />
       </td>
-      <td className="items-num">{coinNumber(row.priceCoins)}</td>
+      <td className="items-num">{sellingPrice(row)}</td>
       <td className="items-num">{draft ? NONE : coinNumber(row.sold)}</td>
       <td className="items-num">{draft ? NONE : coinNumber(row.earned)}</td>
       <td className="items-row-actions">

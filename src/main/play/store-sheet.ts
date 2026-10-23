@@ -173,6 +173,8 @@ function watchedCoin(sheet: Sheet): ViewerCoin {
         throw error;
       }),
     balance: () => coin.balance(),
+    // The earned coin on hold, for a short sheet's line under the balance, when the coin client reads it.
+    ...(coin.wallet ? { wallet: coin.wallet } : {}),
     confirm: (intent) => coin.confirm(intent),
     cancel: (id) => coin.cancel(id),
   };
