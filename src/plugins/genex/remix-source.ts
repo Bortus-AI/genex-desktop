@@ -4,8 +4,10 @@
  * game's source. Never part of it: history, Studio's and Genex's own folders, installed packages, agent
  * settings, secrets, and an engine's caches and builds. The folder is written by agents, so only a
  * real file inside it is copied: a link, or a path that leads out of it, is left behind. A project too
- * big for Genex's source store is refused before anything is pushed. A file big enough to trip the
- * upload's request limit is named in the copy's `.gitattributes`, so it goes to Git LFS whatever its type.
+ * big for Genex's source store is refused before anything is pushed. A model, picture, sound, video or
+ * Unreal package, and any file big enough to trip the upload's request limit, is named in the copy's
+ * `.gitattributes`, so it goes to Git LFS (Genex keeps those blobs in its object store, not on the
+ * git server's disk).
  */
 import { execFile } from "node:child_process";
 import { constants } from "node:fs";
@@ -13,17 +15,23 @@ import { chmod, copyFile, lstat, mkdir, readFile, realpath, rm, writeFile } from
 import path from "node:path";
 import { promisify } from "node:util";
 import { MINUTE_MS } from "../../shared/duration.ts";
+import { assetExtension, isMediaFile } from "../../shared/game-assets.ts";
 import { GenexRemixProblem } from "../../shared/genex.ts";
 import { HOST_GIT_CONFIG, hostGitEnv } from "../../substrate/git-policy.ts";
 
 const exec = promisify(execFile);
 
 /** The most Genex keeps of a game's source by default (its source store's limit for an account). */
-export const SOURCE_MAX_BYTES = 2 * 1024 ** 3;
+export const SOURCE_MAX_BYTES = 5 * 1024 ** 3;
 /** The most files Genex keeps of a game's source by default. */
 export const SOURCE_MAX_FILES = 5_000;
 /** A file at least this big goes to Git LFS by its own name: the upload refuses requests near 100 MB. */
 export const LFS_FILE_BYTES = 50 * 1024 ** 2;
+/** Unreal's packages and levels: binary, and most of an Unreal project's size. */
+const ENGINE_PACKAGES = new Set(["uasset", "umap"]);
+/** Whether a file is a binary asset, which goes to Git LFS whatever its size: media or an Unreal package. */
+const isBinaryAsset = (file: string): boolean => isMediaFile(file) || ENGINE_PACKAGES.has(assetExtension(file));
+
 /** The most git may print when it lists a game's files: a line per file. */
 const LIST_OUTPUT_MAX_BYTES = 64 * 1024 * 1024;
 /** How long git may take to list a game's files. */
@@ -81,7 +89,8 @@ const ENGINE_CACHES: ReadonlyArray<{
   },
   {
     marks: (file) => (file.endsWith(".uproject") ? parentOf(file) : null),
-    caches: new Set(["Binaries", "Intermediate", "Saved", "DerivedDataCache"]),
+    // Builds holds the apps package-game makes: what players install, never the project.
+    caches: new Set(["Binaries", "Intermediate", "Saved", "DerivedDataCache", "Builds"]),
     plugins: { folder: "Plugins", caches: new Set(["Binaries", "Intermediate"]) },
   },
 ];
@@ -207,7 +216,7 @@ export async function stageRemixSource(
   }
   await routeBigFiles(
     dest,
-    files.filter((file) => file.bytes >= LFS_FILE_BYTES).map((file) => file.file),
+    files.filter((file) => file.bytes >= LFS_FILE_BYTES || isBinaryAsset(file.file)).map((file) => file.file),
   );
   return { files: files.length, bytes };
 }

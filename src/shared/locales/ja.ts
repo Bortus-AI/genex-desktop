@@ -1903,8 +1903,8 @@ export default {
   "Its packages aren’t installed yet.": "パッケージがまだインストールされていません。",
   "Its project didn’t go, so no one can remix it yet.":
     "プロジェクトが送れなかったので、まだ誰もリミックスできません。",
-  "Its project is too big to remix: Genex keeps up to 2 GB and 5,000 files.":
-    "プロジェクトが大きすぎてリミックスできません。Genex に置けるのは 2 GB・5,000 ファイルまでです。",
+  "Its project is too big to remix: Genex keeps up to 5 GB and 5,000 files.":
+    "プロジェクトが大きすぎてリミックスできません。Genex に置けるのは 5 GB・5,000 ファイルまでです。",
   "Its session failed before it delivered anything.": "何も提出しないうちにセッションが失敗しました。",
   "Its source is your own repository: run genex make-remixable in the game’s folder to allow remixing.":
     "ソースはあなた自身のリポジトリにあります。リミックスを許可するには、ゲームのフォルダーでgenex make-remixableを実行してください。",

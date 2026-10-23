@@ -1860,8 +1860,8 @@ export default {
     "패키지가 아직 설치되지 않았어요 — 한 번 누르면 “{install}” 명령이 실행돼요.",
   "Its packages aren’t installed yet.": "패키지가 아직 설치되지 않았어요.",
   "Its project didn’t go, so no one can remix it yet.": "프로젝트가 전송되지 않아서 아직 아무도 리믹스할 수 없어요.",
-  "Its project is too big to remix: Genex keeps up to 2 GB and 5,000 files.":
-    "프로젝트가 너무 커서 리믹스할 수 없어요. Genex는 2GB, 파일 5,000개까지 보관해요.",
+  "Its project is too big to remix: Genex keeps up to 5 GB and 5,000 files.":
+    "프로젝트가 너무 커서 리믹스할 수 없어요. Genex는 5GB, 파일 5,000개까지 보관해요.",
   "Its session failed before it delivered anything.": "아무것도 전달하기 전에 세션이 실패했어요.",
   "Its source is your own repository: run genex make-remixable in the game’s folder to allow remixing.":
     "소스가 내 저장소에 있어요. 리믹스를 허용하려면 게임 폴더에서 genex make-remixable을 실행하세요.",

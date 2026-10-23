@@ -3639,7 +3639,7 @@ export const PUBLISH_REMIX_WORDS = {
   terms: t("Genex terms, section 4"),
   gotIt: t("Got it"),
   /** Why the last publish's project didn't go: remixing then stays off. */
-  tooBig: t("Its project is too big to remix: Genex keeps up to 2 GB and 5,000 files."),
+  tooBig: t("Its project is too big to remix: Genex keeps up to 5 GB and 5,000 files."),
   notSent: t("Its project didn’t go, so no one can remix it yet."),
 } as const;
 
