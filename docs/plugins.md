@@ -3425,11 +3425,7 @@ Genex:
   CLI release not yet on npm changed is vendored ahead of the pin (`--ahead-from <apps/cli> --ahead
   <cards> --ahead-source <label>`): its files record that `version` and a `pending` note, plain
   refreshes keep them, and the test fails once the pin reaches that version until a refresh takes
-  them from the published CLI. Today `genex-monetization` and `genex-items` come from CLI 1.36.14
-  (genex-demo `claude/marketplace`) while the pin stays 1.36.13. Follow-up: when 1.36.14 is on npm,
-  bump the pin (the CLI follow below does, with the refresh): until then `shop add --json` prints
-  no `kind` (no Listing draft card), `--tag`, `--shared` and `--package` are unknown options and
-  `items` is an unknown command, each a plain CLI error the agent reads.
+  them from the published CLI. Today every card comes from the pinned CLI 1.36.15, none ahead of it.
 - The bundled CLI follows npm: every 6 hours `.github/workflows/genex-cli-follow.yml` compares
   npm's `latest` `@genex-ai/cli-demo` with the pin. When npm is ahead, `scripts/follow-genex-cli.ts`
   opens one bump PR against `dev` with the exact pin, refreshed skills, the plugin's next patch

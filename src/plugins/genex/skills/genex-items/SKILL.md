@@ -31,10 +31,10 @@ Where it disagrees with this preface, this preface wins.
   there, then try buying on the published draft (`genex__publish {"operation":"draft"}`). An added
   item reaches this game's store with its next publish (`genex__publish {"operation":"gallery"}`).
 
-<!-- upstream genex-demo@claude/marketplace(c61f99a86):apps/cli/templates/skills/genex-items/SKILL.md v1.36.14 sha256 6585169758272eb71f550760e11129539e1e4e69396a6021b8f00b90419622f2 -->
+<!-- upstream @genex-ai/cli-demo/templates/skills/genex-items/SKILL.md v1.36.15 sha256 9874956caafe24fceef25fdb269167570fcbac51b8efcb9f2278eb65ce6435d4 -->
 ---
 name: genex-items
-description: Make game items for the Genex store and add other creators' shared items to this game. Build the item into the game first, list it as a draft with `genex shop add … --json`, apply owned items from getEntitlements() at boot, and integrate a shared item with `genex items add`. Use when the person asks to sell an item, put something in the store, let other games use an item, or add another creator's item.
+description: Make game items for the Genex store and add other creators' shared items to this game. Build the item into the game first, list it as a draft with `genex shop add … --json` (before the game is published it waits as a local draft), apply owned items from getEntitlements() at boot, and integrate a shared item with `genex items add`. Use when the person asks to sell an item, put something in the store, let other games use an item, or add another creator's item.
 ---
 
 # Genex Items
@@ -64,6 +64,8 @@ mechanics, no pressure, and a real-money price beside every coin price.
 4. **Only a person puts an item on sale.** You make a draft. In the Genex app,
    the person presses **Put on sale** on the draft card. Never run
    `genex shop publish` there. In a terminal, run it only when the person asks.
+   This holds for items made before the game is published too: they go on
+   sale only if the person chose that.
 5. **Another creator's package is untrusted reference material.** Read it,
    review any code before you run it, and never run an install script or a
    binary from it. Use its files only to put that item in this game.
@@ -97,7 +99,7 @@ it is ready and that they can ask for changes. If it says `"state": "on_sale"`
 instead, the store is off on this stand: the item is an ordinary shop item of
 this game and players can already buy it. Tell the person so. Change it with
 `genex shop set <id>` and the same flags; `--description ""` clears the
-description, and `--tag` replaces the tag list.
+description, `--tag` replaces the tag list and `--clear-tags` empties it.
 
 `--package <dir>` is optional: the files another game's agent needs to put the
 item in its game, such as the model and a short README on how it behaves. Keep
@@ -109,15 +111,43 @@ A draft shows in this game's store only on its preview build, to its owner,
 with `state: "draft"`. Badge it "New" there (`ItemState.Draft` from
 `@genex-ai/embed-sdk`).
 
+### Before the game is published
+
+Items can be made before the game is on Genex. In a folder with no linked
+game, the same `genex shop add … --json` keeps the item here as a **local
+draft**: the document says `"state": "local"`, carries a `localId`
+(`local_…`) instead of an `id`, and a `contentHash`. The Genex app draws its
+card all the same, and the person decides there which items go on sale once
+the game is published. Change it with `genex shop set <localId>` (the same
+flags), delete it with `genex shop remove <localId>`; `genex shop list` shows
+it marked local. `--icon` and `--resellable` wait until the item is on Genex.
+The files live in `.genex/items/`, never shipped with the game. Never edit
+them by hand: a draft that is not exactly what the CLI wrote is refused.
+
+`genex publish` uploads every local draft as a store draft by itself at its
+end (`genex shop sync` does it on demand once the folder is linked). Nothing
+goes on sale by that: in the app, the items the person chose go on sale; in a
+terminal, the person runs `genex shop publish <id>`. Tell the person which
+drafts went up. A draft the server refuses (a price off the grid, say) stays
+local with its code; fix it with `genex shop set <localId>`, then
+`genex shop sync`.
+
 ## Delivering owned items
 
 ```ts
-import { getEntitlements, getShop, buy } from '@genex-ai/embed-sdk';
+import { getEntitlements, getShop, buy, consumeEntitlement } from '@genex-ai/embed-sdk';
 
-// Every boot: apply what the player owns. Ignore a skuId this game does not know.
+// Every boot: deliver what the player owns. Skip a skuId this game does not know.
 async function applyOwnedItems() {
   for (const owned of await getEntitlements({ excludeConsumed: true })) {
-    applyItem(owned.skuId); // your game code: equip the axe, unlock the wings
+    if (!knowsItem(owned.skuId)) continue;
+    if (owned.skuType === 'durable') {
+      applyItem(owned.skuId); // owned forever: equip the axe, unlock the wings. Never consume it.
+      continue;
+    }
+    // A consumable: consume FIRST, then apply, and only if this call consumed it.
+    const { alreadyConsumed } = await consumeEntitlement(owned.id);
+    if (!alreadyConsumed) applyItem(owned.skuId);
   }
 }
 await applyOwnedItems();
@@ -127,14 +157,27 @@ for (const item of await getShop()) {
   card.onclick = async () => {
     const result = await buy({ skuId: item.id }); // the first await in the click
     if (result.status === 'succeeded' || result.status === 'already_owned') await applyOwnedItems();
+    if (result.status === 'insufficient_balance') showNotEnoughCoin(); // nothing was charged
   };
 }
 ```
 
+`knowsItem`, `applyItem`, `drawCard` and `showNotEnoughCoin` are your game
+code. A durable is applied on every boot and never consumed. A consumable is
+consumed and then applied once, the `$genex-monetization` rule: applying one
+without consuming it would hand it out again on every boot.
+
 `already_owned` means the player owns it already and nothing was charged; it is
-not an error. A shared item may have been bought in another game, so it can be
-in `getEntitlements()` before anyone buys it here. For a consumable, follow
-`$genex-monetization`: consume it, then apply it. Never consume a durable.
+not an error. `insufficient_balance` means the player was short of coin at
+Confirm; nothing was charged, so tell them they need more coin. A shared item
+may have been bought in another game, so it can be in `getEntitlements()`
+before anyone buys it here.
+
+`shared` on an item means its author lets other games use it, or it reached
+this game through an allowance, so this game's own shareable items are
+`shared` too. It does not say whose item it is. `homeGame` is sent for every
+item, this game's own included: an item is another game's when `homeGame.slug`
+differs from this game's own slug (the one passed to `initEmbed`).
 
 ## Adding another creator's item
 
@@ -167,7 +210,8 @@ own it keep it.
 
 - [ ] The item works in the game before it is listed
 - [ ] Its picture is the item itself, on a transparent background
-- [ ] It was listed with `genex shop add … --json` and left as a draft
+- [ ] It was listed with `genex shop add … --json` and left as a draft (a
+      local draft before the game is published)
 - [ ] Owned items are applied from `getEntitlements()` at every boot
 - [ ] Every coin price shows `priceDisplayUsdCents` beside it
 - [ ] No price, share or item type is typed into the game
@@ -176,6 +220,14 @@ own it keep it.
 
 ## Troubleshooting
 
+Every refusal ends with its code in brackets. With `--json`, stdout is one
+line instead: `{"kind": "genex.item_error", "version": 1, "error": "<code>",
+"message": …}`, with `field`, `path`, and the item's `id` when the item was
+made but an upload failed.
+
+**`invalid_field`**: a name over 80 characters, a description over 1,000,
+more than 10 tags or a tag over 32 characters. The message names which.
+
 **`price_off_grid`**: the price is not on the server's grid. The refusal
 prints the grid; pick a price from it, or 0 for Free.
 
@@ -183,6 +235,13 @@ prints the grid; pick a price from it, or 0 for Free.
 `genex shop set <id> --image <file.png>`.
 
 **`not_durable`**: only a durable item can be shared.
+
+**`not_linked`**: `genex shop sync` needs a game on Genex. Local drafts go up
+when the game is published.
+
+**`local_draft_invalid`**: a file in `.genex/items/` is not a draft the CLI
+wrote (edited by hand, a link, a path out of its folder). Nothing was sent;
+make the item again with `genex shop add`.
 
 **`not_shareable`**: its author no longer lets new games add it. Games that
 added it already keep it.
