@@ -1619,6 +1619,8 @@ export default {
   "Get Xcode": "Xcodeを入手",
   "Get a key": "キーを取得",
   "Get coin": "コインを入手",
+  Coin: "コイン",
+  "{amount} coin, get coin": "{amount}コイン、コインを入手",
   "Get credits": "クレジットを入手",
   "Get the Epic Games Launcher": "Epic Games Launcherを入手",
   "Getting Roblox Studio": "Roblox Studioを入手中",

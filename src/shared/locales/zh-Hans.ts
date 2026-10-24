@@ -1523,6 +1523,8 @@ export default {
   "Get Xcode": "获取 Xcode",
   "Get a key": "获取密钥",
   "Get coin": "获取金币",
+  Coin: "金币",
+  "{amount} coin, get coin": "{amount} 金币，获取金币",
   "Get credits": "获取积分",
   "Get the Epic Games Launcher": "获取 Epic Games Launcher",
   "Getting Roblox Studio": "正在获取 Roblox Studio",

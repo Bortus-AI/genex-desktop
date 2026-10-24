@@ -384,6 +384,8 @@ const FIXTURE_SAFE = [
   "studio:store.answer",
   "studio:store.claim",
   "studio:store.shelf",
+  "studio:store.coins",
+  "studio:store.get-coin",
   "studio:store.report",
   "studio:items.browse",
   "studio:items.detail",

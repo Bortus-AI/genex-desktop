@@ -87,6 +87,8 @@ export interface PeopleState {
   ended: PlayMe | null;
   /** The balance as last read, or null before it was. */
   credits: AccountCredits | null;
+  /** The coin the account may spend as last read, for the plate in Play; null before a read or with coin off. */
+  coins: number | null;
   friends: PlayFriendsPage | null;
   friendsStatus: LoadStatus;
   profiles: Record<string, ProfileEntry>;
@@ -109,6 +111,7 @@ export const initialPeople = (): PeopleState => ({
   genexTermsPending: false,
   ended: null,
   credits: null,
+  coins: null,
   friends: null,
   friendsStatus: LoadStatus.Idle,
   profiles: {},
@@ -175,7 +178,7 @@ export function accountRead(
     return { ...known, ...stands, ended: null };
   }
   const ended = view.status === GenexAccountStatus.Ended ? (state.me ?? state.ended) : null;
-  return { ...meRead(state, null), ...stands, ended, credits: null };
+  return { ...meRead(state, null), ...stands, ended, credits: null, coins: null };
 }
 
 /**
@@ -326,6 +329,8 @@ export interface PeopleStore extends StoreApi<PeopleState> {
   signOut(): Promise<void>;
   /** Read the account's balance; a failed read keeps the last one. */
   loadCredits(): Promise<void>;
+  /** Read the coin the account may spend; a failed read keeps the last one. */
+  loadCoins(): Promise<void>;
   /** Read the Friends page (signed in only). */
   loadFriends(): Promise<void>;
   /** Read someone's profile; `force` reads again one already read. */
@@ -373,6 +378,7 @@ type PeopleApi = Pick<
   | "playStats"
   | "playCreators"
   | "playCredits"
+  | "storeCoins"
   | "playSetHandle"
   | "genexAccount"
   | "genexSignIn"
@@ -464,7 +470,7 @@ function numberReads(store: StoreApi<PeopleState>, set: PeopleSet, api: Pick<Peo
 function accountCalls(
   store: StoreApi<PeopleState>,
   set: PeopleSet,
-  api: Pick<PeopleApi, "playCredits" | "genexSignIn" | "genexCancelSignIn" | "genexSignOut">,
+  api: Pick<PeopleApi, "playCredits" | "storeCoins" | "genexSignIn" | "genexCancelSignIn" | "genexSignOut">,
 ) {
   const stands = async (call: () => Promise<GenexAccountView>): Promise<void> => {
     const view = await call();
@@ -481,11 +487,23 @@ function accountCalls(
       // Offline or Genex down: the last balance stays.
     }
   };
+  const loadCoins = async (): Promise<void> => {
+    const asked = store.getState().me?.id;
+    if (!asked) return;
+    try {
+      const coins = await api.storeCoins();
+      // A balance read for another account, or after a sign-out, lands nowhere.
+      set((state) => (state.me?.id === asked ? { ...state, coins } : state));
+    } catch {
+      // The read never reached main: the last balance stays.
+    }
+  };
   return {
     signIn: () => stands(api.genexSignIn),
     cancelSignIn: () => stands(api.genexCancelSignIn),
     signOut: () => stands(api.genexSignOut),
     loadCredits,
+    loadCoins,
   };
 }
 

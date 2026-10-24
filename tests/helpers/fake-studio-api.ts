@@ -208,6 +208,8 @@ const METHODS = [
   "onStoreSheet",
   "storeClaim",
   "storeShelf",
+  "storeCoins",
+  "storeGetCoin",
   "storeReport",
   "itemsBrowse",
   "itemsBrowseDetail",
@@ -348,6 +350,8 @@ function storeDefaults(): Partial<Record<StudioMethod, () => unknown>> {
     storeMyItems: () => [],
     storeItemGames: () => ({ total: 0, games: [] }),
     storeShelf: () => [],
+    // The account's coin for the plate in Play: none, as with coin off.
+    storeCoins: () => null,
     // Create › Items with nothing in it: no item to show, nothing made yet.
     itemsBrowse: () => ({ items: [], nextCursor: null }),
     itemsBrowseDetail: () => ({ refused: "sku_not_found" }),

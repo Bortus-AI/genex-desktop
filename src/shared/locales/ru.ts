@@ -1632,6 +1632,8 @@ export default {
   "Get Xcode": "Скачать Xcode",
   "Get a key": "Получить ключ",
   "Get coin": "Получить монеты",
+  Coin: "Монеты",
+  "{amount} coin, get coin": "Монеты: {amount}, получить монеты",
   "Get credits": "Получить кредиты",
   "Get the Epic Games Launcher": "Скачать Epic Games Launcher",
   "Getting Roblox Studio": "Roblox Studio устанавливается",

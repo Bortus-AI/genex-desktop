@@ -1585,6 +1585,8 @@ export default {
   "Get Xcode": "Xcode 받기",
   "Get a key": "키 받기",
   "Get coin": "코인 받기",
+  Coin: "코인",
+  "{amount} coin, get coin": "{amount}코인, 코인 받기",
   "Get credits": "크레딧 받기",
   "Get the Epic Games Launcher": "Epic Games Launcher 받기",
   "Getting Roblox Studio": "Roblox Studio 받는 중",

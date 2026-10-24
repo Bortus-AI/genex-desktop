@@ -120,6 +120,7 @@ function fakeApi(handlers: Partial<PeopleApi> = {}) {
     playStats: record("playStats", async () => null),
     playCreators: record("playCreators", async () => null),
     playCredits: record("playCredits", async () => credits(1700)),
+    storeCoins: record("storeCoins", async () => 1240),
     playSetHandle: record(
       "playSetHandle",
       async (handle: string): Promise<HandleSave> => ({
@@ -558,6 +559,42 @@ describe("the account across sign-in, offline and a sign-in that ended", () => {
     assert.equal(store.getState().credits?.balance, 1700);
     await store.signOut();
     assert.equal(store.getState().credits, null);
+  });
+});
+
+describe("the account's coin", () => {
+  it("reads the coin Play shows, keeps the last one when a read fails, and forgets it on sign-out", async () => {
+    let answer: () => Promise<number | null> = async () => 1240;
+    const { api } = fakeApi({ storeCoins: () => answer() });
+    const store = createPeopleStore(api, memoryStorage());
+    assert.equal(store.getState().coins, null, "nothing before a read");
+    await store.loadMe();
+    await store.loadCoins();
+    assert.equal(store.getState().coins, 1240);
+    answer = async () => {
+      throw new Error("offline");
+    };
+    await store.loadCoins();
+    assert.equal(store.getState().coins, 1240, "a failed read keeps the last balance");
+    answer = async () => null;
+    await store.loadCoins();
+    assert.equal(store.getState().coins, null, "coin off or signed out on genex.games shows none");
+    answer = async () => 900;
+    await store.loadCoins();
+    await store.signOut();
+    assert.equal(store.getState().coins, null);
+  });
+
+  it("lets a balance read for another account land nowhere", async () => {
+    const slow = deferred<number | null>();
+    const { api } = fakeApi({ storeCoins: () => slow.promise });
+    const store = createPeopleStore(api, memoryStorage());
+    await store.loadMe();
+    const read = store.loadCoins();
+    await store.signOut();
+    slow.resolve(1240);
+    await read;
+    assert.equal(store.getState().coins, null);
   });
 });
 

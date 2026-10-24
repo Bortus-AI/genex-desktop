@@ -19,10 +19,13 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
   signed out: the last account and balance are remembered on this Mac (`studio.genex.me`,
   `studio.genex.credits`); signing out, which Studio asks first, forgets them.
 - The sidebar plate: signed out (a quiet generated face, Sign in to Genex), finishing in the
-  browser (× cancels), signed in (avatar, name, credits opening Credits; a Pro's name has a PRO tag
-  and their row lights up with their nameplate under the pointer), offline (the last account with the offline mark), ended (dimmed, Sign in again). Its
-  menu: Profile, Friends, Credits (the Genex plugin page's Credits tab), Nameplate (Pro), Account
-  settings, Sign out.
+  browser (× cancels), signed in (avatar, name, and beside it the credits opening Credits in
+  Create, or in Play the coin the account may spend (`studio:store.coins`, read as Play opens, as
+  the purchase sheet closes and on focus) opening Get coin; the credits stay while the coin is
+  unknown or coin is off; a Pro's name has a PRO tag and their row lights up with their nameplate
+  under the pointer), offline (the last account with the offline mark), ended (dimmed, Sign in
+  again). Its menu: Profile, Friends, Credits (the Genex plugin page's Credits tab), Coin (Get
+  coin), Nameplate (Pro), Account settings, Sign out.
 - The sidebar's friends, signed in, in Play and Create: right under the games, the word Friends
   (the Friends page, with the requests waiting) and each friend in the API's order, their game on
   one green line while they play (no online or offline); a Pro friend's row lights up with their first nameplate under the pointer. A row opens the profile; hovering a friend

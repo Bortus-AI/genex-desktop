@@ -312,6 +312,12 @@ export function playCoin(deps: CoinDeps) {
   /** The coin the account may spend. */
   const balance = async (): Promise<number> => (await wallet()).spendable;
 
+  /**
+   * The coin the account may spend, as the account plate shows it in Play: none while signed out,
+   * with coin off on genex.games, during an outage or for an answer that is no balance.
+   */
+  const spendableOrNone = (): Promise<number | null> => balance().catch(() => null);
+
   /** Pay for `purchase` from Studio's sheet; a game-priced payment acknowledges the terms the sheet showed. */
   const confirm = async (purchase: CoinIntent): Promise<void> => {
     if (!isIntentId(purchase.id)) throw new Error(MESSAGE.BadIntent);
@@ -331,7 +337,7 @@ export function playCoin(deps: CoinDeps) {
     return isStatus(status) ? status : null;
   };
 
-  return { intent, balance, wallet, confirm, cancel };
+  return { intent, balance, spendableOrNone, wallet, confirm, cancel };
 }
 
 /** The coin client as `playCoin` makes it. */

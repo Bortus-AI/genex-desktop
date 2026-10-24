@@ -59,6 +59,8 @@ export interface StoreIpcDeps {
   store: Omit<PlayStore, "purchase">;
   /** The purchase sheet in the studio window. */
   sheet: Pick<StoreSheetControl, "buy" | "answer">;
+  /** The account's coin for the plate in Play, and Get coin (genex.games' coin page in the browser). */
+  coin: { spendable(): Promise<number | null>; getCoin(): void };
   /** A game's local item drafts: approvals in Studio's app data, sharing and the settle after its publish. */
   local: Pick<LocalItems, "view" | "approve" | "withdraw" | "share" | "settle">;
 }
@@ -158,6 +160,9 @@ export function registerStoreIpc(handle: IpcHandle, deps: StoreIpcDeps): void {
     if (!isAccountId(userId)) throw new Error(MESSAGE.badPerson);
     return store.shelf(userId);
   });
+  handle("studio:store.coins", () => deps.coin.spendable());
+  // The page names no address: main opens genex.games' own coin page, as the purchase sheet's Get coin does.
+  handle("studio:store.get-coin", async () => deps.coin.getCoin());
   handle("studio:store.report", (payload) => {
     const { reason, message } = complaintIn(payload);
     return store.report(itemIdIn(payload), reason, message);

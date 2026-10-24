@@ -4883,6 +4883,9 @@ export const PLAY_WORDS = {
     creditsUnlimited: t("Unlimited"),
     /** The credits beside the plate's name: "1,700 credits, open Credits". */
     creditsLabel: (amount: string) => t("{amount} credits, open Credits", { amount }),
+    coins: t("Coin"),
+    /** The coin beside the plate's name in Play: "1,240 coin, get coin". */
+    coinsLabel: (amount: string) => t("{amount} coin, get coin", { amount }),
     accountSettings: t("Account settings"),
     signOut: t("Sign out"),
     /** The plate while signed out, signing in, offline, and once genex.games ended the sign-in. */

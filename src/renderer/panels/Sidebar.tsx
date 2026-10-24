@@ -218,7 +218,7 @@ export function Sidebar(props: Props): JSX.Element {
       </div>
       {/* Shown once, until the first sign-in: the account plate stays under it. */}
       {playOpen && <PlayPromo />}
-      <ProfilePlate onPlayMode={props.onPlayMode} />
+      <ProfilePlate playOpen={playOpen} onPlayMode={props.onPlayMode} />
     </nav>
   );
 }
