@@ -73,7 +73,7 @@ const OFFLINE_SOURCES: MentionSources = {
 const INTEGRATION_BUILD = "integration";
 /** A show while Live holds another game: nothing was shown, and nothing waits for its Reload. */
 const OTHER_GAME_IN_LIVE =
-  "Another game is open in Live, so it was left as it is and nothing was shown. Tell the user to open this game first, then ask again.";
+  "Another game is open in Live, so it was left as it is and nothing was shown. Opening a game does not start it: tell the user to open this game and press Play on its stage, then ask again.";
 
 /** The build `show_build` means by the game folder as it is. */
 const LIVE_BUILD = "live";
