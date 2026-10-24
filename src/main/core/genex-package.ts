@@ -1,5 +1,5 @@
 /**
- * `genex__package`: the bundled Genex plugin's consented install of one of its two SDK packages
+ * `genex__package`: the bundled Genex plugin's install of one of its two SDK packages, which asks nobody,
  * into the game a call is bound to. The agent names the package; the version comes from
  * `GENEX_GAME_PACKAGES` and the command from the game's lockfile (`GameBuilds.addPackages`), and
  * the folder must be, by real path, the game's own or a Studio worktree git registers for it. A
@@ -121,7 +121,7 @@ export class GenexPackageService {
     return { package: name, version, ...result };
   }
 
-  /** Refuse unsupported or foreign folders before asking for installation approval. No process is started. */
+  /** Refuse unsupported or foreign folders before anything is installed. No process is started. */
   async preflight(args: Record<string, unknown>, binding: PluginBinding): Promise<string> {
     genexPackageOf(args);
     return (await this.#target(binding)).dir;

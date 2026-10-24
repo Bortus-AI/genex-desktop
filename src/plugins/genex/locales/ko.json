@@ -1,7 +1,6 @@
 {
   "3D models, characters, sound and art for your games, made in chat with Genex credits. Coding stays on your own provider.": "게임에 쓸 3D 모델, 캐릭터, 사운드, 아트를 채팅에서 Genex 크레딧으로 만들어요. 코딩은 계속 내 제공자가 맡아요.",
   "Account and jobs": "계정 및 작업",
-  "Add the listed pinned Genex packages. Multiplayer includes its player-identity dependency. A template game gets Studio's built-in copies in its import map; any other game installs them with its own package manager, with the npm registry open for that command only.": "목록의 고정 버전 Genex 패키지를 추가해요. 멀티플레이에는 플레이어 식별 의존성이 함께 들어가요. 템플릿 게임은 import map에 Studio 내장 사본을 받고, 다른 게임은 자체 패키지 관리자로 설치해요. npm 레지스트리는 그 명령에만 열려요.",
   "Approve character workflow": "캐릭터 작업 승인",
   "Asset setup state": "에셋 설정 상태",
   "Blender server address": "Blender 서버 주소",

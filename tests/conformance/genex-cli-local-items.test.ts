@@ -167,7 +167,7 @@ describe("a local `shop add` in a game that is not on Genex yet", () => {
     const answer = await service(p, sandbox, drafts).run(
       { command: "shop add", args: "Ice Shield", options: { price: 300, image: ".genex/scratch/ice.png" } },
       bound(p),
-      { paid: true },
+      { paid: false },
     );
     assert.equal(answer.ok, true);
     const [run] = sandbox.seen;
@@ -194,7 +194,7 @@ describe("a local `shop add` in a game that is not on Genex yet", () => {
         { command: "shop add", args: "Ice Shield", options: { price: 300 } },
         bound(p, p.outside),
         {
-          paid: true,
+          paid: false,
         },
       ),
       /not bound to the game's own folder/,
@@ -213,7 +213,7 @@ describe("a local `shop add` in a game that is not on Genex yet", () => {
     const answer = await service(p, sandbox).run(
       { command: "shop add", args: "Ice Shield", options: { price: 300 } },
       bound(p),
-      { paid: true },
+      { paid: false },
     );
     assert.equal(answer.ok, false);
     assert.deepEqual(await tree(gameItems(p)), {});
@@ -306,7 +306,7 @@ describe("a `shop add` in a game that is on Genex", () => {
     const answer = await service(p, sandbox).run(
       { command: "shop add", args: "Frost Axe", options: { price: 1200 } },
       bound(p),
-      { paid: true },
+      { paid: false },
     );
     assert.equal(answer.ok, true);
     assert.match(sandbox.seen[0]?.genex["project.json"] ?? "", /proj_1/);
@@ -468,7 +468,7 @@ describe("what the CLI leaves in the run folder, carried into a hostile game", (
       const answer = await service(p, sandbox, drafts).run(
         { command: "shop add", args: "Ice Shield", options: { price: 300 } },
         bound(p),
-        { paid: true },
+        { paid: false },
       );
       assert.equal(answer.ok, false);
       assert.match(String(answer.output), /\.genex\/items/);
@@ -491,7 +491,7 @@ describe("what the CLI leaves in the run folder, carried into a hostile game", (
     const answer = await service(p, sandbox).run(
       { command: "shop add", args: "Ice Shield", options: { price: 300 } },
       bound(p),
-      { paid: true },
+      { paid: false },
     );
     assert.equal(answer.ok, true);
     assert.deepEqual(Object.keys(await tree(gameItems(p))).sort(), [`${ICE}.json`, path.join(ICE, "picture.png")]);

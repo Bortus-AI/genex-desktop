@@ -54,10 +54,11 @@ describe("commands the agent may not run", () => {
       /genex__cli-paid/,
     ],
     [
-      "shop add through the free tool",
+      "shop add through the paid tool, whose card would ask about a draft that spends nothing",
       { command: "shop add", args: "Key", options: { price: 100 } },
-      FREE,
-      GenexCliRefusalCode.PaidTool,
+      PAID,
+      GenexCliRefusalCode.FreeTool,
+      /genex__cli\b/,
     ],
     [
       "budget --assets through the free tool, an allowance no Studio run keeps",
@@ -161,13 +162,13 @@ describe("flags and values the agent may not pass", () => {
     [
       "a text value starting with a dash",
       { command: "shop add", args: "Key", options: { price: 100, icon: "--env" } },
-      PAID,
+      FREE,
       GenexCliRefusalCode.InvalidValue,
     ],
     [
       "a type outside its choices",
       { command: "shop add", args: "Key", options: { price: 100, type: "rig" } },
-      PAID,
+      FREE,
       GenexCliRefusalCode.InvalidValue,
     ],
     [
@@ -228,7 +229,7 @@ describe("the argv Studio runs", () => {
     assert.deepEqual(
       genexCliRequest(
         { command: "shop add", args: "Iron Key", options: { price: 100, type: "durable", resellable: true } },
-        PAID,
+        FREE,
       ).argv,
       ["shop", "add", "Iron Key", "--price", "100", "--type", "durable", "--resellable"],
     );
@@ -254,8 +255,8 @@ describe("what the consent card shows for a paid call", () => {
       /max-coins: 250000/,
     ],
     [
-      "a shop item whose long name comes first",
-      { command: "shop add", args: "k".repeat(3000), options: { icon: "i".repeat(400), price: 9000 } },
+      "a shop item change whose long id comes first",
+      { command: "shop set", args: "k".repeat(3000), options: { icon: "i".repeat(400), price: 9000 } },
       /price: 9000/,
     ],
     [
@@ -267,7 +268,7 @@ describe("what the consent card shows for a paid call", () => {
   for (const [name, args, spend] of rows) {
     it(`names what it spends first for ${name}`, () => {
       const text = card(args);
-      assert.match(text, /command: (llm bench|shop add|shop set)/);
+      assert.match(text, /command: (llm bench|shop set)/);
       assert.match(text, spend);
     });
   }
@@ -278,6 +279,11 @@ describe("what the consent card shows for a paid call", () => {
   it("refuses before anyone is asked when Studio would refuse the call", () => {
     assert.throws(() => genexCliConsentArgs({ command: "llm bench", args: "hi" }, PAID), GenexCliRefusal);
     assert.throws(() => genexCliConsentArgs({ command: "shop list" }, PAID), GenexCliRefusal);
+  });
+  it("asks nobody about a new item's draft, which spends nothing and sells nothing until the person puts it on sale", () => {
+    const draft = { command: "shop add", args: "Ivory Coffin", options: { price: 300 } };
+    assert.throws(() => genexCliConsentArgs(draft, PAID), GenexCliRefusal);
+    assert.equal(genexCliRequest(draft, FREE).paid, false);
   });
 });
 
@@ -295,7 +301,7 @@ describe("a store item's fields (marketplace plan 8.1)", () => {
           shared: true,
         },
       },
-      PAID,
+      FREE,
     );
     assert.deepEqual(request.argv, [
       "shop",
@@ -353,7 +359,7 @@ describe("a store item's fields (marketplace plan 8.1)", () => {
           package: "items/frost-axe",
         },
       },
-      PAID,
+      FREE,
     );
     assert.deepEqual(request.argv.slice(3), [
       "--price",
@@ -399,7 +405,7 @@ describe("a store item's fields (marketplace plan 8.1)", () => {
   for (const [name, options] of refusals) {
     it(`refuses ${name}`, () => {
       assert.equal(
-        refusal({ command: "shop add", args: "Frost Axe", options }, PAID).code,
+        refusal({ command: "shop add", args: "Frost Axe", options }, FREE).code,
         GenexCliRefusalCode.InvalidValue,
       );
     });

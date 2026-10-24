@@ -360,7 +360,7 @@ frame only, `STUDIO_UI_ONLY`); prices, shares and counts are genex.games' own, n
   A tab chosen, the sidebar's Items row pressed again and the window coming back read the tab on
   show again (a burst once, `REREAD_GAP_MS`); Put on sale, Take off sale and sharing read Selling
   again at once, Add to and Remove from the item's detail.
-- The **Listing draft card**: when `genex__cli-paid` runs `shop add` or `shop set` and the pinned
+- The **Listing draft card**: when `genex__cli` runs `shop add` (no card asks first) or `genex__cli-paid` runs `shop set` and the pinned
   CLI answers its `--json` draft (`kind: "genex.item_draft"`, version 1) for the game's own hosted
   project, main records `item_drafted` in the chat (`main/core/item-draft.ts`) and announces
   `item.drafted`. The harness may write neither, and a draft an agent writes in words is text. The

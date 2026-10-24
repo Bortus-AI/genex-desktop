@@ -20,11 +20,13 @@ Where it disagrees with this preface, this preface wins.
   game keeps itself, earned by playing: build it with no store item. Only when the person also says
   that currency is for real money, ask once whether they mean Nex, and write the answer in NOTES.md.
 - Studio runs the Genex CLI for you; never run `npx genex`. `genex shop add "<name>" … --json` is
-  `genex__cli-paid {"command":"shop add","args":"<name>","options":{…}}` with the flags by name:
+  `genex__cli {"command":"shop add","args":"<name>","options":{…}}` with the flags by name:
   `price` (0 is Free), `type`, `description`, `tag` (a list), `shared` (true or false), and
   `image`, `model` and `package`, each a path inside this game, such as
-  `".genex/scratch/frost-axe.png"`. Studio copies those files in itself and adds `--json`; the
-  person approves each call. `genex shop set <id>` takes the same options plus `rename`.
+  `".genex/scratch/frost-axe.png"`. Studio copies those files in itself and adds `--json`. It asks
+  the person nothing, because a draft spends nothing and sells nothing; the card's **Put on sale**
+  is their decision. `genex shop set <id>` takes the same options plus `rename`, through
+  `genex__cli-paid`, which the person approves.
 - When the draft comes back, Studio draws its card in the chat after your reply, with **Put on
   sale** and "Other games can use it". `genex shop publish` and `unpublish` are not available:
   only the person puts an item on sale, from that card or Create › Items. Say it is ready and that

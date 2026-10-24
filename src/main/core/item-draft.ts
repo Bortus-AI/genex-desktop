@@ -1,7 +1,7 @@
 /**
  * A listing draft in a Genex CLI answer (marketplace plan 8.3, 10.3; contract "CLI `--json`
  * draft"). The game's agent makes a store item with `genex shop add … --json`, or changes one with
- * `genex shop set <id> … --json`, through Studio's `genex__cli-paid`; the pinned CLI prints one JSON
+ * `genex shop set <id> … --json`, through Studio's `genex__cli` or `genex__cli-paid`; the pinned CLI prints one JSON
  * document, a CreatorSku with `kind: "genex.item_draft"` and `version: 1`. Studio draws the Listing
  * draft card from that document only: a real, successful run of one of those two commands, read as
  * hostile input like any genex.games answer (`play/store.ts`), naming the game's own hosted project.

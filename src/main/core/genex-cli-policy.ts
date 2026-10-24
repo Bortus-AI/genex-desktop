@@ -230,22 +230,27 @@ const GENEX_CLI_COMMANDS: Readonly<Record<GenexCliCommand, CommandRow>> = {
     approval: true,
   },
   [GenexCliCommand.ShopList]: { ...free(true), localItems: LocalItemsUse.Read },
-  [GenexCliCommand.ShopAdd]: shopItem(
-    {
-      price: itemPrice,
-      type: itemType,
-      description: description(false),
-      tag: tags,
-      shared: toggle,
-      resellable: toggle,
-      icon: text,
-      image: gamePath(GamePathTarget.File),
-      model: gamePath(GamePathTarget.File),
-      package: gamePath(GamePathTarget.Folder),
-    },
-    ["price"],
-    LocalItemsUse.Change,
-  ),
+  // A new item is a draft: it spends nothing and nobody can buy it until the person puts it on sale
+  // from its card, so the free tool runs it and no consent card asks about it.
+  [GenexCliCommand.ShopAdd]: {
+    ...shopItem(
+      {
+        price: itemPrice,
+        type: itemType,
+        description: description(false),
+        tag: tags,
+        shared: toggle,
+        resellable: toggle,
+        icon: text,
+        image: gamePath(GamePathTarget.File),
+        model: gamePath(GamePathTarget.File),
+        package: gamePath(GamePathTarget.Folder),
+      },
+      ["price"],
+      LocalItemsUse.Change,
+    ),
+    paid: false,
+  },
   [GenexCliCommand.ShopSet]: shopItem(
     {
       price: itemPrice,

@@ -26,8 +26,8 @@ Spend: usage panel; prices: Credits tab. Enabled Genex suggests assets in planni
 Generations wait for unaccepted terms (Review: sidebar, chat).
 
 Genex bundles its MCP (game/animation search, owned games, generation status) on the same account;
-host tools run the pinned CLI outside the game: `genex__cli` free; `genex__cli-paid` and
-`genex__package` (multiplayer, player identity; template games map Studio's copies) after consent; a
+host tools run the pinned CLI outside the game: `genex__cli` and `genex__package` (multiplayer,
+player identity; template games map Studio's copies) free; `genex__cli-paid` after consent; a
 `shop add --json` draft becomes chat's [Listing draft card](../play.md#the-item-store). Publish (host-drawn)
 connects SDK-less games, tests the draft, goes public and sends the `genex-cover` frame and
 `genex-clip` clip ([rules](../plugins.md#first-party-privileges)), plus its project if remixable

@@ -1,7 +1,6 @@
 {
   "3D models, characters, sound and art for your games, made in chat with Genex credits. Coding stays on your own provider.": "ゲーム用の3Dモデル、キャラクター、サウンド、アートを、チャットでGenexクレジットを使ってつくれます。コーディングはこれまでどおり自分のプロバイダーで行います。",
   "Account and jobs": "アカウントとジョブ",
-  "Add the listed pinned Genex packages. Multiplayer includes its player-identity dependency. A template game gets Studio's built-in copies in its import map; any other game installs them with its own package manager, with the npm registry open for that command only.": "一覧のGenexパッケージを固定バージョンで追加します。マルチプレイには、プレイヤーID用の依存パッケージも含まれます。テンプレートのゲームではStudio内蔵のコピーがimport mapに入り、それ以外のゲームでは自身のパッケージマネージャーでインストールします。npmレジストリはそのコマンドの間だけ開きます。",
   "Approve character workflow": "キャラクター作成を承認",
   "Asset setup state": "アセット設定の状態",
   "Blender server address": "Blenderサーバーのアドレス",

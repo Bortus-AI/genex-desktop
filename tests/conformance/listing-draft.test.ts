@@ -346,7 +346,7 @@ describe("a Studio-run CLI command and the Listing draft card", () => {
     const cli = await cliService(`${JSON.stringify(cliDraft())}\n`, async (draft, binding) => {
       seen.push({ draft, binding });
     });
-    const result = await cli.run(SHOP_ADD, BINDING, { paid: true });
+    const result = await cli.run(SHOP_ADD, BINDING, { paid: false });
     assert.deepEqual(seen, [{ draft: FROST_AXE, binding: BINDING }]);
     assert.equal(result.ok, true);
     assert.deepEqual(result.output, cliDraft());
@@ -358,9 +358,9 @@ describe("a Studio-run CLI command and the Listing draft card", () => {
       seen.push(draft);
     };
     await (await cliService(JSON.stringify(cliDraft()), record)).run({ command: "doctor" }, BINDING, { paid: false });
-    await (await cliService(JSON.stringify(cliDraft()), record, 1)).run(SHOP_ADD, BINDING, { paid: true });
+    await (await cliService(JSON.stringify(cliDraft()), record, 1)).run(SHOP_ADD, BINDING, { paid: false });
     const other = JSON.stringify(cliDraft({ projectId: "proj_2" }));
-    await (await cliService(other, record)).run(SHOP_ADD, BINDING, { paid: true });
+    await (await cliService(other, record)).run(SHOP_ADD, BINDING, { paid: false });
     assert.deepEqual(seen, []);
   });
 
@@ -368,7 +368,7 @@ describe("a Studio-run CLI command and the Listing draft card", () => {
     const cli = await cliService(JSON.stringify(cliDraft()), async () => {
       throw new Error("log closed");
     });
-    const result = await cli.run(SHOP_ADD, BINDING, { paid: true });
+    const result = await cli.run(SHOP_ADD, BINDING, { paid: false });
     assert.equal(result.ok, true);
   });
 });
