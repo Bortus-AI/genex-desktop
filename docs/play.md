@@ -214,7 +214,9 @@ is.
   anything is unpacked (`native-zip.ts`: no entry or link outside it, nothing written through a
   link, no more than the stated size), unpacked with `ditto --noqtn`, every link resolved inside it,
   its program made runnable (an app packed on Windows carries no execute bit), the app's signature
-  (ad hoc is enough) and processor checked, then its bundle id set to
+  (ad hoc is enough) and processor checked (its Mach-O header read in the app, since `lipo` needs
+  Apple's developer tools; an Intel-only app on Apple silicon without Rosetta fails as
+  `needs-rosetta`), then its bundle id set to
   `games.genex.play.<slug>` and signed again ad hoc, so it can only write its own preferences. A
   Linux build is unpacked by the app itself (`unpackZip`: the same checks, each file no larger than
   its record, execute bits kept, links last) and its `entry` must be a regular file, an ELF program

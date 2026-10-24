@@ -1098,6 +1098,8 @@ export default {
     "Installation impossible : ce jeu ne fonctionne pas sur ce Mac.",
   "Couldn’t install: this game is larger than it says.": "Installation impossible : ce jeu est plus lourd qu’annoncé.",
   "Couldn’t install: this game isn’t signed.": "Installation impossible : ce jeu n’est pas signé.",
+  "Couldn’t install: this game needs Rosetta to run on this Mac.":
+    "Installation impossible : ce jeu a besoin de Rosetta pour fonctionner sur ce Mac.",
   "Couldn’t install: this game’s files aren’t safe to open.":
     "Installation impossible : les fichiers de ce jeu ne sont pas sûrs à ouvrir.",
   "Couldn’t load other versions.": "Impossible de charger les autres versions.",
