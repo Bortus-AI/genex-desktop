@@ -9,6 +9,8 @@ import { CODEX_STUDIO_AUTH_ARGS, codexSubscriptionEnv } from "../../substrate/en
 import { requireCodingCli } from "../../substrate/engines/external-cli.ts";
 import type { ClaudeLoginController } from "../claude-login.ts";
 import type { CodexLoginController } from "../codex-login.ts";
+import type { GrokLoginController } from "../grok-login.ts";
+import { grokEnv } from "../../substrate/engines/grok-cli.ts";
 import type { SubscriptionEngine } from "../login-controllers.ts";
 import type { IpcHandle } from "./registrar.ts";
 import { EngineId } from "../../shared/providers.ts";
@@ -31,6 +33,7 @@ const MESSAGE = {
 export interface LoginIpcDeps {
   claudeLogin: Pick<ClaudeLoginController, "start" | "snapshot" | "submitCode" | "openBrowser" | "cancel">;
   codexLogin: Pick<CodexLoginController, "start" | "snapshot" | "cancel" | "dismiss" | "openBrowser">;
+  grokLogin: Pick<GrokLoginController, "start" | "snapshot" | "cancel" | "openBrowser">;
   subscription(id: string): SubscriptionEngine | null;
   /** A run is being held awake for, or a user turn is in flight: the ChatGPT account must not change under it. */
   busy(): boolean;
@@ -44,6 +47,7 @@ export function registerLoginIpc(
   {
     claudeLogin,
     codexLogin,
+    grokLogin,
     subscription,
     busy,
     pushUiEvent,
@@ -78,6 +82,10 @@ export function registerLoginIpc(
         return { started: state.phase !== "failed", error: state.error };
       });
     }
+    if (id === EngineId.Grok) {
+      const state = await grokLogin.start(engine.engineHome);
+      return { started: state.phase !== "failed", error: state.error };
+    }
     if (payload?.separate) return claudeLogin.start(engine.engineHome);
     return claudeLogin.start(claudeLoginHome(engine.engineHome, await engine.resolveLogin()));
   });
@@ -108,6 +116,8 @@ export function registerLoginIpc(
     await codexLogin.openBrowser();
     return true;
   });
+  registerGrokLogin(handle, grokLogin);
+
   handle("studio:codex-login.retry", async (payload) => {
     if (payload?.method !== "browser" && payload?.method !== "device") throw new Error(MESSAGE.unknownMethod);
     const method = payload.method;
@@ -124,6 +134,18 @@ export function registerLoginIpc(
   handle("studio:subscription.forget-studio-login", async (payload) => {
     const engine = subscription(payload?.engine ?? EngineId.ClaudeCode);
     if (!engine) return true;
+    if (payload?.engine === EngineId.Grok) {
+      await grokLogin.cancel();
+      const installation = await requireCli(EngineId.Grok);
+      const result = await run(installation.path, ["logout"], {
+        env: grokEnv({ ...installation.env, GROK_HOME: engine.engineHome }),
+        timeoutMs: CODEX_LOGOUT_TIMEOUT_MS,
+      });
+      if (result.code !== 0) throw new Error("Grok Build could not disconnect. Please try again.");
+      await engine.recheckLogin();
+      pushUiEvent({ type: UiEvent.EnginesChanged, payload: {} });
+      return true;
+    }
     if (payload?.engine === EngineId.Codex) {
       return changeCodexAccount(async () => {
         await codexLogin.dismiss();
@@ -144,6 +166,21 @@ export function registerLoginIpc(
     await fs.rm(engine.engineHome, { recursive: true, force: true });
     await engine.recheckLogin();
     pushUiEvent({ type: UiEvent.EnginesChanged, payload: {} });
+    return true;
+  });
+}
+
+function registerGrokLogin(
+  handle: IpcHandle,
+  grokLogin: Pick<GrokLoginController, "snapshot" | "cancel" | "openBrowser">,
+): void {
+  handle("studio:grok-login.state", async () => grokLogin.snapshot());
+  handle("studio:grok-login.cancel", async () => {
+    await grokLogin.cancel();
+    return grokLogin.snapshot();
+  });
+  handle("studio:grok-login.browser", async () => {
+    await grokLogin.openBrowser();
     return true;
   });
 }

@@ -337,7 +337,7 @@ test("standard folders cover installers that never reach the login PATH", async 
   for (const version of ["v18.20.1", "v22.3.0", "v9.0.0"])
     await mkdir(path.join(home, ".nvm/versions/node", version, "bin"), { recursive: true });
   const dirs = await standardCliDirs(home, "darwin");
-  for (const dir of [".local/bin", ".claude/local", ".npm-global/bin", ".bun/bin", ".volta/bin"])
+  for (const dir of [".local/bin", ".claude/local", ".npm-global/bin", ".bun/bin", ".volta/bin", ".grok/bin"])
     assert.ok(dirs.includes(path.join(home, dir)), dir);
   const nvm = dirs.filter((dir) => dir.includes(".nvm"));
   assert.deepEqual(
@@ -400,6 +400,7 @@ test("Windows standard folders: the native installers first, then npm's prefix a
   const env = { APPDATA: "C:\\Users\\Ada\\AppData\\Roaming", LOCALAPPDATA: "C:\\Users\\Ada\\AppData\\Local" };
   assert.deepEqual(await standardCliDirs("C:\\Users\\Ada", "win32", env), [
     "C:\\Users\\Ada\\.local\\bin",
+    "C:\\Users\\Ada\\.grok\\bin",
     "C:\\Users\\Ada\\AppData\\Local\\Programs\\OpenAI\\Codex\\bin",
     "C:\\Users\\Ada\\AppData\\Roaming\\npm",
     "C:\\Program Files\\nodejs",

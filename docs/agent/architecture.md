@@ -369,16 +369,15 @@ recolored. See [themes](../../design/genex/THEMES.md) and the [design workflow](
 
 **Engines.** `Engine` ([`src/substrate/engines/types.ts`](../../src/substrate/engines/types.ts)) is
 either direct (`complete`, `models`, `status`: Ollama, Bonsai) or delegated (`delegate` into a
-workspace: Claude Code, Codex). Failures map to `EngineError` kinds, some still inferred from
+workspace: Claude Code, Codex, Grok Build). Failures map to `EngineError` kinds, some still inferred from
 provider message text. `EngineRegistry` ([`src/substrate/engines/registry.ts`](../../src/substrate/engines/registry.ts))
 holds the registered engines, builds the `EngineDescriptor` list the UI reads (`describe`), and
-answers fallbacks: a rate limit falls back only to a direct engine; context overflow and auth fall
-back to nothing. `StudioCore.init` registers the engines and sets the preferred order: local first
+answers fallbacks: a rate limit falls back only to a direct engine; context overflow and auth do not. `StudioCore.init` registers the engines and sets the preferred order: local first
 (it cannot be rate limited), then the subscriptions.
 
 **Provider table.** [`src/shared/providers.ts`](../../src/shared/providers.ts) `PROVIDERS` is the one
 table of provider identity: id, the label a person says, whether it is a subscription, its login
-kind (`terminal` for Claude, `console` for Codex, `none`), its role support (`presets`,
+kind (`terminal`, `console`, `device` or `none`), its role support (`presets`,
 `sessions`, `single`) and a subscription's sign-in copy. `describe` serves the row on each
 descriptor as `provider` (null for an unlisted engine). `SUBSCRIPTION_ENGINES` is derived from it
 and re-exported by [`src/main/core/subscription-engines.ts`](../../src/main/core/subscription-engines.ts)

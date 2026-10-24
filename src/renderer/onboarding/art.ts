@@ -12,7 +12,7 @@
  */
 import { SECOND_MS } from "../../shared/duration.ts";
 import { crane } from "../ui/wire-art.ts";
-import { CLAUDE_CODE_MARK, CODEX_MARK, type ProviderMark } from "../ui/provider-marks.ts";
+import { CLAUDE_CODE_MARK, CODEX_MARK, GROK_MARK, type ProviderMark } from "../ui/provider-marks.ts";
 
 export type Rgb = [number, number, number];
 /** Theme colours: accent, ink (the moving part), muted ink, pass and warning. */
@@ -85,9 +85,9 @@ function clamp(x: number): number {
 }
 const ease = (x: number) => {
   const k = clamp(x);
-  return k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+  return k < 0.5 ? 4 * k * k * k : 1 - (-2 * k + 2) ** 3 / 2;
 };
-const easeOut = (x: number) => 1 - Math.pow(1 - clamp(x), 3);
+const easeOut = (x: number) => 1 - (1 - clamp(x)) ** 3;
 const lerp = (a: number, b: number, k: number) => a + (b - a) * k;
 const rgba = (c: Rgb, a: number) => `rgba(${c[0]},${c[1]},${c[2]},${clamp(a).toFixed(3)})`;
 const tones = (P: Palette): Rgb[] => [P.accent, P.ink, P.muted, P.green, P.orange];
@@ -1076,7 +1076,7 @@ function segmentAlpha(line: Line, from: Vec3, to: Vec3, fromW: Vec3, toW: Vec3, 
   if (!line.fade) return a;
   const mx = (toW[0] + fromW[0]) / 2 - line.fade[0],
     mz = (toW[2] + fromW[2]) / 2 - line.fade[1];
-  return a * Math.pow(clamp(1 - Math.sqrt(mx * mx + mz * mz) / line.fade[2]), 1.6);
+  return a * clamp(1 - Math.sqrt(mx * mx + mz * mz) / line.fade[2]) ** 1.6;
 }
 
 /** Add one line's visible segments, projected, to the buckets of their tone and alpha step. */
@@ -1310,10 +1310,16 @@ function approach(key: string, target: number, tg: number): number {
 export const MarkState = { Idle: "idle", Busy: "busy", On: "on", Missing: "missing" } as const;
 export type MarkState = (typeof MarkState)[keyof typeof MarkState];
 /** Whose mark it is. */
-export const Provider = { Claude: "claude", Codex: "codex" } as const;
+export const Provider = { Claude: "claude", Codex: "codex", Grok: "grok" } as const;
 export type Provider = (typeof Provider)[keyof typeof Provider];
-/** Both marks, left to right. */
-export const MARK_PROVIDERS: readonly Provider[] = [Provider.Claude, Provider.Codex];
+/** The marks, in the same order as the connect buttons. */
+export const MARK_PROVIDERS: readonly Provider[] = [Provider.Claude, Provider.Codex, Provider.Grok];
+
+const MARK_ART: Record<Provider, ProviderMark> = {
+  [Provider.Claude]: CLAUDE_CODE_MARK,
+  [Provider.Codex]: CODEX_MARK,
+  [Provider.Grok]: GROK_MARK,
+};
 
 const MARK_CAM: Camera = { yaw: 0, pitch: 0.32, scale: 44, cx: 320, cy: 100, dist: 16, tx: 0, ty: 1.3, tz: 0, R: 2.5 };
 /** The mark's thickness, in units of its 24-unit grid. */
@@ -1566,8 +1572,7 @@ export function drawMarks(
   x: Record<Provider, number>,
   P: Palette,
 ) {
-  drawMark(ctx, Provider.Claude, CLAUDE_CODE_MARK, states.claude, tg, ages.claude, x.claude, P);
-  drawMark(ctx, Provider.Codex, CODEX_MARK, states.codex, tg, ages.codex, x.codex, P);
+  for (const id of MARK_PROVIDERS) drawMark(ctx, id, MARK_ART[id], states[id], tg, ages[id], x[id], P);
 }
 
 /** What the local model's chip shows: waiting, downloading, or the model ready. */

@@ -24,7 +24,7 @@ export interface ProviderSkill {
   enabled?: boolean;
 }
 export interface ProviderSkillInventory {
-  provider: "codex" | "claude-code";
+  provider: "codex" | "claude-code" | "grok";
   label: string;
   source: "native-catalog" | "installed-files";
   skills: ProviderSkill[];

@@ -704,7 +704,7 @@ export interface ModelCatalogStatus {
 }
 // ↑ src/shared/model-catalog.ts
 
-export type CodingProvider = "codex" | "claude-code";
+export type CodingProvider = 'claude-code' | 'codex' | 'grok';
 // ↑ src/shared/coding-cli.ts
 
 export interface CodingCliStatus {
@@ -730,8 +730,8 @@ export interface EngineAccount {
 }
 // ↑ src/shared/engine-descriptor.ts
 
-/** How a subscription signs in: Claude through a piped or embedded terminal plus status polling, Codex through its native login reported from the in-app console. */
-export type LoginKind = "terminal" | "console" | "none";
+/** How a subscription signs in: Claude through a piped or embedded terminal plus status polling, Codex through its native login reported from the in-app console, Grok through device-code login reported the same way. */
+export type LoginKind = "terminal" | "console" | "device" | "none";
 // ↑ src/shared/providers.ts
 
 /**

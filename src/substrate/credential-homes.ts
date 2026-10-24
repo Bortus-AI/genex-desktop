@@ -24,8 +24,10 @@ export function credentialHomes(
   const candidates = [
     path.join(home, ".codex"),
     path.join(home, ".claude"),
+    path.join(home, ".grok"),
     env.CODEX_HOME,
     env.CLAUDE_CONFIG_DIR,
+    env.GROK_HOME,
     ...logins,
   ];
   const homeDir = path.resolve(home);

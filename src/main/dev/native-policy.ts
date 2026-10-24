@@ -22,6 +22,7 @@ const NATIVE_CHANNELS = [
   "studio:subscription.forget-studio-login",
   "studio:codex-login.browser",
   "studio:codex-login.retry",
+  "studio:grok-login.browser",
   "studio:claude-login.browser",
   "studio:open-url",
   // A macOS notification lands in the developer's Notification Center, outside the fixture.
@@ -240,6 +241,8 @@ const FIXTURE_SAFE = [
   "studio:codex-login.state",
   "studio:codex-login.cancel",
   "studio:codex-login.dismiss",
+  "studio:grok-login.state",
+  "studio:grok-login.cancel",
   // Adoption opens no network and writes only inside the profile's own games root.
   "studio:project.inspect",
   "studio:project.adopt",

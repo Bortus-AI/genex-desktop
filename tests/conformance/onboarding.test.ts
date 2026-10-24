@@ -116,6 +116,25 @@ describe("first launch", () => {
       label: "Set up Codex",
     });
     assert.deepEqual(codex({ engine: engine("ready") }), { kind: "on", label: "ChatGPT connected" });
+
+    const grok = (input: Partial<ConnectInput>) => connectView("grok", { engine: engine("needs_login"), ...input });
+    assert.deepEqual(grok({}), { kind: "action", action: "connect", label: "Connect Grok Build" });
+    assert.deepEqual(grok({ grokActive: true, grok: "waiting" }), {
+      kind: "busy",
+      label: "Finish in your browser",
+      cancel: true,
+    });
+    assert.deepEqual(grok({ grokActive: true, grok: "verifying" }), {
+      kind: "busy",
+      label: "Checking…",
+      cancel: false,
+    });
+    assert.deepEqual(grok({ engine: engine("not_installed", "missing") }), {
+      kind: "action",
+      action: "install",
+      label: "Set up Grok Build",
+    });
+    assert.deepEqual(grok({ engine: engine("ready") }), { kind: "on", label: "Grok Build connected" });
   });
 
   it("installs or updates a CLI in place and says so while it runs", () => {
@@ -218,10 +237,10 @@ describe("first-launch art", () => {
       for (const tg of [0, 0.3, 2, 7.5]) {
         drawMarks(
           recorder().ctx,
-          { claude: state, codex: state },
+          { claude: state, codex: state, grok: state },
           tg,
-          { claude: tg < 1 ? tg : -1, codex: -1 },
-          { claude: 192, codex: 448 },
+          { claude: tg < 1 ? tg : -1, codex: -1, grok: -1 },
+          { claude: 120, codex: 320, grok: 520 },
           palette,
         );
       }

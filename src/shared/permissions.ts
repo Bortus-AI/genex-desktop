@@ -86,6 +86,12 @@ const ENGINE_PERMISSIONS: Readonly<Record<string, EnginePermissions>> = {
     modes: [PermissionMode.Auto, PermissionMode.Plan, PermissionMode.Bypass],
     withheld: UnavailableModeReason.CannotAsk,
   },
+  // Headless `grok` cannot ask mid-turn (`streaming-json` is read-only). Auto keeps the
+  // workspace sandbox, Plan is read-only, Bypass turns the sandbox off.
+  [EngineId.Grok]: {
+    modes: [PermissionMode.Auto, PermissionMode.Plan, PermissionMode.Bypass],
+    withheld: UnavailableModeReason.CannotAsk,
+  },
 };
 
 /** What an engine that has no row honours: its own sandboxed contract. */

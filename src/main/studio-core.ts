@@ -62,6 +62,7 @@ import { ContextPreferences } from "../substrate/context-settings.ts";
 import { BonsaiEngine } from "../substrate/engines/bonsai.ts";
 import { ClaudeCodeEngine } from "../substrate/engines/claude-code.ts";
 import { CodexEngine } from "../substrate/engines/codex.ts";
+import { GrokEngine } from "../substrate/engines/grok.ts";
 import { OllamaEngine, OllamaSidecar } from "../substrate/engines/ollama.ts";
 import { EngineRegistry } from "../substrate/engines/registry.ts";
 import type { Engine, LiveToolResult } from "../substrate/engines/types.ts";
@@ -303,6 +304,8 @@ export interface StudioCoreOptions {
   claudeExecutable?: string;
   /** `codex` binary to spawn; unset = whatever is on PATH or in the usual install locations. */
   codexExecutable?: string;
+  /** `grok` binary to spawn; unset = whatever is on PATH or in `~/.grok/bin`. */
+  grokExecutable?: string;
   /** Disable the sandbox only in tests that assert the unsandboxed path. */
   sandbox?: boolean;
   /** The self-edit gate's type check (substrate/type-gate.ts); the time limit is a test seam. */
@@ -914,7 +917,7 @@ export class StudioCore {
     });
   }
 
-  /** The engines the options name, or the app's own four. */
+  /** The engines the options name, or the app's own set. */
   #registerEngines(): void {
     const engines = this.options.engines ?? this.#defaultEngines();
     for (const engine of engines) this.engines.register(engine);
@@ -947,6 +950,12 @@ export class StudioCore {
         engineHome: path.join(this.layout.engineHomes, EngineId.Codex),
         protectedPaths: this.#protectedPaths(),
         ...(this.options.codexExecutable ? { executable: this.options.codexExecutable } : {}),
+      }),
+      // Registered whether or not `grok` is installed: a missing CLI says so in the picker.
+      new GrokEngine({
+        engineHome: path.join(this.layout.engineHomes, EngineId.Grok),
+        protectedPaths: this.#protectedPaths(),
+        ...(this.options.grokExecutable ? { executable: this.options.grokExecutable } : {}),
       }),
     ];
   }

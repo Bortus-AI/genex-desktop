@@ -38,7 +38,7 @@ export type ChildEnvRequest =
        * The CLI's vendor: the other vendor's variables are dropped wholesale. `none` is a tool that
        * is neither coding CLI (the Ollama server): both vendors' variables stay behind.
        */
-      vendor: "claude" | "codex" | "none";
+      vendor: "claude" | "codex" | "grok" | "none";
       /** Credential variables this child is meant to use — its own sign-in, never a metered key. */
       keep?: readonly string[];
       set?: Record<string, string | undefined>;
@@ -85,7 +85,11 @@ const GIT_CONFIG = /^GIT_CONFIG_(?:KEY_\d+|VALUE_\d+|COUNT|PARAMETERS)$/i;
 const CREDENTIAL_NAMES = new Set(["SSH_AUTH_SOCK", "GPG_AGENT_INFO"]);
 /** A URL with a password in it (`postgres://app:hunter2@db`), whatever the variable is called. */
 const PASSWORD_URL = /^[a-z][a-z0-9+.-]*:\/\/[^/\s@]*:[^/\s@]+@/i;
-const VENDOR = { claude: /^(?:ANTHROPIC|CLAUDE)_/i, codex: /^(?:OPENAI|CODEX)_/i } as const;
+const VENDOR = {
+  claude: /^(?:ANTHROPIC|CLAUDE)_/i,
+  codex: /^(?:OPENAI|CODEX)_/i,
+  grok: /^(?:XAI|GROK)_/i,
+} as const;
 
 export function isCredentialVariable(name: string, value?: string): boolean {
   return (
@@ -98,9 +102,10 @@ export function isCredentialVariable(name: string, value?: string): boolean {
 
 /** The other vendor's variables a coding CLI's child never sees; a tool of neither vendor sees neither's. */
 const FOREIGN_VENDORS: Record<ContractorRequest["vendor"], readonly RegExp[]> = {
-  claude: [VENDOR.codex],
-  codex: [VENDOR.claude],
-  none: [VENDOR.claude, VENDOR.codex],
+  claude: [VENDOR.codex, VENDOR.grok],
+  codex: [VENDOR.claude, VENDOR.grok],
+  grok: [VENDOR.claude, VENDOR.codex],
+  none: [VENDOR.claude, VENDOR.codex, VENDOR.grok],
 };
 
 type ContractorRequest = Extract<ChildEnvRequest, { base: "contractor" }>;

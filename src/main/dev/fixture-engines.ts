@@ -23,7 +23,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { ReasoningEffort } from "../../shared/model-preferences.ts";
 
 const DAY_MS = 24 * HOUR_MS;
-const FIXTURE_ENGINES = [EngineId.Ollama, EngineId.ClaudeCode, EngineId.Codex] as const;
+const FIXTURE_ENGINES = [EngineId.Ollama, EngineId.ClaudeCode, EngineId.Codex, EngineId.Grok] as const;
 const READY_STATUS: EngineStatus = { code: EngineStatusCode.Ready, detail: "AG-933 fixture; no account or network" };
 /** How long naming a game takes, so home's Naming step can be seen. */
 const NAMING_DELAY_MS = 2500;
@@ -69,6 +69,7 @@ export const FIRST_LAUNCH_STATUS: Record<string, EngineStatus> = {
     detail: "AG-933 fixture; sign-in is refused in fixture sessions",
   },
   [EngineId.Codex]: { code: EngineStatusCode.NotInstalled, detail: "AG-933 fixture; no Codex app" },
+  [EngineId.Grok]: { code: EngineStatusCode.NotInstalled, detail: "AG-933 fixture; no Grok Build CLI" },
 };
 
 export function fixtureEngines(directChat = false, statuses: Record<string, EngineStatus> = {}): Engine[] {

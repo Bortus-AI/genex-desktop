@@ -7,7 +7,8 @@ import type { ClaudeLoginState } from "../../shared/claude-login.ts";
 import type { CodexLoginState } from "../../shared/codex-login.ts";
 import { CodingCliState } from "../../shared/coding-cli.ts";
 import { EngineStatusCode } from "../../shared/engine-descriptor.ts";
-import { EngineId, type SubscriptionId } from "../../shared/providers.ts";
+import type { GrokLoginState } from "../../shared/grok-login.ts";
+import { EngineId, SUBSCRIPTION_ENGINES, type SubscriptionId } from "../../shared/providers.ts";
 import type { EngineDescriptor } from "../types.ts";
 import { MarkState } from "./art.ts";
 import { STORAGE_KEYS } from "../storage.ts";
@@ -25,7 +26,7 @@ export function shouldWelcome(allowed: boolean | undefined, games: number, stora
 /** A subscription first launch offers to connect: Claude Code or Codex. */
 export type Subscription = SubscriptionId;
 /** The subscriptions, in the order their buttons stand. */
-export const SUBSCRIPTIONS: readonly Subscription[] = [EngineId.ClaudeCode, EngineId.Codex];
+export const SUBSCRIPTIONS: readonly Subscription[] = SUBSCRIPTION_ENGINES;
 
 type Words = Record<"connect" | "install" | "installing" | "update" | "updating" | "recheck" | "on", string>;
 
@@ -47,6 +48,15 @@ const WORDS: Record<Subscription, Words> = {
     updating: "Updating Codex…",
     recheck: "Check Codex again",
     on: "ChatGPT connected",
+  },
+  [EngineId.Grok]: {
+    connect: "Connect Grok Build",
+    install: "Set up Grok Build",
+    installing: "Setting up Grok Build…",
+    update: "Update Grok Build",
+    updating: "Updating Grok Build…",
+    recheck: "Check Grok Build again",
+    on: "Grok Build connected",
   },
 };
 
@@ -81,6 +91,8 @@ export interface ConnectInput {
   claude?: ClaudeLoginState["phase"];
   codexActive?: boolean;
   codex?: CodexLoginState["phase"];
+  grokActive?: boolean;
+  grok?: GrokLoginState["phase"];
   /** A recheck the user started, or the one on returning to the window. */
   checking?: boolean;
   /** The app is installing or updating the CLI for the person. */
@@ -121,6 +133,14 @@ export function connectView(id: Subscription, input: ConnectInput): ConnectView 
   // Codex signs in in the browser; while it checks the sign-in there is nothing left to cancel.
   if (id === EngineId.Codex && input.codexActive) {
     const verifying = input.codex === "verifying";
+    return {
+      kind: ConnectViewKind.Busy,
+      label: verifying ? "Checking…" : "Finish in your browser",
+      cancel: !verifying,
+    };
+  }
+  if (id === EngineId.Grok && input.grokActive) {
+    const verifying = input.grok === "verifying";
     return {
       kind: ConnectViewKind.Busy,
       label: verifying ? "Checking…" : "Finish in your browser",

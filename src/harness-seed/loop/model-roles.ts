@@ -36,6 +36,7 @@ export interface ModelRow {
 export const EngineId = {
   ClaudeCode: "claude-code",
   Codex: "codex",
+  Grok: "grok",
   Bonsai: "bonsai",
   Ollama: "ollama",
 } as const;
@@ -73,19 +74,24 @@ export const CLAUDE_CODE_MODELS: ModelRow[] = [];
  */
 export const CODEX_MODELS: ModelRow[] = [];
 
+/** Grok Build's documented coding models. The running engine replaces an empty list with its own rows. */
+export const GROK_MODELS: ModelRow[] = [];
+
 /** Every subscription engine the studio can run a night on, and the models each offers. */
 export const ENGINE_MODELS: Record<string, ModelRow[]> = {
   [EngineId.ClaudeCode]: CLAUDE_CODE_MODELS,
   [EngineId.Codex]: CODEX_MODELS,
+  [EngineId.Grok]: GROK_MODELS,
 };
 
 /** Ids of the delegated ("your subscription, their harness") engines, in preference order. */
-export const DELEGATED_ENGINES = [EngineId.ClaudeCode, EngineId.Codex];
+export const DELEGATED_ENGINES = [EngineId.ClaudeCode, EngineId.Codex, EngineId.Grok];
 
 /** The engine's name as a person says it, for a role line that names one. */
 export const ENGINE_LABELS: Record<string, string> = {
   [EngineId.ClaudeCode]: "Claude Code",
   [EngineId.Codex]: "Codex",
+  [EngineId.Grok]: "Grok Build",
 };
 
 /** "Claude Code", "Codex", or the id itself for an engine nobody named. */
@@ -95,7 +101,7 @@ export function engineLabel(engine: string | null | undefined): string {
 
 /** True when this engine hires a vendor harness — the engines that have roles at all. */
 export function isDelegated(engine: string | null | undefined): boolean {
-  return engine === EngineId.ClaudeCode || engine === EngineId.Codex;
+  return engine === EngineId.ClaudeCode || engine === EngineId.Codex || engine === EngineId.Grok;
 }
 
 /** The catalog for a session provider, or `[]` for a completion-only engine. */
@@ -296,12 +302,11 @@ export function plannerModel(run: RoleRun | null | undefined): string | undefine
 }
 
 /**
- * How a Codex session spells a studio tool. Claude Code receives the studio's tools as MCP
- * tools and calls them by name; Codex has no tool channel of its own, so the studio ships a
- * bridge and the session runs it as a shell command. The two spellings are the ONLY thing in
- * the whole harness that branches on the engine, and every prompt that mentions a tool renders
- * it through `toolCall` — a Claude session that reads a bridge command tries to run it, and a
- * Codex session that reads an `mcp__` name asks for a tool it does not have.
+ * How a session spells a studio tool. Claude Code receives the studio's tools as MCP tools and
+ * calls them by name. Codex and Grok Build have no in-process tool channel the studio can host,
+ * so the studio ships a bridge and the session runs it as a shell command. Those spellings are
+ * the ONLY thing in the whole harness that branches on the engine, and every prompt that mentions
+ * a tool renders it through `toolCall`.
  *
  * The literal must agree with `BRIDGE_DIR` in `src/substrate/engines/studio-bridge.ts`, which
  * is where the file is actually written; the harness seed cannot import from the app, so a
@@ -313,7 +318,7 @@ export const BRIDGE_TOOL_CMD = "node .studio/bridge/tool.mjs";
 export function toolCall(engine: string | null | undefined, name: unknown): string {
   const tool = String(name ?? "");
   if (engine === EngineId.ClaudeCode) return `mcp__studio__${tool}`;
-  if (engine === EngineId.Codex) return `${BRIDGE_TOOL_CMD} ${tool}`;
+  if (engine === EngineId.Codex || engine === EngineId.Grok) return `${BRIDGE_TOOL_CMD} ${tool}`;
   // A local engine drives its tools through the studio's own tool loop, where a tool is its
   // bare name and neither spelling exists.
   return tool;
@@ -322,7 +327,8 @@ export function toolCall(engine: string | null | undefined, name: unknown): stri
 /** The clause at the head of a TOOLS block: how this engine calls the tools listed under it. */
 export function toolSyntax(engine: string | null | undefined): string {
   if (engine === EngineId.ClaudeCode) return "call each one by its name, mcp__studio__<name>";
-  if (engine === EngineId.Codex) return `run each one as \`${BRIDGE_TOOL_CMD} <name> --field=value\``;
+  if (engine === EngineId.Codex || engine === EngineId.Grok)
+    return `run each one as \`${BRIDGE_TOOL_CMD} <name> --field=value\``;
   return "call each one by its name";
 }
 

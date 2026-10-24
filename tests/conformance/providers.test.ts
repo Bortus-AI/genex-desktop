@@ -30,7 +30,7 @@ const engine = (id: string, kind: Engine["kind"] = "delegated"): Engine => ({
 
 describe("provider table", () => {
   it("is the one list of subscriptions main and the renderer offer, in preference order", () => {
-    assert.deepEqual([...SUBSCRIPTION_ENGINES], ["claude-code", "codex"]);
+    assert.deepEqual([...SUBSCRIPTION_ENGINES], ["claude-code", "codex", "grok"]);
     assert.equal(mainSubscriptions, SUBSCRIPTION_ENGINES);
     assert.equal(rendererSubscriptions, SUBSCRIPTION_ENGINES);
     assert.deepEqual(
@@ -66,6 +66,7 @@ describe("provider table", () => {
   it("says how each provider signs in, and nothing for an engine it does not know", () => {
     assert.equal(loginKind("claude-code"), "terminal");
     assert.equal(loginKind("codex"), "console");
+    assert.equal(loginKind("grok"), "device");
     assert.equal(loginKind("ollama"), "none");
     assert.equal(loginKind("gemini-cli"), "none");
     assert.equal(providerInfo("gemini-cli"), undefined);

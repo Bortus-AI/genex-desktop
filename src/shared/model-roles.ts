@@ -27,19 +27,24 @@ export const CLAUDE_CODE_MODELS: readonly EngineModelRow[] = [];
 /** The fallback rows under Codex when the account's own catalogue has never been written. */
 export const CODEX_MODELS: readonly EngineModelRow[] = [];
 
+/** Grok Build's documented coding models. The CLI's `grok models` text has no published schema. */
+export const GROK_MODELS: readonly EngineModelRow[] = [];
+
 /** Every subscription engine the studio can run a night on, and the models each offers. */
 export const ENGINE_MODELS: Readonly<Record<string, readonly EngineModelRow[]>> = {
   [EngineId.ClaudeCode]: CLAUDE_CODE_MODELS,
   [EngineId.Codex]: CODEX_MODELS,
+  [EngineId.Grok]: GROK_MODELS,
 };
 
 /** Ids of the delegated ("your subscription, their harness") engines, in preference order. */
-export const DELEGATED_ENGINES: readonly string[] = [EngineId.ClaudeCode, EngineId.Codex];
+export const DELEGATED_ENGINES: readonly string[] = [EngineId.ClaudeCode, EngineId.Codex, EngineId.Grok];
 
 /** The engine's name as a person says it, for a role line that names one. */
 export const ENGINE_LABELS: Readonly<Record<string, string>> = {
   [EngineId.ClaudeCode]: "Claude Code",
   [EngineId.Codex]: "Codex",
+  [EngineId.Grok]: "Grok Build",
 };
 
 /** The three jobs, in the order the roles page shows them. */
@@ -61,7 +66,7 @@ export function engineLabel(engine: string | null | undefined): string {
 
 /** True when this engine hires a vendor harness — the engines that have roles at all. */
 export function isDelegated(engine: string | null | undefined): boolean {
-  return engine === EngineId.ClaudeCode || engine === EngineId.Codex;
+  return engine === EngineId.ClaudeCode || engine === EngineId.Codex || engine === EngineId.Grok;
 }
 
 /** Session engines: the delegated ones and Bonsai, which can cross roles too. */

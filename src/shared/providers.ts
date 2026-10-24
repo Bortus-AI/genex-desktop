@@ -7,8 +7,8 @@
  * (docs/agent/recipes.md, "Provider or engine").
  */
 
-/** How a subscription signs in: Claude through a piped or embedded terminal plus status polling, Codex through its native login reported from the in-app console. */
-export type LoginKind = "terminal" | "console" | "none";
+/** How a subscription signs in: Claude through a piped or embedded terminal plus status polling, Codex through its native login reported from the in-app console, Grok through device-code login reported the same way. */
+export type LoginKind = "terminal" | "console" | "device" | "none";
 
 /**
  * Which roles a provider can run: `presets` has the model rows and single-pick presets of
@@ -45,6 +45,7 @@ export interface ProviderInfo {
 export const EngineId = {
   ClaudeCode: "claude-code",
   Codex: "codex",
+  Grok: "grok",
   Bonsai: "bonsai",
   Ollama: "ollama",
 } as const;
@@ -82,6 +83,22 @@ export const PROVIDERS = [
       installUrl: "https://developers.openai.com/codex/cli",
       get: "Install Codex",
       who: "Codex handles that part",
+    },
+  },
+  {
+    id: EngineId.Grok,
+    label: "Grok Build",
+    subscription: true,
+    login: "device",
+    roles: "presets",
+    signIn: {
+      product: "your xAI account",
+      card: "Use Grok Build",
+      account: "xAI account",
+      install: "Grok Build isn't installed on this Mac.",
+      installUrl: "https://docs.x.ai/build/overview",
+      get: "Install Grok Build",
+      who: "Grok Build handles that part",
     },
   },
   { id: EngineId.Bonsai, label: "Bonsai", subscription: false, login: "none", roles: "sessions", signIn: null },

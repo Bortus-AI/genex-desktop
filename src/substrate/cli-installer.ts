@@ -38,7 +38,7 @@ interface Installer {
   windows: string;
   shell: string;
   set: Record<string, string>;
-  vendor: "claude" | "codex";
+  vendor: "claude" | "codex" | "grok";
 }
 
 /** Each coding CLI's official installers, from its vendor's install instructions. */
@@ -57,6 +57,13 @@ const INSTALLERS = {
     // Without it the script offers to start Codex, or to remove an npm or Homebrew copy, and waits.
     set: { CODEX_NON_INTERACTIVE: "1" },
     vendor: "codex",
+  },
+  [EngineId.Grok]: {
+    unix: "https://x.ai/cli/install.sh",
+    windows: "https://x.ai/cli/install.ps1",
+    shell: "/bin/bash",
+    set: { GROK_DISABLE_AUTOUPDATER: "1" },
+    vendor: "grok",
   },
 } as const satisfies Record<CodingProvider, Installer>;
 

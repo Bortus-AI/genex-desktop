@@ -35,11 +35,16 @@ test("pre-init injection avoids every real engine status/models/auth probe and k
   });
   await core.start();
   assert.equal(core.host.state, "ready");
-  assert.equal((await core.engines.describe()).length, 3);
+  assert.equal((await core.engines.describe()).length, 4);
   assert.equal(core.sandbox.enabled, true);
   await core.updateSettings({ architect: true });
   let calls = 0;
-  for (const engine of [core.engines.get("ollama"), core.engines.get("codex"), core.engines.get("claude-code")])
+  for (const engine of [
+    core.engines.get("ollama"),
+    core.engines.get("codex"),
+    core.engines.get("claude-code"),
+    core.engines.get("grok"),
+  ])
     if (engine.complete)
       t.mock.method(engine as Required<typeof engine>, "complete", async () => {
         calls++;

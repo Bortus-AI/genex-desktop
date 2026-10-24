@@ -10,7 +10,8 @@ import { type ClaudeLoginState, isClaudeLoginActive } from "../../shared/claude-
 import { CodingCliState } from "../../shared/coding-cli.ts";
 import { EngineStatusCode } from "../../shared/engine-descriptor.ts";
 import { EngineId } from "../../shared/providers.ts";
-import { SUBSCRIPTION_ENGINES, useClaudeLogin, useSubscriptionAuth } from "../subscription-auth.ts";
+import { SUBSCRIPTION_ENGINES, useClaudeLogin, useGrokLogin, useSubscriptionAuth } from "../subscription-auth.ts";
+import type { GrokLoginState } from "../../shared/grok-login.ts";
 import type { EngineDescriptor } from "../types.ts";
 import { Button } from "../ui/Button.tsx";
 import {
@@ -37,6 +38,7 @@ const PROVIDERS: Record<string, ProviderWords> = {
     guide: "https://code.claude.com/docs/en/setup",
   },
   [EngineId.Codex]: { name: "Codex", plans: "ChatGPT Plus or Pro", guide: "https://developers.openai.com/codex/cli/" },
+  [EngineId.Grok]: { name: "Grok Build", plans: "xAI", guide: "https://docs.x.ai/build/overview" },
 };
 
 /** A provider row's status: its dot and the ink of its word. */
@@ -148,6 +150,7 @@ const CLAUDE_SIGN_IN_LINE: Partial<Record<ClaudeLoginState["phase"], string>> = 
 function signingInView(
   engineId: string,
   login: ClaudeLoginState | null,
+  grok: GrokLoginState | null,
   act: RowActions,
   codeFallback: ReturnType<typeof useCodeFallback>,
 ): RowView {
@@ -157,6 +160,22 @@ function signingInView(
       status: "Signing in…",
       line: "Finish signing in in your browser.",
       actions: <Button onClick={() => void act.run(() => window.studio.codexLoginCancel())}>Cancel</Button>,
+    };
+  if (engineId === EngineId.Grok)
+    return {
+      tone: RowTone.Busy,
+      status: "Signing in…",
+      line: grok?.deviceCode
+        ? `Finish in your browser. Your code is ${grok.deviceCode}.`
+        : "Finish signing in in your browser.",
+      actions: (
+        <>
+          {grok?.hasBrowserUrl && (
+            <Button onClick={() => void act.run(() => window.studio.grokLoginOpenBrowser())}>Open sign-in page</Button>
+          )}
+          <Button onClick={() => void act.run(() => window.studio.grokLoginCancel())}>Cancel</Button>
+        </>
+      ),
     };
   const phase = login?.phase;
   const waitingOnBrowser = phase === "code" && !codeFallback.pasting;
@@ -269,6 +288,7 @@ function rowView(row: {
   cliMissing: boolean;
   signingIn: boolean;
   login: ClaudeLoginState | null;
+  grok: GrokLoginState | null;
   loginError: string | null | undefined;
   act: RowActions;
   install: RowInstall;
@@ -276,7 +296,7 @@ function rowView(row: {
 }): RowView {
   const { engineId, engine, words, act } = row;
   if (row.cliMissing) return missingView(words, engine.account?.cli, act, row.install);
-  if (row.signingIn) return signingInView(engineId, row.login, act, row.codeFallback);
+  if (row.signingIn) return signingInView(engineId, row.login, row.grok, act, row.codeFallback);
   if (engine.status.code === EngineStatusCode.Ready && row.install.installing)
     return {
       tone: RowTone.Busy,
@@ -411,7 +431,7 @@ function signInState(
   const claudeActive = claudeLogin !== null && isClaudeLoginActive(claudeLogin);
   return {
     claudeLogin,
-    signingIn: engineId === EngineId.Codex ? waiting : claudeActive,
+    signingIn: engineId === EngineId.Codex || engineId === EngineId.Grok ? waiting : claudeActive,
     loginError: (claudeLogin?.phase === "failed" ? claudeLogin.error : undefined) ?? error,
   };
 }
@@ -483,6 +503,7 @@ function ProviderRow({
 }: { engineId: string } & ModelSettingsProps): JSX.Element | null {
   const { engine, waiting, error, signIn, refresh } = useSubscriptionAuth(engines, onEnginesRefresh, engineId);
   const login = useClaudeLogin(engineId);
+  const grok = useGrokLogin(engineId);
   const cliMissing = cliMissingFor(engine);
   const words = PROVIDERS[engineId] ?? { name: engine?.label ?? "", plans: "subscription", guide: "" };
   const act = useRowActions(engineId, words.guide, refresh, signIn);
@@ -507,6 +528,7 @@ function ProviderRow({
     cliMissing,
     signingIn,
     login: claudeLogin,
+    grok,
     loginError,
     act,
     install,

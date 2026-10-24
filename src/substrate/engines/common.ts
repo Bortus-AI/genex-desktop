@@ -87,6 +87,8 @@ export interface PartialDelegateState {
   cliPath?: string | undefined;
   studioToolCalls?: DelegateResult["studioToolCalls"];
   contextTokens?: number | undefined;
+  /** Defaults to a subscription. An API-key Grok session reports `api`. */
+  billing?: DelegateResult["billing"];
 }
 
 /** A build that ended early but left real work behind: an outcome to report, not an error. */
@@ -104,8 +106,7 @@ export function partialDelegateResult(
     durationMs: Date.now() - state.startedAt,
     stopReason: ending.stopReason,
     errorText: ending.errorText,
-    // Both delegated engines run on the user's subscription (D8), never a metered key.
-    billing: "subscription",
+    billing: state.billing ?? "subscription",
     ...(state.sessionId ? { sessionId: state.sessionId } : {}),
     ...(state.model ? { model: state.model } : {}),
     ...(state.requestedModel ? { requestedModel: state.requestedModel } : {}),

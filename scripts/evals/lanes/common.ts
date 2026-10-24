@@ -310,9 +310,11 @@ export function evalHomesEnv(homes: EvalCliHomes): Record<string, string> {
 }
 
 /** The vendor the app's contractor filter (`childEnv`) knows each coding CLI by. */
+/** Eval lanes run Claude Code and Codex. Grok Build is a provider, not one of these lanes. */
+type EvalCodingCli = Exclude<CodingProvider, typeof EngineId.Grok>;
 const CONTRACTOR_VENDOR = { [EngineId.ClaudeCode]: "claude", [EngineId.Codex]: "codex" } as const satisfies Record<
-  CodingProvider,
-  string
+  EvalCodingCli,
+  "claude" | "codex"
 >;
 
 /** The marker `laneFlagsDigest` folds in for the raw lanes' credential policy, so a change to it moves the pin. */
@@ -328,7 +330,7 @@ export const RAW_LANE_CREDENTIAL_POLICY = "credentials:contractor";
 export function laneChildEnv(
   parent: NodeJS.ProcessEnv,
   homes: EvalCliHomes,
-  engine: CodingProvider,
+  engine: Exclude<CodingProvider, typeof EngineId.Grok>,
   pathPrefix: readonly string[] = [],
 ): NodeJS.ProcessEnv {
   const contractor = childEnv(strippedEnv(parent), { base: "contractor", vendor: CONTRACTOR_VENDOR[engine] });

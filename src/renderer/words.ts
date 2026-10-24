@@ -1375,6 +1375,7 @@ export const MODEL_PICKER_WORDS = {
   localModels: "Local models",
   chatGptModels: "ChatGPT models",
   claudeModels: "Claude models",
+  grokModels: "Grok models",
   local: "local",
   localStale: "local · stale",
   noTools: "no tools",

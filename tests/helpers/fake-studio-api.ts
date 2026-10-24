@@ -122,6 +122,10 @@ const METHODS = [
   "codexLoginOpenBrowser",
   "codexLoginRetry",
   "onCodexLogin",
+  "grokLoginState",
+  "grokLoginCancel",
+  "grokLoginOpenBrowser",
+  "onGrokLogin",
   "subscriptionForgetStudioLogin",
   "openUrl",
   "notify",
@@ -198,6 +202,7 @@ type StudioEvent = Parameters<Parameters<StudioApi["onEvent"]>[0]>[0];
 type TerminalEvent = Parameters<Parameters<StudioApi["onTerminal"]>[0]>[0];
 type ClaudeLogin = Parameters<Parameters<StudioApi["onClaudeLogin"]>[0]>[0];
 type CodexLogin = Parameters<Parameters<StudioApi["onCodexLogin"]>[0]>[0];
+type GrokLogin = Parameters<Parameters<StudioApi["onGrokLogin"]>[0]>[0];
 type RunSummary = Parameters<Parameters<StudioApi["onRunSummary"]>[2]>[0];
 
 export interface FakeStudioApi {
@@ -212,9 +217,10 @@ export interface FakeStudioApi {
   emitTerminal(event: TerminalEvent): void;
   emitClaudeLogin(state: ClaudeLogin): void;
   emitCodexLogin(state: CodexLogin): void;
+  emitGrokLogin(state: GrokLogin): void;
   emitRunSummary(project: string, runId: string, summary: RunSummary): void;
   /** Subscribed listeners per `on*` call — 0 after a component unmounts proves it unsubscribed. */
-  listeners(method: "onEvent" | "onTerminal" | "onClaudeLogin" | "onCodexLogin" | "onRunSummary"): number;
+  listeners(method: "onEvent" | "onTerminal" | "onClaudeLogin" | "onCodexLogin" | "onGrokLogin" | "onRunSummary"): number;
 }
 
 export interface FakeStudioOptions {
@@ -299,6 +305,7 @@ export function fakeStudioApi(overrides: Partial<StudioApi> = {}, options: FakeS
     onTerminal: new Set<(event: TerminalEvent) => void>(),
     onClaudeLogin: new Set<(state: ClaudeLogin) => void>(),
     onCodexLogin: new Set<(state: CodexLogin) => void>(),
+    onGrokLogin: new Set<(state: GrokLogin) => void>(),
     onRunSummary: new Set<{ project: string; runId: string; listener: (summary: RunSummary) => void }>(),
   };
   const subscribe = <T>(set: Set<T>, entry: T) => {
@@ -310,6 +317,7 @@ export function fakeStudioApi(overrides: Partial<StudioApi> = {}, options: FakeS
     onTerminal: ((listener: (event: TerminalEvent) => void) => subscribe(sets.onTerminal, listener)) as never,
     onClaudeLogin: ((listener: (state: ClaudeLogin) => void) => subscribe(sets.onClaudeLogin, listener)) as never,
     onCodexLogin: ((listener: (state: CodexLogin) => void) => subscribe(sets.onCodexLogin, listener)) as never,
+    onGrokLogin: ((listener: (state: GrokLogin) => void) => subscribe(sets.onGrokLogin, listener)) as never,
     onRunSummary: ((project: string, runId: string, listener: (summary: RunSummary) => void) =>
       subscribe(sets.onRunSummary, { project, runId, listener })) as never,
   };
@@ -340,6 +348,9 @@ export function fakeStudioApi(overrides: Partial<StudioApi> = {}, options: FakeS
     },
     emitCodexLogin: (state) => {
       for (const listener of [...sets.onCodexLogin]) listener(state);
+    },
+    emitGrokLogin: (state) => {
+      for (const listener of [...sets.onGrokLogin]) listener(state);
     },
     emitRunSummary: (project, runId, summary) => {
       for (const entry of [...sets.onRunSummary])

@@ -41,6 +41,7 @@ test("each CLI's installer is its vendor's own script: shell on macOS and Linux,
   const expected: Record<CodingProvider, [string, string]> = {
     "claude-code": ["https://claude.ai/install.sh", "https://claude.ai/install.ps1"],
     codex: ["https://chatgpt.com/codex/install.sh", "https://chatgpt.com/codex/install.ps1"],
+    grok: ["https://x.ai/cli/install.sh", "https://x.ai/cli/install.ps1"],
   };
   for (const [provider, [unix, windows]] of Object.entries(expected) as [CodingProvider, [string, string]][]) {
     for (const platform of ["darwin", "linux"] as const)

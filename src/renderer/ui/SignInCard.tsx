@@ -3,7 +3,7 @@ import { Button } from "./Button.tsx";
 import { problemWords } from "../words.ts";
 import type { ClaudeLoginState } from "../../shared/claude-login.ts";
 import { EngineId } from "../../shared/providers.ts";
-import { signInVendor, useClaudeLogin } from "../subscription-auth.ts";
+import { signInVendor, useClaudeLogin, useGrokLogin } from "../subscription-auth.ts";
 import { useCliInstall } from "../cli-install.ts";
 import { SHOW_TERMINAL_EVENT } from "../panels/terminal-events.ts";
 
@@ -60,6 +60,8 @@ function cardMessage({ engine, vendor, login, busy, flat, missingCli, installing
   if (flat) return `Use ${vendor.product} to build games.`;
   if (engine === EngineId.Codex)
     return "Connect your ChatGPT subscription to build games. Codex handles sign-in in your browser.";
+  if (engine === EngineId.Grok)
+    return "Connect Grok Build with a device code, or set XAI_API_KEY. The studio never sees your password.";
   return `${capitalise(vendor.product)} expired or isn't signed in. The studio never sees your password — ${vendor.who}.`;
 }
 
@@ -68,12 +70,17 @@ function signInLabel({ engine, busy, stalled, flat }: CardState): string {
   if (busy) return "Waiting…";
   if (stalled) return "Try again";
   if (flat) return "Connect";
-  return engine === EngineId.Codex ? "Connect ChatGPT" : "Sign in";
+  if (engine === EngineId.Codex) return "Connect ChatGPT";
+  if (engine === EngineId.Grok) return "Connect Grok Build";
+  return "Sign in";
 }
 
 /** Stop the sign-in under way for `engine`. */
-const cancelSignIn = (engine: string): Promise<unknown> =>
-  engine === EngineId.Codex ? window.studio.codexLoginCancel() : window.studio.claudeLoginCancel();
+function cancelSignIn(engine: string): Promise<unknown> {
+  if (engine === EngineId.Codex) return window.studio.codexLoginCancel();
+  if (engine === EngineId.Grok) return window.studio.grokLoginCancel();
+  return window.studio.claudeLoginCancel();
+}
 
 /** The Claude sign-in's own steps: its page again, the code box on request, and its terminal. */
 function ClaudeSignInSteps({
@@ -122,6 +129,7 @@ export function SignInCard({
 }): JSX.Element {
   const vendor = signInVendor(engine);
   const login = useClaudeLogin(engine);
+  const grok = useGrokLogin(engine);
   const [code, setCode] = useState("");
   const [codeError, setCodeError] = useState<string | null>(null);
   // Nothing typed for one subscription belongs to the next one either.
@@ -185,6 +193,10 @@ export function SignInCard({
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
         {primary()}
         <ClaudeSignInSteps login={login} codeFallback={codeFallback} />
+        {grok?.hasBrowserUrl ? (
+          <Button onClick={() => void window.studio.grokLoginOpenBrowser()}>Open the sign-in page</Button>
+        ) : null}
+        {grok?.deviceCode ? <span className="text-xs text-ink-2">Code {grok.deviceCode}</span> : null}
         {busy && <Button onClick={() => void cancelSignIn(engine)}>Cancel sign-in</Button>}
         {onRecheck ? (
           <Button onClick={onRecheck} disabled={busy}>

@@ -46,6 +46,7 @@ const MESSAGE = {
     "Installed globally. Studio currently loads project skills only; these personal skills are not enabled in its Claude sessions.",
   codexNote:
     "Reported by the selected Codex CLI profile. Availability does not mean a skill was used in a conversation.",
+  grokNote: "Installed under the Grok login this session uses. Grok loads them when that home is the one it runs with.",
   invalidSkillMetadata: "Invalid skill metadata",
 } as const;
 
@@ -337,6 +338,27 @@ export async function codexGlobalSkills(cwd: string, login: CodexSkillLogin | nu
   } catch (error) {
     output.warnings.push(errorMessage(error));
   }
+  return output;
+}
+
+/** Skills Grok Build keeps under its login home (`~/.grok/skills`, or `$GROK_HOME/skills`). */
+export async function grokGlobalSkills(
+  login: CodexSkillLogin | null,
+  userHome: string,
+): Promise<ProviderSkillInventory> {
+  const output: ProviderSkillInventory = {
+    provider: EngineId.Grok,
+    label: "Grok Build",
+    source: "installed-files",
+    skills: [],
+    warnings: [],
+    note: MESSAGE.grokNote,
+    builders: codexBuilderUse(login?.source ?? LoginSource.None),
+  };
+  const inventory: SkillInventoryScan = { output, seen: new Set(), directories: new Set() };
+  const root = path.join(login?.home ?? path.join(userHome, ".grok"), "skills");
+  await scanSkillRoot(inventory, root, "personal");
+  output.skills.sort((a, b) => a.name.localeCompare(b.name));
   return output;
 }
 

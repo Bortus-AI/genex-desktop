@@ -17,6 +17,7 @@ import type { FolderInspection, GameLocation, GameName, GameNameRequest, GamePro
 import type { BuildProblem, InstallResult } from "./build-problem.ts";
 import type { NightReview } from "./run-review.ts";
 import type { CodexLoginState } from "./codex-login.ts";
+import type { GrokLoginState } from "./grok-login.ts";
 import type { ClaudeLoginState } from "./claude-login.ts";
 import type { ProjectAsset, ProjectAssets } from "./game-assets.ts";
 import type { ModelRig } from "./model-rig.ts";
@@ -351,6 +352,10 @@ export interface StudioApi {
   codexLoginOpenBrowser(): Promise<unknown>;
   codexLoginRetry(method: "browser" | "device"): Promise<CodexLoginState>;
   onCodexLogin(listener: (state: CodexLoginState) => void): () => void;
+  grokLoginState(): Promise<GrokLoginState>;
+  grokLoginCancel(): Promise<GrokLoginState>;
+  grokLoginOpenBrowser(): Promise<unknown>;
+  onGrokLogin(listener: (state: GrokLoginState) => void): () => void;
   subscriptionForgetStudioLogin(engine?: string): Promise<boolean>;
   openUrl(url: string): Promise<boolean>;
   /** A macOS notification; clicking it focuses Studio and sends `notification.open` with the id. */

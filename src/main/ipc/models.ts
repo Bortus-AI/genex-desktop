@@ -11,6 +11,7 @@ import { hardwareReport } from "../core/hardware-report.ts";
 import type { SubscriptionEngine } from "../login-controllers.ts";
 import type { IpcHandle } from "./registrar.ts";
 import { errorMessage } from "../../shared/errors.ts";
+import { isCodingProvider } from "../../shared/coding-cli.ts";
 import { EngineId } from "../../shared/providers.ts";
 import { EngineStatusCode } from "../../shared/engine-descriptor.ts";
 
@@ -31,7 +32,7 @@ export function registerModelsIpc(handle: IpcHandle, { core, subscription, pushU
   handle("studio:engines", async () => core.engines.describe());
   handle("studio:models.refresh", async (payload) => {
     const provider = payload?.provider;
-    if (provider !== EngineId.ClaudeCode && provider !== EngineId.Codex) throw new Error("Unknown coding provider");
+    if (!isCodingProvider(provider)) throw new Error("Unknown coding provider");
     await core.engines.get(provider).refreshModels?.(true);
     return true;
   });

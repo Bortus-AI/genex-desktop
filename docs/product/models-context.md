@@ -43,7 +43,7 @@ effort and Send/Stop only.
 
 Every chat's pill after Mode picks **Auto** (Recommended; stops only dangerous actions),
 **Manual**, **Accept edits**, **Plan** or **Bypass permissions** (confirmed first; Rewind restores
-only the game folder); modes the engine cannot honour are greyed with why (Codex: Auto, Plan,
+only the game folder); modes the engine cannot honour are greyed with why (Codex and Grok: Auto, Plan,
 Bypass; Bonsai: no Bypass; Ollama: Auto). A chat keeps its mode; new chats take the last Auto,
 Manual or Accept edits. Claude's chat and build lead work anywhere on your Mac with your access;
 unattended builds keep their sandbox ([details](../tool-permissions.md)).

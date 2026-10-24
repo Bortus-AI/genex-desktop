@@ -1,5 +1,6 @@
 import { isClaudeLoginActive } from "../shared/claude-login.ts";
 import { isCodexLoginActive } from "../shared/codex-login.ts";
+import { isGrokLoginActive } from "../shared/grok-login.ts";
 import { updateCodingCli } from "../substrate/cli-update.ts";
 import { HarnessLogBatch } from "./harness-log-batch.ts";
 import { showAfterPaint } from "./window-ready.ts";
@@ -43,6 +44,7 @@ import type { GameFullScreen } from "./game-full-screen.ts";
 import { wireGameFullScreen } from "./full-screen-view.ts";
 import { BootReason, HarnessState } from "../shared/protocol.ts";
 import { ClaudeCodeEngine } from "../substrate/engines/claude-code.ts";
+import { GrokEngine } from "../substrate/engines/grok.ts";
 import { CodexEngine } from "../substrate/engines/codex.ts";
 import { configureCodingClis, resolveCodingCli } from "../substrate/engines/external-cli.ts";
 import { installCodingCli } from "../substrate/cli-installer.ts";
@@ -434,7 +436,7 @@ app.on("accessibility-support-changed", (_event, enabled) => {
 let liveThreadStatus: ThreadStatusMap = {};
 /** An eval-lane launch's view of the core's UI events (it digests the game its chat seeds); null otherwise. */
 let evalLaneUiTap: ((event: UiEvent) => void) | null = null;
-const { codexLogin, claudeLogin } = createLoginControllers({
+const { codexLogin, claudeLogin, grokLogin } = createLoginControllers({
   terminals,
   openExternal: (url) => shell.openExternal(url),
   subscription,
@@ -447,6 +449,10 @@ const { codexLogin, claudeLogin } = createLoginControllers({
   showClaudeState: (state) => {
     const page = livePage();
     if (page) pushToRenderer(page, "studio:claude-login", state);
+  },
+  showGrokState: (state) => {
+    const page = livePage();
+    if (page) pushToRenderer(page, "studio:grok-login", state);
   },
 });
 
@@ -464,7 +470,8 @@ function reviveCrashedWindow(): void {
 function subscription(id: string): SubscriptionEngine | null {
   if (!core?.engines.has(id)) return null;
   const engine = core.engines.get(id);
-  if (engine instanceof ClaudeCodeEngine || engine instanceof CodexEngine) return engine;
+  if (engine instanceof ClaudeCodeEngine || engine instanceof CodexEngine || engine instanceof GrokEngine)
+    return engine;
   return null;
 }
 
@@ -1066,6 +1073,7 @@ function registerIpc(studio: StudioCore): void {
   registerLoginIpc(handle, {
     claudeLogin,
     codexLogin,
+    grokLogin,
     subscription,
     pushUiEvent,
     busy: () => keepAwake.held || (core?.budget.userInFlight ?? 0) > 0,
@@ -1076,7 +1084,10 @@ function registerIpc(studio: StudioCore): void {
       // Electron's fetch, so the installer download goes through the system proxy.
       install: (provider) => installCodingCli(provider, { fetch: net.fetch }),
       busy: () => {
-        const signingIn = isClaudeLoginActive(claudeLogin.snapshot()) || isCodexLoginActive(codexLogin.snapshot());
+        const signingIn =
+          isClaudeLoginActive(claudeLogin.snapshot()) ||
+          isCodexLoginActive(codexLogin.snapshot()) ||
+          isGrokLoginActive(grokLogin.snapshot());
         return keepAwake.held || studio.budget.userInFlight > 0 || signingIn;
       },
       update: async (provider) => {

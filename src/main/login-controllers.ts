@@ -11,6 +11,8 @@ import type { ClaudeLoginState } from "../shared/claude-login.ts";
 import type { CodexLoginState } from "../shared/codex-login.ts";
 import { ClaudeLoginController } from "./claude-login.ts";
 import { CodexLoginController } from "./codex-login.ts";
+import { GrokLoginController } from "./grok-login.ts";
+import type { GrokLoginState } from "../shared/grok-login.ts";
 import type { TerminalService } from "./terminal-service.ts";
 import { EngineId } from "../shared/providers.ts";
 import { TerminalKind } from "../shared/terminal.ts";
@@ -35,6 +37,7 @@ export interface LoginControllerDeps {
   /** Show the Codex sign-in state: the dialog covers the stage, so the native preview hides. */
   showCodexState(state: CodexLoginState): void;
   showClaudeState(state: ClaudeLoginState): void;
+  showGrokState(state: GrokLoginState): void;
   /** The installed CLI each sign-in runs; the studio's own resolver unless a test gives another. */
   requireCli?: typeof requireCodingCli;
   findBinary?: typeof findClaudeBinary;
@@ -47,9 +50,14 @@ export function createLoginControllers({
   pushUiEvent,
   showCodexState,
   showClaudeState,
+  showGrokState,
   requireCli = requireCodingCli,
   findBinary = findClaudeBinary,
-}: LoginControllerDeps): { codexLogin: CodexLoginController; claudeLogin: ClaudeLoginController } {
+}: LoginControllerDeps): {
+  codexLogin: CodexLoginController;
+  claudeLogin: ClaudeLoginController;
+  grokLogin: GrokLoginController;
+} {
   let lastCodexLoginPhase = "idle";
   const codexLogin = new CodexLoginController({
     resolveCli: () => requireCli(EngineId.Codex),
@@ -97,5 +105,15 @@ export function createLoginControllers({
       pushUiEvent({ type: UiEvent.EnginesChanged, payload: {} });
     },
   });
-  return { codexLogin, claudeLogin };
+
+  const grokLogin = new GrokLoginController({
+    resolveCli: (provider) => requireCli(provider),
+    openExternal,
+    onState: showGrokState,
+    onConnected: async () => {
+      await subscription(EngineId.Grok)?.recheckLogin();
+      pushUiEvent({ type: UiEvent.EnginesChanged, payload: {} });
+    },
+  });
+  return { codexLogin, claudeLogin, grokLogin };
 }

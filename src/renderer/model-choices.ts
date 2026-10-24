@@ -33,6 +33,7 @@ export type PickerChoices = Readonly<Record<string, Readonly<Record<string, bool
 const VENDOR_GROUP: Partial<Record<string, string>> = {
   [EngineId.Codex]: MODEL_PICKER_WORDS.chatGptModels,
   [EngineId.ClaudeCode]: MODEL_PICKER_WORDS.claudeModels,
+  [EngineId.Grok]: MODEL_PICKER_WORDS.grokModels,
 };
 
 /** Section header a picker row sits under: who makes the models. */

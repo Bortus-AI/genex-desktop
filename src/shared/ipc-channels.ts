@@ -133,6 +133,9 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:codex-login.dismiss": "codexLoginDismiss",
   "studio:codex-login.browser": "codexLoginOpenBrowser",
   "studio:codex-login.retry": "codexLoginRetry",
+  "studio:grok-login.state": "grokLoginState",
+  "studio:grok-login.cancel": "grokLoginCancel",
+  "studio:grok-login.browser": "grokLoginOpenBrowser",
   "studio:open-url": "openUrl",
   "studio:notify": "notify",
   "studio:badge": "setBadge",
@@ -312,6 +315,9 @@ export interface StudioInvokePayloads {
   "studio:codex-login.dismiss": undefined;
   "studio:codex-login.browser": undefined;
   "studio:codex-login.retry": { method: Arg<"codexLoginRetry", 0> };
+  "studio:grok-login.state": undefined;
+  "studio:grok-login.cancel": undefined;
+  "studio:grok-login.browser": undefined;
   "studio:open-url": { url: string };
   "studio:notify": Arg<"notify", 0>;
   "studio:badge": { count: number };
@@ -384,6 +390,7 @@ export const STUDIO_PUSH_CHANNELS = {
   "studio:terminal": "onTerminal",
   "studio:claude-login": "onClaudeLogin",
   "studio:codex-login": "onCodexLogin",
+  "studio:grok-login": "onGrokLogin",
 } as const satisfies Record<`studio:${string}`, keyof StudioApi>;
 
 export type StudioPushChannel = keyof typeof STUDIO_PUSH_CHANNELS;

@@ -545,7 +545,11 @@ describe("SEC-3: both CLIs' sign-in homes are off limits to every agent process"
     // Absolute on this platform: `/Users/me` on macOS and Linux, `<drive>:\Users\me` on Windows.
     const at = (...parts: string[]) => path.resolve(path.sep, ...parts);
     const home = at("Users", "me");
-    assert.deepEqual(credentialHomes([], {}, home), [at("Users", "me", ".codex"), at("Users", "me", ".claude")]);
+    assert.deepEqual(credentialHomes([], {}, home), [
+      at("Users", "me", ".codex"),
+      at("Users", "me", ".claude"),
+      at("Users", "me", ".grok"),
+    ]);
     assert.deepEqual(
       credentialHomes(
         [at("login", "claude"), null, undefined, "relative/path", at("Users", "me", ".codex")],
@@ -555,6 +559,7 @@ describe("SEC-3: both CLIs' sign-in homes are off limits to every agent process"
       [
         at("Users", "me", ".codex"),
         at("Users", "me", ".claude"),
+        at("Users", "me", ".grok"),
         at("env", "codex"),
         at("env", "claude"),
         at("login", "claude"),
@@ -562,7 +567,7 @@ describe("SEC-3: both CLIs' sign-in homes are off limits to every agent process"
     );
     assert.deepEqual(
       credentialHomes([at("Users"), at(), home], { CODEX_HOME: home }, home),
-      [at("Users", "me", ".codex"), at("Users", "me", ".claude")],
+      [at("Users", "me", ".codex"), at("Users", "me", ".claude"), at("Users", "me", ".grok")],
       "never the home folder, its ancestors or the root",
     );
   });

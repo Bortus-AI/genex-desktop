@@ -12,6 +12,7 @@ import { formatDuration, MINUTES_PER_HOUR } from "./loop-duration.ts";
 export const PLAN_PROVIDERS: Readonly<Record<string, { brand: string; usagePage: string }>> = {
   [EngineId.ClaudeCode]: { brand: "Claude", usagePage: "https://claude.ai/settings/usage" },
   [EngineId.Codex]: { brand: "ChatGPT", usagePage: "https://chatgpt.com/codex/settings/usage" },
+  [EngineId.Grok]: { brand: "Grok", usagePage: "https://console.x.ai" },
 };
 
 /** A limit this full shows as full, this high as high (percent). */

@@ -41,22 +41,33 @@ export interface DiscoveryOptions {
   platform?: NodeJS.Platform;
 }
 /** The executable each coding CLI installs as. */
-const CLI_BINARY = { [EngineId.Codex]: "codex", [EngineId.ClaudeCode]: "claude" } as const satisfies Record<
-  CodingProvider,
-  string
->;
+const CLI_BINARY = {
+  [EngineId.Codex]: "codex",
+  [EngineId.ClaudeCode]: "claude",
+  [EngineId.Grok]: "grok",
+} as const satisfies Record<CodingProvider, string>;
 /** Where the user is sent to install each CLI. */
 const GUIDANCE_URL = {
   [EngineId.Codex]: "https://developers.openai.com/codex/cli/",
   [EngineId.ClaudeCode]: "https://code.claude.com/docs/en/setup",
+  [EngineId.Grok]: "https://docs.x.ai/build/overview",
 } as const satisfies Record<CodingProvider, string>;
 /** The help each CLI is asked for, and the options it must list: every one Studio passes. */
 const HELP_ARGS: Record<CodingProvider, string[]> = {
   [EngineId.Codex]: ["exec", "--help"],
   [EngineId.ClaudeCode]: ["--help"],
+  [EngineId.Grok]: ["--help"],
 };
 const REQUIRED_FLAGS: Record<CodingProvider, string[]> = {
   [EngineId.Codex]: ["--json", "--output-schema", "--ignore-user-config", "--skip-git-repo-check"],
+  [EngineId.Grok]: [
+    "--output-format",
+    "--prompt-file",
+    "--always-approve",
+    "--sandbox",
+    "--resume",
+    "--no-auto-update",
+  ],
   [EngineId.ClaudeCode]: [
     "--input-format",
     "--output-format",
@@ -257,6 +268,7 @@ export async function standardCliDirs(
     path.join(home, ".volta/bin"),
     path.join(home, ".bun/bin"),
     path.join(home, ".codex/bin"),
+    path.join(home, ".grok/bin"),
     path.join(home, mac ? "Library/pnpm" : ".local/share/pnpm"),
     path.join(home, ".local/share/mise/shims"),
     path.join(home, ".asdf/shims"),
@@ -311,6 +323,7 @@ function windowsCliDirs(home: string, env: NodeJS.ProcessEnv): string[] {
   const localAppData = variable("LOCALAPPDATA", join(home, "AppData", "Local"));
   return [
     join(home, ".local", "bin"),
+    join(home, ".grok", "bin"),
     // Codex's own installer (install.ps1) puts its launcher here and adds it to the user's PATH,
     // which a Studio already running never sees.
     join(localAppData, "Programs", "OpenAI", "Codex", "bin"),
