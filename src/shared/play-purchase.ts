@@ -100,6 +100,13 @@ export interface PurchaseItem {
   unitPriceCoins: number;
 }
 
+/** Earned coin the account cannot spend yet (genex.games' spend hold), and when the first of it is ready. */
+export interface PurchaseHeld {
+  coins: number;
+  /** Milliseconds since the epoch. */
+  releaseAt: number;
+}
+
 /** The sheet as main draws it in the bar's layer (`PlayBarState.purchase`). */
 export interface PlayPurchaseSheet {
   /**
@@ -123,6 +130,8 @@ export interface PlayPurchaseSheet {
   price: { coins: number; usdCents: number | null } | null;
   /** The coin the account may spend: after paying once Paid. Null while unknown. */
   balance: number | null;
+  /** Earned coin on hold beside it, when genex.games says there is some and when it is ready; absent with none. */
+  held?: PurchaseHeld;
 }
 
 /** An answer as main takes it: to which sheet, and what. */

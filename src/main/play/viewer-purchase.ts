@@ -20,9 +20,10 @@ import {
   PurchaseStep,
   playCoinPageUrl,
   purchaseOver,
+  type PurchaseHeld,
   readPurchaseAnswer,
 } from "../../shared/play-purchase.ts";
-import { CoinFailure, type CoinIntent, CoinIntentStatus, CoinRefused, type PlayCoin } from "./coin.ts";
+import { CoinFailure, type CoinIntent, CoinIntentStatus, CoinRefused, type CoinWallet, type PlayCoin } from "./coin.ts";
 import { type PlayWorld, SignInNeeded } from "./gallery.ts";
 
 /** How often a payment genex.games has not answered is asked after. */
@@ -54,8 +55,12 @@ export const PURCHASE_COOLDOWN_MS = 5 * SECOND_MS;
 /** Electron's input kinds that press something (a button, a key or a touch going down): they restart Pay's wait. */
 const PRESSES: ReadonlySet<string> = new Set(["mouseDown", "rawKeyDown", "keyDown", "touchStart", "gestureTapDown"]);
 
-/** What the sheet needs of genex.games' coin client. */
-export type ViewerCoin = Pick<PlayCoin, "intent" | "balance" | "confirm" | "cancel">;
+/**
+ * What the sheet needs of genex.games' coin client. `wallet` adds the earned coin still on hold to the
+ * balance; a client without it reads the balance alone.
+ */
+export type ViewerCoin = Pick<PlayCoin, "intent" | "balance" | "confirm" | "cancel"> &
+  Partial<Pick<PlayCoin, "wallet">>;
 
 /** Input in the bar's layer as Electron reports it: its kind, and whether a held key repeats it. */
 export interface SheetInput {
@@ -158,6 +163,8 @@ interface Held {
   shown: boolean;
   armed: boolean;
   balance: number | null;
+  /** Earned coin on hold beside the balance; null with none, or while unknown. */
+  held: PurchaseHeld | null;
   /** Get coin or Sign in was pressed: the balance or the purchase is checked again. */
   rechecking: boolean;
   /** When Pending began. */
@@ -208,7 +215,18 @@ const sheetOf = (h: Held): PlayPurchaseSheet => ({
   },
   price: h.intent && { coins: h.intent.totalCoins, usdCents: h.intent.usdCents },
   balance: h.balance,
+  ...(h.held ? { held: h.held } : {}),
 });
+
+/** The balance, with the earned coin on hold when the coin client reads it; null when it cannot be read. */
+const readWallet = (coin: ViewerCoin): Promise<CoinWallet | null> =>
+  attempt(() => (coin.wallet ? coin.wallet() : coin.balance().then((spendable) => ({ spendable, held: null }))));
+
+/** What a wallet read puts on the sheet: the balance and the coin on hold, both unknown when it failed. */
+function keepWallet(h: Held, wallet: CoinWallet | null): void {
+  h.balance = wallet?.spendable ?? null;
+  h.held = wallet?.held ?? null;
+}
 
 /** A purchase the game on screen may ask for: its own and still open to pay, or one the account cannot read yet. */
 const askable = (intent: CoinIntent | null, world: PlayWorld): boolean =>
@@ -300,9 +318,9 @@ function show(m: Machine, h: Held, face: Face): void {
 /** The balance read afresh into the sheet on screen, if it still is. */
 function freshBalance(m: Machine, h: Held): void {
   const { sheet } = h;
-  void attempt(() => m.ctx.deps.coin.balance()).then((balance) => {
-    if (balance === null || !still(m, h, sheet)) return;
-    h.balance = balance;
+  void readWallet(m.ctx.deps.coin).then((wallet) => {
+    if (wallet === null || !still(m, h, sheet)) return;
+    keepWallet(h, wallet);
     draw(m, h);
   });
 }
@@ -414,7 +432,7 @@ async function readPurchase(m: Machine, s: PurchaseHolder, id: string): Promise<
   // Only the game on screen may ask, for a purchase of its own still open to pay; anything else draws nothing.
   if (!world || intent === undefined) return null;
   if (!askable(intent, world)) return null;
-  const balance = intent ? await attempt(() => coin.balance()) : null;
+  const wallet = intent ? await readWallet(coin) : null;
   return {
     epoch: s.epoch,
     id,
@@ -426,7 +444,8 @@ async function readPurchase(m: Machine, s: PurchaseHolder, id: string): Promise<
     sheet: 0,
     shown: false,
     armed: false,
-    balance,
+    balance: wallet?.spendable ?? null,
+    held: wallet?.held ?? null,
     rechecking: false,
     pendingSince: 0,
     timers: noTimers(),
@@ -504,10 +523,10 @@ async function pay(m: Machine, h: Held): Promise<void> {
 /** After Get coin: the balance checked again until it covers the price (Review), or the purchase lapses. */
 async function recheckBalance(m: Machine, h: Held): Promise<void> {
   const { sheet } = h;
-  const balance = await attempt(() => m.ctx.deps.coin.balance());
+  const wallet = await readWallet(m.ctx.deps.coin);
   if (!still(m, h, sheet)) return;
-  if (balance !== null) h.balance = balance;
-  if (balance !== null && !short(h)) return show(m, h, notEnough(PurchaseRecovery.Ready));
+  if (wallet !== null) keepWallet(h, wallet);
+  if (wallet !== null && !short(h)) return show(m, h, notEnough(PurchaseRecovery.Ready));
   draw(m, h);
   later(m, h, "recheck", PURCHASE_RECHECK_MS, () => recheckBalance(m, h));
 }
@@ -524,7 +543,7 @@ async function recheckIntent(m: Machine, h: Held): Promise<void> {
   // Signed in at last, it turns out to be another game's: it was never this game's to ask for.
   if (intent.projectId !== h.world.id) return close(m, h, QUIETLY);
   h.intent = intent;
-  h.balance = await attempt(() => m.ctx.deps.coin.balance());
+  keepWallet(h, await readWallet(m.ctx.deps.coin));
   if (!still(m, h, sheet)) return;
   settleOn(m, h, SETTLED[intent.status](intent) ?? signedOut(PurchaseRecovery.Ready));
 }

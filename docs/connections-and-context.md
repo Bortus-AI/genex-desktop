@@ -597,7 +597,8 @@ never from or into the game folder.
 With an unlocked account, agents also reach Studio's pinned Genex CLI: `genex__cli` for free
 commands (doctor, budget, LLM models, job status and cancel, shop list) and, after a consent card,
 `genex__cli-paid` for commands that spend or change what the game sells. Studio runs every command
-in a throwaway folder of its own, never the game, with only the Genex API reachable; setup,
+in a throwaway folder of its own, never the game, with only the Genex API reachable (and Genex's
+object storage while a store item's picture, model or package moves); setup,
 sign-in, publishing and generation commands are refused and point to the matching Genex tool.
 `genex__package` adds `@genex-ai/multiplayer` or `@genex-ai/embed-sdk` at Studio's pin to a
 build game after consent, opening the npm registry for that one install. A Studio-template game

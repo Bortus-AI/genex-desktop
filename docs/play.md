@@ -299,6 +299,122 @@ is.
 - `studio:play.game` reads a game's own page (`StudioApi.playGame`): its card, likes, comments,
   description, screenshots and when it changed.
 
+## The item store
+
+Games sell items for coin (marketplace plan; genex.games' `/api/store`, off while `STORE_MODE` is).
+An item is a SKU: a name, a description, a picture (maybe a 3D model), a price or Free, and
+consumable or durable. A **shared item** is a durable its author lets other games use; a game that
+adds one holds an **allowance** for it, and sells it once a live build made after the add is promoted.
+Main reads every store answer as hostile input as the app's Genex account (`main/play/store.ts`,
+channels `studio:store.*` and `studio:items.*` in `main/ipc/store.ts`, answered for Studio's main
+frame only, `STUDIO_UI_ONLY`); prices, shares and counts are genex.games' own, never computed here.
+
+- A game's page has a **Store** section with **Store / My items N** (`play/GameStore.tsx`): cards
+  with the render, the name and the price, Free or Owned, a shared item's "N games" badge; My items
+  marks each owned item Works here, N left, or dimmed Not in this game. It hides while the store is
+  off, unreadable or empty. A card opens the item's sheet (`play/ItemSheet.tsx`): Works in N games,
+  the price, Balance X → Y (short: You have X · Y more needed, and, when genex.games holds earned
+  coin, "N of your coin is on hold until <date>.") and one button: Pay N runs Play's purchase sheet in the studio window
+  (`main/play/store-sheet.ts`, confirmed on `STUDIO_CONFIRM_SURFACE`; `followStudioWindow` makes Pay
+  wait again when the window loses or regains focus, and a reload, a dead page or a closed window
+  cancels a purchase still unpaid), Get claims a Free item, Get coin opens genex.games and Review
+  follows the coin; ⋯ reports the item (Copy, Doesn't work, Inappropriate, Scam). Drag to turn loads
+  the item's GLB only from Genex's asset hosts, the only ones main passes on and the window's
+  `connect-src` allows. A profile shows up to five owned items over its stats (`play/ItemShelf.tsx`),
+  each with **Get in \<game>** and that game's cover, which opens the game's page; an item that game
+  no longer sells (`onSale: false`; absent reads as true) stays, without the button (P21).
+  The Store tab is read again when Store or My items is chosen again and when the window comes
+  back to the front, a burst of those once (`play/game-store-reads.ts`, `REREAD_GAP_MS`).
+- A web game's card opens the viewer, not its page (a web game's page is the game, as on
+  genex.games), so the viewer's bar has the **Store** door, after Share, for a game whose Store tab
+  has items (`PlayViewerDeps.store`; none while the store is off, empty or unreadable). It opens
+  the same `GameStore` in the game's place on the app's own page (`PlayViewerLayer.tsx`), never over
+  the game in the bar's layer: main hides the game's view and never closes it, so the game keeps its
+  session (a player mid-run loses nothing; an item bought here reaches the game when it reads its
+  entitlements again), and the item sheet, its purchase machine and `STUDIO_UI_ONLY` stay the studio
+  window's. The keyboard goes to the page; the door again, **Back to game** or Esc closes it and
+  gives the game its place and keyboard back (an item sheet's own Esc closes only the sheet,
+  `viewerEscape`). While it is open, a game that finishes loading stays hidden, and Full screen and
+  Resume do nothing. A native game's card still opens its page, with its Store under it.
+- **Create › Items** (sidebar row `[data-sidebar-room="items"]`, `panels/items/`,
+  `state/items.ts`) is a room over the workspace, like Plugins. **Browse** lists other creators'
+  shared items with a search, read once the typing pauses; the intro and You get per sale name the
+  selling game's share genex.games sends (`sellerShareBps`, `panels/items/browse-model.ts`), else the
+  design's words; the panel shows Players pay, You get per sale and **Add to \<game> ▾**,
+  which offers the account's local games whose Genex publish record names a project: it adds the
+  allowance, then opens that game's chat and sends the prompt that has the agent run
+  `genex items add <id>` (`panels/items/items-prompts.ts`, `composeInChatWhenOpen`): the agent calls
+  `genex__cli-paid` `items add`, and Studio moves the CLI's `genex-items/<id>/` into the game
+  ([host tools](plugins.md#first-party-privileges)). An item already in the chosen game (Browse's
+  detail names the account's games it was added to) says **Added to \<game>**, with "It shows in the
+  game after its next release." until a build made after it goes live (Q5), and **Remove from
+  \<game>**, asked first, calls `itemsRemoveFromGame`. **Selling**
+  shows Ready to use and On hold for N days, then the account's items (Draft, put on sale; Report
+  under review; Off sale, dimmed) with Put on sale, Take off sale, Other games can use it and Ask the
+  agent to change it, which leaves words in the item's game's composer; a Free item's price says Free.
+  **New item** opens the chosen game's chat, its composer asking "Ask for an item or a change…".
+  A tab chosen, the sidebar's Items row pressed again and the window coming back read the tab on
+  show again (a burst once, `REREAD_GAP_MS`); Put on sale, Take off sale and sharing read Selling
+  again at once, Add to and Remove from the item's detail.
+- The **Listing draft card**: when `genex__cli-paid` runs `shop add` or `shop set` and the pinned
+  CLI answers its `--json` draft (`kind: "genex.item_draft"`, version 1) for the game's own hosted
+  project, main records `item_drafted` in the chat (`main/core/item-draft.ts`) and announces
+  `item.drafted`. The harness may write neither, and a draft an agent writes in words is text. The
+  card goes up after the turn's reply, one per item (a newer draft replaces it), with the price,
+  **Other games can use it** and **Put on sale** ("or ask for changes below"); its presses call
+  `itemSetShared` and `itemPutOnSale` from main, so only the person puts an item on sale. Studio's
+  CLI runs never publish (`shop publish` is not in its command table). Put on sale shows only for a
+  draft or an item its author took off sale: an item a store that is off put on sale at once (D7)
+  says On sale, and `picture_missing` / `picture_invalid` ask the agent to upload the picture. The
+  agent's `shop add|set` takes the description, tags, sharing, Free and the game's picture, model
+  and package files ([host tools](plugins.md#first-party-privileges)). The card needs CLI 1.36.14
+  (`kind`/`version` in `--json`); the pin is 1.36.13 until it is on npm.
+- **Local drafts** (an item made before its game is on Genex, contract "Local item drafts"): the CLI
+  keeps it in the game's `.genex/items/` (`<localId>.json` and a `<localId>/` folder). Studio copies
+  those drafts into each `shop` run's folder and carries a `shop add|set|remove`'s change back
+  (`main/core/local-item-files.ts`: drafts only, never through a link, capped). Its card (`state:
+  "local"`, keyed by local id) says "Draft · goes on sale when you publish" and offers **Sell when
+  published**, the person's approval of its `contentHash`, kept in this profile's app data
+  (`<userData>/item-approvals.json`, `main/core/item-approvals.ts`), never in the game; pressed it
+  says "Will go on sale when you publish", with Undo. An approval names only a hash the CLI printed
+  for that draft; a newer draft says "It changed since you approved it." **Other games can use it** on a
+  local draft is main's own `shop set <localId> --shared|--no-shared`; the approval follows it only
+  when that run changed the very bytes the card showed (Studio's fingerprint of what the run took from
+  the game). Once the game's publish record says its publish made it public (`status: "published"`,
+  written last: a publish that failed part-way or is still running has none), `main/core/local-items.ts`
+  settles the game while one of its chats shows a local card or Studio's record holds a draft not yet uploaded:
+  on open, on focus (at most every 15 s, one at a time) and at once when a Genex publish finishes
+  (`chat/use-local-items.ts`). It runs Studio's own `shop sync --json` (never
+  an agent's; uploaded drafts leave the game), then puts on sale only drafts whose approval equals
+  the hash the sync reports (`itemPutOnSale`). The card then becomes the item's: On sale, a draft
+  with Put on sale ("…so it stayed a draft." when it changed), or genex.games' refusal; a refused
+  upload stays local with its reason. The outcome keeps the hash the sync sent: when it is not the
+  draft the card shows (the files were edited outside Studio), the card offers neither Put on sale nor
+  sharing and sends the person to Items › Selling, which shows the item as Genex holds it. Nothing in the game folder is read as an approval or a sync
+  result, so a `last-sync.json` from a terminal `genex publish` puts nothing on sale (D40).
+
+Fixtures: with `STUDIO_FIXTURE_GENEX_ACCOUNT=1`, `dev/fixture-store.ts` answers the store (Stick &
+Steel's store; the account's Snowball items); `--fixture items-store` makes the fixture game the
+account's Snowball on Genex and puts Frost Axe's Listing draft card in its chat, and adds `fixture-duty`
+(Claude of Duty, not on Genex yet) with Ice Shield's local draft; once its publish record names the
+account's `claude-of-duty` as published, the fixture's own sync uploads it to the fixture store (`dev/fixture-items.ts`).
+Selectors: the viewer's door `[data-play-bar="store"]` (`aria-pressed` while open), its Store
+`[data-play-viewer-store="<slug>"]` with `[data-play-viewer-store-back]`, a page's Store
+`[data-game-store="<slug>"]` (`[data-game-store-view="store|my-items"]`, `[data-store-item="<id>"]`),
+the sheet's `[data-item-sheet-held]`, the shelf's `[data-shelf-item="<id>"]` / `[data-shelf-get="<slug>"]`;
+`[data-sidebar-room="items"]`; `[data-items-page="browse|selling"]` with
+`[data-items-tab="<tab>"]`, `[data-items-search]`, `[data-items-browse]`, `[data-items-grid]`,
+`[data-items-card="<id>"]`, `[data-items-detail="<id>"]`, `[data-items-add-to="<game>"]`,
+`[data-items-added="<game>"]`, `[data-items-remove-from="<game>"]` → `[data-items-remove-confirm="<game>"]`,
+`[data-items-choose-game]` (`[data-items-game="<game>"]`), `[data-items-selling]`, `[data-items-held]`,
+`[data-items-new]`, `[data-items-row="<id>"]`, `[data-items-status="draft|under-review|off-sale"]`,
+`[data-items-put-on-sale="<id>"]`, `[data-items-actions="<id>"]` → `[data-items-action="<action>"]`;
+in the chat `[data-listing-draft="<id>"][data-listing-sale="offer|pressing|on-sale|taken-down"]`,
+`[data-listing-share="<id>"]`, `[data-listing-put-on-sale="<id>"]`, `[data-listing-on-sale]`; a local draft's
+`[data-listing-draft="<localId>"][data-listing-local="offer|approved|changed|removed"]`,
+`[data-listing-local-status]`, `[data-listing-sell-when-published="<localId>"]` (`aria-pressed`),
+`[data-listing-undo-sell="<localId>"]`, `[data-listing-local-changed]`, `[data-listing-stayed-draft]`.
+
 ## Where to work
 
 `src/renderer/play/`, `src/renderer/state/play.ts` and `people.ts`, `src/renderer/avatars/`,
@@ -312,12 +428,25 @@ state of the sheet, on a confirm website that resolves nowhere; the account hold
 coin adds 1,000. Tests: `tests/conformance/play-*`, `genex-account`, `app-account-plugin`; the
 purchase popup in Electron: `npm run test:ui -- play-purchase`.
 
-A live `studio:dev` profile can point Play at a local or test genex.games with
-`GENEX_DEV_PLAY_API_ORIGIN` and `GENEX_DEV_PLAY_WEB_ORIGIN` (bare origins: https, or http on this
-Mac; `src/main/play/origins.ts`). A packaged app or a fixture launch ignores them. With another
-API the account signs in on that server's own device sign-in, for the launch only
-(`src/main/dev/dev-stand-account.ts`); Publish, the Genex plugin, games' pages and their
-pictures stay on genex.games.
+A live `studio:dev` profile can point Play at a local or test genex.games (a stand) with
+`GENEX_DEV_PLAY_API_ORIGIN`, `GENEX_DEV_PLAY_WEB_ORIGIN` and `GENEX_DEV_PLAY_GAMES_ORIGIN` (bare
+origins: https, or http on this Mac), plus `GENEX_DEV_PLAY_GAMES_CA` (an absolute PEM path;
+`src/main/play/origins.ts` `devStand`). A packaged app, a fixture launch and the normal profile
+ignore them. With another API the account signs in on that server's own device sign-in, for the
+launch only (`src/main/dev/dev-stand-account.ts`), and `genex__cli` and the Genex plugin's backend
+(its publish, and so its asset tools and account page) run against that API with that account
+(`launchStand`, `genexPluginAccount`: the registry's `hostAccount` names the API to the backend as
+`STUDIO_PLUGIN_API` and hands the stand's token as its lease; its saved genex.games account is
+neither read nor written). The games origin counts only with a stand API: the viewer plays
+`<scheme>://<slug>.<games host>/`, its pages may hop only to the stand's website, purchases are caught
+on that website (`purchaseConfirmOrigin`), and the CA is trusted for those game hosts alone
+(`play/dev-games-trust.ts`) and by the Genex plugin's publish, whose backend and CLI runs trust it
+beside the system's to push to the stand's source host and check its game host
+(`STUDIO_PLUGIN_CA`, `NODE_EXTRA_CA_CERTS`, `GIT_SSL_CAINFO`); that publish tests its draft on the
+stand's game host (`STUDIO_PLUGIN_GAMES`, `publish.ts` `stagingLink`). A development launch still takes no `genex://` link, and item pictures and models from hosts other
+than Genex's (a local MinIO) still draw the stand-in. Get coin opens the website's coin page as sign-in
+opens its pages (`websitePageOpener`), so a development website's http page opens too. See the
+[field guide](STUDIO-DEVELOPER-FIELD-GUIDE.md#run-an-owned-development-profile).
 
 ## Asset library and sharing
 

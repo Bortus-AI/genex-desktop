@@ -499,6 +499,37 @@ describe("the account across sign-in, offline and a sign-in that ended", () => {
     assert.ok(calls.some(([name]) => name === "genexSignIn"));
   });
 
+  it("reads the account again when the sign-in finishes between its two reads", async () => {
+    // A development stand's sign-in finishes inside main's read of where the account stands: the
+    // read of who it is, just before, still found no token.
+    let token: string | null = null;
+    const { api, calls } = fakeApi({
+      playMe: async () => (token ? me("u3") : null),
+      genexAccount: async () => {
+        token = "minted";
+        return { status: GenexAccountStatus.SignedIn };
+      },
+    });
+    const store = createPeopleStore(api, memoryStorage());
+    await store.loadMe();
+    assert.equal(store.getState().account, GenexAccountStatus.SignedIn);
+    assert.equal(store.getState().me?.id, "u3", "the plate fills in without another event");
+    assert.deepEqual(
+      calls.map(([name]) => name),
+      ["playMe", "genexAccount", "playMe"],
+    );
+  });
+
+  it("reads who it is once when the account is signed in from the start", async () => {
+    const { api, calls } = fakeApi();
+    const store = createPeopleStore(api, memoryStorage());
+    await store.loadMe();
+    assert.deepEqual(
+      calls.map(([name]) => name),
+      ["playMe", "genexAccount"],
+    );
+  });
+
   it("cancels a sign-in and signs out through main, signed out after", async () => {
     const { api, calls } = fakeApi();
     const store = createPeopleStore(api, memoryStorage());

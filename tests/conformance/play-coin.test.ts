@@ -238,6 +238,32 @@ describe("The coin client", () => {
     await assert.rejects(other.coin.intent("clx123"), "an answer about another purchase is not this one");
   });
 
+  it("reads the earned coin still on hold and when it is ready, and none for anything it cannot trust", async () => {
+    const release = "2026-10-30T12:00:00.000Z";
+    const wallet = (body: Record<string, unknown>) => rig(() => ok({ spendable: 12_450, ...body })).coin.wallet();
+    assert.deepEqual(await wallet({ earnedHeld: 7500, nextReleaseAt: release }), {
+      spendable: 12_450,
+      held: { coins: 7500, releaseAt: Date.parse(release) },
+    });
+    const none: Array<Record<string, unknown>> = [
+      { earnedHeld: 0, nextReleaseAt: release },
+      { earnedHeld: 7500, nextReleaseAt: null },
+      { earnedHeld: 7500 },
+      { nextReleaseAt: release },
+      { earnedHeld: -1, nextReleaseAt: release },
+      { earnedHeld: 1.5, nextReleaseAt: release },
+      { earnedHeld: "7500", nextReleaseAt: release },
+      { earnedHeld: 7500, nextReleaseAt: "soon" },
+      { earnedHeld: 7500, nextReleaseAt: 1_793_000_000_000 },
+    ];
+    for (const body of none)
+      assert.deepEqual(await wallet(body), { spendable: 12_450, held: null }, JSON.stringify(body));
+    assert.equal(
+      await rig(() => ok({ spendable: 12_450, earnedHeld: 7500, nextReleaseAt: release })).coin.balance(),
+      12_450,
+    );
+  });
+
   it("refuses a balance that is not a count of coin", async () => {
     for (const spendable of [-1, 1.5, "1240", null, Number.NaN]) {
       const { coin } = rig(() => ok({ spendable }));

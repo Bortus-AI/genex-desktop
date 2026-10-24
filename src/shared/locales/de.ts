@@ -1959,6 +1959,8 @@ export default {
     "Das ging immer wieder schief, also wurde gestoppt, um deine Credits zu sparen.",
   "It leaves Play and genex.games and goes back to drafts. The direct link still works, and plays and likes stay if it’s published again.":
     "Es verschwindet aus „Spielen“ und von genex.games und kommt zurück zu den Entwürfen. Der direkte Link funktioniert weiter, und Spielzahlen und Likes bleiben, wenn du es wieder veröffentlichst.",
+  "It leaves the game’s Store. Players who own it keep it.":
+    "Es verschwindet aus dem Shop des Spiels. Wer es hat, behält es.",
   "It may need the setup scripts its packages came with, which didn’t run.":
     "Es braucht vielleicht die Setup-Skripte seiner Pakete, die nicht gelaufen sind.",
   "It merged this part's work without a reviewer's verdict. The reviewers score parts that build in steps; this one was built in one session.":
@@ -1975,6 +1977,7 @@ export default {
     "Es läuft mit deinen Rechten: Genex isoliert seinen Code nicht.",
   "It runs, but no reviewer compared it with the game you had.":
     "Es läuft, aber kein Prüfer hat es mit deinem bisherigen Spiel verglichen.",
+  "It shows in the game after its next release.": "Es erscheint im Spiel nach seinem nächsten Release.",
   "It shows up here as soon as it runs.": "Es erscheint hier, sobald es läuft.",
   "It starts off: turn it on in Plugins; each of its tools asks you before it runs.":
     "Es startet ausgeschaltet: Schalte es unter „Plugins“ ein; jedes seiner Tools fragt dich, bevor es läuft.",
@@ -3075,6 +3078,7 @@ export default {
   "Remove the waiting messages first: this harness cannot take them back.":
     "Entferne zuerst die wartenden Nachrichten: Dieses Harness kann sie nicht zurücknehmen.",
   "Remove this row": "Diese Zeile entfernen",
+  "Remove {item} from {game}?": "{item} aus {game} entfernen?",
   "Remove {name}": "{name} entfernen",
   Removed: "Entfernt",
   "Removed {actor}": "{actor} entfernt",
@@ -5465,6 +5469,7 @@ export default {
   "{chart}: {readings}": "{chart}: {readings}",
   "{check}: {name} · {status}": "{check}: {name} · {status}",
   "{chosen} of {total}": "{chosen} von {total}",
+  "{coins} of your coin is on hold until {date}.": "{coins} deiner Coins sind bis {date} zurückgehalten.",
   "{command} (exit {code})": "{command} (Exit: {code})",
   "{command} failed": "{command} fehlgeschlagen",
   "{commit} (cataloged, not audited)": "{commit} (im Katalog, nicht geprüft)",
@@ -6024,6 +6029,7 @@ export default {
   "It isn’t on this computer any more. Install it again.": "Es ist nicht mehr auf diesem Computer. Installier es neu.",
   "It couldn’t start on this computer.": "Es konnte auf diesem Computer nicht starten.",
   "Remove from this computer": "Von diesem Computer entfernen",
+  "Remove from {game}": "Aus {game} entfernen",
   "{title} is removed from this computer. Its saves stay.":
     "{title} ist von diesem Computer entfernt. Die Spielstände bleiben.",
   "Ready to play on this computer.": "Bereit zum Spielen auf diesem Computer.",
@@ -6074,4 +6080,129 @@ export default {
   "Your game is on Roblox": "Dein Spiel ist auf Roblox",
   "Your game's agent publishes it in Roblox Studio while you keep working.":
     "Der Agent deines Spiels veröffentlicht es in Roblox Studio, während du weiterarbeitest.",
+  "Anything else we should know? (optional)": "Sonst noch etwas, das wir wissen sollten? (optional)",
+  "Balance {amount}": "Guthaben {amount}",
+  "Balance {now} → {after}": "Guthaben {now} → {after}",
+  "Doesn't work": "Funktioniert nicht",
+  "Drag to turn": "Ziehen zum Drehen",
+  "Genex hasn’t confirmed it yet. It shows under My items once it does. You won’t be charged twice.":
+    "Genex hat es noch nicht bestätigt. Es erscheint unter Meine Items, sobald das passiert. Du zahlst nicht doppelt.",
+  Get: "Holen",
+  "Get in {game}": "In {game} holen",
+  Inappropriate: "Unangemessen",
+  "It may be back later. No coin was charged.": "Vielleicht kommt es später wieder. Es wurden keine Coins abgebucht.",
+  "It's yours. Find it under Store › My items in every game it works in.":
+    "Es gehört dir. Du findest es unter Shop › Meine Items in jedem Spiel, in dem es funktioniert.",
+  Item: "Item",
+  Items: "Items",
+  "Items you own show up here.": "Items, die du besitzt, erscheinen hier.",
+  "My items": "Meine Items",
+  "No coin was charged.": "Es wurden keine Coins abgebucht.",
+  "No coin was reserved or charged.": "Es wurden keine Coins reserviert oder abgebucht.",
+  "Not in this game": "Nicht in diesem Spiel",
+  Owned: "Im Besitz",
+  "Report item": "Item melden",
+  "Report item…": "Item melden…",
+  Scam: "Betrug",
+  "Sign in to see the items you own.": "Melde dich an, um deine Items zu sehen.",
+  Store: "Shop",
+  "Store and my items": "Shop und meine Items",
+  "The coin went back to your balance.": "Die Coins sind zurück auf deinem Guthaben.",
+  "This item isn’t sold here anymore": "Dieses Item wird hier nicht mehr verkauft",
+  "Too many reports for now. Try again later.": "Gerade zu viele Meldungen. Versuch es später noch mal.",
+  "Try again once the coin lands.": "Versuch es noch mal, sobald die Coins da sind.",
+  "Why are you reporting it?": "Warum meldest du es?",
+  "Works here": "Funktioniert hier",
+  "You have {have} · {more} more needed": "Du hast {have} · es fehlen {more}",
+  "Your items couldn’t load.": "Deine Items konnten nicht geladen werden.",
+  "item report\u0004Copy": "Kopie",
+  "{count, number} left": "Noch {count, number}",
+  "{count, plural, one {Works in # game} other {Works in # games}}":
+    "{count, plural, one {Funktioniert in # Spiel} other {Funktioniert in # Spielen}}",
+  "+{amount}": "+{amount}",
+  Actions: "Aktionen",
+  "Actions for {name}": "Aktionen für {name}",
+  "Add to {game}": "Zu {game} hinzufügen",
+  "Ask for an item or a change…": "Frag nach einem Item oder einer Änderung…",
+  "Ask the agent to change it": "Agent um Änderung bitten",
+  Browse: "Entdecken",
+  "Browse and selling": "Entdecken und Verkaufen",
+  "By {name}": "Von {name}",
+  "Choose a game": "Spiel wählen",
+  "Coin you earn is spent in games, like any coin.": "Verdiente Coins gibst du in Spielen aus, wie alle Coins.",
+  "Draft, put on sale": "Entwurf, zum Verkauf anbieten",
+  Earned: "Verdient",
+  "Genex can’t sell it under that name. Ask the agent for another.":
+    "Genex kann es unter diesem Namen nicht verkaufen. Bitte den Agent um einen anderen.",
+  "Genex can’t sell it with that description. Ask the agent to change it.":
+    "Genex kann es mit dieser Beschreibung nicht verkaufen. Bitte den Agent, sie zu ändern.",
+  "Genex couldn’t do that. Try again in a moment.": "Das hat bei Genex nicht geklappt. Versuch es gleich noch mal.",
+  "Genex couldn’t use its 3D model. Ask the agent to fix it.":
+    "Genex konnte das 3D-Modell nicht verwenden. Bitte den Agent, es zu reparieren.",
+  "Genex couldn’t use its files. Ask the agent to fix them.":
+    "Genex konnte die Dateien nicht verwenden. Bitte den Agent, sie zu reparieren.",
+  "Genex couldn’t use its picture. Ask the agent to upload the picture.":
+    "Genex konnte das Bild nicht verwenden. Bitte den Agent, das Bild hochzuladen.",
+  "Genex took this item off sale.": "Genex hat dieses Item aus dem Verkauf genommen.",
+  "It isn’t on sale anymore.": "Es wird nicht mehr verkauft.",
+  "It needs a picture first. Ask the agent to upload the picture.":
+    "Es braucht zuerst ein Bild. Bitte den Agent, das Bild hochzuladen.",
+  "Items couldn’t load.": "Items konnten nicht geladen werden.",
+  "Items other creators made. Free to add to your game, and you get 15% of every sale in it.":
+    "Items von anderen Creators. Kostenlos für dein Spiel, und du bekommst 15 % von jedem Verkauf darin.",
+  "Items other creators made. Free to add to your game, and you get {share} of every sale in it.":
+    "Items von anderen Creators. Kostenlos für dein Spiel, und du bekommst {share} von jedem Verkauf darin.",
+  "Items you make show up here. Ask your game’s agent for one.":
+    "Items, die du machst, erscheinen hier. Bitte den Agent deines Spiels um eins.",
+  "Its files are too large. Ask the agent to make them smaller.":
+    "Die Dateien sind zu groß. Bitte den Agent, sie kleiner zu machen.",
+  "Its maker doesn’t let other games use it anymore.": "Der Creator erlaubt anderen Spielen nicht mehr, es zu nutzen.",
+  "It’s already this game’s own item.": "Es ist schon ein eigenes Item dieses Spiels.",
+  "Listing draft: {name}": "Angebotsentwurf: {name}",
+  "Draft · goes on sale when you publish": "Entwurf · geht in den Verkauf, wenn du veröffentlichst",
+  "Sell when published": "Beim Veröffentlichen verkaufen",
+  "Will go on sale when you publish": "Geht in den Verkauf, wenn du veröffentlichst",
+  "It changed since you approved it.": "Es hat sich geändert, seit du es freigegeben hast.",
+  "This item changed after this card. See it in Items › Selling before you put it on sale.":
+    "Dieses Item hat sich nach dieser Karte geändert. Sieh es dir unter Items › Verkaufen an, bevor du es in den Verkauf gibst.",
+  "It changed since you approved it, so it stayed a draft.":
+    "Es hat sich geändert, seit du es freigegeben hast, und bleibt deshalb ein Entwurf.",
+  "Removed from this game": "Aus diesem Spiel entfernt",
+  "Genex couldn’t change this draft. Try again.": "Genex konnte diesen Entwurf nicht ändern. Versuch es noch einmal.",
+  "New item": "Neues Item",
+  "No items match.": "Keine passenden Items.",
+  "No one has shared an item yet.": "Noch hat niemand ein Item geteilt.",
+  "Off sale": "Nicht im Verkauf",
+  "On sale": "Im Verkauf",
+  "Only an item players keep can be used in other games.":
+    "Nur ein Item, das Spieler behalten, kann in anderen Spielen genutzt werden.",
+  "Only the item’s maker can change it.": "Nur der Creator des Items kann es ändern.",
+  "Other games can use it": "Andere Spiele dürfen es nutzen",
+  "Players pay": "Spieler zahlen",
+  "Publish a game to Genex first, then add items to it.":
+    "Veröffentliche zuerst ein Spiel auf Genex, dann füge ihm Items hinzu.",
+  "Put on sale": "Zum Verkauf anbieten",
+  "Ready to use": "Verfügbar",
+  "Report under review": "Meldung wird geprüft",
+  "Search items": "Items suchen",
+  Selling: "Verkaufen",
+  "Sign in to Genex first.": "Melde dich zuerst bei Genex an.",
+  "Sign in to Genex to see items.": "Melde dich bei Genex an, um Items zu sehen.",
+  Sold: "Verkauft",
+  Status: "Status",
+  "Take off sale": "Aus dem Verkauf nehmen",
+  "That price isn’t one the store takes. Ask the agent to pick another.":
+    "Diesen Preis nimmt der Shop nicht. Bitte den Agent, einen anderen zu wählen.",
+  "The item store is off right now.": "Der Item-Shop ist gerade aus.",
+  "This game sells as many items as it can.": "Dieses Spiel verkauft schon so viele Items wie möglich.",
+  "You get per sale": "Du bekommst pro Verkauf",
+  "You get per sale ({share})": "Du bekommst pro Verkauf ({share})",
+  "Your agent puts it in the game.": "Dein Agent baut es ins Spiel ein.",
+  "You’ve put a lot on sale today. Try again tomorrow.":
+    "Du hast heute schon viel angeboten. Versuch es morgen wieder.",
+  "or ask for changes below": "oder frag unten nach Änderungen",
+  "{count, plural, one {in # game} other {in # games}}": "{count, plural, one {in # Spiel} other {in # Spielen}}",
+  "{days, plural, one {On hold for # day} other {On hold for # days}}":
+    "{days, plural, one {# Tag zurückgehalten} other {# Tage zurückgehalten}}",
+  "{game} · {games}": "{game} · {games}",
 } satisfies LocaleCatalog;

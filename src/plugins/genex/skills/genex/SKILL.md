@@ -24,11 +24,14 @@ Where it disagrees with this preface, this preface wins.
   options. Studio passes `--out-dir` and `--no-wait` itself, and delivered files land in the game,
   so wire in those local paths. In a Godot game they land in its project (`godot/assets/...`),
   which the game loads as `res://assets/...`.
-- `doctor`, `budget`, `llm models`, `llm status`, `llm cancel` and `shop list`: `genex__cli`.
-  `budget --assets` is not available: Studio's own asset allowance and the user's approval govern
-  asset spending.
-- `llm bench` and `shop add|set|remove|test`: `genex__cli-paid`. The user approves each call,
-  because it spends coin or changes what the game sells.
+- `doctor`, `budget`, `llm models`, `llm status`, `llm cancel`, `shop list`, `items list` and
+  `items search`: `genex__cli`. `budget --assets` is not available: Studio's own asset allowance
+  and the user's approval govern asset spending.
+- `llm bench`, `shop add|set|remove|test` and `items add|remove`: `genex__cli-paid`. The user
+  approves each call, because it spends coin or changes what the game sells. A store item's
+  `image`, `model` and `package` name paths inside this game, and `items add` writes
+  `genex-items/<id>/` into it; `shop publish` is not available, because only the person puts an
+  item on sale. Read the `genex-items` skill first.
 - `publish` and `promote`: `genex__publish {"operation":"gallery"}`, which also updates the draft;
   use it when the user wants the game published. `preview` alone: `genex__publish
   {"operation":"draft"}`, a test build that leaves the public version as it is. Follow a publish

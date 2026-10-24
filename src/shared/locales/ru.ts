@@ -1899,6 +1899,8 @@ export default {
     "Это раз за разом не получалось, поэтому работа остановлена, чтобы сберечь твои кредиты.",
   "It leaves Play and genex.games and goes back to drafts. The direct link still works, and plays and likes stay if it’s published again.":
     "Игра пропадёт из «Играть» и с genex.games и вернётся в черновики. Прямая ссылка продолжит работать, а запуски и лайки сохранятся, если опубликуешь её снова.",
+  "It leaves the game’s Store. Players who own it keep it.":
+    "Он пропадёт из магазина игры. У игроков, которые его купили, он останется.",
   "It may need the setup scripts its packages came with, which didn’t run.":
     "Возможно, ей нужны скрипты установки из её пакетов — они не запускались.",
   "It merged this part's work without a reviewer's verdict. The reviewers score parts that build in steps; this one was built in one session.":
@@ -1915,6 +1917,7 @@ export default {
     "Он работает с твоими правами: Genex не изолирует его код.",
   "It runs, but no reviewer compared it with the game you had.":
     "Эта версия работает, но проверяющие не сравнивали её с прежней игрой.",
+  "It shows in the game after its next release.": "Он появится в игре после её следующего релиза.",
   "It shows up here as soon as it runs.": "Она появится здесь, как только запустится.",
   "It starts off: turn it on in Plugins; each of its tools asks you before it runs.":
     "Сначала он выключен: включи его в «Плагинах»; каждый его инструмент спросит тебя перед запуском.",
@@ -2987,6 +2990,7 @@ export default {
   "Remove the waiting messages first: this harness cannot take them back.":
     "Сначала убери сообщения из очереди: эта версия Harness не умеет забирать их обратно.",
   "Remove this row": "Удалить строку",
+  "Remove {item} from {game}?": "Убрать {item} из «{game}»?",
   "Remove {name}": "Удалить {name}",
   Removed: "Удалённые",
   "Removed {actor}": "Удалён {actor}",
@@ -5324,6 +5328,7 @@ export default {
   "{chart}: {readings}": "{chart}: {readings}",
   "{check}: {name} · {status}": "{check}: {name} · {status}",
   "{chosen} of {total}": "{chosen} из {total}",
+  "{coins} of your coin is on hold until {date}.": "{coins} твоих монет удерживается до {date}.",
   "{command} (exit {code})": "{command} (код выхода {code})",
   "{command} failed": "{command}: ошибка",
   "{commit} (cataloged, not audited)": "{commit} (есть в каталоге, не проверен)",
@@ -5924,6 +5929,7 @@ export default {
   "It isn’t on this computer any more. Install it again.": "Игры больше нет на этом компьютере. Установи её снова.",
   "It couldn’t start on this computer.": "Не удалось запустить игру на этом компьютере.",
   "Remove from this computer": "Удалить с этого компьютера",
+  "Remove from {game}": "Убрать из «{game}»",
   "{title} is removed from this computer. Its saves stay.":
     "Игра «{title}» удалена с этого компьютера. Сохранения остались.",
   "Ready to play on this computer.": "Можно играть на этом компьютере.",
@@ -5972,4 +5978,129 @@ export default {
   "Your game is on Roblox": "Твоя игра на Roblox",
   "Your game's agent publishes it in Roblox Studio while you keep working.":
     "Агент твоей игры публикует её в Roblox Studio, а ты можешь работать дальше.",
+  "Anything else we should know? (optional)": "Что-нибудь ещё, что нам стоит знать? (необязательно)",
+  "Balance {amount}": "Баланс {amount}",
+  "Balance {now} → {after}": "Баланс {now} → {after}",
+  "Doesn't work": "Не работает",
+  "Drag to turn": "Потяни, чтобы повернуть",
+  "Genex hasn’t confirmed it yet. It shows under My items once it does. You won’t be charged twice.":
+    "Genex ещё не подтвердил оплату. Предмет появится в «Мои предметы», как только это случится. Дважды не спишем.",
+  Get: "Получить",
+  "Get in {game}": "Получить в {game}",
+  Inappropriate: "Неприемлемо",
+  "It may be back later. No coin was charged.": "Возможно, он ещё вернётся. Монеты не списаны.",
+  "It's yours. Find it under Store › My items in every game it works in.":
+    "Теперь он твой. Ищи его в «Магазин › Мои предметы» в каждой игре, где он работает.",
+  Item: "Предмет",
+  Items: "Предметы",
+  "Items you own show up here.": "Здесь появятся предметы, которые у тебя есть.",
+  "My items": "Мои предметы",
+  "No coin was charged.": "Монеты не списаны.",
+  "No coin was reserved or charged.": "Монеты не зарезервированы и не списаны.",
+  "Not in this game": "Не в этой игре",
+  Owned: "У тебя есть",
+  "Report item": "Пожаловаться на предмет",
+  "Report item…": "Пожаловаться на предмет…",
+  Scam: "Мошенничество",
+  "Sign in to see the items you own.": "Войди, чтобы увидеть свои предметы.",
+  Store: "Магазин",
+  "Store and my items": "Магазин и мои предметы",
+  "The coin went back to your balance.": "Монеты вернулись на баланс.",
+  "This item isn’t sold here anymore": "Этот предмет здесь больше не продаётся",
+  "Too many reports for now. Try again later.": "Слишком много жалоб. Попробуй позже.",
+  "Try again once the coin lands.": "Попробуй снова, когда поступят монеты.",
+  "Why are you reporting it?": "Почему ты жалуешься?",
+  "Works here": "Работает здесь",
+  "You have {have} · {more} more needed": "У тебя {have} · не хватает {more}",
+  "Your items couldn’t load.": "Не удалось загрузить твои предметы.",
+  "item report\u0004Copy": "Копия",
+  "{count, number} left": "Осталось: {count, number}",
+  "{count, plural, one {Works in # game} other {Works in # games}}":
+    "{count, plural, one {Работает в # игре} few {Работает в # играх} many {Работает в # играх} other {Работает в # игры}}",
+  "+{amount}": "+{amount}",
+  Actions: "Действия",
+  "Actions for {name}": "Действия: {name}",
+  "Add to {game}": "Добавить в {game}",
+  "Ask for an item or a change…": "Попроси предмет или изменение…",
+  "Ask the agent to change it": "Попросить агента изменить",
+  Browse: "Обзор",
+  "Browse and selling": "Обзор и продажи",
+  "By {name}": "Автор: {name}",
+  "Choose a game": "Выбрать игру",
+  "Coin you earn is spent in games, like any coin.": "Заработанные монеты тратятся в играх, как любые другие.",
+  "Draft, put on sale": "Черновик, выставить на продажу",
+  Earned: "Заработано",
+  "Genex can’t sell it under that name. Ask the agent for another.":
+    "Genex не может продавать его под этим названием. Попроси агента придумать другое.",
+  "Genex can’t sell it with that description. Ask the agent to change it.":
+    "Genex не может продавать его с таким описанием. Попроси агента изменить его.",
+  "Genex couldn’t do that. Try again in a moment.": "Genex не смог это сделать. Попробуй ещё раз чуть позже.",
+  "Genex couldn’t use its 3D model. Ask the agent to fix it.":
+    "Genex не смог использовать его 3D-модель. Попроси агента исправить её.",
+  "Genex couldn’t use its files. Ask the agent to fix them.":
+    "Genex не смог использовать его файлы. Попроси агента исправить их.",
+  "Genex couldn’t use its picture. Ask the agent to upload the picture.":
+    "Genex не смог использовать его картинку. Попроси агента загрузить картинку.",
+  "Genex took this item off sale.": "Genex снял этот предмет с продажи.",
+  "It isn’t on sale anymore.": "Он больше не продаётся.",
+  "It needs a picture first. Ask the agent to upload the picture.":
+    "Сначала нужна картинка. Попроси агента загрузить картинку.",
+  "Items couldn’t load.": "Не удалось загрузить предметы.",
+  "Items other creators made. Free to add to your game, and you get 15% of every sale in it.":
+    "Предметы других авторов. Их можно бесплатно добавить в свою игру, и ты получаешь 15% с каждой продажи в ней.",
+  "Items other creators made. Free to add to your game, and you get {share} of every sale in it.":
+    "Предметы других авторов. Их можно бесплатно добавить в свою игру, и ты получаешь {share} с каждой продажи в ней.",
+  "Items you make show up here. Ask your game’s agent for one.":
+    "Здесь появятся предметы, которые ты создашь. Попроси агента своей игры сделать первый.",
+  "Its files are too large. Ask the agent to make them smaller.":
+    "Его файлы слишком большие. Попроси агента уменьшить их.",
+  "Its maker doesn’t let other games use it anymore.": "Автор больше не разрешает другим играм его использовать.",
+  "It’s already this game’s own item.": "Это уже собственный предмет этой игры.",
+  "Listing draft: {name}": "Черновик товара: {name}",
+  "Draft · goes on sale when you publish": "Черновик · поступит в продажу, когда опубликуешь",
+  "Sell when published": "Продавать после публикации",
+  "Will go on sale when you publish": "Поступит в продажу после публикации",
+  "It changed since you approved it.": "Он изменился после твоего одобрения.",
+  "This item changed after this card. See it in Items › Selling before you put it on sale.":
+    "Этот предмет изменился после этой карточки. Посмотри его в разделе Предметы › Продажи, прежде чем выставлять на продажу.",
+  "It changed since you approved it, so it stayed a draft.":
+    "Он изменился после твоего одобрения, поэтому остался черновиком.",
+  "Removed from this game": "Удалён из этой игры",
+  "Genex couldn’t change this draft. Try again.": "Genex не смог изменить этот черновик. Попробуй ещё раз.",
+  "New item": "Новый предмет",
+  "No items match.": "Ничего не найдено.",
+  "No one has shared an item yet.": "Пока никто не поделился предметами.",
+  "Off sale": "Снят с продажи",
+  "On sale": "В продаже",
+  "Only an item players keep can be used in other games.":
+    "В других играх можно использовать только предмет, который остаётся у игроков навсегда.",
+  "Only the item’s maker can change it.": "Изменить предмет может только его автор.",
+  "Other games can use it": "Другие игры могут использовать",
+  "Players pay": "Игроки платят",
+  "Publish a game to Genex first, then add items to it.":
+    "Сначала опубликуй игру в Genex, потом добавляй в неё предметы.",
+  "Put on sale": "Выставить на продажу",
+  "Ready to use": "Можно тратить",
+  "Report under review": "Жалоба на рассмотрении",
+  "Search items": "Поиск предметов",
+  Selling: "Продажи",
+  "Sign in to Genex first.": "Сначала войди в Genex.",
+  "Sign in to Genex to see items.": "Войди в Genex, чтобы увидеть предметы.",
+  Sold: "Продано",
+  Status: "Статус",
+  "Take off sale": "Снять с продажи",
+  "That price isn’t one the store takes. Ask the agent to pick another.":
+    "Магазин не принимает такую цену. Попроси агента выбрать другую.",
+  "The item store is off right now.": "Магазин предметов сейчас выключен.",
+  "This game sells as many items as it can.": "В этой игре уже продаётся максимум предметов.",
+  "You get per sale": "Ты получаешь с продажи",
+  "You get per sale ({share})": "Ты получаешь с продажи ({share})",
+  "Your agent puts it in the game.": "Агент добавит его в игру.",
+  "You’ve put a lot on sale today. Try again tomorrow.": "Ты сегодня выставил много предметов. Попробуй завтра.",
+  "or ask for changes below": "или попроси изменения ниже",
+  "{count, plural, one {in # game} other {in # games}}":
+    "{count, plural, one {в # игре} few {в # играх} many {в # играх} other {в # игры}}",
+  "{days, plural, one {On hold for # day} other {On hold for # days}}":
+    "{days, plural, one {Удерживается # день} few {Удерживается # дня} many {Удерживается # дней} other {Удерживается # дня}}",
+  "{game} · {games}": "{game} · {games}",
 } satisfies LocaleCatalog;
