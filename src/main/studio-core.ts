@@ -1236,7 +1236,7 @@ export class StudioCore {
   }
 
   /**
-   * A store item the game's agent made or changed through `genex__cli-paid`: its Listing draft card
+   * A store item the game's agent made (`genex__cli`) or changed (`genex__cli-paid`): its Listing draft card
    * in the chat that asked (`item_drafted`, a record only the host writes), and a nudge for Create ›
    * Items. The card's buttons call genex.games from main; the agent never presses them (D40). A local
    * draft is noted first, so the person's "Sell when published" can name only what the CLI printed.

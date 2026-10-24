@@ -129,6 +129,11 @@ const shopAdd = (options: Record<string, unknown>) => ({
   args: "Frost Axe",
   options: { price: 1200, ...options },
 });
+/** A change to a listed item takes the same files, and the person approves it on a card. */
+const shopSet = (options: Record<string, unknown>) => ({ command: "shop set", args: ITEM, options });
+// A new item's draft runs through the free tool: it asks nobody (`genex-cli-policy.ts`).
+const FREE = { paid: false };
+const PAID = { paid: true };
 
 describe("a store item's files, from the game into the run folder", () => {
   it("copies the picture, model and package and points the CLI at the copies, leaving the game as it was", async () => {
@@ -138,7 +143,7 @@ describe("a store item's files, from the game into the run folder", () => {
     const answer = await service(p, sandbox).run(
       shopAdd({ image: ".genex/scratch/frost-axe.png", model: "./assets/frost-axe.glb", package: "items/frost-axe" }),
       bound(p),
-      { paid: true },
+      FREE,
     );
     assert.equal(answer.ok, true);
     const [run] = sandbox.seen;
@@ -197,13 +202,13 @@ describe("a store item's files, from the game into the run folder", () => {
       const given = await options(p);
       const before = { games: await tree(p.gamesRoot), outside: await tree(p.outside) };
       const cli = service(p, sandbox);
-      await assert.rejects(cli.run(shopAdd(given), bound(p), { paid: true }), (error: unknown) => {
+      await assert.rejects(cli.run(shopAdd(given), bound(p), FREE), (error: unknown) => {
         assert.ok(error instanceof GenexCliRefusal, String(error));
         assert.equal(error.code, GenexCliRefusalCode.InvalidValue);
         assert.match(error.message, message);
         return true;
       });
-      await assert.rejects(cli.preflight(shopAdd(given), bound(p), { paid: true }), message, "nobody is asked");
+      await assert.rejects(cli.preflight(shopSet(given), bound(p), PAID), message, "nobody is asked");
       assert.equal(sandbox.seen.length, 0, "nothing ran");
       assert.deepEqual(await tree(p.gamesRoot), before.games);
       assert.deepEqual(await tree(p.outside), before.outside);
@@ -216,7 +221,7 @@ describe("a store item's files, from the game into the run folder", () => {
     await writeFile(path.join(p.outside, "frost-axe.png"), PICTURE);
     const sandbox = fakeSandbox();
     await assert.rejects(
-      service(p, sandbox).run(shopAdd({ image: "frost-axe.png" }), bound(p, p.outside), { paid: true }),
+      service(p, sandbox).run(shopAdd({ image: "frost-axe.png" }), bound(p, p.outside), FREE),
       /not bound to the game/,
     );
     assert.equal(sandbox.seen.length, 0);
@@ -235,13 +240,13 @@ describe("a store item's files, from the game into the run folder", () => {
     const shown = await preflight(
       "genex",
       PluginHostTool.GenexCliPaid,
-      shopAdd({ image: ".genex/scratch/frost-axe.png" }),
+      shopSet({ image: ".genex/scratch/frost-axe.png" }),
       bound(p),
     );
-    assert.equal(shown.command, "shop add");
+    assert.equal(shown.command, "shop set");
     assert.equal(shown.image, ".genex/scratch/frost-axe.png");
     await assert.rejects(
-      preflight("genex", PluginHostTool.GenexCliPaid, shopAdd({ image: "assets/missing.png" }), bound(p)),
+      preflight("genex", PluginHostTool.GenexCliPaid, shopSet({ image: "assets/missing.png" }), bound(p)),
       /names nothing/,
     );
     assert.equal(sandbox.seen.length, 0, "a preflight runs nothing");
@@ -400,7 +405,7 @@ describe("the network a run that moves an item's files opens", () => {
     it(`opens ${domains === WITH_STORAGE ? "Genex's item storage beside the API" : "the API alone"} for ${name}`, async () => {
       const p = await profile();
       const sandbox = fakeSandbox({ stdout: ADDED, write: cliWritesItem });
-      await service(p, sandbox).run(call, bound(p), { paid: true });
+      await service(p, sandbox).run(call, bound(p), call.command === "shop add" ? FREE : PAID);
       const [run] = sandbox.seen;
       assert.ok(run, "the CLI ran");
       assert.deepEqual(run.request.policy?.allowedDomains, domains);

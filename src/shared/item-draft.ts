@@ -1,7 +1,7 @@
 /**
  * A listing draft (marketplace P11, plan 8.3): an item the game's chat agent made with
  * `genex shop add --json`, or changed with `genex shop set --json`, through Studio's own
- * `genex__cli-paid`. Studio main recognises it in the real tool result (`main/core/item-draft.ts`),
+ * `genex__cli` (`shop add`) or `genex__cli-paid` (`shop set`). Studio main recognises it in the real tool result (`main/core/item-draft.ts`),
  * never in anything the agent wrote, and records it in the chat as `item_drafted`, a record only
  * the host writes. The chat draws it as the Listing draft card, whose buttons call genex.games from
  * main (`itemSetShared`, `itemPutOnSale`): the agent never presses them (D40).

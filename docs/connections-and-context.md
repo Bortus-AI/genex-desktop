@@ -595,7 +595,7 @@ agents read a card with `genex__skill` before that work, and the host serves it 
 never from or into the game folder.
 
 With an unlocked account, agents also reach Studio's pinned Genex CLI: `genex__cli` for free
-commands (doctor, budget, LLM models, job status and cancel, shop list) and, after a consent card,
+commands (doctor, budget, LLM models, job status and cancel, shop list, a store item's draft) and, after a consent card,
 `genex__cli-paid` for commands that spend or change what the game sells. Studio runs every command
 in a throwaway folder of its own, never the game, with only the Genex API reachable (and Genex's
 object storage while a store item's picture, model or package moves); setup,

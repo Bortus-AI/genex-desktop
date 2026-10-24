@@ -3382,15 +3382,15 @@ Genex:
   ProcessSandbox in a fresh `<userData>/genex-cli/<id>` folder (also its `HOME`), never a game
   folder, so the CLI's skill sync and contract healing touch only that folder, which is removed
   afterwards. `main/core/genex-cli-policy.ts` allows doctor, budget, `llm models|status|cancel`,
-  `shop list` and `items list|search` free, and `llm bench`, `shop add|set|remove|test` and
-  `items add|remove` paid; everything else, `shop publish|unpublish` (only the person puts an item
+  `shop list`, `shop add` (a draft spends and sells nothing, so no card asks) and `items list|search`
+  free, and `llm bench`, `shop set|remove|test` and `items add|remove` paid; everything else, `shop publish|unpublish` (only the person puts an item
   on sale, D40), `shop sync` (Studio's own upload of local drafts after a publish, `syncLocalItems`), `budget --assets` (its allowance would live only in the removed run folder) and
   every flag Studio sets itself is refused with a typed reason naming the tool to use instead. A
   store item's `shop add|set` takes `price` (0 is Free), `type`, `description` (≤ 1000, `""` clears
   it on `set`), `tag` (one or a list, ≤ 10 × 32), `shared` (`--shared`/`--no-shared`) and `image`,
   `model` and `package`: paths inside the bound game (`main/core/genex-game-paths.ts`), refused as
   text when absolute, `~`, `..` or the game itself, then by real path when they lead out of the game
-  (a link), are missing or are the wrong kind, all before consent and again before the run, which
+  (a link), are missing or are the wrong kind, all before any card and again before the run, which
   gets a copy in the run folder (a package without links, `.git`, `node_modules`, `.genex` or
   `genex-items`, at most 2,000 files and 200 MiB). `items add <id>` (an item id, never a path) runs
   in the run folder too; Studio then moves its `genex-items/<id>/` into the bound game, refusing a
@@ -3419,7 +3419,7 @@ Genex:
   loads `/vendor/genex/connect.js` after the map (`withGenexSdkImport`); its page must be a
   regular file, never a link. Multiplayer is refused there. A Godot game (`godot/project.godot`)
   or a Unity game (`[unity/]ProjectSettings/ProjectVersion.txt`) is refused with a pointer to
-  `godot__multiplayer` or `unity__multiplayer`: its multiplayer goes into its project. The paid tool and the package tool need consent; fixture profiles refuse
+  `godot__multiplayer` or `unity__multiplayer`: its multiplayer goes into its project. The paid tool needs consent; the package tool asks nobody (Genex's own pinned packages spend nothing), and fixture profiles refuse
   both host steps (`studio:plugins.host-cli`, `studio:plugins.host-package`).
 - `genex__asset` accepts only each lane's own options (`LANE_OPTIONS`, `plugins/genex/request.ts`),
   and a refusal names them (`Unsupported Genex option for <op>`). Each lane's provider is fixed and

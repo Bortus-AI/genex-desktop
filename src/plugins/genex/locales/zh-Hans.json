@@ -1,7 +1,6 @@
 {
   "3D models, characters, sound and art for your games, made in chat with Genex credits. Coding stays on your own provider.": "在对话中用 Genex 积分为你的游戏制作 3D 模型、角色、音效和美术。编程仍由你自己的提供方负责。",
   "Account and jobs": "账号和任务",
-  "Add the listed pinned Genex packages. Multiplayer includes its player-identity dependency. A template game gets Studio's built-in copies in its import map; any other game installs them with its own package manager, with the npm registry open for that command only.": "添加列出的固定版本 Genex 依赖包。多人游戏会附带它的玩家身份依赖。用模板做的游戏会在 import map 中使用 Studio 内置的副本；其他游戏用自己的包管理器安装，npm 仓库只对这条命令开放。",
   "Approve character workflow": "批准角色流程",
   "Asset setup state": "素材设置状态",
   "Blender server address": "Blender 服务器地址",

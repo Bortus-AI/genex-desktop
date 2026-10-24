@@ -212,7 +212,7 @@ Loop runner's saves, shots, play checks, editor end and reopen, module and helpe
 save nothing and take no snapshot while the chat plans. The lead is not the chat's turn: another
 turn ending leaves its consent cards and connector calls going (`outlivesTurn` in `PluginConsent`
 and `activeConnectorCalls`). Its own session's end ends its connector calls, but not its plugin cards:
-a Loop's lead ends its turn to wait for its workers, so its card for a package or a store item waits
+a Loop's lead ends its turn to wait for its workers, so its card for a paid Genex command waits
 for the person; the answer, the timeout or a Stop end it. A director's turn writes no Connecting activity, so the build card reads as
 planning between parts.
 
