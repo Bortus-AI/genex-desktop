@@ -7,9 +7,12 @@ Where it disagrees with this preface, this preface wins.
   The card below still calls it coin.
 - **A price in Nex is a store item, listed by default.** When the person prices something in Nex
   (a class, a skin, a weapon, a power-up), or asks to sell something for real money without naming
-  a currency, each priced thing is a store item: build it into the game, then list it with
-  `shop add` without asking, so its card shows in the chat, before or after the game is published.
-  A free thing needs no item. Take each price from the store's grid:
+  a currency, each priced thing is a store item. List it first, with `shop add` and without asking,
+  as soon as you know its name and price, so its card shows in the chat: before the SDK, the
+  purchase flow or multiplayer, and before or after the game is published, because the card needs
+  nothing from the game. Then build it in and wire `buy()` and `getEntitlements()`. In a Loop the
+  lead lists the items itself at the start, and store items never wait on a multiplayer part. A
+  free thing needs no item. Take each price from the store's grid:
   `genex__cli {"command":"shop list"}` prints it once the game is on Genex, and the default grid is
   100, 300, 800, 1,200, 5,000, 20,000 and 50,000 Nex (0 is Free). Use the grid price nearest the
   one the person named and say which.
