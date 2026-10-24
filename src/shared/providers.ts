@@ -139,17 +139,6 @@ export const PROVIDERS = [
     },
   },
   {
-    id: EngineId.Cursor,
-    label: "Cursor",
-    subscription: false,
-    login: "cli",
-    roles: "sessions",
-    // Cursor's own models draw on the plan's weekly pool, but Claude, GPT and Gemini in Cursor, and
-    // anything past the pool, are paid from the account's credit: only the person's pick runs it.
-    billing: "metered",
-    signIn: null,
-  },
-  {
     id: EngineId.Bonsai,
     label: "Bonsai",
     subscription: false,
@@ -173,6 +162,17 @@ export const PROVIDERS = [
     subscription: false,
     login: "cli",
     roles: "sessions",
+    billing: "metered",
+    signIn: null,
+  },
+  {
+    id: EngineId.Cursor,
+    label: "Cursor",
+    subscription: false,
+    login: "cli",
+    roles: "sessions",
+    // Cursor's own models draw on the plan's weekly pool, but Claude, GPT and Gemini in Cursor, and
+    // anything past the pool, are paid from the account's credit: only the person's pick runs it.
     billing: "metered",
     signIn: null,
   },
