@@ -824,7 +824,8 @@ export class ConversationService {
   async #showBuild(call: CoordinatorCall): Promise<string> {
     const { build, project, commit } = await this.#namedBuild(call);
     const loads = this.#loadsLive(call, project);
-    const elsewhere = this.#x.previews.liveHoldsAnother(project);
+    // The person's ask from the game open on their stage may take Live from another game out of sight.
+    const elsewhere = !loads && this.#x.previews.liveHoldsAnother(project);
     if (build === LIVE_BUILD) {
       if (elsewhere) return OTHER_GAME_IN_LIVE;
       if (!loads) {
@@ -869,7 +870,7 @@ export class ConversationService {
     });
     const landing = `Landed ${commit.slice(0, SHORT_COMMIT)} in the game folder (${landed.how})`;
     if (this.#x.previews.liveHoldsAnother(project))
-      return `${landing}; another game is open in Live, so this one shows it when the user opens it.`;
+      return `${landing}; another game is open in Live, so this one shows it when the user opens it and presses Play.`;
     if (!loads)
       return `${landing}; Live was left as the person has it, and the Reload button on the stage now offers it.`;
     this.#core.emit(UiEvent.StageShow, { project, view: "live" });
