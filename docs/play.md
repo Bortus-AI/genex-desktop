@@ -153,7 +153,9 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
   project: a creator who never shared its project, `game-source.ts`) makes nothing and says so
   (`PlayRemixRefusal`). Cards and the viewer offer Remix only once main has looked at the source
   (`studio:play.remix-ready`, `remix-ready.ts`: the head commit by `git ls-remote`, its file names by a
-  blobless shallow clone, kept by commit in `play-remix-ready.json`).
+  blobless shallow clone, kept by commit in `play-remix-ready.json`). A Mac without Apple's developer
+  tools has only a stand-in for Git, which asks to install them, so there no git runs and Remix stays
+  hidden (`hostGitRuns`, asked once a minute).
   A game reaches Genex with its project only from a Publish that allowed remixing (the dialog's
   Allow remixing, ticked by default; Rights says what remixers may do): Studio stages the files the
   game's git keeps, without history, packages, agent settings, secrets or an engine's caches and
