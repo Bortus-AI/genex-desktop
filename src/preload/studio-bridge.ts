@@ -276,6 +276,8 @@ function storeCalls(bridge: BridgeCalls) {
     onStoreSheet: (listener) => subscribe("studio:store.sheet", listener),
     storeClaim: (itemId, slug) => invoke("studio:store.claim", { itemId, slug }),
     storeShelf: (userId) => invoke("studio:store.shelf", { userId }),
+    storeCoins: () => invoke("studio:store.coins"),
+    storeGetCoin: () => invoke("studio:store.get-coin"),
     storeReport: (itemId, reason, message) => invoke("studio:store.report", { itemId, reason, message }),
     itemsBrowse: (query, cursor, tags = []) => invoke("studio:items.browse", { query, cursor, tags }),
     itemsBrowseDetail: (itemId) => invoke("studio:items.detail", { itemId }),

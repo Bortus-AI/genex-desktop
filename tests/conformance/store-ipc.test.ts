@@ -59,6 +59,10 @@ function rig() {
       buy: record("buy", { outcome: StoreBuyOutcome.Paid }),
       answer: (value) => void calls.push(["answer", value]),
     },
+    coin: {
+      spendable: record("coins", 1240),
+      getCoin: () => void calls.push(["getCoin"]),
+    },
     local: {
       view: record("localView", LOCAL_VIEW),
       approve: record("localApprove", LOCAL_VIEW),
@@ -99,6 +103,8 @@ describe("The store's channels", () => {
       ["studio:store.answer", answer, ["answer", answer]],
       ["studio:store.claim", { itemId: "sku6", slug: "stick-steel" }, ["claim", "sku6", "stick-steel"]],
       ["studio:store.shelf", { userId: "user1" }, ["shelf", "user1"]],
+      ["studio:store.coins", undefined, ["coins"]],
+      ["studio:store.get-coin", undefined, ["getCoin"]],
       [
         "studio:store.report",
         { itemId: "sku1", reason: ItemReportReason.Copy, message: "Mine." },
@@ -243,6 +249,8 @@ describe("The store's preload calls", () => {
     await api.storeBuy("sku1", "stick-steel");
     await api.storeAnswer(3, PurchaseAnswer.Pay);
     await api.storeReport("sku1", ItemReportReason.Scam, null);
+    await api.storeCoins();
+    await api.storeGetCoin();
     await api.itemsBrowse("wings", null);
     await api.itemsBrowse("", "c2", ["fire"]);
     await api.itemsSelling();
@@ -255,6 +263,8 @@ describe("The store's preload calls", () => {
       { channel: "studio:store.buy", payload: { itemId: "sku1", slug: "stick-steel" } },
       { channel: "studio:store.answer", payload: { sheet: 3, answer: PurchaseAnswer.Pay } },
       { channel: "studio:store.report", payload: { itemId: "sku1", reason: ItemReportReason.Scam, message: null } },
+      { channel: "studio:store.coins", payload: undefined },
+      { channel: "studio:store.get-coin", payload: undefined },
       { channel: "studio:items.browse", payload: { query: "wings", cursor: null, tags: [] } },
       { channel: "studio:items.browse", payload: { query: "", cursor: "c2", tags: ["fire"] } },
       { channel: "studio:items.selling", payload: undefined },

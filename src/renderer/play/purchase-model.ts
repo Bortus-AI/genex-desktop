@@ -141,7 +141,7 @@ function askActions(sheet: Pick<PlayPurchaseSheet, "armed" | "price">): SheetAct
   return { quiet: CANCEL, primary: button(PurchaseAnswer.Pay, label, { disabled: !sheet.armed || !price }) };
 }
 
-/** Not enough coin: Get coin until the coin arrives (then Review), or Back once genex.games ended it. */
+/** Not enough coin: Get Nex until the coin arrives (then Review), or Back once genex.games ended it. */
 function shortActions(recovery: PurchaseRecovery | null): SheetActions {
   if (recovery === PurchaseRecovery.Over) return { quiet: BACK, primary: GET_COIN };
   return { quiet: CANCEL, primary: recovery === PurchaseRecovery.Ready ? REVIEW : GET_COIN };
@@ -208,7 +208,7 @@ export function noticeWords(
   }
 }
 
-/** The small line under the buttons: where Get coin or Sign in leads, and what comes after. */
+/** The small line under the buttons: where Get Nex or Sign in leads, and what comes after. */
 export function sheetNote(sheet: Pick<PlayPurchaseSheet, "step" | "recovery">): string | null {
   if (sheet.step === PurchaseStep.SignedOut) return sheet.recovery === PurchaseRecovery.Ready ? null : WORDS.signInNote;
   if (sheet.step !== PurchaseStep.NotEnough) return null;
@@ -273,7 +273,7 @@ export function storeHeldLine(sheet: PlayPurchaseSheet): string | null {
   return STORE.held(coinNumber(held.coins), dayText(held.releaseAt));
 }
 
-/** The small line under the store sheet's button: where Get coin or Sign in leads, and what comes after. */
+/** The small line under the store sheet's button: where Get Nex or Sign in leads, and what comes after. */
 export function storeSheetNote(sheet: Pick<PlayPurchaseSheet, "step" | "recovery">): string | null {
   if (sheet.step === PurchaseStep.NotEnough && sheet.recovery === PurchaseRecovery.Over) return STORE.overNote;
   return sheetNote(sheet);

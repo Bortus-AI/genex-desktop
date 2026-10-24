@@ -277,6 +277,23 @@ export const PlateState = {
 } as const;
 export type PlateState = (typeof PlateState)[keyof typeof PlateState];
 
+/** What the signed-in plate shows beside the name. Its `data-plate-end` value. */
+export const PlateEnd = {
+  /** The credits, which open Credits: in Create, and in Play while the coin is unknown. */
+  Credits: "credits",
+  /** The coin the account may spend, which opens Get Nex: in Play. */
+  Coins: "coins",
+  /** The Offline mark: neither balance is current. */
+  Offline: "offline",
+} as const;
+export type PlateEnd = (typeof PlateEnd)[keyof typeof PlateEnd];
+
+/** Coin in Play and credits in Create; the Offline mark offline; the credits in Play until the coin is read. */
+export function plateEnd(view: { offline: boolean; play: boolean; coins: number | null }): PlateEnd {
+  if (view.offline) return PlateEnd.Offline;
+  return view.play && view.coins !== null ? PlateEnd.Coins : PlateEnd.Credits;
+}
+
 /**
  * The plate for where the account stands and whether the Mac is `online`. A remembered account
  * shows before main has answered; offline only ever changes the friends beside it.

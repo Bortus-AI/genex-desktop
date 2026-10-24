@@ -3,6 +3,19 @@
 You are building inside AI Game Studio. Below the upstream marker is Genex's items card, unchanged.
 Where it disagrees with this preface, this preface wins.
 
+- **Nex is Genex's currency.** Players buy Nex with real money and spend it in the Genex store.
+  The card below still calls it coin.
+- **A price in Nex is a store item, listed by default.** When the person prices something in Nex
+  (a class, a skin, a weapon, a power-up), or asks to sell something for real money without naming
+  a currency, each priced thing is a store item: build it into the game, then list it with
+  `shop add` without asking, so its card shows in the chat, before or after the game is published.
+  A free thing needs no item. Take each price from the store's grid:
+  `genex__cli {"command":"shop list"}` prints it once the game is on Genex, and the default grid is
+  100, 300, 800, 1,200, 5,000, 20,000 and 50,000 Nex (0 is Free). Use the grid price nearest the
+  one the person named and say which.
+- **Coins, gold or gems are the game's own.** A price in coins or any other name is a currency the
+  game keeps itself, earned by playing: build it with no store item. Only when the person also says
+  that currency is for real money, ask once whether they mean Nex, and write the answer in NOTES.md.
 - Studio runs the Genex CLI for you; never run `npx genex`. `genex shop add "<name>" … --json` is
   `genex__cli-paid {"command":"shop add","args":"<name>","options":{…}}` with the flags by name:
   `price` (0 is Free), `type`, `description`, `tag` (a list), `shared` (true or false), and

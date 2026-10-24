@@ -5,7 +5,7 @@
  * and runs Play's own purchase sheet for it (`storeBuy`, `onStoreSheet`), and this draws each step
  * main shows in the item's layout and answers it naming the sheet on screen (`storeAnswer`): Pay
  * counts only once main armed it, the keyboard never starts on Pay, and ✕, Esc and a click outside
- * cancel a purchase still open and close one that is over. Not enough coin offers Get coin, which
+ * cancel a purchase still open and close one that is over. Not enough coin offers Get Nex, which
  * opens genex.games, and Review once the coin lands. A Free item's Get claims it here; an item the
  * player has shows as theirs. The ⋯ menu reports the item (P22). Main pays or cancels only the
  * purchase it started.

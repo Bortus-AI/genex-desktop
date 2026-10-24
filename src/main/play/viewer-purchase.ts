@@ -30,7 +30,7 @@ import { type PlayWorld, SignInNeeded } from "./gallery.ts";
 export const PURCHASE_SETTLE_POLL_MS = 2 * SECOND_MS;
 /** The longest a pending payment is asked after; past it the sheet stays Pending (the game still learns). */
 export const PURCHASE_SETTLE_MS = 3 * MINUTE_MS;
-/** How often the balance (after Get coin) or the purchase (after Sign in) is checked again. */
+/** How often the balance (after Get Nex) or the purchase (after Sign in) is checked again. */
 export const PURCHASE_RECHECK_MS = 3 * SECOND_MS;
 /** How long past its time a purchase is read again, so genex.games has let it lapse by then. */
 export const PURCHASE_EXPIRY_GRACE_MS = SECOND_MS;
@@ -85,7 +85,7 @@ export interface PurchaseContext {
     coin: ViewerCoin;
     /** Sign in to Genex in the browser. */
     account: { signIn(): void };
-    /** Open a genex.games page in the browser (Get coin). */
+    /** Open a genex.games page in the browser (Get Nex). */
     openPage(url: string): void;
     /** The website Play links to. */
     web: string;
@@ -165,7 +165,7 @@ interface Held {
   balance: number | null;
   /** Earned coin on hold beside the balance; null with none, or while unknown. */
   held: PurchaseHeld | null;
-  /** Get coin or Sign in was pressed: the balance or the purchase is checked again. */
+  /** Get Nex or Sign in was pressed: the balance or the purchase is checked again. */
   rechecking: boolean;
   /** When Pending began. */
   pendingSince: number;
@@ -520,7 +520,7 @@ async function pay(m: Machine, h: Held): Promise<void> {
   if (still(m, h, sheet)) paid(m, h);
 }
 
-/** After Get coin: the balance checked again until it covers the price (Review), or the purchase lapses. */
+/** After Get Nex: the balance checked again until it covers the price (Review), or the purchase lapses. */
 async function recheckBalance(m: Machine, h: Held): Promise<void> {
   const { sheet } = h;
   const wallet = await readWallet(m.ctx.deps.coin);

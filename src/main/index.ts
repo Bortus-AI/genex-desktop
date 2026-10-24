@@ -203,6 +203,7 @@ import { followStudioWindow, type StoreSheetControl, storeSheet } from "./play/s
 import { devStand, websitePageOpener } from "./play/origins.ts";
 import { devGamesTrust } from "./play/dev-games-trust.ts";
 import { PLAY_ORIGIN, type PlayPoint } from "../shared/play.ts";
+import { playCoinPageUrl } from "../shared/play-purchase.ts";
 import { registerRunsIpc } from "./ipc/runs.ts";
 import { registerSettingsIpc } from "./ipc/settings.ts";
 import { readLicenseTexts } from "./licenses.ts";
@@ -1461,7 +1462,20 @@ function playCoinFor(studio: StudioCore): PlayCoin {
 }
 
 /** The store's parts: its client, the purchase sheet, and the requests both make. */
-type PlayStoreParts = Omit<StoreIpcDeps, "local"> & { sheet: StoreSheetControl; request: GalleryRequest };
+type PlayStoreParts = Omit<StoreIpcDeps, "local" | "coin"> & { sheet: StoreSheetControl; request: GalleryRequest };
+
+/** The account's coin for the plate in Play, and Get Nex, read as the purchase sheet's is (`playCoinFor`). */
+function plateCoinFor(studio: StudioCore): StoreIpcDeps["coin"] {
+  const coin = playCoinFor(studio);
+  return {
+    spendable: () => coin.spendableOrNone(),
+    // Get Nex: genex.games in the browser; a fixture launch opens nothing and tops its balance up.
+    getCoin: () => {
+      if (fixtureNativePolicy) fixtureGetCoin();
+      else if (window) openGenexWebsitePage(studio, window, playCoinPageUrl(playOrigin.web));
+    },
+  };
+}
 
 /**
  * The store on the Genex account (marketplace plan 10.1): its client, and the purchase sheet a game's
@@ -1486,7 +1500,7 @@ function storeFor(studio: StudioCore): PlayStoreParts {
     world: (slug) => playCatalogFor(studio).world(slug),
     coin: playCoin(deps),
     account: { signIn: () => signInToGenex(studio) },
-    // Get coin: genex.games in the browser; a fixture launch opens nothing and tops its balance up.
+    // Get Nex: genex.games in the browser; a fixture launch opens nothing and tops its balance up.
     openPage: (url) => {
       if (fixtureNativePolicy) fixtureGetCoin();
       else if (window) openGenexWebsitePage(studio, window, url);
@@ -1503,7 +1517,7 @@ function storeFor(studio: StudioCore): PlayStoreParts {
 }
 
 /**
- * A genex.games page the app links to (Get coin): a page of Play's website opens as a sign-in page
+ * A genex.games page the app links to (Get Nex): a page of Play's website opens as a sign-in page
  * does, which takes a development website's plain http; anything else as every other link does.
  */
 function openGenexWebsitePage(studio: StudioCore, win: BrowserWindow, url: string): void {
@@ -1548,7 +1562,7 @@ function attachPlay(studio: StudioCore, win: BrowserWindow): void {
     storeShown: async (slug) => (await storeFor(studio).store.items(slug)).items.length > 0,
     coin: playCoinFor(studio),
     account: { signIn: () => signInToGenex(studio) },
-    // Get coin: genex.games in the browser; a fixture launch opens nothing and tops its balance up.
+    // Get Nex: genex.games in the browser; a fixture launch opens nothing and tops its balance up.
     openPage: (url) => {
       if (fixtureNativePolicy) fixtureGetCoin();
       else openGenexWebsitePage(studio, win, url);
@@ -2094,7 +2108,7 @@ function registerIpc(studio: StudioCore, engines: EngineBoot): void {
   registerDataFolderIpc(handle, dataFolderIpc(studio));
   registerGenexAccountIpc(handle, { account: genexAccountFor(studio) });
   registerPlayIpc(handle, playIpcDeps(studio));
-  registerStoreIpc(handle, { ...storeFor(studio), local: studio.localItems });
+  registerStoreIpc(handle, { ...storeFor(studio), coin: plateCoinFor(studio), local: studio.localItems });
   const { library } = playAccountFor(studio);
   registerAssetLibraryIpc(handle, { library, sharing: librarySharingFor(studio), pictureFile: pictureFileFor() });
   registerNotificationsIpc(handle, {

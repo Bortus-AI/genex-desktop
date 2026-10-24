@@ -85,7 +85,7 @@ export interface PlayViewerDeps {
   coin: ViewerCoin;
   /** The app's Genex account: the purchase sheet's Sign in signs in to it in the browser. */
   account: { signIn(): void };
-  /** Open a genex.games page in the browser (the purchase sheet's Get coin); a fixture launch opens nothing. */
+  /** Open a genex.games page in the browser (the purchase sheet's Get Nex); a fixture launch opens nothing. */
   openPage(url: string): void;
   clipboard(text: string): void;
   /** The website Play links to: Share and Invite copy the game's page there. */

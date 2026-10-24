@@ -197,7 +197,7 @@ describe("Buying from a game's page", () => {
     assert.deepEqual(await result, { outcome: StoreBuyOutcome.NotPaid });
   });
 
-  it("shows Not enough coin when the balance is short, and Get coin opens genex.games' coin page", async () => {
+  it("shows Not enough coin when the balance is short, and Get Nex opens genex.games' coin page", async () => {
     const made = rig({ balance: 12_450 });
     const { done: result } = await opened(made);
     assert.deepEqual([made.last()?.step, made.last()?.recovery], [PurchaseStep.NotEnough, PurchaseRecovery.Waiting]);

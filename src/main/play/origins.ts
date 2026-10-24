@@ -147,7 +147,7 @@ export function genexPageAddress(address: string, web: string): string {
 }
 
 /**
- * Open a genex.games page the app links to (Get coin): a page of the website at `web` the way a
+ * Open a genex.games page the app links to (Get Nex): a page of the website at `web` the way a
  * sign-in page opens (`openWebsite`, which takes a development website's plain http), anything else
  * the way every other link opens (`openOther`).
  */

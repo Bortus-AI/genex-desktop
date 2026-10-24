@@ -852,8 +852,8 @@ export default {
     "La recherche des compétences de Codex s’est fermée. Actualise pour réessayer.",
   "Codex skill discovery timed out. Refresh to retry.":
     "La recherche des compétences de Codex a expiré. Actualise pour réessayer.",
-  "Coin lives in your Genex account. Sign in once, then pay here.":
-    "Les pièces sont sur ton compte Genex. Connecte-toi une fois, puis paie ici.",
+  "Nex lives in your Genex account. Sign in once, then pay here.":
+    "Tes Nex sont sur ton compte Genex. Connecte-toi une fois, puis paie ici.",
   Color: "Couleur",
   Colors: "Couleurs",
   Columns: "Colonnes",
@@ -1681,7 +1681,9 @@ export default {
     "Installe Unreal Engine {version} pour faire des jeux dans Unreal.",
   "Get Xcode": "Télécharger Xcode",
   "Get a key": "Obtenir une clé",
-  "Get coin": "Obtenir des pièces",
+  "Get Nex": "Obtenir des Nex",
+  Nex: "Nex",
+  "{amount} Nex, get Nex": "{amount} Nex, obtenir des Nex",
   "Get credits": "Obtenir des crédits",
   "Get the Epic Games Launcher": "Télécharger Epic Games Launcher",
   "Getting Roblox Studio": "Installation de Roblox Studio",
@@ -2724,8 +2726,8 @@ export default {
   "Opens System Settings → Privacy & Security → {pane}":
     "Ouvre Réglages Système → Confidentialité et sécurité → {pane}",
   "Opens beside the chat": "S’ouvre à côté du chat",
-  "Opens genex.games. Pay comes back once the coin lands.":
-    "Ouvre genex.games. Tu pourras payer dès que les pièces seront arrivées.",
+  "Opens genex.games. Pay comes back once the Nex lands.":
+    "Ouvre genex.games. Tu pourras payer dès que les Nex seront arrivés.",
   "Opens in Explorer": "S’ouvre dans l’Explorateur",
   "Opens in Finder": "S’ouvre dans le Finder",
   "Opens in its default app": "S’ouvre dans son app par défaut",
@@ -4318,12 +4320,12 @@ export default {
   Try: "Essaie",
   "Try again": "Réessayer",
   "Try again in a few minutes.": "Réessaie dans quelques minutes.",
-  "Try again in the game once the coin lands.": "Réessaie dans le jeu dès que les pièces seront arrivées.",
-  "Try again in the game. No coin was charged.": "Réessaie dans le jeu. Aucune pièce n’a été débitée.",
-  "Try again in the game. No coin was reserved or charged.":
-    "Réessaie dans le jeu. Aucune pièce n’a été réservée ni débitée.",
-  "Try again in the game. The coin went back to your balance.":
-    "Réessaie dans le jeu. Les pièces sont revenues sur ton solde.",
+  "Try again in the game once the Nex lands.": "Réessaie dans le jeu dès que les Nex seront arrivés.",
+  "Try again in the game. No Nex was charged.": "Réessaie dans le jeu. Aucun Nex n’a été débité.",
+  "Try again in the game. No Nex was reserved or charged.":
+    "Réessaie dans le jeu. Aucun Nex n’a été réservé ni débité.",
+  "Try again in the game. The Nex went back to your balance.":
+    "Réessaie dans le jeu. Les Nex sont revenus sur ton solde.",
   "Try again, or choose another model.": "Réessaie ou choisis un autre modèle.",
   "Try the build again": "Relancer le build",
   "Try your changes before you update.": "Teste tes changements avant de mettre à jour.",
@@ -4762,7 +4764,7 @@ export default {
   "Your browser should show": "Ton navigateur devrait afficher",
   "Your build": "Ton build",
   "Your coding provider": "Ton fournisseur de modèles",
-  "Your coin arrived. Review the purchase, then pay.": "Tes pièces sont arrivées. Vérifie l’achat, puis paie.",
+  "Your Nex arrived. Review the purchase, then pay.": "Tes Nex sont arrivés. Vérifie l’achat, puis paie.",
   "Your files": "Tes fichiers",
   "Your game appears here": "Ton jeu apparaîtra ici",
   "Your game as it was when the run started.": "Ton jeu tel qu’il était au lancement du build.",
@@ -5407,7 +5409,7 @@ export default {
   "{added} of {total} added": "{added} sur {total} ajoutés",
   "{added} of {total} parts added": "{added} sur {total} parties ajoutées",
   "{added} of {total} parts added · {working} working": "{added} sur {total} parties ajoutées · {working} en cours",
-  "{amount} coin": "{amount} pièces",
+  "{amount} Nex": "{amount} Nex",
   "{amount} credits, open Credits": "{amount} crédits, ouvrir Crédits",
   "{amount} more needed": "Il manque {amount}",
   "{app} settings": "Réglages de {app}",
@@ -5432,7 +5434,7 @@ export default {
   "{chart}: {readings}": "{chart} : {readings}",
   "{check}: {name} · {status}": "{check} : {name} · {status}",
   "{chosen} of {total}": "{chosen} sur {total}",
-  "{coins} of your coin is on hold until {date}.": "{coins} de tes pièces sont bloquées jusqu’au {date}.",
+  "{coins} of your Nex is on hold until {date}.": "{coins} de tes Nex sont bloqués jusqu’au {date}.",
   "{command} (exit {code})": "{command} (sortie : {code})",
   "{command} failed": "Échec de {command}",
   "{commit} (cataloged, not audited)": "{commit} (au catalogue, non audité)",
@@ -6051,15 +6053,15 @@ export default {
   Get: "Obtenir",
   "Get in {game}": "Obtenir dans {game}",
   Inappropriate: "Inapproprié",
-  "It may be back later. No coin was charged.": "Il reviendra peut-être plus tard. Aucune pièce n’a été débitée.",
+  "It may be back later. No Nex was charged.": "Il reviendra peut-être plus tard. Aucun Nex n’a été débité.",
   "It's yours. Find it under Store › My items in every game it works in.":
     "Il est à toi. Retrouve-le dans Boutique › Mes objets dans chaque jeu où il fonctionne.",
   Item: "Objet",
   Items: "Objets",
   "Items you own show up here.": "Les objets que tu possèdes apparaissent ici.",
   "My items": "Mes objets",
-  "No coin was charged.": "Aucune pièce n’a été débitée.",
-  "No coin was reserved or charged.": "Aucune pièce n’a été réservée ni débitée.",
+  "No Nex was charged.": "Aucun Nex n’a été débité.",
+  "No Nex was reserved or charged.": "Aucun Nex n’a été réservé ni débité.",
   "Not in this game": "Pas dans ce jeu",
   Owned: "Possédé",
   "Report item": "Signaler l’objet",
@@ -6068,10 +6070,10 @@ export default {
   "Sign in to see the items you own.": "Connecte-toi pour voir les objets que tu possèdes.",
   Store: "Boutique",
   "Store and my items": "Boutique et mes objets",
-  "The coin went back to your balance.": "Les pièces sont revenues sur ton solde.",
+  "The Nex went back to your balance.": "Les Nex sont revenus sur ton solde.",
   "This item isn’t sold here anymore": "Cet objet n’est plus vendu ici",
   "Too many reports for now. Try again later.": "Trop de signalements pour l’instant. Réessaie plus tard.",
-  "Try again once the coin lands.": "Réessaie dès que les pièces seront arrivées.",
+  "Try again once the Nex lands.": "Réessaie dès que les Nex seront arrivés.",
   "Why are you reporting it?": "Pourquoi le signales-tu ?",
   "Works here": "Fonctionne ici",
   "You have {have} · {more} more needed": "Tu as {have} · il manque {more}",
@@ -6090,8 +6092,8 @@ export default {
   "Browse and selling": "Parcourir et ventes",
   "By {name}": "Par {name}",
   "Choose a game": "Choisir un jeu",
-  "Coin you earn is spent in games, like any coin.":
-    "Les pièces que tu gagnes se dépensent dans les jeux, comme toutes les pièces.",
+  "Nex you earn is spent in games, like any Nex.":
+    "Les Nex que tu gagnes se dépensent dans les jeux, comme tous les Nex.",
   "Draft, put on sale": "Brouillon, mettre en vente",
   Earned: "Gagné",
   "Genex can’t sell it under that name. Ask the agent for another.":

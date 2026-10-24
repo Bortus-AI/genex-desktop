@@ -32,6 +32,8 @@ import {
   nativeViewsUp,
   noteOn,
   PlateState,
+  plateEnd,
+  PlateEnd,
   plateState,
   NoteLook,
   PLAY_PROMO_DONE,
@@ -1319,6 +1321,24 @@ describe("the sidebar's account plate", () => {
     assert.equal(shown({ account: GenexAccountStatus.SignedIn, me: who }), PlateState.SignedIn);
     assert.equal(shown({ account: GenexAccountStatus.SignedIn, me: who }, false), PlateState.Offline);
     assert.equal(shown({ account: GenexAccountStatus.SignedIn }), PlateState.Hidden, "signed in, not read yet");
+  });
+});
+
+describe("What the account plate shows beside the name", () => {
+  it("shows coin in Play and credits in Create, and the Offline mark offline wherever it is", () => {
+    assert.equal(plateEnd({ offline: false, play: true, coins: 1240 }), PlateEnd.Coins);
+    assert.equal(
+      plateEnd({ offline: false, play: true, coins: 0 }),
+      PlateEnd.Coins,
+      "none to spend is still a balance",
+    );
+    assert.equal(plateEnd({ offline: false, play: false, coins: 1240 }), PlateEnd.Credits);
+    assert.equal(plateEnd({ offline: true, play: true, coins: 1240 }), PlateEnd.Offline);
+    assert.equal(plateEnd({ offline: true, play: false, coins: null }), PlateEnd.Offline);
+  });
+
+  it("keeps the credits in Play while the coin is unknown, or coin is off on genex.games", () => {
+    assert.equal(plateEnd({ offline: false, play: true, coins: null }), PlateEnd.Credits);
   });
 });
 

@@ -376,7 +376,7 @@ const FIXTURE_SAFE = [
   // The store and Create › Items: a fixture launch answers every store and creator route, a page
   // purchase and its coin from its own data (`dev/fixture-store.ts` over `dev/fixture-play.ts`),
   // signed out unless it asks for its fixture account; a purchase, a claim, an allowance or Put on
-  // sale lasts the launch, and Get coin opens no page, so no socket opens.
+  // sale lasts the launch, and Get Nex opens no page, so no socket opens.
   "studio:store.items",
   "studio:store.my-items",
   "studio:store.item-games",
@@ -384,6 +384,8 @@ const FIXTURE_SAFE = [
   "studio:store.answer",
   "studio:store.claim",
   "studio:store.shelf",
+  "studio:store.coins",
+  "studio:store.get-coin",
   "studio:store.report",
   "studio:items.browse",
   "studio:items.detail",

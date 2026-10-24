@@ -4883,6 +4883,9 @@ export const PLAY_WORDS = {
     creditsUnlimited: t("Unlimited"),
     /** The credits beside the plate's name: "1,700 credits, open Credits". */
     creditsLabel: (amount: string) => t("{amount} credits, open Credits", { amount }),
+    coins: t("Nex"),
+    /** The coin beside the plate's name in Play: "1,240 coin, get coin". */
+    coinsLabel: (amount: string) => t("{amount} Nex, get Nex", { amount }),
     accountSettings: t("Account settings"),
     signOut: t("Sign out"),
     /** The plate while signed out, signing in, offline, and once genex.games ended the sign-in. */
@@ -5245,7 +5248,7 @@ export const PLAY_WORDS = {
     balance: t("Your balance"),
     /** Read between the balance and what it comes to, in place of the arrow. */
     afterPaying: t("after paying"),
-    coin: (amount: string) => t("{amount} coin", { amount }),
+    coin: (amount: string) => t("{amount} Nex", { amount }),
     quantity: (count: string) => `× ${count}`,
     cancel: t("Cancel"),
     pay: (amount: string) => t("Pay {amount}", { amount }),
@@ -5256,14 +5259,14 @@ export const PLAY_WORDS = {
     receipt: (game: string) => t("{game} has your receipt.", { game }),
     back: t("Back to game"),
     moreNeeded: (amount: string) => t("{amount} more needed", { amount }),
-    getCoin: t("Get coin"),
-    getCoinNote: t("Opens genex.games. Pay comes back once the coin lands."),
+    getCoin: t("Get Nex"),
+    getCoinNote: t("Opens genex.games. Pay comes back once the Nex lands."),
     /** genex.games already ended the purchase for want of coin: it cannot come back here. */
-    overNote: t("Try again in the game once the coin lands."),
+    overNote: t("Try again in the game once the Nex lands."),
     review: t("Review"),
-    coinArrived: t("Your coin arrived. Review the purchase, then pay."),
+    coinArrived: t("Your Nex arrived. Review the purchase, then pay."),
     signedOutTitle: t("Sign in to buy things in games"),
-    signedOutBody: t("Coin lives in your Genex account. Sign in once, then pay here."),
+    signedOutBody: t("Nex lives in your Genex account. Sign in once, then pay here."),
     signIn: t("Sign in to Genex"),
     signInNote: t("Opens your browser. You’ll come back here to pay."),
     signedInTitle: t("You’re signed in"),
@@ -5277,20 +5280,20 @@ export const PLAY_WORDS = {
     failed: {
       [PurchaseProblem.Expired]: {
         title: t("This purchase timed out"),
-        body: t("Try again in the game. No coin was reserved or charged."),
+        body: t("Try again in the game. No Nex was reserved or charged."),
       },
       [PurchaseProblem.Canceled]: {
         title: t("This purchase was canceled"),
-        body: t("Try again in the game. No coin was charged."),
+        body: t("Try again in the game. No Nex was charged."),
       },
       [PurchaseProblem.Refused]: {
         title: t("This purchase didn’t go through"),
-        body: t("Try again in the game. No coin was charged."),
+        body: t("Try again in the game. No Nex was charged."),
       },
       /** Paid, then given back: the coin was charged, so never "No coin was charged". */
       [PurchaseProblem.Refunded]: {
         title: t("This purchase was refunded"),
-        body: t("Try again in the game. The coin went back to your balance."),
+        body: t("Try again in the game. The Nex went back to your balance."),
       },
     } satisfies Record<PurchaseProblem, { title: string; body: string }>,
   },
@@ -5340,7 +5343,7 @@ export const PLAY_STORE_WORDS = {
   balance: (amount: string) => t("Balance {amount}", { amount }),
   short: (have: string, more: string) => t("You have {have} · {more} more needed", { have, more }),
   /** Under a short balance, when part of the coin is earned coin still on hold (web and desktop say the same). */
-  held: (coins: string, date: string) => t("{coins} of your coin is on hold until {date}.", { coins, date }),
+  held: (coins: string, date: string) => t("{coins} of your Nex is on hold until {date}.", { coins, date }),
   pay: (amount: string) => t("Pay {amount}", { amount }),
   get: t("Get"),
   yours: t("It's yours. Find it under Store › My items in every game it works in."),
@@ -5348,18 +5351,18 @@ export const PLAY_STORE_WORDS = {
   close: t("Close"),
   more: t("More"),
   /** genex.games already ended the purchase for want of coin: it is started again from the card. */
-  overNote: t("Try again once the coin lands."),
+  overNote: t("Try again once the Nex lands."),
   pendingBody: t("Genex hasn’t confirmed it yet. It shows under My items once it does. You won’t be charged twice."),
   /** How a purchase from the page that ended unpaid (or refunded) reads; its titles are the in-game sheet's. */
   failedBody: {
-    [PurchaseProblem.Expired]: t("No coin was reserved or charged."),
-    [PurchaseProblem.Canceled]: t("No coin was charged."),
-    [PurchaseProblem.Refused]: t("No coin was charged."),
-    [PurchaseProblem.Refunded]: t("The coin went back to your balance."),
+    [PurchaseProblem.Expired]: t("No Nex was reserved or charged."),
+    [PurchaseProblem.Canceled]: t("No Nex was charged."),
+    [PurchaseProblem.Refused]: t("No Nex was charged."),
+    [PurchaseProblem.Refunded]: t("The Nex went back to your balance."),
   } satisfies Record<PurchaseProblem, string>,
   /** The item is no longer sold on this page. */
   goneTitle: t("This item isn’t sold here anymore"),
-  goneBody: t("It may be back later. No coin was charged."),
+  goneBody: t("It may be back later. No Nex was charged."),
   // The item report (P22), from the sheet's ⋯ menu.
   reportItem: t("Report item…"),
   reportTitle: t("Report item"),
@@ -5428,7 +5431,7 @@ export const ITEMS_WORDS = {
   newItem: t("New item"),
   readyToUse: t("Ready to use"),
   onHold: (days: number) => t("{days, plural, one {On hold for # day} other {On hold for # days}}", { days }),
-  coinNote: t("Coin you earn is spent in games, like any coin."),
+  coinNote: t("Nex you earn is spent in games, like any Nex."),
   item: t("Item"),
   price: t("Price"),
   sold: t("Sold"),

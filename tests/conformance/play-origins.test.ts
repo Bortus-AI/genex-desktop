@@ -229,7 +229,7 @@ describe("what the browser opens for Play", () => {
     assert.throws(() => genexPageAddress("javascript:alert(1)", web));
   });
 
-  it("opens Get coin's page of the development website as sign-in does, and genex.games' page as before", () => {
+  it("opens Get Nex's page of the development website as sign-in does, and genex.games' page as before", () => {
     const opened: Array<[string, string]> = [];
     const opener = (web: string) =>
       websitePageOpener(

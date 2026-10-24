@@ -264,6 +264,20 @@ describe("The coin client", () => {
     );
   });
 
+  it("answers the plate's balance, or none signed out, with coin off, during an outage or for a broken answer", async () => {
+    assert.equal(await rig(() => ok({ spendable: 1240 })).coin.spendableOrNone(), 1240);
+    const none: Array<() => GalleryAnswer> = [
+      () => ({ status: 404, body: { error: "not_found" } }),
+      () => ({ status: 500, body: null }),
+      () => ok(null),
+      () => ok({ spendable: -1 }),
+    ];
+    for (const answer of none) assert.equal(await rig(answer).coin.spendableOrNone(), null);
+    const signedOut = rig(() => ok({ spendable: 1240 }), "");
+    assert.equal(await signedOut.coin.spendableOrNone(), null);
+    assert.deepEqual(signedOut.calls, [], "nothing is sent while no account is unlocked");
+  });
+
   it("refuses a balance that is not a count of coin", async () => {
     for (const spendable of [-1, 1.5, "1240", null, Number.NaN]) {
       const { coin } = rig(() => ok({ spendable }));

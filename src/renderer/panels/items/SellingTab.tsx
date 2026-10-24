@@ -1,6 +1,6 @@
 /**
  * Create › Items › Selling (marketplace P10–P13, screen 08): the strip with the coin ready to use and
- * the coin on hold ("Coin you earn is spent in games, like any coin."; there is no exchange to
+ * the coin on hold ("Nex you earn is spent in games, like any Nex."; there is no exchange to
  * credits, P16), then the account's items, newest first: each with its game, "in N games" and its
  * status (Draft, put on sale; Report under review; Off sale, dimmed), its price, how many sold and
  * what it earned, and a ⋯ menu: Put on sale, Take off sale, Other games can use it, and Ask the agent

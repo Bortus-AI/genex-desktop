@@ -19,10 +19,13 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
   signed out: the last account and balance are remembered on this Mac (`studio.genex.me`,
   `studio.genex.credits`); signing out, which Studio asks first, forgets them.
 - The sidebar plate: signed out (a quiet generated face, Sign in to Genex), finishing in the
-  browser (× cancels), signed in (avatar, name, credits opening Credits; a Pro's name has a PRO tag
-  and their row lights up with their nameplate under the pointer), offline (the last account with the offline mark), ended (dimmed, Sign in again). Its
-  menu: Profile, Friends, Credits (the Genex plugin page's Credits tab), Nameplate (Pro), Account
-  settings, Sign out.
+  browser (× cancels), signed in (avatar, name, and beside it the credits opening Credits in
+  Create, or in Play the Nex the account may spend (`studio:store.coins`, read as Play opens, as
+  the purchase sheet closes and on focus) opening Get Nex; the credits stay while the balance is
+  unknown or coin is off; a Pro's name has a PRO tag and their row lights up with their nameplate
+  under the pointer), offline (the last account with the offline mark), ended (dimmed, Sign in
+  again). Its menu: Profile, Friends, Credits (the Genex plugin page's Credits tab), Nex (Get Nex),
+  Nameplate (Pro), Account settings, Sign out.
 - The sidebar's friends, signed in, in Play and Create: right under the games, the word Friends
   (the Friends page, with the requests waiting) and each friend in the API's order, their game on
   one green line while they play (no online or offline); a Pro friend's row lights up with their first nameplate under the pointer. A row opens the profile; hovering a friend
@@ -128,13 +131,13 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
   cancels it on genex.games, and the next sheet waits 5 seconds; a page that reloads or leaves, or a
   viewer that closes, cancels one still unpaid. Its states: Ask (`× N` above one; a game-priced
   payment's terms whole, in a scroll area), Paying, Paid (the receipt and what is left), Not enough
-  coin (Get coin opens genex.games; once the coin arrives, Review; after genex.games refused Pay for
+  coin (Get Nex opens genex.games; once the coin arrives, Review; after genex.games refused Pay for
   want of coin, try again in the game), Sign in (Review once signed in), Pending (genex.games has not
   answered; asked every 2 seconds) and Failed (timed out, canceled, refused or refunded). A purchase
   genex.games still holds open never times out sooner than its two minutes after the game asked, by
   the app's own clock, however far that clock runs ahead. Signing in from the sheet signs the bar in
   too. UNCONFIRMED with genex.games: confirming from Studio on the `native_modal` surface, and
-  `/inventory` as Get coin's page; each is one constant (`STUDIO_CONFIRM_SURFACE`, `playCoinPageUrl`).
+  `/inventory` as Get Nex's page; each is one constant (`STUDIO_CONFIRM_SURFACE`, `playCoinPageUrl`).
   A development profile pointing Studio at another API catches nothing.
 - The page stays on Genex games' addresses; a link it opens goes to the browser, at most one every
   few seconds. A coin purchase's popup is the exception above: its confirm address no longer goes to
@@ -301,7 +304,8 @@ is.
 
 ## The item store
 
-Games sell items for coin (marketplace plan; genex.games' `/api/store`, off while `STORE_MODE` is).
+Games sell items for Nex, Genex's currency, which players buy with real money (the code, the API
+and genex.games' routes still call it coin; marketplace plan; `/api/store`, off while `STORE_MODE` is).
 An item is a SKU: a name, a description, a picture (maybe a 3D model), a price or Free, and
 consumable or durable. A **shared item** is a durable its author lets other games use; a game that
 adds one holds an **allowance** for it, and sells it once a live build made after the add is promoted.
@@ -317,7 +321,7 @@ frame only, `STUDIO_UI_ONLY`); prices, shares and counts are genex.games' own, n
   coin, "N of your coin is on hold until <date>.") and one button: Pay N runs Play's purchase sheet in the studio window
   (`main/play/store-sheet.ts`, confirmed on `STUDIO_CONFIRM_SURFACE`; `followStudioWindow` makes Pay
   wait again when the window loses or regains focus, and a reload, a dead page or a closed window
-  cancels a purchase still unpaid), Get claims a Free item, Get coin opens genex.games and Review
+  cancels a purchase still unpaid), Get claims a Free item, Get Nex opens genex.games and Review
   follows the coin; ⋯ reports the item (Copy, Doesn't work, Inappropriate, Scam). Drag to turn loads
   the item's GLB only from Genex's asset hosts, the only ones main passes on and the window's
   `connect-src` allows. A profile shows up to five owned items over its stats (`play/ItemShelf.tsx`),
@@ -444,7 +448,7 @@ on that website (`purchaseConfirmOrigin`), and the CA is trusted for those game 
 beside the system's to push to the stand's source host and check its game host
 (`STUDIO_PLUGIN_CA`, `NODE_EXTRA_CA_CERTS`, `GIT_SSL_CAINFO`); that publish tests its draft on the
 stand's game host (`STUDIO_PLUGIN_GAMES`, `publish.ts` `stagingLink`). A development launch still takes no `genex://` link, and item pictures and models from hosts other
-than Genex's (a local MinIO) still draw the stand-in. Get coin opens the website's coin page as sign-in
+than Genex's (a local MinIO) still draw the stand-in. Get Nex opens the website's coin page as sign-in
 opens its pages (`websitePageOpener`), so a development website's http page opens too. See the
 [field guide](STUDIO-DEVELOPER-FIELD-GUIDE.md#run-an-owned-development-profile).
 

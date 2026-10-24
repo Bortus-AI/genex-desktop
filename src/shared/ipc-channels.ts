@@ -233,6 +233,8 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:store.answer": "storeAnswer",
   "studio:store.claim": "storeClaim",
   "studio:store.shelf": "storeShelf",
+  "studio:store.coins": "storeCoins",
+  "studio:store.get-coin": "storeGetCoin",
   "studio:store.report": "storeReport",
   "studio:items.browse": "itemsBrowse",
   "studio:items.detail": "itemsBrowseDetail",
@@ -514,6 +516,8 @@ export interface StudioInvokePayloads {
   "studio:store.answer": PlayPurchaseAnswer;
   "studio:store.claim": { itemId: string; slug: string };
   "studio:store.shelf": { userId: string };
+  "studio:store.coins": undefined;
+  "studio:store.get-coin": undefined;
   "studio:store.report": { itemId: string; reason: ItemReportReason; message: string | null };
   "studio:items.browse": { query: string; cursor: string | null; tags: string[] };
   "studio:items.detail": { itemId: string };

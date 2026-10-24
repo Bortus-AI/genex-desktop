@@ -3421,7 +3421,12 @@ Genex:
 - Genex's guide, nine platform cards and five lane cards (model, character, texture, audio,
   image) are vendored behind Studio-written prefaces in
   `src/plugins/genex/skills` (`vendor.json` pins each source and hash; `npm run genex:skills`
-  refreshes them; `genex-skills-vendor.test.ts` catches drift) and served as file skills. A card a
+  refreshes them; `genex-skills-vendor.test.ts` catches drift) and served as file skills. Genex's
+  currency is Nex (the cards call it coin), and the prefaces make store items the default for it:
+  a thing priced in Nex, or sold for real money with no currency named, is a store item the agent
+  lists with `shop add` without asking, so its card shows; coins, gold or gems are the game's own
+  currency unless the person says they are for real money, when it asks once. Dynamic payments
+  stay for amounts decided while playing. A card a
   CLI release not yet on npm changed is vendored ahead of the pin (`--ahead-from <apps/cli> --ahead
   <cards> --ahead-source <label>`): its files record that `version` and a `pending` note, plain
   refreshes keep them, and the test fails once the pin reaches that version until a refresh takes
