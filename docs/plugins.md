@@ -1324,6 +1324,10 @@ every time (Ask first, below), and a call to one through the connection names th
 use instead. A `screen_capture` JPEG over 1 MB is shrunk with `sips` or PowerShell's System.Drawing,
 and refused in plain words when it can't be.
 
+A call already cancelled is refused before starting StudioMCP or sending its tool request; the
+cancel is checked again after startup. Non-object JSON values on the MCP output are ignored,
+so a malformed line cannot crash the connection or prevent a later valid answer.
+
 The binding file comes from the helper link (`helper-link.ts`), which the backend starts once Studio
 is set up. It is a hand-written RFC 6455 server (`helper-socket.ts`, no dependency) on 127.0.0.1
 only, on the first free port of `HELPER_PORTS` (47301–47304, which the helper tries in the same
@@ -1423,8 +1427,10 @@ through a link), written in the plugin's storage for each check and removed afte
 its own `sourcemap.json` (a Rojo project) uses that. Findings come back as plain lines at a file
 and line (`TypeError` and `SyntaxError`, selene's `Error` and StyLua's parse errors are errors;
 lints are warnings; StyLua's layout differences are format). A program that hangs, prints past the
-cap, can't start or exits with another code is named and never counts as a clean check. A file
-every program found clean is remembered with its sha256 and the programs that checked it
+cap, can't start or exits with another code is named and never counts as a clean check. Exit 1
+counts as findings only when Genex can read at least one finding; empty or unrecognized output
+is a failed check and caches no clean scripts. Records from before this distinction are rechecked
+once. A file every program found clean is remembered with its sha256 and the programs that checked it
 (`luau/clean/<game>.json`) and checked again only once it changes. The programs are found where
 the person keeps them (PATH, then `~/.rokit/bin`, `~/.aftman/bin`, `~/.foreman/bin`), then in the
 plugin's storage (`luau-tools.ts`); the definitions only in the storage. **Add Luau checks**
@@ -1508,7 +1514,9 @@ the name the agent gave. `insert-asset` takes an id of plain digits, reads the p
 `search_asset` for that id; one it doesn't find by its product info in Edit, free only when public
 or the signed-in person's own), refuses a paid asset with nothing inserted, and answers every
 script the asset brought, flagging `require` with an id, `loadstring`, `getfenv`, `HttpService` and
-`MarketplaceService`.
+`MarketplaceService`. Insertion requires a readable destination inventory first. If the script
+inventory fails after insertion, the result says the asset was inserted but its scripts remain
+unreviewed, asks the agent not to insert it again, and never claims it brought no scripts.
 
 **Models.** `check-model` (no card, no lock) runs the asset gate (`asset-gate.ts`) over a `.glb` or
 `.gltf` in the game folder: at most 20,000 triangles, closed (every edge, once vertices at the same
