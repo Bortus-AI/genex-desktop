@@ -162,15 +162,16 @@ import { fixtureDownload, fixtureFileResponse } from "./dev/fixture-asset-librar
 import {
   buildHostsFor,
   type GalleryRequest,
+  mintedTicket,
   networkRequest,
   type PlayGallery,
   playGallery,
   type PlayWorld,
+  TicketDelivery,
 } from "./play/gallery.ts";
 import { relayHostsOf, startGenexGateway } from "./play/genex-gateway.ts";
 import { GAME_LINK_SCHEME, gameLinkIn, gameLinks } from "./play/game-links.ts";
 import { thisComputer } from "./play/native-host.ts";
-import { IDENTITY_QUESTION, nativeTicket } from "./play/native-identity.ts";
 import { type InstallOutcome, type NativeInstaller, nativeInstalls } from "./play/native-installs.ts";
 import { checkNativeUpdates } from "./play/native-updates.ts";
 import { runTool } from "./play/native-unpack.ts";
@@ -180,6 +181,7 @@ import { hasGameWindow, showGameWindow } from "./play/native-windows.ts";
 import { linuxGameWindows } from "./play/native-windows-linux.ts";
 import { spawnNativeGame } from "../substrate/plugins/native-process.ts";
 import { spawnLinuxGame } from "../substrate/plugins/linux-game.ts";
+import { windowsGames } from "../substrate/plugins/windows-game.ts";
 import { psProbe, SYSTEM_CLOCK } from "../substrate/job-process.ts";
 import { killProcessTree } from "../substrate/process-tree.ts";
 import { prepareNativeGamesFixture } from "./dev/fixture-native-games.ts";
@@ -1184,19 +1186,28 @@ function watchNativeUpdates(studio: StudioCore): void {
  * Native games being played in their own windows, each in the game sandbox, or null where Genex
  * launches no native game.
  */
+/** Where Genex keeps its compiled game host on Windows, in its own data. */
+const GAME_HOST_FOLDER = "game-host";
+
+/** How this system starts a native game, sees its window, brings it forward and asks it to quit. */
+function gameLauncher(): Pick<NativeSessionsDeps, "spawn" | "hasWindow" | "show" | "kill"> {
+  // Windows runs a game in an AppContainer through Genex's game host, which says when its window is up.
+  if (process.platform === StudioPlatform.Windows) return windowsGames(path.join(userDataRoot, GAME_HOST_FOLDER));
+  const kill = (pid: number, signal: NodeJS.Signals) => process.kill(pid, signal);
+  // Linux runs a game in bubblewrap and has no window list to read; the Mac in Seatbelt.
+  if (process.platform === StudioPlatform.Linux) return { spawn: spawnLinuxGame, ...linuxGameWindows(), kill };
+  return { spawn: spawnNativeGame, hasWindow: hasGameWindow, show: showGameWindow, kill };
+}
+
 function playSessionsFor(studio: StudioCore): NativeSessions | null {
   const installs = playInstallsFor(studio);
   if (!installs) return null;
-  // Linux runs a game in bubblewrap and has no window list to read; the Mac in Seatbelt.
-  const linux = process.platform === StudioPlatform.Linux;
-  const windows = linux ? linuxGameWindows() : { hasWindow: hasGameWindow, show: showGameWindow };
+  // A Windows game reaches nothing, Genex included: its AppContainer has no loopback (windows-game.ts).
+  const offline = Boolean(fixtureNativePolicy) || process.platform === StudioPlatform.Windows;
   nativeLauncher ??= nativeSessions({
     root: studio.layout.installedGames,
     record: (slug) => installs.record(slug),
-    spawn: linux ? spawnLinuxGame : spawnNativeGame,
-    hasWindow: windows.hasWindow,
-    show: windows.show,
-    kill: (pid, signal) => process.kill(pid, signal),
+    ...gameLauncher(),
     killTree: (pid) => killProcessTree(pid),
     probe: psProbe(),
     clock: SYSTEM_CLOCK,
@@ -1205,9 +1216,8 @@ function playSessionsFor(studio: StudioCore): NativeSessions | null {
     ended: (slug) => installs.sweep(slug),
     log: (line) => studioLog.write("main", line),
     // A fixture launch has no Genex to reach: its games stay offline, and their plays uncounted.
-    ...(fixtureNativePolicy
-      ? {}
-      : { genex: (slug: string) => openGameGenex(studio, slug), presence: playsFor(studio) }),
+    ...(offline ? {} : { genex: (slug: string) => openGameGenex(studio, slug) }),
+    ...(fixtureNativePolicy ? {} : { presence: playsFor(studio) }),
   });
   return nativeLauncher;
 }
@@ -1234,38 +1244,9 @@ async function openGameGenex(studio: StudioCore, slug: string): Promise<GameGene
     api: playOrigin.api,
     relay: relayHostsOf(new URL(playOrigin.api).hostname),
   });
-  const catalog = playCatalogFor(studio);
-  const installs = playInstallsFor(studio);
-  const ticket = await nativeTicket(
-    {
-      ticket: (game, delivery) => catalog.ticket(game, delivery),
-      ask: async ({ slug: game }) => askNativeIdentity((await installs?.record(game))?.title ?? game),
-      share: (projectId) => catalog.shareIdentity(projectId),
-      shared: async (game, projectId) => installs?.knowsYou(game, projectId),
-    },
-    slug,
-  );
+  const ticket = mintedTicket(await playCatalogFor(studio).ticket(slug, TicketDelivery.Desktop));
   const env = { GENEX_API_URL: gateway.apiUrl, ...(ticket ? { GENEX_EMBED_TICKET: ticket } : {}) };
   return { ports: gateway.ports, env, close: gateway.close };
-}
-
-/**
- * Ask the player, once per game, whether a native game may know who they are, as a sheet on
- * Studio's window: the game would see their Genex name and avatar (App Review 4.7.3).
- */
-async function askNativeIdentity(game: string): Promise<boolean> {
-  const words = IDENTITY_QUESTION;
-  const options = {
-    type: "question" as const,
-    message: words.title(game),
-    detail: words.detail(),
-    buttons: [words.accept(), words.decline()],
-    defaultId: 0,
-    cancelId: 1,
-  };
-  const parent = window && !window.isDestroyed() ? window : null;
-  const { response } = parent ? await dialog.showMessageBox(parent, options) : await dialog.showMessageBox(options);
-  return response === 0;
 }
 
 /**

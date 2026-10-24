@@ -639,6 +639,9 @@ export default {
   "Checking plan usage…": "요금제 사용량을 확인하는 중…",
   "Checking play": "플레이를 확인하는 중",
   "Checking preservation": "빠진 게 없는지 확인 중",
+  "Checking that Epic signed the installer…": "설치 프로그램에 Epic 서명이 있는지 확인하고 있어요…",
+  "Checking that Microsoft signed Unreal's runtime installer…":
+    "Unreal에 들어 있는 런타임 설치 프로그램에 Microsoft 서명이 있는지 확인하고 있어요…",
   "Checking that Roblox signed the installer.": "Roblox가 설치 프로그램에 서명했는지 확인하고 있어요.",
   "Checking the game files…": "게임 파일을 확인하는 중…",
   "Checking the key…": "키 확인 중…",
@@ -857,7 +860,6 @@ export default {
   "Context · {percent}% used": "컨텍스트 · {percent}% 사용됨",
   "Context: {used} tokens": "컨텍스트: {used} 토큰",
   Continue: "계속",
-  "Continue as me": "내 계정으로 계속",
   "Continue on this Mac": "이 Mac에서 계속",
   "Continue to confirmation": "확인 단계로 계속",
   Contractor: "외부 에이전트",
@@ -983,8 +985,6 @@ export default {
   "Couldn't start the sign-in on this Mac. Paste a key instead.":
     "이 Mac에서 로그인을 시작할 수 없어요. 대신 키를 붙여넣어 주세요.",
   "Couldn't stop play": "플레이를 멈추지 못했어요",
-  "Couldn't stop sharing who you are. Try again in a moment.":
-    "내 정보 공유를 멈추지 못했어요. 잠시 후 다시 시도하세요.",
   "Couldn't take a motion strip": "연속 동작 이미지를 찍지 못했어요",
   "Couldn't take a picture of {asset}": "{asset} 사진을 찍지 못했어요",
   "Couldn't take a play-view shot": "플레이 화면을 찍지 못했어요",
@@ -1143,6 +1143,8 @@ export default {
   "Dismiss remaining imports": "남은 커넥터 닫기",
   Dividers: "구분선",
   "Do it for me": "대신 해 주기",
+  "Do it for me opens the launcher, and this chat installs it there with computer control. About 45 GB. Only you sign in to Epic, when it asks.":
+    "'대신 해 주기'를 누르면 런처가 열리고, 이 채팅이 컴퓨터를 조작해 Unreal을 설치해요. 약 45GB예요. Epic 로그인을 요청하면 본인이 직접 로그인하세요.",
   "Does it feel alive? {score} of {max}": "살아 있는 느낌이 나나요? {score}/{max}",
   "Does what you ask, then stops.": "요청한 일을 하고 멈춰요.",
   "Don't allow": "허용 안 함",
@@ -1179,6 +1181,7 @@ export default {
   "Downloading Roblox's installer.": "Roblox 설치 프로그램을 다운로드하고 있어요.",
   "Downloading Unity Hub": "Unity Hub 다운로드 중",
   "Downloading models": "모델 다운로드 중",
+  "Downloading the Epic Games Launcher from Epic…": "Epic에서 Epic Games Launcher를 다운로드하고 있어요…",
   "Downloading {model}": "{model} 다운로드 중",
   "Downloading {model} · {percent}%": "{model} 다운로드 중 · {percent}%",
   "Downloading {name}": "{name} 다운로드 중",
@@ -1225,8 +1228,19 @@ export default {
   "Enter the server's address, like 127.0.0.1:5000.": "서버 주소를 입력하세요. 예: 127.0.0.1:5000",
   "Environment variables": "환경 변수",
   "Environment variables: name": "환경 변수: 이름",
+  "Epic's download led somewhere other than Epic, so Genex stopped.":
+    "Epic 다운로드가 Epic이 아닌 곳으로 연결돼서 Genex가 멈췄어요.",
+  "Epic's download link wasn't secure, so Genex didn't download it.":
+    "Epic 다운로드 링크가 안전하지 않아서 Genex가 다운로드하지 않았어요.",
+  "Epic's download page is opening in your browser.": "브라우저에서 Epic 다운로드 페이지를 여는 중이에요.",
+  "Epic's download was far bigger than its installer, so Genex stopped.":
+    "Epic 다운로드가 설치 프로그램보다 훨씬 커서 Genex가 멈췄어요.",
+  "Epic's free app that installs Unreal. Do it for me downloads it from Epic and installs it: choose Yes when Windows asks.":
+    "Unreal을 설치해 주는 Epic의 무료 앱이에요. '대신 해 주기'로 Epic에서 다운로드해 설치해요. Windows가 물어보면 '예'를 고르세요.",
   "Epic's free app that installs Unreal. Genex opens Epic's download page.":
     "Unreal을 설치해 주는 Epic의 무료 앱이에요. Genex가 Epic 다운로드 페이지를 열어요.",
+  "Epic's installer didn't download. Check your internet connection and try again.":
+    "Epic 설치 프로그램을 다운로드하지 못했어요. 인터넷 연결을 확인하고 다시 시도하세요.",
   Error: "오류",
   "Error copied.": "오류를 복사했어요.",
   "Every game chat and Loop run is recorded under Recent runs.": "모든 게임 채팅과 Loop 빌드는 ‘최근 빌드’에 기록돼요.",
@@ -1426,6 +1440,8 @@ export default {
     "Genex는 이 컴퓨터에서 Roblox Studio를 클릭할 수 없어요. Studio에서 직접 게시하세요: {clicks}.",
   "Genex can't click in Roblox Studio on this computer. Turn it on yourself: {clicks}.":
     "Genex는 이 컴퓨터에서 Roblox Studio를 클릭할 수 없어요. 직접 켜세요: {clicks}.",
+  "Genex can't click in the launcher on this computer. Install Unreal {version} yourself: {clicks}.":
+    "Genex는 이 컴퓨터에서 런처를 클릭할 수 없어요. Unreal {version}을 직접 설치하세요: {clicks}.",
   "Genex can't find this computer's Roblox folders: its home folder isn't a full path of this system.":
     "Genex가 이 컴퓨터의 Roblox 폴더를 찾을 수 없어요. 홈 폴더가 이 시스템의 전체 경로가 아니에요.",
   "Genex can't read {file} as Roblox Studio's settings, so it changes no settings file. Turn Studio's MCP server on in Studio: {clicks}.":
@@ -1447,8 +1463,6 @@ export default {
   "Genex couldn't download the Luau checks. Check the connection and press Add Luau checks again.":
     "Genex가 Luau 검사를 다운로드하지 못했어요. 연결을 확인하고 ‘Luau 검사 추가’를 다시 누르세요.",
   "Genex couldn't get Roblox Studio.": "Genex가 Roblox Studio를 받지 못했어요.",
-  "Genex couldn't stop sharing who you are with this game. Try again in a moment.":
-    "Genex가 이 게임과의 내 정보 공유를 멈추지 못했어요. 잠시 후 다시 시도하세요.",
   "Genex couldn't tell whether {app} was free, so nothing was rewound. Rewind again in a moment.":
     "Genex가 {app}의 사용 가능 여부를 확인하지 못해서 아무것도 되감지 않았어요. 잠시 후 다시 되감아 주세요.",
   "Genex couldn't tell whether {app} was free, so the newer version didn't come back. Try again in a moment.":
@@ -1462,10 +1476,14 @@ export default {
   "Genex cover": "Genex 커버",
   "Genex credits": "Genex 크레딧",
   "Genex decides from crash reports": "Genex가 크래시 보고서로 판단해요",
+  "Genex didn't click anything. Install Unreal {version} yourself in the launcher: {clicks}.":
+    "Genex는 아무것도 클릭하지 않았어요. 런처에서 Unreal {version}을 직접 설치하세요: {clicks}.",
   "Genex didn't click anything. Turn it on yourself: {clicks}.":
     "Genex가 아무것도 클릭하지 않았어요. 직접 켜세요: {clicks}.",
   "Genex didn't publish anything. To publish it yourself in Studio: {clicks}.":
     "Genex가 아무것도 게시하지 않았어요. Studio에서 직접 게시하려면: {clicks}.",
+  "Genex didn’t approve the {app}.": "Genex가 {app}을 승인하지 않았어요.",
+  "Genex didn’t approve the {app}: {reason}": "Genex가 {app}을 승인하지 않았어요: {reason}",
   "Genex didn’t take that. Try again in a moment.": "Genex가 받아들이지 않았어요. 잠시 후 다시 시도해 주세요.",
   "Genex downloads Godot this way on Windows only; on a Mac, Do it for me installs it in Applications.":
     "Genex는 Windows에서만 이렇게 Godot를 다운로드해요. Mac에서는 ‘대신 해 주기’가 응용 프로그램 폴더에 설치해요.",
@@ -1488,6 +1506,7 @@ export default {
     "Genex가 이 프로젝트를 설정하지 않았으니 되돌릴 게 없어요.",
   "Genex hasn’t confirmed it yet. {game} finishes the purchase once it does. You won’t be charged twice.":
     "Genex가 아직 확인하지 않았어요. 확인되면 {game}에서 구매를 마무리해요. 두 번 청구되지 않아요.",
+  "Genex installs Epic's launcher itself on Windows only.": "Genex가 Epic 런처를 직접 설치하는 건 Windows에서만이에요.",
   "Genex installs Unity Hub on a Mac only: get it from Unity's page.":
     "Genex는 Mac에서만 Unity Hub를 설치해요. Unity 페이지에서 받으세요.",
   "Genex is already getting Roblox Studio.": "Genex가 이미 Roblox Studio를 받고 있어요.",
@@ -1498,8 +1517,6 @@ export default {
   "Genex is installing Godot. Nothing is needed from you.": "Genex가 Godot를 설치하고 있어요. 따로 할 일은 없어요.",
   "Genex is open source under the MIT License. It also includes software from other projects, each under its own license.":
     "Genex는 MIT 라이선스로 공개된 오픈 소스예요. 다른 프로젝트의 소프트웨어도 포함되어 있고, 각각 고유한 라이선스를 따라요.",
-  "Genex is reviewing the game before it shows in the gallery.":
-    "갤러리에 표시되기 전에 Genex가 게임을 검토하고 있어요.",
   "Genex isn't getting Roblox Studio right now.": "Genex는 지금 Roblox Studio를 받고 있지 않아요.",
   "Genex keeps a copy of each file first, and Undo setup takes these changes back. A Genex editor helper file you changed is kept beside it as a .mine copy.":
     "Genex는 먼저 각 파일의 사본을 남겨 두고, ‘설정 되돌리기’로 이 변경을 되돌릴 수 있어요. 직접 수정한 Genex 에디터 도우미 파일은 옆에 .mine 사본으로 보관돼요.",
@@ -1697,6 +1714,7 @@ export default {
   "In Unity Hub, sign in and add a Unity license (Personal is free if Unity's terms allow it for you). Unity's own terms cover its apps and your account. Only you type your password.":
     "Unity Hub에서 로그인하고 Unity 라이선스를 추가하세요(Unity 약관상 가능하면 Personal은 무료예요). Unity 앱과 계정에는 Unity 자체 약관이 적용돼요. 비밀번호는 본인만 입력해요.",
   "In every game": "모든 게임",
+  "In review": "검토 중",
   "In round {round}'s brief": "{round}라운드 지시에 포함",
   "In the background": "백그라운드",
   "In the background: {title}": "백그라운드: {title}",
@@ -1733,6 +1751,7 @@ export default {
   "Install Codex": "Codex 설치하기",
   "Install Codex, then check again.": "Codex를 설치한 뒤 다시 확인해 주세요.",
   "Install Genex plugin": "Genex 플러그인 설치",
+  "Install Microsoft's Visual C++ runtime": "Microsoft Visual C++ 런타임 설치",
   "Install Ollama": "Ollama 설치",
   "Install OpenCode": "OpenCode 설치",
   "Install OpenCode from Settings › Model Providers.": "설정 › 모델 제공자에서 OpenCode를 설치해 주세요.",
@@ -1770,10 +1789,14 @@ export default {
   "Installed.": "설치됨.",
   "Installing Blender {version}": "Blender {version} 설치 중",
   "Installing Godot {version}": "Godot {version} 설치 중",
+  "Installing Microsoft's Visual C++ runtime. Choose Yes when Windows asks.":
+    "Microsoft Visual C++ 런타임을 설치하고 있어요. Windows가 물어보면 '예'를 고르세요.",
   "Installing OpenCode. This can take a minute.": "OpenCode를 설치하는 중이에요. 1분 정도 걸릴 수 있어요.",
   "Installing Unity Hub": "Unity Hub 설치 중",
   "Installing Unity {version}": "Unity {version} 설치 중",
   "Installing packages": "패키지 설치 중",
+  "Installing the Epic Games Launcher. Choose Yes when Windows asks.":
+    "Epic Games Launcher를 설치하고 있어요. Windows가 물어보면 '예'를 고르세요.",
   "Installing {name} took too long. Try again.": "{name} 설치가 너무 오래 걸렸어요. 다시 시도해 주세요.",
   "Installing {name}. This can take a minute.": "{name} 설치 중이에요. 1분 정도 걸릴 수 있어요.",
   "Installing {title}": "{title} 설치 중",
@@ -1851,8 +1874,6 @@ export default {
   "It turns on when installed: agents in all your games can use it from your next message.":
     "설치하면 바로 켜져요. 다음 메시지부터 모든 게임의 에이전트가 쓸 수 있어요.",
   "It was paused before it could write up the build.": "빌드 요약을 쓰기 전에 일시 정지됐어요.",
-  "It will see your display name and avatar, so your progress and scores can be saved to your account. Games are code written by other people, not by Genex. You can stop sharing any time in Settings › Storage.":
-    "게임이 내 표시 이름과 아바타를 보게 되고, 진행 상황과 점수가 내 계정에 저장돼요. 게임은 Genex가 아니라 다른 사람이 작성한 코드예요. 공유는 ‘설정 › 저장 공간’에서 언제든 멈출 수 있어요.",
   "It's no longer there.": "더 이상 없어요.",
   "It's switched on in Studio's settings. Studio answers once a place is open: open one in Studio, or press New Roblox game.":
     "Studio 설정에서 켜졌어요. 플레이스가 열리면 Studio가 응답해요. Studio에서 하나를 열거나 ‘새 Roblox 게임’을 누르세요.",
@@ -1870,8 +1891,8 @@ export default {
     "패키지가 아직 설치되지 않았어요 — 한 번 누르면 “{install}” 명령이 실행돼요.",
   "Its packages aren’t installed yet.": "패키지가 아직 설치되지 않았어요.",
   "Its project didn’t go, so no one can remix it yet.": "프로젝트가 전송되지 않아서 아직 아무도 리믹스할 수 없어요.",
-  "Its project is too big to remix: Genex keeps up to 2 GB and 5,000 files.":
-    "프로젝트가 너무 커서 리믹스할 수 없어요. Genex는 2GB, 파일 5,000개까지 보관해요.",
+  "Its project is too big to remix: Genex keeps up to 5 GB and 5,000 files.":
+    "프로젝트가 너무 커서 리믹스할 수 없어요. Genex는 5GB, 파일 5,000개까지 보관해요.",
   "Its session failed before it delivered anything.": "아무것도 전달하기 전에 세션이 실패했어요.",
   "Its source is your own repository: run genex make-remixable in the game’s folder to allow remixing.":
     "소스가 내 저장소에 있어요. 리믹스를 허용하려면 게임 폴더에서 genex make-remixable을 실행하세요.",
@@ -1916,7 +1937,6 @@ export default {
     "유지됨. 전에 실패하던 검사 {count, plural, other {#개}}가 이제 통과하고, 전에 통과하던 건 깨지지 않았고, 나란히 비교하는 리뷰어도 반대하지 않았어요.",
   Kind: "종류",
   "Kinds of asset": "에셋 종류",
-  "Knows who you are": "나를 알고 있음",
   "Koi drifting through a neon night market, seen from above": "네온 야시장 위를 떠다니는 잉어, 위에서 내려다본 모습",
   "Laid the terrain": "지형을 만들었어요",
   Language: "언어",
@@ -1956,7 +1976,6 @@ export default {
     "이 채팅의 에이전트가 이 앱을 쓰게 할까요? 이 앱 화면을 읽고 클릭하고 입력할 수 있어요.",
   "Let this chat's agent use {app}? It can click, type and read what {app} shows.":
     "이 채팅의 에이전트가 {app} 앱을 쓰게 할까요? {app} 화면을 읽고 클릭하고 입력할 수 있어요.",
-  "Let {game} know who you are?": "{game}에 내가 누구인지 알릴까요?",
   "Letters a–z, digits and dashes.": "영문 a–z, 숫자, 대시만 쓸 수 있어요.",
   "Letting go of every input": "모든 입력을 떼는 중",
   "Letting the game settle": "게임이 안정되길 기다리는 중",
@@ -2134,6 +2153,7 @@ export default {
   "Merging a worker's work": "작업자의 작업을 합치는 중",
   "Mic didn’t start": "마이크가 켜지지 않았어요",
   Microphone: "마이크",
+  "Microsoft's Visual C++ runtime is installed.": "Microsoft Visual C++ 런타임을 설치했어요.",
   Mine: "내 것",
   Minimize: "최소화",
   "Mobile support": "모바일 지원",
@@ -2299,6 +2319,7 @@ export default {
   "None yet": "아직 없어요",
   "Not a public file: {path}": "공개 파일이 아니에요: {path}",
   "Not added": "추가 안 됨",
+  "Not approved": "승인 안 됨",
   "Not asked — the step did not land.": "요청 안 함 — 단계가 반영되지 않았어요.",
   "Not comparable": "비교 불가",
   "Not confirmed": "확인되지 않음",
@@ -2317,6 +2338,9 @@ export default {
   "Not in your game yet": "아직 게임에 없음",
   "Not installed": "미설치",
   "Not live yet": "아직 반영 안 됨",
+  "Package it on a Mac": "Mac에서 패키징하세요",
+  "Package it on a Windows PC": "Windows PC에서 패키징하세요",
+  "Package it on a Linux PC": "Linux PC에서 패키징하세요",
   "Not made yet": "아직 만들지 않음",
   "Not measured": "측정 안 됨",
   "Not measured yet": "아직 측정 전",
@@ -2353,6 +2377,7 @@ export default {
   "Nothing changes until you apply.": "적용하기 전에는 아무것도 바뀌지 않아요.",
   "Nothing is added to this folder.": "이 폴더에는 아무것도 추가되지 않아요.",
   "Nothing is failing.": "실패하는 게 없어요.",
+  "Nothing is installing.": "설치 중인 게 없어요.",
   "Nothing is online for this game yet": "이 게임은 아직 온라인에 올라간 게 없어요",
   "Nothing kept yet": "아직 유지된 라운드 없음",
   "Nothing made": "만든 것 없음",
@@ -2361,6 +2386,8 @@ export default {
   "Nothing new to suggest.": "새로 제안할 게 없어요.",
   "Nothing spent yet": "아직 사용 내역이 없어요",
   "Nothing to free up": "확보할 공간이 없어요",
+  "Nothing was clicked. Install Unreal {version} yourself in the launcher: {clicks}.":
+    "아무것도 클릭하지 않았어요. 런처에서 Unreal {version}을 직접 설치하세요: {clicks}.",
   "Nothing was clicked. Turn it on yourself: {clicks}.": "아무것도 클릭하지 않았어요. 직접 켜세요: {clicks}.",
   "Nothing was ever sent from this launch.": "이번 실행에서는 아무것도 보낸 적이 없어요.",
   "Nothing was published. To publish it yourself in Studio: {clicks}.":
@@ -2457,6 +2484,8 @@ export default {
   "Open a game before starting its terminal.": "터미널을 시작하기 전에 게임을 열어 주세요.",
   "Open a game first, so its chat can click it for you, or turn it on yourself: {clicks}.":
     "먼저 게임을 열면 그 채팅이 대신 클릭해요. 아니면 직접 켜세요: {clicks}.",
+  "Open a game first, so its chat can install Unreal for you, or install Unreal {version} yourself in the launcher: {clicks}.":
+    "먼저 게임을 열면 그 채팅이 Unreal을 대신 설치해요. 아니면 런처에서 Unreal {version}을 직접 설치하세요: {clicks}.",
   "Open a game first, then choose the place it builds in.": "먼저 게임을 연 다음 그 게임을 만들 플레이스를 고르세요.",
   "Open a game first: Unity works on the open game's project.":
     "먼저 게임을 여세요. Unity는 열린 게임의 프로젝트에서 작업해요.",
@@ -2667,7 +2696,6 @@ export default {
   "Plans first, asks to proceed": "먼저 계획하고, 진행할지 물어봐요",
   Platforms: "플랫폼",
   Play: "플레이",
-  "Play as guest": "게스트로 플레이",
   "Play build": "빌드 플레이",
   "Play game": "게임 플레이",
   "Play latest": "최신 빌드 플레이",
@@ -3087,6 +3115,8 @@ export default {
   "Run status unavailable": "빌드 상태를 알 수 없음",
   "Run the setup scripts this game’s packages came with": "이 게임의 패키지와 함께 온 설정 스크립트 실행",
   "Run this game’s setup scripts?": "이 게임의 설정 스크립트를 실행할까요?",
+  "Run vc_redist.x64.exe from Unreal's Engine › Extras › Redist › en-us folder to install Microsoft's Visual C++ runtime.":
+    "Unreal의 Engine › Extras › Redist › en-us 폴더에 있는 vc_redist.x64.exe를 실행해서 Microsoft Visual C++ 런타임을 설치하세요.",
   "Run {command}": "{command} 실행",
   "Run {command} for {connector}?": "{connector}용 {command} 명령을 실행할까요?",
   Running: "실행 중",
@@ -3197,6 +3227,8 @@ export default {
   Sending: "보내는 중",
   "Sending…": "보내는 중…",
   "Sends when the build finishes…": "빌드가 끝나면 보내져요…",
+  "Sent for review. It appears in Play once Genex approves it.":
+    "검토를 요청했어요. Genex가 승인하면 플레이에 나타나요.",
   Sent: "보냄",
   "Sent — every part gets it with its next round": "보냈어요 — 모든 파트가 다음 라운드에 받아요",
   "Sent — it goes into this part's next round": "보냈어요 — 이 파트의 다음 라운드에 반영돼요",
@@ -3438,7 +3470,6 @@ export default {
   "Stop game": "게임 중지",
   "Stop replying about {about}": "{about} 답장 취소",
   "Stop sharing": "공유 중지",
-  "Stop sharing who you are with {game}": "‘{game}’ 게임과의 내 정보 공유 중지",
   "Stop this background work": "이 백그라운드 작업 중지",
   "Stop this game's build before removing it.": "이 게임의 빌드를 중지한 다음 제거하세요.",
   "Stop this terminal before closing its session.": "세션을 닫기 전에 이 터미널을 중지하세요.",
@@ -3452,6 +3483,7 @@ export default {
   "Stopped getting Roblox Studio. Anything Roblox's installer already put on this computer stays.":
     "Roblox Studio 받기를 멈췄어요. Roblox 설치 프로그램이 이미 이 컴퓨터에 넣은 것은 그대로 남아요.",
   "Stopped play": "플레이를 멈췄어요",
+  "Stopped.": "중지했어요.",
   "Stopped. Everything built so far is kept.": "중지했어요. 지금까지 만든 것은 모두 남아 있어요.",
   "Stopped. What it built is in your game now.": "중지했어요. 만든 것은 이제 게임에 반영돼 있어요.",
   "Stopped. What it built is kept in your project.": "중지했어요. 만든 것은 프로젝트에 남아 있어요.",
@@ -3622,6 +3654,8 @@ export default {
   "The CLI returned an invalid control response.": "CLI가 잘못된 제어 응답을 보냈어요.",
   "The CLI returned an invalid model list.": "CLI가 잘못된 모델 목록을 보냈어요.",
   "The Epic Games Launcher is installed": "Epic Games Launcher 설치됨",
+  "The Epic Games Launcher is installed. Sign in to Epic in it.":
+    "Epic Games Launcher를 설치했어요. 런처에서 Epic에 로그인하세요.",
   "The Genex helper is in Studio": "Genex 도우미가 Studio에 있어요",
   "The Genex helper is in Studio's Plugins folder and Studio's MCP server is on.":
     "Genex 도우미가 Studio의 Plugins 폴더에 있고 Studio의 MCP 서버가 켜져 있어요.",
@@ -3702,6 +3736,10 @@ export default {
     "설치 프로그램이 Roblox가 아닌 다른 곳의 서명이라서 Genex가 실행하지 않았어요. 아무것도 설치하지 않았어요.",
   "The installer isn't signed as Roblox's, so Genex didn't run it. Nothing was installed.":
     "설치 프로그램에 Roblox 서명이 없어서 Genex가 실행하지 않았어요. 아무것도 설치하지 않았어요.",
+  "The installer isn't signed by its maker, so Genex didn't run it.":
+    "설치 프로그램에 만든 곳의 서명이 없어서 Genex가 실행하지 않았어요.",
+  "The installer isn't signed, so Genex didn't run it.": "설치 프로그램에 서명이 없어서 Genex가 실행하지 않았어요.",
+  "The installer stopped before it finished. Try again.": "설치 프로그램이 끝나기 전에 멈췄어요. 다시 시도하세요.",
   "The instructions this suggestion changes are gone. Discard it.":
     "이 제안이 바꾸려는 지침이 없어졌어요. 제안을 버려 주세요.",
   "The judge didn't play": "심사위원이 플레이하지 않았어요",
@@ -3971,6 +4009,8 @@ export default {
     "이 게임의 채팅이 컴퓨터 제어로 Roblox Studio에서 {clicks} 순서로 클릭해요. 게임을 하는 모든 사람이 업데이트를 받고, 내 Roblox 계정으로 게시돼요.",
   "This game's chat clicks {clicks} in Roblox Studio with computer control. It keeps the privacy and settings Studio gives a new game and leaves the description empty. It is published on your Roblox account; if Roblox asks for your age, ID, a two-step code, terms or a payment, Genex stops and leaves that to you.":
     "이 게임의 채팅이 컴퓨터 제어로 Roblox Studio에서 {clicks} 순서로 클릭해요. Studio가 새 게임에 주는 공개 범위와 설정은 그대로 두고 설명은 비워 둬요. 내 Roblox 계정으로 게시되며, Roblox가 나이, 신분증, 2단계 인증 코드, 약관 동의나 결제를 요구하면 Genex는 멈추고 직접 하도록 맡겨요.",
+  "This game's chat is installing Unreal in the Epic Games Launcher. If Genex asks you something first, answer it in this game's chat, and sign in to Epic if the launcher asks.":
+    "이 게임의 채팅이 Epic Games Launcher에서 Unreal을 설치하고 있어요. Genex가 먼저 뭔가 물어보면 이 게임의 채팅에서 답하고, 런처가 요청하면 Epic에 로그인하세요.",
   "This game's chat is publishing the update in Roblox Studio. If Genex asks you something first, answer it in this game's chat, then watch Studio.":
     "이 게임의 채팅이 Roblox Studio에서 업데이트를 게시하고 있어요. Genex가 먼저 뭔가 물어보면 이 게임의 채팅에서 답한 다음 Studio를 지켜보세요.",
   "This game's chat is publishing {name} to Roblox in Studio. If Genex asks you something first, answer it in this game's chat, then watch Studio.":
@@ -4145,7 +4185,6 @@ export default {
     "Unreal 에디터가 두 개 열려 있어요. 종료할 에디터를 해당 창에서 직접 종료하세요.",
   "Two open Studios have a place named {name}, so Genex can't tell them apart. Save one under another name in Studio, then choose it again.":
     "열려 있는 두 Studio에 이름이 {name}인 플레이스가 있어서 Genex가 구분할 수 없어요. Studio에서 하나를 다른 이름으로 저장한 다음 다시 고르세요.",
-  "Two steps before the agent can build in Unreal.": "두 단계만 더 하면 에이전트가 Unreal에서 게임을 만들 수 있어요.",
   "Type a name.": "이름을 입력하세요.",
   "Type your email and password in the Unity Hub window and add a Unity license (Personal is free if Unity's terms allow it for you). Genex goes on by itself once you're in.":
     "Unity Hub 창에서 이메일과 비밀번호를 입력하고 Unity 라이선스를 추가하세요(Unity 약관상 가능하면 Personal은 무료예요). 로그인하면 Genex가 알아서 이어서 진행해요.",
@@ -4233,9 +4272,17 @@ export default {
   "Unreal {engine} builds with Xcode {min} to {max}. Keep Xcode {version} and add Xcode {wanted} from Apple's downloads: put it in Applications beside Xcode {current}; this card then shows the one command to select it.":
     "Unreal {engine} 버전은 Xcode {min}~{max} 버전으로 빌드해요. Xcode {version} 버전은 그대로 두고 Apple 다운로드 페이지에서 Xcode {wanted} 버전을 추가하세요. 응용 프로그램 폴더의 Xcode {current} 옆에 두면 이 카드에 선택용 명령이 하나 표시돼요.",
   "Unreal {engine} is set up for {project}": "{project}에 Unreal {engine} 설정 완료",
+  "Unreal {version} and everything it needs are on this computer.":
+    "Unreal {version}과 필요한 모든 것이 이 컴퓨터에 있어요.",
   "Unreal {version} is installed": "Unreal {version} 설치됨",
   "Unreal {version}'s editor isn't where Epic's launcher says. Verify the install in the Epic Games Launcher.":
     "Unreal {version} 에디터가 Epic 런처가 알려 준 위치에 없어요. Epic Games Launcher에서 설치를 검증하세요.",
+  "Unreal's copy of Microsoft's runtime installer is missing. In the Epic Games Launcher, verify Unreal.":
+    "Unreal에 들어 있어야 할 Microsoft 런타임 설치 프로그램이 없어요. Epic Games Launcher에서 Unreal을 확인(Verify)하세요.",
+  "Unreal's editor needs it to start, and it isn't on this computer. Do it for me runs Unreal's own copy: choose Yes when Windows asks.":
+    "Unreal 에디터를 시작하려면 필요한데, 이 컴퓨터에 없어요. '대신 해 주기'로 Unreal에 들어 있는 것을 실행해요. Windows가 물어보면 '예'를 고르세요.",
+  "Unreal's editor needs it to start. Run vc_redist.x64.exe from Unreal's Engine › Extras › Redist › en-us folder.":
+    "Unreal 에디터를 시작하려면 필요해요. Unreal의 Engine › Extras › Redist › en-us 폴더에 있는 vc_redist.x64.exe를 실행하세요.",
   "Unrecognized Genex page link": "알 수 없는 Genex 페이지 링크",
   "Unsafe runtime archive": "안전하지 않은 런타임 압축 파일",
   "Unsupported TOML value. Use quoted strings, booleans or arrays of strings.":
@@ -4433,6 +4480,8 @@ export default {
   "Why the lead stopped it": "메인 에이전트가 멈춘 이유",
   Window: "창",
   "Windows app": "Windows 앱",
+  "Windows didn't get permission to install. Press Do it for me again and choose Yes when Windows asks.":
+    "Windows가 설치 권한을 받지 못했어요. '대신 해 주기'를 다시 누르고 Windows가 물어보면 '예'를 고르세요.",
   "Windows needs a one-time setup of the protected workspace, approved by an administrator.":
     "Windows에서는 관리자 승인을 받아 보호된 작업 공간을 한 번 설정해야 해요.",
   "Windows will ask you to allow this once. If it asks for a password, an administrator of this PC can enter theirs. Agents work in their own protected space, away from your files.":
@@ -4796,7 +4845,6 @@ export default {
   "how well the screen reads": "화면이 얼마나 잘 읽히는지",
   "how well the screen reads {score}": "화면이 얼마나 잘 읽히는지: {score}",
   "how well the screen reads {score} out of {max}": "화면이 얼마나 잘 읽히는지: {max}점 중 {score}점",
-  "identity\u0004Stop sharing": "공유 중지",
   "in hand": "진행 중",
   "in {game}": "{game}에서 플레이 중",
   "in {game} and {count} more": "{game} 외 {count}개 게임에서 플레이 중",
@@ -5395,8 +5443,6 @@ export default {
   "{game} cover preview": "{game} 커버 미리보기",
   "{game} has your receipt.": "{game}에 영수증이 전달됐어요.",
   "{game} in play": "플레이 중인 {game}",
-  "{game} no longer knows who you are. It asks again next time you play.":
-    "‘{game}’ 게임은 이제 내가 누구인지 몰라요. 다음에 플레이할 때 다시 물어봐요.",
   "{game} now builds in {engine} · {project}": "{game} 게임은 이제 {engine}에서 만들어져요 · {project}",
   "{game} {number}": "{game} {number}",
   "{game} · started {time}": "{game} · {time} 시작",
@@ -5492,6 +5538,7 @@ export default {
   "{name}, playing {game}": "{name}, {game} 플레이 중",
   '{name}: Codex reads the bearer token from the environment variable {variable}. Studio stores it itself — paste the token into the Authorization field as "Bearer <token>".':
     "{name}: Codex는 bearer 토큰을 환경 변수 {variable}에서 읽어요. Studio는 토큰을 직접 저장하니, Authorization 필드에 “Bearer <token>” 형식으로 붙여 넣으세요.",
+  "{name}: Genex is reviewing it": "{name}: Genex가 검토하고 있어요",
   "{name}: on Genex for desktop players": "{name}: 데스크톱 플레이어용으로 Genex에 올라감",
   "{name}: publishing it is coming soon": "{name}: 게시 기능은 곧 제공돼요",
   "{name}: sign in to Genex again": "{name}: Genex에 다시 로그인",
@@ -5625,6 +5672,8 @@ export default {
   "{source} needs your permission": "{source}에서 권한을 요청해요",
   "{state} · from {plugin}": "{state} · {plugin} 제공",
   "{status} · newer than Genex has tested": "{status} · Genex에서 테스트한 버전보다 최신",
+  "{steps, plural, =2 {Two steps before the agent can build in Unreal.} =3 {Three steps before the agent can build in Unreal.} other {# steps before the agent can build in Unreal.}}":
+    "{steps, plural, =2 {두 단계만 더 하면 에이전트가 Unreal에서 게임을 만들 수 있어요.} =3 {세 단계만 더 하면 에이전트가 Unreal에서 게임을 만들 수 있어요.} other {#단계만 더 하면 에이전트가 Unreal에서 게임을 만들 수 있어요.}}",
   "{task} in {engine}…": "{engine}에서 {task}…",
   "{task} · working": "{task} · 작업 중",
   "{task}: didn't finish.": "{task}: 끝내지 못했어요.",

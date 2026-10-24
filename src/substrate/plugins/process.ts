@@ -107,8 +107,8 @@ export interface PluginHostEnv {
 
 /**
  * A plugin backend's whole environment, built from scratch: PATH, HOME, TMPDIR, the credential
- * opt-out and, on Windows, what any program needs to start there plus ProgramData and Program
- * Files (x86), the made-up Mac a development test of an engine plugin names, and a bundled plugin's
+ * opt-out and, on Windows, what any program needs to start there plus ProgramData and both Program
+ * Files folders, the made-up Mac a development test of an engine plugin names, and a bundled plugin's
  * seed folder (`seed`) and the stand the host has it use (`host`: its API, its game host, and its CA,
  * which the backend's own requests trust through Node's `NODE_EXTRA_CA_CERTS`). Nothing else of Studio's.
  * `toolPath` is the user's login PATH when known: an app started from the Finder has a bare one,
@@ -136,10 +136,14 @@ export function pluginBackendEnv(
     [PLUGIN_CA_ENV]: host?.ca,
     [PLUGIN_GAMES_ENV]: host?.games,
     NODE_EXTRA_CA_CERTS: host?.ca,
-    // Where Windows keeps shared app data and 32-bit programs, which a plugin may need to find an
-    // installed app (Epic's launcher keeps its list of engines there); neither is secret.
+    // Where Windows keeps shared app data and programs (64-bit and 32-bit), which a plugin may need
+    // to find an installed app (Epic's launcher and its records of engines are there); none is secret.
     ...(platform === "win32"
-      ? { ProgramData: envValue(parent, "ProgramData"), "ProgramFiles(x86)": envValue(parent, "ProgramFiles(x86)") }
+      ? {
+          ProgramData: envValue(parent, "ProgramData"),
+          ProgramFiles: envValue(parent, "ProgramFiles"),
+          "ProgramFiles(x86)": envValue(parent, "ProgramFiles(x86)"),
+        }
       : {}),
   };
   return Object.fromEntries(Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined));

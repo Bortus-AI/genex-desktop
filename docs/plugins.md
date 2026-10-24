@@ -967,7 +967,11 @@ classes passes; an unknown method is unverified only on what such a class made, 
 is told that `unreal.load_class(None, '/Script/<Module>.<Class>')` is the reliable form.
 
 **The Unreal projects panel** (`setup.ts`, `backend.ts` and the `setup` panel, titled "Unreal")
-finds the engines in Epic's launcher list (`LauncherInstalled.dat`). Its project list
+finds the engines in Epic's launcher records: each install's own `EpicGamesLauncher/Data/Manifests/<id>.item`
+(the current Windows launcher keeps engines only there, its list empty) and the launcher list
+(`LauncherInstalled.dat`), a folder both name counted once, from its record, and one whose record says
+it is still installing not counted yet. Epic's launcher itself is looked for in Program Files (where
+the 64-bit launcher installs on Windows), then Program Files (x86). Its project list
 (`find-projects.ts`) joins Unreal's recent list (each 5.8+ engine's `EditorSettings.ini`),
 `*/*.uproject` one level inside Documents › Unreal Projects, and the projects Genex created, set up
 or was shown. Each project appears once by its real path, with the file's own name on disk (another
@@ -2401,11 +2405,26 @@ only through the person (Use in this game) or a tool that declares `makes` (`use
 `new-game`). `new-game` offers the plugin's steps card (`game.engine.steps` appends
 `engine_steps`) while a step is open.
 
-On a Mac without the Unreal Genex makes games with, `show-steps` brings the Unreal button out and
-shows the install card instead (`unrealInstallCard`): Get the Epic Games Launcher (Epic's download
-page; ticked once the launcher is in Applications), then Install Unreal 5.8 in it, the person's own
-step (Epic's sign-in), with Open the Epic Games Launcher; Don't use Unreal (`skip`) in Hide's place;
-once Unreal is found in a game whose chat chose it, the card closes and tells the agent.
+On a computer without the Unreal Genex makes games with (or, on Windows, without the Visual C++
+runtime its editor loads), `show-steps` brings the Unreal button out and shows the install card
+instead (`unrealInstallCard`): Get the Epic Games Launcher (ticked once the launcher is found, or
+Unreal is), then Install Unreal 5.8 in it, then on Windows Install Microsoft's Visual C++ runtime
+when its files are missing from System32; Don't use Unreal (`skip`) in Hide's place. Its **Do it for
+me** (`install-for-me`, and the agent's `unreal__install-unreal`) runs the next open step, one per
+press (`epic-install.ts`): on Windows Genex downloads Epic's installer from Epic's launcher link
+(redirects only to Epic's two hosts, HTTPS, capped), runs it with Windows Installer only once
+Authenticode calls it Valid and signed by Epic Games Inc., and opens the launcher for the sign-in
+(elsewhere the step opens Epic's download page); Unreal itself is handed to the game's chat through
+`game.engine.assist` after Genex opens the launcher, the turn answering it clicking Library › + ›
+5.8 › Install with the desktop tool (the manifest's `engine.apps` names only Epic's launcher, so no
+other turn drives it), stopping at Epic's sign-in; the runtime runs from the engine's own
+`vc_redist.x64.exe`, signed by Microsoft Corporation. Windows asks the person for permission each
+time. While an install runs its row is `working` with where it stands and Stop (`stop-install`)
+replaces Don't use Unreal; a failed install is told to the agent once (`stuckSays`), a stop the
+person pressed is not. Without computer control for the chat (`game.engine.canAssist`), installing
+Unreal stays the person's step. `new-game` refuses before making anything while the runtime is
+missing. Once everything is found in a game whose chat chose Unreal, the card closes and tells the
+agent.
 
 The steps card ("Unreal setup") sits above the composer while nothing else waits there. A row's
 button runs its plugin action as every surface does (`runPluginAction`): one that declares
@@ -2478,7 +2497,26 @@ backend's channel there instead of a SIGTERM, which would end the backend before
 its report is a failed run, its summary naming the exit code, the counts so far and its last lines.
 `unreal__plugin-status` answers each job's state and results and `proof`: the summary, the note and
 `unreal/Saved/Genex/Shots/<Plugin>-window.jpg` (kept by `app_look`'s `save`) that exist, the summary
-and note only for a run that finished, relative to the game, read from disk after a restart. A chat build of a game still with no kind, with the plugin on, first asks the
+and note only for a run that finished, relative to the game, read from disk after a restart.
+Any Unreal game also gets `unreal__package-game {stop?}` and `unreal__package-status`
+(`game-package.ts`): the app players install, for this computer's system only (Unreal makes no app
+for another one). The person's open Unreal saves first (play ended; one that answers but can't save
+leaves nothing packaged), then `RunUAT BuildCookRun -platform=Mac|Win64 -clientconfig=Shipping -build
+-cook -stage -pak -stagingdirectory=…` stages into `unreal/Builds/<Mac|Windows>/` (emptied first, never
+through a link; ignored by the game's history; never `-archive`, which copies a Mac app without its
+cooked content), the cook run by the engine's `UnrealEditor-Cmd`, within 120
+minutes. A Mac needs Xcode: a template's plugins make even a Blueprint game build code there. Like
+`plugin-test` it runs outside ProcessSandbox, with the small environment and its own process group:
+AutomationTool rewrites its per-user config cache for each new project and the cook needs the
+editor's derived data, Zen store and shader workers, all of which UnrealBuildTool's profile denies.
+On Windows `RunUAT.bat` runs through cmd.exe with every path whole in quotes (`quotedScriptLine`); a
+path with a quote, `%` or `!`, or on a network share, is refused first. `package-status` answers the
+state, the app relative to the game, the seconds and a failure's first error lines with the
+computer's paths taken out; after a restart, idle with the app found on disk. Publish then finds the
+app: `main/core/native-builds.ts` takes an Unreal Windows package's starter at its root as the whole
+build (no program inside a Windows build's folder is a build of its own, and Unreal's
+`UEPrereqSetup` is a helper) and never a project's own `Binaries` beside its `.uproject`, which hold
+no cooked content. A chat build of a game still with no kind, with the plugin on, first asks the
 user Web or Unreal Engine with `ask_user`, unless the message names one
 (`loop/unreal-prompts.ts` `engineChoiceRule`: one option per scaffold, else per plugin, among
 `plugins.tools`'s `kinds` (Unreal's are `Unreal game` and `Unreal plugin`), each in its plugin's
@@ -3227,7 +3265,10 @@ Genex:
   (`publishApps`, `native-publish.ts`, one hour each), one at a time, after resolving each by real
   path inside the game folder. An app that fails never fails the publish; its row says "Not sent"
   and a line under the rows says why in the CLI's words. Each result is kept in the workspace's
-  `native.json` and answered as `GenexPublishState.native` (Sending…, On Genex). A draft sends no app,
+  `native.json` and answered as `GenexPublishState.native` (Sending…, On Genex). An app sent by
+  someone other than a Genex admin waits for Genex's review: the CLI's answer carries the build's
+  `review` (`pending`, `approved`, `rejected`, with `reviewReason`), its row says In review or Not
+  approved (a line under the rows gives Genex's reason), and players get it once it is approved. A draft sends no app,
   and a stale build stays. While the pinned CLI is older than `genex native` (1.36.11), nothing is
   sent and a built app says "Coming soon" (`uploads: false`), its players getting the web version.
   The dialog sends apps only through an installed Genex plugin whose record says it can
@@ -3244,7 +3285,10 @@ Genex:
   the first time, each app goes with `genex native publish`, the first that goes carrying
   `--gallery --title <name>` (a refused listing exits 1 with its answer; the app is live either way).
   Listed, the record turns public with the game's genex.games page as its link; held for review or
-  not listed, a line under the rows says so; refused, the publish fails in Genex's words. Multiplayer
+  not listed, a line under the rows says so; refused, the publish fails in Genex's words. A listing
+  whose app Genex still reviews counts as held (`listingForPlayers`): the game shows nowhere until
+  the app is approved, so the dialog says "Sent for review", neither celebrates nor offers to send
+  the same apps again (`appsInReview`). Multiplayer
   stays off for it. Like a web publish, it takes the cover again as it starts and sends it once its
   apps are on Genex (`#reshoot`, then the cover step). Its clip names as its build the first 40
   characters of a sent app's archive sha256 (`appClipCommit`, from `native.json`), which Genex

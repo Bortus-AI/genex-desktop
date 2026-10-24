@@ -154,7 +154,12 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
   A game reaches Genex with its project only from a Publish that allowed remixing (the dialog's
   Allow remixing, ticked by default; Rights says what remixers may do): Studio stages the files the
   game's git keeps, without history, packages, agent settings, secrets or an engine's caches and
-  builds, an Unreal plugin's too (`remix-source.ts`), and the CLI pushes that folder as the source
+  builds, an Unreal plugin's too, its packaged apps (`Builds/`) included; an engine game whose project
+sits in a folder of its own also leaves out `assets/` (its models, already imported) and `docs/proof/`
+screenshots (`remix-source.ts`; at most
+5 GB and 5,000 files, as genex.games keeps; every model, picture, sound, video and Unreal package, and
+any file of 50 MB or more, goes to Git LFS, whose blobs Genex keeps in R2 rather than on the git
+server's disk), and the CLI pushes that folder as the source
   (`--source`; a game with only apps sends it with `make-remixable` once they are live). The copy
   goes once its push is over, and a draft carries none. Otherwise, or when the project can't
   go (too big, no repository), the publish turns remixing off on Genex.
@@ -192,8 +197,7 @@ is.
   redirecting elsewhere, and answers `Range`. A row with anything off is dropped, the rest kept.
 - The build a computer installs is its platform's for its own processor, else a universal Mac app,
   else, on Apple silicon with Rosetta installed, an Intel-only one, where its `minOs` is met
-  (`buildFor`). Games launch on the Mac and on Linux; nothing is launched on Windows until its
-  sandbox can show a program's window. Play names the computer "this Mac" on a Mac and "this
+  (`buildFor`). Games launch on the Mac, on Linux and on Windows. Play names the computer "this Mac" on a Mac and "this
   computer" elsewhere (`nativeHereWords`). When nothing installs, the game page says why in place of
   Install (`whyNotHere`): this system runs no downloaded games (naming where Genex can run it), no
   build for this system, one for a different processor (Apple silicon, Rosetta), or a newer macOS
@@ -211,7 +215,9 @@ is.
   `games.genex.play.<slug>` and signed again ad hoc, so it can only write its own preferences. A
   Linux build is unpacked by the app itself (`unpackZip`: the same checks, each file no larger than
   its record, execute bits kept, links last) and its `entry` must be a regular file, an ELF program
-  for this computer's processor, made runnable; the whole version folder is its app (`entry` `.`). Each
+  for this computer's processor, made runnable; the whole version folder is its app (`entry` `.`). A
+  Windows build is unpacked the same way, and its `entry` must be a PE `.exe` for this computer's
+  processor (`unpackWindowsBuild`). Each
   game keeps `installed-games/<slug>/<version>/` and `saves/`; `index.json` lists them. Removing a
   game (refused while it runs) keeps its saves; an update keeps the running version until it quits.
 - Playing (`main/play/native-launch.ts`): one copy per game, in the game sandbox (`spawnNativeGame`:
@@ -225,7 +231,19 @@ is.
   GPU's `/sys`, the PulseAudio or PipeWire socket and `/dev/input`, and a network namespace of its
   own. Linux has no window list every session shares, so a game counts as on screen once it has
   kept running for three seconds (`native-windows-linux.ts`), and the window manager brings it
-  forward. A game opens full screen with its engine's own argument
+  forward. On Windows (`windowsGames`, `substrate/plugins/windows-game.ts`) srt-win can't serve:
+  it puts every program on a desktop of its own, with no window on screen. A game runs instead
+  through Genex's game host (`windows-game-host.ts`, compiled once with .NET Framework's `csc.exe`
+  into `<userData>/game-host/`) in an AppContainer of its own (`Genex.Play.<slug>`, no
+  capabilities). It reads its version folder, writes only `saves/` and its scratch folder (each an
+  ACL entry for the container's SID, plus a Low integrity label on the write folders), and its
+  AppData goes to the container's own folder. It reads none of the person's files and reaches no
+  network: an AppContainer reaches no loopback port without an administrator's exemption, so a
+  Windows game has no way to Genex yet. It gets the person's desktop, GPU, sound and input. It runs
+  in a job killed with the host (also with no other desktops, logging off, clipboard reads or system
+  settings); the host ends it when Genex's process or the host's stdin ends, says when its window
+  is up (Genex counts it as on screen then), brings that window forward once, and passes Quit on as
+  `WM_CLOSE`. A game opens full screen with its engine's own argument
   (`launchArgs`: Unity `-screen-fullscreen 1`, Godot `--fullscreen`, Unreal `-fullscreen`; the
   engine is the catalog's, kept in the install record), unless its app sets `GenexWindowed` in its
   Info.plist (read at unpack, `WINDOWED_KEY`); the page's Quit asks it to quit, then ends its process tree;
@@ -246,16 +264,10 @@ is.
   - **What the game is told.** Its environment carries `GENEX_API_URL` (the gateway), `GENEX_GAME`
     (its slug, so a build made before its first publish knows which rooms to join) and, while the
     Genex account is unlocked, `GENEX_EMBED_TICKET`. That is a single-use ticket minted with
-    `delivery: "native"` (`gallery.ticket`); otherwise the game plays as a guest. Genex's Godot
-    addon and Unity package read both (CLI_INTEGRATION §6b).
-  - **The player's yes** (`main/play/native-identity.ts`). Genex mints a native ticket only for a game
-    the player agreed may know who they are (App Review 4.7.3, per game and account): it answers
-    `consent_required` with the game's project. Play then asks once, as a sheet on Studio's window
-    in Genex's own words (Continue as me, Play as guest); a yes is recorded on Genex
-    (`PUT /api/embed/consent/<project>`) and in the install record (`identityProject`), and the
-    ticket is minted again. A no, a refusal or a failure plays as a guest and records nothing.
-    Settings › Storage marks such a game "Knows who you are" with Stop sharing, which withdraws it on
-    Genex first (`DELETE`, `studio:play.forget-identity`) and then here; the next launch asks again.
+    `delivery: "desktop"` (`gallery.ticket`); otherwise the game plays as a guest. Genex signs the
+    player in without asking first: its per-game question (App Review 4.7.3) gates only the phone
+    app's `native` delivery, and the desktop app ships outside the App Store. Genex's Godot addon
+    and Unity package read both (CLI_INTEGRATION §6b).
   - **Failure and shutdown.** A gateway that can't open leaves the game offline, not unplayable. The
     gateway closes when the game ends. A fixture launch opens none.
   - **Its play count** (`main/play/native-plays.ts`). Most native builds never redeem the ticket, so

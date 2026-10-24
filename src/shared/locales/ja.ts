@@ -644,6 +644,9 @@ export default {
   "Checking plan usage…": "プランの使用状況を確認しています…",
   "Checking play": "プレイを確認しています",
   "Checking preservation": "何も失われていないか確認中",
+  "Checking that Epic signed the installer…": "インストーラーにEpicの署名があるか確認しています…",
+  "Checking that Microsoft signed Unreal's runtime installer…":
+    "Unreal付属のランタイムのインストーラーにMicrosoftの署名があるか確認しています…",
   "Checking that Roblox signed the installer.": "Robloxがインストーラーに署名しているか確認しています。",
   "Checking the game files…": "ゲームファイルを確認しています…",
   "Checking the key…": "キーを確認中…",
@@ -869,7 +872,6 @@ export default {
   "Context · {percent}% used": "コンテキスト · {percent}%使用",
   "Context: {used} tokens": "コンテキスト：{used}トークン",
   Continue: "続ける",
-  "Continue as me": "自分として続ける",
   "Continue on this Mac": "このMacで続ける",
   "Continue to confirmation": "確認に進む",
   Contractor: "外部エージェント",
@@ -997,8 +999,6 @@ export default {
   "Couldn't start the sign-in on this Mac. Paste a key instead.":
     "このMacでサインインを開始できませんでした。代わりにキーを貼り付けてください。",
   "Couldn't stop play": "プレイを停止できませんでした",
-  "Couldn't stop sharing who you are. Try again in a moment.":
-    "あなたの情報の共有をやめられませんでした。少し待ってからもう一度お試しください。",
   "Couldn't take a motion strip": "動きの連続画像を撮れませんでした",
   "Couldn't take a picture of {asset}": "{asset}の画像を撮れませんでした",
   "Couldn't take a play-view shot": "プレイ画面を撮れませんでした",
@@ -1167,6 +1167,8 @@ export default {
   "Dismiss remaining imports": "残りのインポートを閉じる",
   Dividers: "区切り線",
   "Do it for me": "おまかせ",
+  "Do it for me opens the launcher, and this chat installs it there with computer control. About 45 GB. Only you sign in to Epic, when it asks.":
+    "「おまかせ」でランチャーを開き、このチャットがコンピューター操作でUnrealをインストールします。約45 GB。Epicにサインインを求められたら、あなたがサインインしてください。",
   "Does it feel alive? {score} of {max}": "生き生きしている？{score}/{max}",
   "Does what you ask, then stops.": "頼んだことをやったら、止まります。",
   "Don't allow": "許可しない",
@@ -1203,6 +1205,7 @@ export default {
   "Downloading Roblox's installer.": "Robloxのインストーラーをダウンロードしています。",
   "Downloading Unity Hub": "Unity Hubをダウンロード中",
   "Downloading models": "モデルをダウンロード中",
+  "Downloading the Epic Games Launcher from Epic…": "EpicからEpic Games Launcherをダウンロードしています…",
   "Downloading {model}": "{model}をダウンロード中",
   "Downloading {model} · {percent}%": "{model}をダウンロード中 · {percent}%",
   "Downloading {name}": "{name}をダウンロード中",
@@ -1251,8 +1254,19 @@ export default {
   "Enter the server's address, like 127.0.0.1:5000.": "サーバーのアドレスを入力してください（例：127.0.0.1:5000）。",
   "Environment variables": "環境変数",
   "Environment variables: name": "環境変数：名前",
+  "Epic's download led somewhere other than Epic, so Genex stopped.":
+    "Epicのダウンロードが、Epic以外の場所につながっていたため、Genexは止めました。",
+  "Epic's download link wasn't secure, so Genex didn't download it.":
+    "Epicのダウンロードリンクが安全ではなかったため、Genexはダウンロードしませんでした。",
+  "Epic's download page is opening in your browser.": "Epicのダウンロードページをブラウザーで開いています。",
+  "Epic's download was far bigger than its installer, so Genex stopped.":
+    "Epicのダウンロードがインストーラーよりはるかに大きかったため、Genexは止めました。",
+  "Epic's free app that installs Unreal. Do it for me downloads it from Epic and installs it: choose Yes when Windows asks.":
+    "Unrealをインストールする、Epicの無料アプリです。「おまかせ」でEpicからダウンロードしてインストールします。Windowsに聞かれたら「はい」を選んでください。",
   "Epic's free app that installs Unreal. Genex opens Epic's download page.":
     "Unrealをインストールする、Epicの無料アプリです。GenexがEpicのダウンロードページを開きます。",
+  "Epic's installer didn't download. Check your internet connection and try again.":
+    "Epicのインストーラーをダウンロードできませんでした。インターネット接続を確認して、もう一度試してください。",
   Error: "エラー",
   "Error copied.": "エラーをコピーしました。",
   "Every game chat and Loop run is recorded under Recent runs.":
@@ -1455,6 +1469,8 @@ export default {
     "Genexはこのコンピューターでは、Roblox Studioをクリックできません。Studioで自分で公開してください：{clicks}。",
   "Genex can't click in Roblox Studio on this computer. Turn it on yourself: {clicks}.":
     "Genexはこのコンピューターでは、Roblox Studioをクリックできません。自分でオンにしてください：{clicks}。",
+  "Genex can't click in the launcher on this computer. Install Unreal {version} yourself: {clicks}.":
+    "Genexはこのコンピューターではランチャーをクリックできません。自分でUnreal {version}をインストールしてください：{clicks}。",
   "Genex can't find this computer's Roblox folders: its home folder isn't a full path of this system.":
     "GenexはこのコンピューターのRobloxフォルダーを見つけられません。ホームフォルダーがこのシステムの完全なパスではありません。",
   "Genex can't read {file} as Roblox Studio's settings, so it changes no settings file. Turn Studio's MCP server on in Studio: {clicks}.":
@@ -1476,8 +1492,6 @@ export default {
   "Genex couldn't download the Luau checks. Check the connection and press Add Luau checks again.":
     "GenexはLuauチェックをダウンロードできませんでした。接続を確認して、もう一度「Luauチェックを追加」を押してください。",
   "Genex couldn't get Roblox Studio.": "GenexはRoblox Studioを入手できませんでした。",
-  "Genex couldn't stop sharing who you are with this game. Try again in a moment.":
-    "Genexはこのゲームとのあなたの情報の共有をやめられませんでした。少し待ってからもう一度お試しください。",
   "Genex couldn't tell whether {app} was free, so nothing was rewound. Rewind again in a moment.":
     "Genexは{app}が空いているか確認できなかったため、何も巻き戻していません。少ししてからもう一度巻き戻してください。",
   "Genex couldn't tell whether {app} was free, so the newer version didn't come back. Try again in a moment.":
@@ -1491,10 +1505,14 @@ export default {
   "Genex cover": "Genexカバー",
   "Genex credits": "Genexクレジット",
   "Genex decides from crash reports": "クラッシュレポートからGenexが判断します",
+  "Genex didn't click anything. Install Unreal {version} yourself in the launcher: {clicks}.":
+    "Genexは何もクリックしていません。ランチャーで自分でUnreal {version}をインストールしてください：{clicks}。",
   "Genex didn't click anything. Turn it on yourself: {clicks}.":
     "Genexは何もクリックしませんでした。自分でオンにしてください：{clicks}。",
   "Genex didn't publish anything. To publish it yourself in Studio: {clicks}.":
     "Genexは何も公開しませんでした。Studioで自分で公開するには：{clicks}。",
+  "Genex didn’t approve the {app}.": "{app}はGenexに承認されませんでした。",
+  "Genex didn’t approve the {app}: {reason}": "{app}はGenexに承認されませんでした：{reason}",
   "Genex didn’t take that. Try again in a moment.":
     "Genexが受け付けませんでした。少し待ってからもう一度試してください。",
   "Genex downloads Godot this way on Windows only; on a Mac, Do it for me installs it in Applications.":
@@ -1518,6 +1536,8 @@ export default {
     "Genexはこのプロジェクトをセットアップしていないので、元に戻すものはありません。",
   "Genex hasn’t confirmed it yet. {game} finishes the purchase once it does. You won’t be charged twice.":
     "Genexがまだ確認していません。確認されると{game}が購入を完了します。二重に請求されることはありません。",
+  "Genex installs Epic's launcher itself on Windows only.":
+    "GenexがEpicのランチャーを自分でインストールするのはWindowsだけです。",
   "Genex installs Unity Hub on a Mac only: get it from Unity's page.":
     "GenexがUnity HubをインストールできるのはMacだけです。Unityのページから入手してください。",
   "Genex is already getting Roblox Studio.": "GenexはすでにRoblox Studioを入手中です。",
@@ -1530,8 +1550,6 @@ export default {
     "GenexがGodotをインストールしています。何もしなくて大丈夫です。",
   "Genex is open source under the MIT License. It also includes software from other projects, each under its own license.":
     "GenexはMITライセンスのオープンソースです。ほかのプロジェクトのソフトウェアも含まれており、それぞれ独自のライセンスに従います。",
-  "Genex is reviewing the game before it shows in the gallery.":
-    "ギャラリーに表示される前に、Genexがゲームを確認しています。",
   "Genex isn't getting Roblox Studio right now.": "Genexは今、Roblox Studioを入手していません。",
   "Genex keeps a copy of each file first, and Undo setup takes these changes back. A Genex editor helper file you changed is kept beside it as a .mine copy.":
     "Genexは先に各ファイルのコピーを保存します。「セットアップを元に戻す」でこれらの変更を取り消せます。あなたが変更したGenexエディターヘルパーのファイルは、.mineコピーとして横に残ります。",
@@ -1733,6 +1751,7 @@ export default {
   "In Unity Hub, sign in and add a Unity license (Personal is free if Unity's terms allow it for you). Unity's own terms cover its apps and your account. Only you type your password.":
     "Unity Hubでサインインして、Unityのライセンスを追加してください（Unityの規約で認められていれば、Personalは無料です）。Unityのアプリとアカウントには、Unity自身の規約が適用されます。パスワードを入力するのはあなただけです。",
   "In every game": "すべてのゲーム",
+  "In review": "審査中",
   "In round {round}'s brief": "ラウンド{round}の指示に反映",
   "In the background": "バックグラウンド",
   "In the background: {title}": "バックグラウンド：{title}",
@@ -1771,6 +1790,7 @@ export default {
   "Install Codex": "Codexをインストール",
   "Install Codex, then check again.": "Codexをインストールしてから、もう一度確認してください。",
   "Install Genex plugin": "Genexプラグインをインストール",
+  "Install Microsoft's Visual C++ runtime": "MicrosoftのVisual C++ランタイムをインストール",
   "Install Ollama": "Ollamaをインストール",
   "Install OpenCode": "OpenCodeをインストール",
   "Install OpenCode from Settings › Model Providers.":
@@ -1809,10 +1829,14 @@ export default {
   "Installed.": "インストール済み。",
   "Installing Blender {version}": "Blender {version}をインストール中",
   "Installing Godot {version}": "Godot {version}をインストール中",
+  "Installing Microsoft's Visual C++ runtime. Choose Yes when Windows asks.":
+    "MicrosoftのVisual C++ランタイムをインストールしています。Windowsに聞かれたら「はい」を選んでください。",
   "Installing OpenCode. This can take a minute.": "OpenCodeをインストールしています。1分ほどかかることがあります。",
   "Installing Unity Hub": "Unity Hubをインストール中",
   "Installing Unity {version}": "Unity {version}をインストール中",
   "Installing packages": "パッケージをインストール中",
+  "Installing the Epic Games Launcher. Choose Yes when Windows asks.":
+    "Epic Games Launcherをインストールしています。Windowsに聞かれたら「はい」を選んでください。",
   "Installing {name} took too long. Try again.":
     "{name}のインストールに時間がかかりすぎました。もう一度試してください。",
   "Installing {name}. This can take a minute.": "{name}をインストールしています。1分ほどかかることがあります。",
@@ -1893,8 +1917,6 @@ export default {
   "It turns on when installed: agents in all your games can use it from your next message.":
     "インストールするとオンになります。次のメッセージから、すべてのゲームのエージェントが使えます。",
   "It was paused before it could write up the build.": "ビルドのまとめを書く前に一時停止されました。",
-  "It will see your display name and avatar, so your progress and scores can be saved to your account. Games are code written by other people, not by Genex. You can stop sharing any time in Settings › Storage.":
-    "ゲームはあなたの表示名とアバターを見られるようになり、進行状況やスコアがあなたのアカウントに保存されます。ゲームはGenexではなく、ほかの人が書いたコードです。共有は「設定 › ストレージ」でいつでもやめられます。",
   "It's no longer there.": "もう存在しません。",
   "It's switched on in Studio's settings. Studio answers once a place is open: open one in Studio, or press New Roblox game.":
     "Studioの設定でオンになっています。プレイスが開くとStudioが応答します。Studioでプレイスを開くか、「新しいRobloxゲーム」を押してください。",
@@ -1913,8 +1935,8 @@ export default {
   "Its packages aren’t installed yet.": "パッケージがまだインストールされていません。",
   "Its project didn’t go, so no one can remix it yet.":
     "プロジェクトが送れなかったので、まだ誰もリミックスできません。",
-  "Its project is too big to remix: Genex keeps up to 2 GB and 5,000 files.":
-    "プロジェクトが大きすぎてリミックスできません。Genex に置けるのは 2 GB・5,000 ファイルまでです。",
+  "Its project is too big to remix: Genex keeps up to 5 GB and 5,000 files.":
+    "プロジェクトが大きすぎてリミックスできません。Genex に置けるのは 5 GB・5,000 ファイルまでです。",
   "Its session failed before it delivered anything.": "何も提出しないうちにセッションが失敗しました。",
   "Its source is your own repository: run genex make-remixable in the game’s folder to allow remixing.":
     "ソースはあなた自身のリポジトリにあります。リミックスを許可するには、ゲームのフォルダーでgenex make-remixableを実行してください。",
@@ -1960,7 +1982,6 @@ export default {
     "採用。前は失敗していたチェックのうち{count, plural, other {#件}}が合格になり、前に合格していたものは壊れず、並べて比べるレビュアーからの異論もありませんでした。",
   Kind: "種類",
   "Kinds of asset": "アセットの種類",
-  "Knows who you are": "あなたを知っています",
   "Koi drifting through a neon night market, seen from above": "ネオンの夜市の上を漂う鯉を真上から",
   "Laid the terrain": "地形を作成しました",
   Language: "言語",
@@ -2000,7 +2021,6 @@ export default {
     "このチャットのエージェントにこのアプリを使わせますか？このアプリに表示される内容を読み、クリックや入力ができます。",
   "Let this chat's agent use {app}? It can click, type and read what {app} shows.":
     "このチャットのエージェントに{app}を使わせますか？{app}に表示される内容を読み、クリックや入力ができます。",
-  "Let {game} know who you are?": "{game}にあなたが誰かを伝えますか？",
   "Letters a–z, digits and dashes.": "a–zの英字、数字、ハイフンが使えます。",
   "Letting go of every input": "すべての入力を離しています",
   "Letting the game settle": "ゲームが落ち着くのを待っています",
@@ -2181,6 +2201,7 @@ export default {
   "Merging a worker's work": "ワーカーの作業を統合中",
   "Mic didn’t start": "マイクを開始できませんでした",
   Microphone: "マイク",
+  "Microsoft's Visual C++ runtime is installed.": "MicrosoftのVisual C++ランタイムをインストールしました。",
   Mine: "自分",
   Minimize: "最小化",
   "Mobile support": "モバイル対応",
@@ -2351,6 +2372,7 @@ export default {
   "None yet": "まだありません",
   "Not a public file: {path}": "公開ファイルではありません：{path}",
   "Not added": "未追加",
+  "Not approved": "未承認",
   "Not asked — the step did not land.": "依頼なし — ステップが実現しませんでした。",
   "Not comparable": "比較できません",
   "Not confirmed": "未確認",
@@ -2369,6 +2391,9 @@ export default {
   "Not in your game yet": "ゲームに未追加",
   "Not installed": "未インストール",
   "Not live yet": "まだ反映されていません",
+  "Package it on a Mac": "Mac でパッケージ化してください",
+  "Package it on a Windows PC": "Windows PC でパッケージ化してください",
+  "Package it on a Linux PC": "Linux PC でパッケージ化してください",
   "Not made yet": "まだつくっていません",
   "Not measured": "未計測",
   "Not measured yet": "まだ計測していません",
@@ -2405,6 +2430,7 @@ export default {
   "Nothing changes until you apply.": "適用するまで何も変わりません。",
   "Nothing is added to this folder.": "このフォルダーには何も追加されません。",
   "Nothing is failing.": "失敗しているものはありません。",
+  "Nothing is installing.": "インストール中のものはありません。",
   "Nothing is online for this game yet": "このゲームはまだ何もオンラインにありません",
   "Nothing kept yet": "まだ採用なし",
   "Nothing made": "成果なし",
@@ -2413,6 +2439,8 @@ export default {
   "Nothing new to suggest.": "新しい提案はありません。",
   "Nothing spent yet": "まだ利用はありません",
   "Nothing to free up": "空けられる容量はありません",
+  "Nothing was clicked. Install Unreal {version} yourself in the launcher: {clicks}.":
+    "何もクリックしていません。ランチャーで自分でUnreal {version}をインストールしてください：{clicks}。",
   "Nothing was clicked. Turn it on yourself: {clicks}.":
     "何もクリックされませんでした。自分でオンにしてください：{clicks}。",
   "Nothing was ever sent from this launch.": "今回の起動では何も送信されていません。",
@@ -2516,6 +2544,8 @@ export default {
   "Open a game before starting its terminal.": "ターミナルを開く前に、ゲームを開いてください。",
   "Open a game first, so its chat can click it for you, or turn it on yourself: {clicks}.":
     "先にゲームを開けば、そのチャットが代わりにクリックします。自分でオンにすることもできます：{clicks}。",
+  "Open a game first, so its chat can install Unreal for you, or install Unreal {version} yourself in the launcher: {clicks}.":
+    "先にゲームを開くと、そのチャットがUnrealをインストールします。または、ランチャーで自分でUnreal {version}をインストールしてください：{clicks}。",
   "Open a game first, then choose the place it builds in.":
     "先にゲームを開いてから、そのゲームをつくるプレイスを選んでください。",
   "Open a game first: Unity works on the open game's project.":
@@ -2733,7 +2763,6 @@ export default {
   "Plans first, asks to proceed": "先に計画し、進める前に確認します",
   Platforms: "プラットフォーム",
   Play: "プレイ",
-  "Play as guest": "ゲストとして遊ぶ",
   "Play build": "ビルドをプレイ",
   "Play game": "ゲームをプレイ",
   "Play latest": "最新版をプレイ",
@@ -3159,6 +3188,8 @@ export default {
   "Run status unavailable": "ビルドの状態を取得できません",
   "Run the setup scripts this game’s packages came with": "このゲームのパッケージに付属のセットアップスクリプトを実行",
   "Run this game’s setup scripts?": "このゲームのセットアップスクリプトを実行しますか？",
+  "Run vc_redist.x64.exe from Unreal's Engine › Extras › Redist › en-us folder to install Microsoft's Visual C++ runtime.":
+    "UnrealのEngine › Extras › Redist › en-usフォルダーにあるvc_redist.x64.exeを実行して、MicrosoftのVisual C++ランタイムをインストールしてください。",
   "Run {command}": "{command}を実行",
   "Run {command} for {connector}?": "{connector}用に{command}を実行しますか？",
   Running: "実行中",
@@ -3269,6 +3300,8 @@ export default {
   Sending: "送信中",
   "Sending…": "送信中…",
   "Sends when the build finishes…": "ビルドが終わったら送信されます…",
+  "Sent for review. It appears in Play once Genex approves it.":
+    "審査に送りました。Genexが承認すると「プレイ」に表示されます。",
   Sent: "送信済み",
   "Sent — every part gets it with its next round": "送信しました。すべてのパートの次のラウンドに反映されます",
   "Sent — it goes into this part's next round": "送信しました。このパートの次のラウンドに反映されます",
@@ -3517,7 +3550,6 @@ export default {
   "Stop game": "ゲームを停止",
   "Stop replying about {about}": "{about}への返信をやめる",
   "Stop sharing": "共有をやめる",
-  "Stop sharing who you are with {game}": "{game}とのあなたの情報の共有をやめる",
   "Stop this background work": "このバックグラウンド作業を止める",
   "Stop this game's build before removing it.": "削除する前に、このゲームのビルドを停止してください。",
   "Stop this terminal before closing its session.": "セッションを閉じる前に、このターミナルを停止してください。",
@@ -3531,6 +3563,7 @@ export default {
   "Stopped getting Roblox Studio. Anything Roblox's installer already put on this computer stays.":
     "Roblox Studioの入手を止めました。Robloxのインストーラーがすでにこのコンピューターに入れたものは残ります。",
   "Stopped play": "プレイを停止しました",
+  "Stopped.": "停止しました。",
   "Stopped. Everything built so far is kept.": "停止しました。ここまでつくったものはすべて残っています。",
   "Stopped. What it built is in your game now.": "停止しました。つくったものはゲームに反映されています。",
   "Stopped. What it built is kept in your project.": "停止しました。つくったものはプロジェクトに残っています。",
@@ -3706,6 +3739,8 @@ export default {
   "The CLI returned an invalid control response.": "CLIが無効な制御応答を返しました。",
   "The CLI returned an invalid model list.": "CLIが無効なモデル一覧を返しました。",
   "The Epic Games Launcher is installed": "Epic Games Launcherはインストール済み",
+  "The Epic Games Launcher is installed. Sign in to Epic in it.":
+    "Epic Games Launcherをインストールしました。ランチャーでEpicにサインインしてください。",
   "The Genex helper is in Studio": "GenexヘルパーはStudioに入っています",
   "The Genex helper is in Studio's Plugins folder and Studio's MCP server is on.":
     "GenexヘルパーがStudioのPluginsフォルダーに入り、StudioのMCPサーバーがオンになっています。",
@@ -3786,6 +3821,11 @@ export default {
     "インストーラーにRoblox以外の署名があるので、Genexは実行しませんでした。何もインストールされていません。",
   "The installer isn't signed as Roblox's, so Genex didn't run it. Nothing was installed.":
     "インストーラーにRobloxの署名がないので、Genexは実行しませんでした。何もインストールされていません。",
+  "The installer isn't signed by its maker, so Genex didn't run it.":
+    "インストーラーに作成元の署名がないため、Genexは実行しませんでした。",
+  "The installer isn't signed, so Genex didn't run it.": "インストーラーに署名がないため、Genexは実行しませんでした。",
+  "The installer stopped before it finished. Try again.":
+    "インストーラーが途中で止まりました。もう一度試してください。",
   "The instructions this suggestion changes are gone. Discard it.":
     "この提案が変更する指示はもうありません。提案を破棄してください。",
   "The judge didn't play": "審査員はプレイしませんでした",
@@ -4069,6 +4109,8 @@ export default {
     "このゲームのチャットが、コンピューター操作でRoblox Studioの{clicks}をクリックします。ゲームをプレイする全員にアップデートが届き、あなたのRobloxアカウントで公開されます。",
   "This game's chat clicks {clicks} in Roblox Studio with computer control. It keeps the privacy and settings Studio gives a new game and leaves the description empty. It is published on your Roblox account; if Roblox asks for your age, ID, a two-step code, terms or a payment, Genex stops and leaves that to you.":
     "このゲームのチャットが、コンピューター操作でRoblox Studioの{clicks}をクリックします。Studioが新しいゲームに付けるプライバシーと設定はそのままで、説明は空のままにします。あなたのRobloxアカウントで公開されます。Robloxから年齢、身分証明書、2段階認証のコード、規約への同意、支払いを求められたら、Genexは止まってあなたに任せます。",
+  "This game's chat is installing Unreal in the Epic Games Launcher. If Genex asks you something first, answer it in this game's chat, and sign in to Epic if the launcher asks.":
+    "このゲームのチャットがEpic Games LauncherでUnrealをインストールしています。先にGenexから質問があればこのゲームのチャットで答え、ランチャーに求められたらEpicにサインインしてください。",
   "This game's chat is publishing the update in Roblox Studio. If Genex asks you something first, answer it in this game's chat, then watch Studio.":
     "このゲームのチャットがRoblox Studioでアップデートを公開しています。先にGenexから質問があれば、このゲームのチャットで答えてから、Studioを見ていてください。",
   "This game's chat is publishing {name} to Roblox in Studio. If Genex asks you something first, answer it in this game's chat, then watch Studio.":
@@ -4247,7 +4289,6 @@ export default {
     "Unrealエディターが2つ開いています。終了したいほうを、そのウィンドウから終了してください。",
   "Two open Studios have a place named {name}, so Genex can't tell them apart. Save one under another name in Studio, then choose it again.":
     "開いている2つのStudioに{name}という名前のプレイスがあり、Genexには区別できません。Studioで片方を別の名前で保存してから、もう一度選んでください。",
-  "Two steps before the agent can build in Unreal.": "あと2ステップで、エージェントがUnrealでつくれるようになります。",
   "Type a name.": "名前を入力してください。",
   "Type your email and password in the Unity Hub window and add a Unity license (Personal is free if Unity's terms allow it for you). Genex goes on by itself once you're in.":
     "Unity Hubのウィンドウでメールアドレスとパスワードを入力し、Unityのライセンスを追加してください（Unityの規約で認められていれば、Personalは無料です）。サインインできたら、Genexが自動で続けます。",
@@ -4339,9 +4380,17 @@ export default {
   "Unreal {engine} builds with Xcode {min} to {max}. Keep Xcode {version} and add Xcode {wanted} from Apple's downloads: put it in Applications beside Xcode {current}; this card then shows the one command to select it.":
     "Unreal {engine}はXcode {min}〜{max}でビルドします。Xcode {version}はそのままにして、AppleのダウンロードページからXcode {wanted}を追加してください。「アプリケーション」のXcode {current}の横に置くと、このカードに選択用のコマンドが1つ表示されます。",
   "Unreal {engine} is set up for {project}": "Unreal {engine}は{project}用にセットアップ済み",
+  "Unreal {version} and everything it needs are on this computer.":
+    "Unreal {version}と必要なものはすべて、このコンピューターにそろっています。",
   "Unreal {version} is installed": "Unreal {version}はインストール済み",
   "Unreal {version}'s editor isn't where Epic's launcher says. Verify the install in the Epic Games Launcher.":
     "Unreal {version}のエディターが、Epicのランチャーが示す場所にありません。Epic Games Launcherでインストールを検証してください。",
+  "Unreal's copy of Microsoft's runtime installer is missing. In the Epic Games Launcher, verify Unreal.":
+    "Unreal付属のMicrosoftランタイムのインストーラーが見つかりません。Epic Games LauncherでUnrealを検証（Verify）してください。",
+  "Unreal's editor needs it to start, and it isn't on this computer. Do it for me runs Unreal's own copy: choose Yes when Windows asks.":
+    "Unrealのエディターの起動に必要ですが、このコンピューターにはありません。「おまかせ」でUnreal付属のものを実行します。Windowsに聞かれたら「はい」を選んでください。",
+  "Unreal's editor needs it to start. Run vc_redist.x64.exe from Unreal's Engine › Extras › Redist › en-us folder.":
+    "Unrealのエディターの起動に必要です。UnrealのEngine › Extras › Redist › en-usフォルダーにあるvc_redist.x64.exeを実行してください。",
   "Unrecognized Genex page link": "認識できないGenexページのリンク",
   "Unsafe runtime archive": "安全でないランタイムアーカイブ",
   "Unsupported TOML value. Use quoted strings, booleans or arrays of strings.":
@@ -4542,6 +4591,8 @@ export default {
   "Why the lead stopped it": "メインエージェントが止めた理由",
   Window: "ウィンドウ",
   "Windows app": "Windowsアプリ",
+  "Windows didn't get permission to install. Press Do it for me again and choose Yes when Windows asks.":
+    "Windowsでインストールが許可されませんでした。もう一度「おまかせ」を押して、Windowsに聞かれたら「はい」を選んでください。",
   "Windows needs a one-time setup of the protected workspace, approved by an administrator.":
     "Windowsでは、保護されたワークスペースの初回セットアップに管理者の承認が必要です。",
   "Windows will ask you to allow this once. If it asks for a password, an administrator of this PC can enter theirs. Agents work in their own protected space, away from your files.":
@@ -4908,7 +4959,6 @@ export default {
   "how well the screen reads": "画面がどれだけわかりやすいか",
   "how well the screen reads {score}": "画面がどれだけわかりやすいか：{score}",
   "how well the screen reads {score} out of {max}": "画面がどれだけわかりやすいか：{max}点中{score}点",
-  "identity\u0004Stop sharing": "共有をやめる",
   "in hand": "作業中",
   "in {game}": "{game}でプレイ中",
   "in {game} and {count} more": "{game}ほか{count}本でプレイ中",
@@ -5517,8 +5567,6 @@ export default {
   "{game} cover preview": "{game}のカバーのプレビュー",
   "{game} has your receipt.": "{game}にレシートが届きました。",
   "{game} in play": "プレイ中の{game}",
-  "{game} no longer knows who you are. It asks again next time you play.":
-    "{game}はもうあなたが誰かを知りません。次に遊ぶときにまた確認されます。",
   "{game} now builds in {engine} · {project}": "{game}は{engine}でつくるようになりました · {project}",
   "{game} {number}": "{game} {number}",
   "{game} · started {time}": "{game} · {time}に開始",
@@ -5614,6 +5662,7 @@ export default {
   "{name}, playing {game}": "{name}、{game}をプレイ中",
   '{name}: Codex reads the bearer token from the environment variable {variable}. Studio stores it itself — paste the token into the Authorization field as "Bearer <token>".':
     "{name}：Codexはbearerトークンを環境変数{variable}から読みます。Studioはトークンを自分で保存するので、Authorizationフィールドに「Bearer <token>」の形で貼り付けてください。",
+  "{name}: Genex is reviewing it": "{name}：Genexが審査中",
   "{name}: on Genex for desktop players": "{name}：デスクトップのプレイヤー向けにGenexで公開中",
   "{name}: publishing it is coming soon": "{name}：公開は近日対応予定です",
   "{name}: sign in to Genex again": "{name}：Genexにもう一度サインイン",
@@ -5748,6 +5797,8 @@ export default {
   "{source} needs your permission": "{source}が許可を求めています",
   "{state} · from {plugin}": "{state} · {plugin}から",
   "{status} · newer than Genex has tested": "{status} · Genexでの検証より新しいバージョン",
+  "{steps, plural, =2 {Two steps before the agent can build in Unreal.} =3 {Three steps before the agent can build in Unreal.} other {# steps before the agent can build in Unreal.}}":
+    "{steps, plural, =2 {あと2ステップで、エージェントがUnrealでつくれるようになります。} =3 {あと3ステップで、エージェントがUnrealでつくれるようになります。} other {あと#ステップで、エージェントがUnrealでつくれるようになります。}}",
   "{task} in {engine}…": "{engine}で{task}…",
   "{task} · working": "{task} · 作業中",
   "{task}: didn't finish.": "{task}：完了しませんでした。",

@@ -3616,13 +3616,6 @@ export const INSTALLED_GAMES_WORDS = {
   },
   remove: t("Remove"),
   savesStay: t("Saves stay when you remove a game. Getting it again starts where you left off."),
-  /** The row of a game the player let know who they are (App Review 4.7.3), and how to take it back. */
-  knowsYou: t("Knows who you are"),
-  stopSharing: tc("identity", "Stop sharing"),
-  stopSharingLabel: (title: string) => t("Stop sharing who you are with {game}", { game: title }),
-  stopped: (title: string) =>
-    t("{game} no longer knows who you are. It asks again next time you play.", { game: title }),
-  stopFailed: t("Couldn't stop sharing who you are. Try again in a moment."),
 } as const;
 
 /** The Publish dialog's Allow remixing, and its page on what remixers can do (`panels/plugins/genex/PublishRemix.tsx`). */
@@ -3647,7 +3640,7 @@ export const PUBLISH_REMIX_WORDS = {
   terms: t("Genex terms, section 4"),
   gotIt: t("Got it"),
   /** Why the last publish's project didn't go: remixing then stays off. */
-  tooBig: t("Its project is too big to remix: Genex keeps up to 2 GB and 5,000 files."),
+  tooBig: t("Its project is too big to remix: Genex keeps up to 5 GB and 5,000 files."),
   notSent: t("Its project didn’t go, so no one can remix it yet."),
 } as const;
 
@@ -3695,6 +3688,12 @@ export const PUBLISH_PLATFORM_WORDS = {
   },
   stale: t("Built before your last change"),
   missing: t("Not made yet"),
+  /** An Unreal game's app for another system: Unreal packages it only on that system. */
+  elsewhere: {
+    [PublishTarget.Mac]: t("Package it on a Mac"),
+    [PublishTarget.Windows]: t("Package it on a Windows PC"),
+    [PublishTarget.Linux]: t("Package it on a Linux PC"),
+  } satisfies Record<Exclude<PublishTarget, typeof PublishTarget.Web>, string>,
   /** A built app genex.games does not take yet: it shows, and Publish sends the web version. */
   soon: t("Coming soon"),
   soonLabel: (name: string) => t("{name}: publishing it is coming soon", { name }),
@@ -3721,10 +3720,16 @@ export const PUBLISH_PLATFORM_WORDS = {
   sentLabel: (name: string) => t("{name}: on Genex for desktop players", { name }),
   failed: t("Not sent"),
   failedLine: (name: string, error: string) => t("Couldn’t send the {app}: {error}", { app: name, error }),
+  /** An app sent by someone other than an admin: Genex reviews it before players get it. */
+  review: t("In review"),
+  reviewLabel: (name: string) => t("{name}: Genex is reviewing it", { name }),
+  notApproved: t("Not approved"),
+  rejected: (name: string) => t("Genex didn’t approve the {app}.", { app: name }),
+  rejectedLine: (name: string, reason: string) => t("Genex didn’t approve the {app}: {reason}", { app: name, reason }),
   /** A game with only apps: its main press, who can play it, and how its listing went. */
   publishApps: (apps: string) => t("Publish {apps}", { apps }),
   onlyPlayers: (players: string) => t("Only {players} players can play it.", { players }),
-  held: t("Genex is reviewing the game before it shows in the gallery."),
+  held: t("Sent for review. It appears in Play once Genex approves it."),
   /** A game made in an engine with nothing Publish can send yet: no app, or none Studio can send. */
   makeFirst: t("Make a Mac, Windows or Linux app first, then publish it here."),
   makeAnyFirst: t("Make a web version or a Mac, Windows or Linux app first, then publish it here."),
