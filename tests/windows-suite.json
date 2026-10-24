@@ -40,6 +40,7 @@
   "tests/conformance/chat-session.test.ts",
   "tests/conformance/chat-transcript.test.ts",
   "tests/conformance/check-grammar.test.ts",
+  "tests/conformance/check-mac-tools.test.ts",
   "tests/conformance/check-vocabulary.test.ts",
   "tests/conformance/child-env.test.ts",
   "tests/conformance/claude-cli.test.ts",
