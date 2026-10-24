@@ -21,7 +21,10 @@ export const PlayOriginEnv = {
   Web: "GENEX_DEV_PLAY_WEB_ORIGIN",
   /** Where the stand serves its games, e.g. `https://localhost:8443`: a game plays at `https://<slug>.localhost:8443/`. */
   Games: "GENEX_DEV_PLAY_GAMES_ORIGIN",
-  /** A local CA's certificate (a PEM file's absolute path) the viewer trusts for the stand's game hosts only. */
+  /**
+   * A local CA's certificate (a PEM file's absolute path): the viewer trusts it for the stand's game
+   * hosts only, and the Genex plugin's publish (its backend and CLI runs) beside the system's.
+   */
   GamesCa: "GENEX_DEV_PLAY_GAMES_CA",
 } as const;
 export type PlayOriginEnv = (typeof PlayOriginEnv)[keyof typeof PlayOriginEnv];
@@ -84,7 +87,11 @@ export interface DevStand {
    * one the profile signed in to); null: genex.games, with the Genex plugin's account.
    */
   hostToolsApi: string | null;
-  /** The stand's own CA file the viewer trusts for the stand's game hosts only; null trusts nothing more. */
+  /**
+   * The stand's own CA file: the viewer trusts it for the stand's game hosts only, and the Genex
+   * plugin's publish to the stand beside the system's (`genex-cli.ts` `launchStand`); null trusts
+   * nothing more.
+   */
   gamesCaFile: string | null;
 }
 

@@ -2,7 +2,7 @@ import { t, tc } from "../shared/i18n.ts";
 import { providerInfo } from "../shared/providers.ts";
 import type { ExportReview } from "../shared/plugins.ts";
 import type { PluginSuggestedPayload } from "../shared/project-tools.ts";
-import { type ListingDraft, listingDraftOf } from "../shared/item-draft.ts";
+import { type ListingRecord, listingDraftOf, listingKey } from "../shared/item-draft.ts";
 import { parseSuggestion } from "./chat/plugin-suggestion.ts";
 import { type JobHandle, type JobStart, jobEndLine, jobStart, missingPanes } from "./chat/job-lines.ts";
 import { type AppLookAccessKind, JobTool } from "../shared/jobs.ts";
@@ -212,7 +212,7 @@ export type Entry =
    * A store item the game's agent made or changed, read from a record only the host writes: once the
    * turn that made it has ended, the item's latest draft (an earlier card of the same item comes down).
    */
-  | { kind: typeof EntryKind.ListingDraft; id: string; draft: ListingDraft }
+  | { kind: typeof EntryKind.ListingDraft; id: string; draft: ListingRecord }
   /** A card with one affordance: Resume a paused run, prefill a steering message, or Rewind. */
   | {
       kind: typeof EntryKind.Action;
@@ -1694,7 +1694,8 @@ function holdListing(chat: ChatDraft, event: EventEnvelope): boolean {
   if (!recorded) return false;
   const draft = listingDraftOf(recorded);
   if (!draft) return true;
-  const earlier = chat.listings.findIndex((card) => card.entry.draft.itemId === draft.itemId);
+  const key = listingKey(draft);
+  const earlier = chat.listings.findIndex((card) => listingKey(card.entry.draft) === key);
   const [replaced] = earlier >= 0 ? chat.listings.splice(earlier, 1) : [];
   const shown = replaced ? chat.entries.indexOf(replaced.entry) : -1;
   if (shown >= 0) chat.entries.splice(shown, 1);

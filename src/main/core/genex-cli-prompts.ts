@@ -13,7 +13,7 @@ export type GenexStudioTool = (typeof GenexStudioTool)[keyof typeof GenexStudioT
 /** Refusals and failures of a Studio-run Genex CLI command or package install. */
 export const GENEX_CLI_PROMPT = {
   Unavailable: (command: string) =>
-    `\`genex ${command}\` is not available in Studio. Available: doctor, budget, llm models, llm status, llm cancel, shop list, items list and items search through genex__cli; llm bench, shop add|set|remove|test and items add|remove through genex__cli-paid. Only the person puts an item on sale, from its card in the chat. Say so rather than work around it.`,
+    `\`genex ${command}\` is not available in Studio. Available: doctor, budget, llm models, llm status, llm cancel, shop list, items list and items search through genex__cli; llm bench, shop add|set|remove|test and items add|remove through genex__cli-paid. Only the person puts an item on sale, from its card in the chat; items made before the game is on Genex wait as local drafts, and Studio uploads them after the publish. Say so rather than work around it.`,
   UseTool: (command: string, tool: GenexStudioTool) =>
     `\`genex ${command}\` is ${tool} in Studio: call that tool instead.`,
   PaidTool: (command: string) =>
@@ -74,6 +74,11 @@ export const GENEX_CLI_PROMPT = {
   ItemFolderUnwritable: "the game's folder could not be written.",
   ItemFolderEntry: (entry: string) =>
     `the item folder holds ${JSON.stringify(entry)}, which is not a file or a folder.`,
+  /** A local `shop add|set|remove` ran, but what it changed could not go into the game's `.genex/items/`. */
+  LocalDraftsNotCarried: (why: string) =>
+    `The Genex CLI changed this game's local item drafts, but Studio wrote nothing to .genex/items/ in it: ${why} Fix that, then run the command again.`,
+  LocalDraftsLink: (where: string) => `${where} is a link or a file, not a folder. Move it aside first.`,
+  LocalDraftUnclean: (localId: string) => `the draft ${localId} holds a link, a folder or more than a draft holds.`,
 } as const;
 
 /** How each value rule reads in a refusal. */
@@ -92,4 +97,5 @@ export const GENEX_VALUE_RULE = {
   GamePath: (target: string) =>
     `takes a ${target === "folder" ? "folder" : "file"} inside this game, relative to its folder (for example .genex/scratch/frost-axe.png), never an absolute path, ~ or ..`,
   ItemId: "takes one store item id, as genex items search or Browse shows it (letters, digits, - and _)",
+  LocalId: "takes one local draft id, as genex shop add printed it (local_ and 12 lowercase letters or digits)",
 } as const;

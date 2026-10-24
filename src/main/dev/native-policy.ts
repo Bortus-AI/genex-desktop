@@ -395,6 +395,13 @@ const FIXTURE_SAFE = [
   "studio:items.put-on-sale",
   "studio:items.take-off-sale",
   "studio:items.shared",
+  // A game's local item drafts: approvals live in the profile's own app data, and a fixture launch
+  // settles and shares them from its own store (`dev/fixture-items.ts`), so no CLI runs and no socket opens.
+  "studio:items.local",
+  "studio:items.local-approve",
+  "studio:items.local-withdraw",
+  "studio:items.local-share",
+  "studio:items.local-settle",
   // The app's Genex account: a fixture launch's is its own (`dev/fixture-genex-account.ts`), signed
   // in as the fixture account it asked for; its sign-in opens no page and its sign-out lasts the launch.
   "studio:genex-account.read",

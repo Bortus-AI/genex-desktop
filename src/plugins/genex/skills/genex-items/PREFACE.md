@@ -13,6 +13,11 @@ Where it disagrees with this preface, this preface wins.
   sale** and "Other games can use it". `genex shop publish` and `unpublish` are not available:
   only the person puts an item on sale, from that card or Create › Items. Say it is ready and that
   they can ask for changes.
+- In a game that is not on Genex yet, `shop add` keeps the item as a local draft in
+  `.genex/items/` (its id starts `local_`; `shop set|remove <local id>` change it). Leave those
+  files to the CLI: Studio carries them. Its card offers **Sell when published**; after the game's
+  publish Studio uploads the drafts itself and puts on sale only what the person approved, unchanged.
+  `genex shop sync` is Studio's, not yours.
 - `genex items search "<words>"` is `genex__cli {"command":"items search","args":"<words>"}` (and
   `"options":{"tag":["fire"]}`), `genex items list` is `genex__cli {"command":"items list"}`, and
   `genex items add <id>` and `genex items remove <id>` are `genex__cli-paid` with the id in `args`:

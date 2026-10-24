@@ -97,7 +97,7 @@ import {
 } from "./auto-update.ts";
 import { RELEASE_CHECK_INTERVAL_MS, latestRelease } from "./release-check.ts";
 import { UpdateAction } from "../shared/app-update.ts";
-import { gatedHostTool } from "./core/genex-cli.ts";
+import { gatedHostTool, type GenexStand, launchStand } from "./core/genex-cli.ts";
 import { normalGamesElsewhere, normalGamesFolder } from "./core/never-touch-list.ts";
 import { diagnosticsText, gatherDiagnostics } from "./diagnostics.ts";
 import { type FeedbackSources, sendFeedback } from "./feedback.ts";
@@ -133,6 +133,7 @@ import { fixtureAccountPort } from "./dev/fixture-genex-account.ts";
 import { openGenexPage } from "./genex-browser.ts";
 import { fixtureGamePage, fixtureGetCoin, fixtureNativeGames, fixturePlayRequest } from "./dev/fixture-play.ts";
 import { createFixtureStore } from "./dev/fixture-store.ts";
+import { fixtureLocalRuns } from "./dev/fixture-items.ts";
 import { FIXTURE_CONFIRM_ORIGIN } from "./dev/fixture-coin.ts";
 import { launchFixtureAccount } from "./dev/fixture-people.ts";
 import {
@@ -158,7 +159,14 @@ import { type LibrarySharing, librarySharing } from "./core/library-sharing.ts";
 import { registerAssetLibraryIpc } from "./ipc/asset-library.ts";
 import { readAssetPreview } from "./asset-preview.ts";
 import { fixtureDownload, fixtureFileResponse } from "./dev/fixture-asset-library.ts";
-import { buildHostsFor, networkRequest, type PlayGallery, playGallery, type PlayWorld } from "./play/gallery.ts";
+import {
+  buildHostsFor,
+  type GalleryRequest,
+  networkRequest,
+  type PlayGallery,
+  playGallery,
+  type PlayWorld,
+} from "./play/gallery.ts";
 import { relayHostsOf, startGenexGateway } from "./play/genex-gateway.ts";
 import { GAME_LINK_SCHEME, gameLinkIn, gameLinks } from "./play/game-links.ts";
 import { thisComputer } from "./play/native-host.ts";
@@ -552,7 +560,7 @@ let playAccount: { people: PlayPeople; creators: CreatorStats; credits: GenexCre
 let gameLibrary: LibrarySharing | null = null;
 let playManage: PlayManage | null = null;
 /** The store on the Genex account and its purchase sheet in the studio window, made on first use (`storeFor`). */
-let playStoreDeps: (StoreIpcDeps & { sheet: StoreSheetControl }) | null = null;
+let playStoreDeps: PlayStoreParts | null = null;
 /** Play's native installs and the games being played, made on first use (`playInstallsFor`, `playSessionsFor`). */
 let nativeInstaller: NativeInstaller | null = null;
 let nativeLauncher: NativeSessions | null = null;
@@ -840,6 +848,10 @@ function appLookOptions(userData: string): Pick<StudioCoreOptions, "appLook" | "
   return { appLook: macAppLook({ run: appLookRun, scratchDir: scratch, access: access.status }), screenAccess: access };
 }
 
+/** The core's stand option, when this launch has one. */
+const optionalStand = (genexStand: GenexStand | undefined): Pick<StudioCoreOptions, "genexStand"> =>
+  genexStand ? { genexStand } : {};
+
 /** Computer control (cua-driver), made with the first core: one registry, stopped on quit. */
 let desktop: DesktopControl | undefined;
 
@@ -857,10 +869,23 @@ async function createCore(userData: string): Promise<StudioCore> {
     neverTouch: otherProfiles(userData),
     // The normal profile keeps its games outside its data: another launch's workers never reach them.
     neverTouchGames: normalGamesElsewhere(launch.gamesRoot, app.getPath("home")),
-    // A development profile on a stand: the Genex host tools' CLI goes to the stand as the account it signed in to.
-    ...(stand.hostToolsApi
-      ? { genexStand: { api: stand.hostToolsApi, token: () => genexAccountFor(studio).token() } }
-      : {}),
+    // A development profile on a stand: the Genex host tools' CLI and the Genex plugin (its publish)
+    // go to the stand as the account it signed in to.
+    ...optionalStand(launchStand(stand, () => genexAccountFor(studio).token())),
+    // A game's local item drafts after its publish: Put on sale as the app's account; a fixture
+    // launch uploads them to its own store in place of the CLI.
+    localItems: {
+      putOnSale: (skuId) => storeFor(studio).store.putOnSale(skuId),
+      ...(fixtureNativePolicy
+        ? {
+            runs: fixtureLocalRuns({
+              request: (route, init) => storeFor(studio).request(route, init),
+              token: () => genexAccountFor(studio).token(),
+              core: () => studio,
+            }),
+          }
+        : {}),
+    },
     ...launch,
     ...(ollamaHost ? { ollamaHost } : {}),
     // Electron's binary doubles as node for the harness child process.
@@ -1454,12 +1479,15 @@ function playCoinFor(studio: StudioCore): PlayCoin {
   });
 }
 
+/** The store's parts: its client, the purchase sheet, and the requests both make. */
+type PlayStoreParts = Omit<StoreIpcDeps, "local"> & { sheet: StoreSheetControl; request: GalleryRequest };
+
 /**
  * The store on the Genex account (marketplace plan 10.1): its client, and the purchase sheet a game's
  * page shows in the studio window, confirmed as the viewer's is. A fixture launch answers both from
  * its own store over its other fixture answers (`dev/fixture-store.ts`), so no socket opens.
  */
-function storeFor(studio: StudioCore): StoreIpcDeps & { sheet: StoreSheetControl } {
+function storeFor(studio: StudioCore): PlayStoreParts {
   if (playStoreDeps) return playStoreDeps;
   const account = genexAccountFor(studio);
   const deps = {
@@ -1489,7 +1517,7 @@ function storeFor(studio: StudioCore): StoreIpcDeps & { sheet: StoreSheetControl
       if (page) pushToRenderer(page, "studio:store.sheet", shown);
     },
   });
-  playStoreDeps = { store, sheet };
+  playStoreDeps = { store, sheet, request: deps.request };
   return playStoreDeps;
 }
 
@@ -2085,7 +2113,7 @@ function registerIpc(studio: StudioCore, engines: EngineBoot): void {
   registerDataFolderIpc(handle, dataFolderIpc(studio));
   registerGenexAccountIpc(handle, { account: genexAccountFor(studio) });
   registerPlayIpc(handle, playIpcDeps(studio));
-  registerStoreIpc(handle, storeFor(studio));
+  registerStoreIpc(handle, { ...storeFor(studio), local: studio.localItems });
   const { library } = playAccountFor(studio);
   registerAssetLibraryIpc(handle, { library, sharing: librarySharingFor(studio), pictureFile: pictureFileFor() });
   registerNotificationsIpc(handle, {

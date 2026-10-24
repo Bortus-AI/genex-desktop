@@ -7,8 +7,12 @@
  * paths inside the bound game (`gamePaths`), which the host checks by real path and copies into the
  * run folder; `items add` names the shared item whose folder the host moves into the game
  * (`delivers`). `shop publish` and `shop unpublish` are never in the table: only the person puts an
- * item on sale, from the Listing draft card (D40).
+ * item on sale, from the Listing draft card (D40). The shop's commands also work on the game's local
+ * drafts (`.genex/items/`, made before the game is on Genex): Studio copies them into the run folder
+ * and carries a change back (`localItems`). `shop sync`, which uploads them, is Studio's own run after
+ * a publish ({@link localSyncRequest}), never the agent's.
  */
+import { isLocalItemId } from "../../shared/item-draft.ts";
 import { ITEM_DESCRIPTION_MAX, ITEM_TAG_LENGTH_MAX, ITEM_TAGS_MAX, isItemId } from "../../shared/store-items.ts";
 import { GENEX_CLI_PROMPT, GENEX_VALUE_RULE, GenexStudioTool } from "./genex-cli-prompts.ts";
 
@@ -31,6 +35,17 @@ export const GenexCliCommand = {
   ItemsRemove: "items remove",
 } as const;
 export type GenexCliCommand = (typeof GenexCliCommand)[keyof typeof GenexCliCommand];
+
+/** Commands only Studio itself runs, never for an agent: no row in the agent's table. */
+export const GenexHostCommand = {
+  /** Upload the game's local drafts as drafts on genex.games, after a publish (`local-items.ts`). */
+  ShopSync: "shop sync",
+} as const;
+export type GenexHostCommand = (typeof GenexHostCommand)[keyof typeof GenexHostCommand];
+
+/** How a command uses the game's local drafts: it reads them, or it may change them. */
+export const LocalItemsUse = { Read: "read", Change: "change", Sync: "sync" } as const;
+export type LocalItemsUse = (typeof LocalItemsUse)[keyof typeof LocalItemsUse];
 
 /** Why a call was refused. */
 export const GenexCliRefusalCode = {
@@ -151,6 +166,11 @@ interface CommandRow {
   approval?: boolean;
   /** It writes the item its positional names into the game (`items add`). */
   delivers?: boolean;
+  /**
+   * It works on the game's local drafts too: Studio copies them into the run folder (and carries a
+   * change back), and it runs without a hosted project while the game has none.
+   */
+  localItems?: LocalItemsUse;
 }
 
 const free = (
@@ -163,12 +183,17 @@ const free = (
   positional,
   options,
 });
-const shopItem = (options: CommandRow["options"] = {}, required?: readonly string[]): CommandRow => ({
+const shopItem = (
+  options: CommandRow["options"] = {},
+  required?: readonly string[],
+  localItems?: LocalItemsUse,
+): CommandRow => ({
   paid: true,
   project: true,
   positional: Positional.Text,
   options,
   ...(required ? { required } : {}),
+  ...(localItems ? { localItems } : {}),
 });
 /** A change to which other creators' items this game sells: the person approves it. */
 const sharedItem = (delivers: boolean): CommandRow => ({
@@ -204,7 +229,7 @@ const GENEX_CLI_COMMANDS: Readonly<Record<GenexCliCommand, CommandRow>> = {
     required: ["max-coins"],
     approval: true,
   },
-  [GenexCliCommand.ShopList]: free(true),
+  [GenexCliCommand.ShopList]: { ...free(true), localItems: LocalItemsUse.Read },
   [GenexCliCommand.ShopAdd]: shopItem(
     {
       price: itemPrice,
@@ -219,21 +244,26 @@ const GENEX_CLI_COMMANDS: Readonly<Record<GenexCliCommand, CommandRow>> = {
       package: gamePath(GamePathTarget.Folder),
     },
     ["price"],
+    LocalItemsUse.Change,
   ),
-  [GenexCliCommand.ShopSet]: shopItem({
-    price: itemPrice,
-    type: itemType,
-    rename: text,
-    description: description(true),
-    tag: tags,
-    shared: toggle,
-    resellable: toggle,
-    icon: text,
-    image: gamePath(GamePathTarget.File),
-    model: gamePath(GamePathTarget.File),
-    package: gamePath(GamePathTarget.Folder),
-  }),
-  [GenexCliCommand.ShopRemove]: shopItem(),
+  [GenexCliCommand.ShopSet]: shopItem(
+    {
+      price: itemPrice,
+      type: itemType,
+      rename: text,
+      description: description(true),
+      tag: tags,
+      shared: toggle,
+      resellable: toggle,
+      icon: text,
+      image: gamePath(GamePathTarget.File),
+      model: gamePath(GamePathTarget.File),
+      package: gamePath(GamePathTarget.Folder),
+    },
+    undefined,
+    LocalItemsUse.Change,
+  ),
+  [GenexCliCommand.ShopRemove]: shopItem({}, undefined, LocalItemsUse.Change),
   [GenexCliCommand.ShopTest]: shopItem(),
   [GenexCliCommand.ItemsList]: free(true),
   [GenexCliCommand.ItemsSearch]: free(true, { tag: tags }, Positional.Text),
@@ -272,7 +302,7 @@ export interface GamePathArg {
 
 /** One call, ready to run: the command, its argv before Studio's own flags, and what it needs. */
 export interface GenexCliRequest {
-  command: GenexCliCommand;
+  command: GenexCliCommand | GenexHostCommand;
   argv: string[];
   /** It runs against the game's hosted project, mirrored into the run folder. */
   project: boolean;
@@ -281,6 +311,8 @@ export interface GenexCliRequest {
   gamePaths?: GamePathArg[];
   /** The shared item whose `genex-items/<id>/` Studio moves into the game once the CLI wrote it. */
   delivers?: string;
+  /** How it uses the game's local drafts (`.genex/items/`); absent when it does not. */
+  localItems?: LocalItemsUse;
 }
 
 const refuse = (code: GenexCliRefusalCode, message: string) => new GenexCliRefusal(code, message);
@@ -429,7 +461,10 @@ const BUDGET_ALLOWANCE_OPTION = "assets";
  * which tool asked: a paid command never runs through the free tool (which asked nobody), and a
  * free one never through the paid tool (which asked for nothing).
  */
-export function genexCliRequest(args: Record<string, unknown>, tool: { paid: boolean }): GenexCliRequest {
+export function genexCliRequest(
+  args: Record<string, unknown>,
+  tool: { paid: boolean },
+): GenexCliRequest & { command: GenexCliCommand } {
   const command = commandOf(args.command);
   const options = optionsOf(args.options);
   const row = GENEX_CLI_COMMANDS[command];
@@ -447,6 +482,32 @@ export function genexCliRequest(args: Record<string, unknown>, tool: { paid: boo
     paid: row.paid,
     ...(flags.gamePaths.length > 0 ? { gamePaths: flags.gamePaths } : {}),
     ...(row.delivers ? { delivers: String(args.args) } : {}),
+    ...(row.localItems ? { localItems: row.localItems } : {}),
+  };
+}
+
+/** Studio's own upload of the game's local drafts after a publish: `genex shop sync`, never an agent's. */
+export const localSyncRequest = (): GenexCliRequest => ({
+  command: GenexHostCommand.ShopSync,
+  argv: GenexHostCommand.ShopSync.split(" "),
+  project: true,
+  paid: false,
+  localItems: LocalItemsUse.Sync,
+});
+
+/**
+ * The person's "Other games can use it" on a local draft, run by main for them: `genex shop set
+ * <localId> --shared|--no-shared`. Anything but a local id is refused before anything runs.
+ */
+export function localShareRequest(localId: string, shared: boolean): GenexCliRequest {
+  if (!isLocalItemId(localId))
+    throw refuse(GenexCliRefusalCode.InvalidValue, GENEX_CLI_PROMPT.InvalidValue("args", GENEX_VALUE_RULE.LocalId));
+  return {
+    command: GenexCliCommand.ShopSet,
+    argv: [...GenexCliCommand.ShopSet.split(" "), localId, shared ? "--shared" : "--no-shared"],
+    project: true,
+    paid: true,
+    localItems: LocalItemsUse.Change,
   };
 }
 

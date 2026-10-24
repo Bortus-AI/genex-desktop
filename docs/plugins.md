@@ -3332,7 +3332,7 @@ Genex:
   afterwards. `main/core/genex-cli-policy.ts` allows doctor, budget, `llm models|status|cancel`,
   `shop list` and `items list|search` free, and `llm bench`, `shop add|set|remove|test` and
   `items add|remove` paid; everything else, `shop publish|unpublish` (only the person puts an item
-  on sale, D40), `budget --assets` (its allowance would live only in the removed run folder) and
+  on sale, D40), `shop sync` (Studio's own upload of local drafts after a publish, `syncLocalItems`), `budget --assets` (its allowance would live only in the removed run folder) and
   every flag Studio sets itself is refused with a typed reason naming the tool to use instead. A
   store item's `shop add|set` takes `price` (0 is Free), `type`, `description` (≤ 1000, `""` clears
   it on `set`), `tag` (one or a list, ≤ 10 × 32), `shared` (`--shared`/`--no-shared`) and `image`,
@@ -3343,11 +3343,17 @@ Genex:
   `genex-items`, at most 2,000 files and 200 MiB). `items add <id>` (an item id, never a path) runs
   in the run folder too; Studio then moves its `genex-items/<id>/` into the bound game, refusing a
   link or a file at `genex-items`, the item's folder or `.genex/replaced-items` (where an earlier
-  copy goes, stamped), so the CLI never writes a game. The bound folder is the game's or its Studio
+  copy goes, stamped), so the CLI never writes a game. `shop list|add|set|remove` also see the game's
+  local item drafts (`.genex/items/`, made before the game is on Genex): Studio copies each clean draft
+  into the run folder and carries a change back (`local-item-files.ts`: a `<localId>.json` and a flat
+  `<localId>/` of regular files, at most 8 files and 300 MiB, never through a link either way); in a
+  game with no hosted project they run on those drafts alone ([store](play.md#the-item-store);
+  `genex-cli-local-items.test.ts` holds the hostile tables). The bound folder is the game's or its Studio
   worktree (`genex-bound-game.ts`, shared with `genex__package`); `genex-cli-game-paths.test.ts`
   holds the hostile table. Studio adds `--env`,
   `--api-url https://api.genex.games` (a development profile's stand API instead, with the stand
-  account's token: `GenexStand`, [play](play.md)), `--no-auth` and `--json`, and `--user-approved`
+  account's token: `GenexStand`, [play](play.md); the Genex plugin's backend follows the same stand,
+  `PluginRegistry.hostAccount`), `--no-auth` and `--json`, and `--user-approved`
   only for an approved bench. The consent card shows Studio's summary of the validated call (the command, what
   it spends first, the agent's text last and clipped), and a call Studio would refuse asks nobody. The token reaches the
   preload on stdin; the network is that API's host only; the games root and every game are

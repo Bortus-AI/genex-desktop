@@ -47,6 +47,7 @@ import type {
   StoreSheet,
   StoreTab,
 } from "./store-items.ts";
+import type { LocalItemsView, LocalShareResult } from "./item-draft.ts";
 import type { PlayCredits } from "./play-credits.ts";
 import type {
   AddOutcome,
@@ -662,6 +663,19 @@ export interface StudioApi {
   itemTakeOffSale(itemId: string): Promise<CreatorItem | StoreRefused>;
   /** Create › Items: "Other games can use it", on or off. */
   itemSetShared(itemId: string, shared: boolean): Promise<CreatorItem | StoreRefused>;
+  /** A game's local item drafts as Studio holds them: approvals, drafts and what became of each after its publish. */
+  itemsLocal(project: string): Promise<LocalItemsView>;
+  /** "Sell when published" on a local draft as its card shows it (`contentHash`); kept in Studio's app data. */
+  itemsLocalApprove(project: string, localId: string, contentHash: string): Promise<LocalItemsView>;
+  /** Undo "Sell when published" on a local draft. */
+  itemsLocalWithdraw(project: string, localId: string): Promise<LocalItemsView>;
+  /** "Other games can use it" on a local draft, whose card shows `contentHash`: main runs the CLI's `shop set`. */
+  itemsLocalShare(project: string, localId: string, contentHash: string, shared: boolean): Promise<LocalShareResult>;
+  /**
+   * Settle a game's local drafts once it is on Genex: upload them, then put on sale only what the
+   * person approved unchanged. Paced in main; `force` right after a publish finished.
+   */
+  itemsLocalSettle(project: string, force: boolean): Promise<LocalItemsView>;
   /** The app's Genex account: signed out, signing in, signed in, or a sign-in genex.games ended. Never asks the network. */
   genexAccount(): Promise<GenexAccountView>;
   /** Sign in to Genex in the browser (again, after a sign-in ended); the account as it is after. */

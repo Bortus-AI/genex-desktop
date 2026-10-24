@@ -414,6 +414,10 @@ function applyUiEvent(
       // A new or changed item of the account's: Selling, once shown, reads it again.
       if (items.getState().selling.read !== ItemsRead.Idle) void items.readSelling();
       break;
+    case UiEvent.ItemsLocal:
+      // Main's record of a game's local drafts changed: a card showing one of them reads it again.
+      if (Object.hasOwn(items.getState().local, event.payload.project)) void items.readLocal(event.payload.project);
+      break;
     case UiEvent.ProviderUsage:
       providerUsage.setState((state) => usageReported(state, event.payload.reports), true);
       break;

@@ -62,6 +62,8 @@ is product copy, not this glossary.
 - **Listing draft card**: the chat card for an item the game's agent made, recorded by main from a
   real `genex shop add|set --json` result only (`item_drafted`, `src/main/core/item-draft.ts`); its Put
   on sale is the person's press, never the agent's.
+- **Local draft**: an item made before its game is on Genex (`.genex/items/`); its card's Sell when
+  published is an approval in app data (`item-approvals.ts`).
 
 ## Runs
 

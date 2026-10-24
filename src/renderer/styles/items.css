@@ -533,3 +533,13 @@
   font-size: 13px;
   line-height: 18px;
 }
+.listing-local-status {
+  color: var(--ink-3);
+  font-size: 13px;
+  line-height: 18px;
+}
+.listing-note {
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 18px;
+}

@@ -31,6 +31,8 @@ import { loopAvailableFor } from "../loop-setting.ts";
 import { notifyProblem } from "../state/toasts.ts";
 import { useItems } from "../state/hooks.ts";
 import { askedForItem } from "../state/items.ts";
+import { isLocalDraft } from "../../shared/item-draft.ts";
+import { useLocalItemsSettle } from "../chat/use-local-items.ts";
 import { studio } from "../state/studio.ts";
 import { ChatSkeleton } from "../chat/ChatSkeleton.tsx";
 import { LoadFailed } from "../ui/LoadFailed.tsx";
@@ -109,6 +111,12 @@ function ChatComposer(parts: ChatParts & { composerRef: RefObject<PromptBarHandl
   const project = chat.meta.project ?? null;
   const askedForAnItem = useItems((s) => project !== null && s.askingIn === project);
   const underListing = transcript.readingEntries.at(-1)?.kind === EntryKind.ListingDraft;
+  // A local draft waits for the game's publish: while this chat shows its card, or the game holds
+  // one, Studio settles them when the chat opens, the window comes back and the publish finishes.
+  const showsLocalDraft = transcript.readingEntries.some(
+    (entry) => entry.kind === EntryKind.ListingDraft && isLocalDraft(entry.draft),
+  );
+  useLocalItemsSettle(project, showsLocalDraft);
   const send: typeof submit = (...args) => {
     if (askedForAnItem) studio().items.setState((state) => askedForItem(state, null), true);
     return submit(...args);

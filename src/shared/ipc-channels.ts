@@ -243,6 +243,11 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:items.put-on-sale": "itemPutOnSale",
   "studio:items.take-off-sale": "itemTakeOffSale",
   "studio:items.shared": "itemSetShared",
+  "studio:items.local": "itemsLocal",
+  "studio:items.local-approve": "itemsLocalApprove",
+  "studio:items.local-withdraw": "itemsLocalWithdraw",
+  "studio:items.local-share": "itemsLocalShare",
+  "studio:items.local-settle": "itemsLocalSettle",
   "studio:genex-account.read": "genexAccount",
   "studio:genex-account.sign-in": "genexSignIn",
   "studio:genex-account.cancel": "genexCancelSignIn",
@@ -520,6 +525,11 @@ export interface StudioInvokePayloads {
   "studio:items.put-on-sale": { itemId: string };
   "studio:items.take-off-sale": { itemId: string };
   "studio:items.shared": { itemId: string; shared: boolean };
+  "studio:items.local": { project: string };
+  "studio:items.local-approve": { project: string; localId: string; contentHash: string };
+  "studio:items.local-withdraw": { project: string; localId: string };
+  "studio:items.local-share": { project: string; localId: string; contentHash: string; shared: boolean };
+  "studio:items.local-settle": { project: string; force: boolean };
   "studio:genex-account.read": undefined;
   "studio:genex-account.sign-in": undefined;
   "studio:genex-account.cancel": undefined;

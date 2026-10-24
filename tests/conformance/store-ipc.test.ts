@@ -18,6 +18,10 @@ import { ItemReportReason, StoreBuyOutcome, StoreRefusal, type StoreSheet } from
 type Listener = (event: IpcSender, payload: unknown) => Promise<IpcResult>;
 const STUDIO: IpcSender = { sender: "studio", senderFrame: "studio-main-frame" };
 
+const LOCAL_ID = "local_ab12cd34ef56";
+const HASH = "3f9a".repeat(16);
+const LOCAL_VIEW = { project: "space-race", approvals: {}, drafts: {}, removed: [], outcomes: {} };
+
 /** Every store channel of the map. */
 const STORE_CHANNELS = Object.keys(STUDIO_INVOKE_CHANNELS).filter(
   (channel) => channel.startsWith("studio:store.") || channel.startsWith("studio:items."),
@@ -54,6 +58,13 @@ function rig() {
     sheet: {
       buy: record("buy", { outcome: StoreBuyOutcome.Paid }),
       answer: (value) => void calls.push(["answer", value]),
+    },
+    local: {
+      view: record("localView", LOCAL_VIEW),
+      approve: record("localApprove", LOCAL_VIEW),
+      withdraw: record("localWithdraw", LOCAL_VIEW),
+      share: record("localShare", { failed: true as const }),
+      settle: record("localSettle", LOCAL_VIEW),
     },
   };
   const handle = createIpcHandle(
@@ -105,6 +116,27 @@ describe("The store's channels", () => {
       ["studio:items.put-on-sale", { itemId: "sku9" }, ["putOnSale", "sku9"]],
       ["studio:items.take-off-sale", { itemId: "sku9" }, ["takeOffSale", "sku9"]],
       ["studio:items.shared", { itemId: "sku9", shared: true }, ["setShared", "sku9", true]],
+      ["studio:items.local", { project: "space-race" }, ["localView", "space-race"]],
+      [
+        "studio:items.local-approve",
+        { project: "space-race", localId: LOCAL_ID, contentHash: HASH },
+        ["localApprove", "space-race", LOCAL_ID, HASH],
+      ],
+      [
+        "studio:items.local-withdraw",
+        { project: "space-race", localId: LOCAL_ID },
+        ["localWithdraw", "space-race", LOCAL_ID],
+      ],
+      [
+        "studio:items.local-share",
+        { project: "space-race", localId: LOCAL_ID, contentHash: HASH, shared: true },
+        ["localShare", "space-race", LOCAL_ID, HASH, true],
+      ],
+      [
+        "studio:items.local-settle",
+        { project: "space-race", force: true },
+        ["localSettle", "space-race", { force: true }],
+      ],
     ];
     for (const [channel, payload, expected] of table) {
       calls.length = 0;
@@ -155,6 +187,21 @@ describe("The store's channels, given what no Studio page would send", () => {
       ["studio:items.take-off-sale", { itemId: "a/b" }],
       ["studio:items.shared", { itemId: "sku9", shared: "true" }],
       ["studio:items.shared", { itemId: "sku9" }],
+      ["studio:items.local", { project: "../space-race" }],
+      ["studio:items.local", { project: "Space Race" }],
+      ["studio:items.local", { project: 5 }],
+      ["studio:items.local", undefined],
+      ["studio:items.local-approve", { project: "space-race", localId: "../local_ab12cd34ef56", contentHash: HASH }],
+      ["studio:items.local-approve", { project: "space-race", localId: "sku9", contentHash: HASH }],
+      ["studio:items.local-approve", { project: "space-race", localId: LOCAL_ID, contentHash: "nothex" }],
+      ["studio:items.local-approve", { project: "space-race", localId: LOCAL_ID }],
+      ["studio:items.local-approve", { project: "/tmp/space-race", localId: LOCAL_ID, contentHash: HASH }],
+      ["studio:items.local-withdraw", { project: "space-race", localId: "local_AB12CD34EF56" }],
+      ["studio:items.local-share", { project: "space-race", localId: LOCAL_ID, contentHash: HASH, shared: "yes" }],
+      ["studio:items.local-share", { project: "space-race", localId: "--json", contentHash: HASH, shared: true }],
+      ["studio:items.local-share", { project: "space-race", localId: LOCAL_ID, shared: true }],
+      ["studio:items.local-settle", { project: "space-race", force: 1 }],
+      ["studio:items.local-settle", { project: "space-race/../x", force: false }],
     ];
     for (const [channel, payload] of hostile) {
       const result = await invoke(channel, payload);
@@ -200,6 +247,9 @@ describe("The store's preload calls", () => {
     await api.itemsBrowse("", "c2", ["fire"]);
     await api.itemsSelling();
     await api.itemSetShared("sku9", false);
+    await api.itemsLocalApprove("space-race", LOCAL_ID, HASH);
+    await api.itemsLocalShare("space-race", LOCAL_ID, HASH, false);
+    await api.itemsLocalSettle("space-race", true);
     assert.deepEqual(invokes, [
       { channel: "studio:store.items", payload: { slug: "stick-steel" } },
       { channel: "studio:store.buy", payload: { itemId: "sku1", slug: "stick-steel" } },
@@ -209,6 +259,15 @@ describe("The store's preload calls", () => {
       { channel: "studio:items.browse", payload: { query: "", cursor: "c2", tags: ["fire"] } },
       { channel: "studio:items.selling", payload: undefined },
       { channel: "studio:items.shared", payload: { itemId: "sku9", shared: false } },
+      {
+        channel: "studio:items.local-approve",
+        payload: { project: "space-race", localId: LOCAL_ID, contentHash: HASH },
+      },
+      {
+        channel: "studio:items.local-share",
+        payload: { project: "space-race", localId: LOCAL_ID, contentHash: HASH, shared: false },
+      },
+      { channel: "studio:items.local-settle", payload: { project: "space-race", force: true } },
     ]);
   });
 

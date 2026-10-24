@@ -3,9 +3,13 @@
  * games", buying (main starts the purchase and draws Play's sheet for it, `play/store-sheet.ts`)
  * and its sheet's answers, claiming a Free item, the profile shelf, a complaint, and Create › Items
  * (Browse, adding a shared item to a game, Selling, Put on sale, Take off sale and Other games can
- * use it). Every id, game, reason and flag is checked here before the store client or the sheet hears
- * of it: the renderer is a browser, and genex.games' routes are built from these.
+ * use it), and a game's local item drafts (the person's "Sell when published", sharing one, and the
+ * settle after the game's publish, `core/local-items.ts`). Every id, game, reason and flag is checked
+ * here before the store client, the sheet or the local drafts hear of it: the renderer is a browser,
+ * and genex.games' routes and the CLI's arguments are built from these.
  */
+import { PROJECT_NAME_RE } from "../../shared/game-folder-name.ts";
+import { isContentHash, isLocalItemId } from "../../shared/item-draft.ts";
 import { isPlaySlug } from "../../shared/play.ts";
 import { isPlayGameId } from "../../shared/play-manage.ts";
 import { isAccountId } from "../../shared/play-people.ts";
@@ -22,6 +26,7 @@ import {
 import { isCursor } from "../play/gallery.ts";
 import type { BrowseRequest, PlayStore } from "../play/store.ts";
 import type { StoreSheetControl } from "../play/store-sheet.ts";
+import type { LocalItems } from "../core/local-items.ts";
 import type { IpcHandle } from "./registrar.ts";
 
 /**
@@ -43,6 +48,9 @@ const MESSAGE = {
   badSearch: "not a Browse search",
   badAnswer: "not an answer to the purchase sheet",
   badFlag: "not a yes or no",
+  badGameName: "not a local game",
+  badLocalDraft: "not a local item draft",
+  badHash: "not a local draft's content",
 } as const;
 
 /** What the store's channels answer from. */
@@ -51,6 +59,8 @@ export interface StoreIpcDeps {
   store: Omit<PlayStore, "purchase">;
   /** The purchase sheet in the studio window. */
   sheet: Pick<StoreSheetControl, "buy" | "answer">;
+  /** A game's local item drafts: approvals in Studio's app data, sharing and the settle after its publish. */
+  local: Pick<LocalItems, "view" | "approve" | "withdraw" | "share" | "settle">;
 }
 
 /** A field of a payload, or undefined when the payload is no object. */
@@ -102,6 +112,31 @@ function browseIn(payload: unknown): BrowseRequest {
   return { query, cursor, tags };
 }
 
+/** A local game's name, as its folder is named. */
+function gameIn(payload: unknown): string {
+  const project = field(payload, "project");
+  if (typeof project !== "string" || !PROJECT_NAME_RE.test(project)) throw new Error(MESSAGE.badGameName);
+  return project;
+}
+
+function localIdIn(payload: unknown): string {
+  const localId = field(payload, "localId");
+  if (!isLocalItemId(localId)) throw new Error(MESSAGE.badLocalDraft);
+  return localId;
+}
+
+function hashIn(payload: unknown): string {
+  const contentHash = field(payload, "contentHash");
+  if (!isContentHash(contentHash)) throw new Error(MESSAGE.badHash);
+  return contentHash;
+}
+
+function flagIn(payload: unknown, key: string): boolean {
+  const flag = field(payload, key);
+  if (typeof flag !== "boolean") throw new Error(MESSAGE.badFlag);
+  return flag;
+}
+
 function answerIn(payload: unknown): PlayPurchaseAnswer {
   const answer = readPurchaseAnswer(payload);
   if (!answer) throw new Error(MESSAGE.badAnswer);
@@ -128,6 +163,23 @@ export function registerStoreIpc(handle: IpcHandle, deps: StoreIpcDeps): void {
     return store.report(itemIdIn(payload), reason, message);
   });
   registerCreatorIpc(handle, store);
+  registerLocalItemsIpc(handle, deps.local);
+}
+
+/**
+ * A game's local item drafts. "Sell when published" is the person's approval of the content the card
+ * shows; only Studio's settle after the publish puts an approved draft on sale (D40).
+ */
+function registerLocalItemsIpc(handle: IpcHandle, local: StoreIpcDeps["local"]): void {
+  handle("studio:items.local", (payload) => local.view(gameIn(payload)));
+  handle("studio:items.local-approve", (payload) =>
+    local.approve(gameIn(payload), localIdIn(payload), hashIn(payload)),
+  );
+  handle("studio:items.local-withdraw", (payload) => local.withdraw(gameIn(payload), localIdIn(payload)));
+  handle("studio:items.local-share", (payload) =>
+    local.share(gameIn(payload), localIdIn(payload), hashIn(payload), flagIn(payload, "shared")),
+  );
+  handle("studio:items.local-settle", (payload) => local.settle(gameIn(payload), { force: flagIn(payload, "force") }));
 }
 
 /** Create › Items: Browse, a shared item in one of the account's games, Selling and the author's actions. */

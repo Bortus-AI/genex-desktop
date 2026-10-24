@@ -6107,6 +6107,16 @@ export default {
   "Its maker doesn’t let other games use it anymore.": "Der Creator erlaubt anderen Spielen nicht mehr, es zu nutzen.",
   "It’s already this game’s own item.": "Es ist schon ein eigenes Item dieses Spiels.",
   "Listing draft: {name}": "Angebotsentwurf: {name}",
+  "Draft · goes on sale when you publish": "Entwurf · geht in den Verkauf, wenn du veröffentlichst",
+  "Sell when published": "Beim Veröffentlichen verkaufen",
+  "Will go on sale when you publish": "Geht in den Verkauf, wenn du veröffentlichst",
+  "It changed since you approved it.": "Es hat sich geändert, seit du es freigegeben hast.",
+  "This item changed after this card. See it in Items › Selling before you put it on sale.":
+    "Dieses Item hat sich nach dieser Karte geändert. Sieh es dir unter Items › Verkaufen an, bevor du es in den Verkauf gibst.",
+  "It changed since you approved it, so it stayed a draft.":
+    "Es hat sich geändert, seit du es freigegeben hast, und bleibt deshalb ein Entwurf.",
+  "Removed from this game": "Aus diesem Spiel entfernt",
+  "Genex couldn’t change this draft. Try again.": "Genex konnte diesen Entwurf nicht ändern. Versuch es noch einmal.",
   "New item": "Neues Item",
   "No items match.": "Keine passenden Items.",
   "No one has shared an item yet.": "Noch hat niemand ein Item geteilt.",

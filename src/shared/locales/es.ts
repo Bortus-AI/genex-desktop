@@ -6056,6 +6056,16 @@ export default {
   "Its maker doesn’t let other games use it anymore.": "Su creador ya no deja que otros juegos lo usen.",
   "It’s already this game’s own item.": "Ya es un objeto propio de este juego.",
   "Listing draft: {name}": "Borrador de venta: {name}",
+  "Draft · goes on sale when you publish": "Borrador · sale a la venta cuando publiques",
+  "Sell when published": "Vender al publicar",
+  "Will go on sale when you publish": "Saldrá a la venta cuando publiques",
+  "It changed since you approved it.": "Cambió desde que lo aprobaste.",
+  "This item changed after this card. See it in Items › Selling before you put it on sale.":
+    "Este objeto cambió después de esta tarjeta. Míralo en Objetos › Ventas antes de ponerlo a la venta.",
+  "It changed since you approved it, so it stayed a draft.":
+    "Cambió desde que lo aprobaste, así que sigue como borrador.",
+  "Removed from this game": "Quitado de este juego",
+  "Genex couldn’t change this draft. Try again.": "Genex no pudo cambiar este borrador. Inténtalo de nuevo.",
   "New item": "Nuevo objeto",
   "No items match.": "No hay objetos que coincidan.",
   "No one has shared an item yet.": "Nadie ha compartido un objeto todavía.",

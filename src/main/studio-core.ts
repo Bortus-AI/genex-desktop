@@ -151,10 +151,15 @@ import {
   GenexCliService,
   type GenexStand,
   genexHostPreflight,
+  genexPluginAccount,
   genexHostTool,
   standCredentialFile,
 } from "./core/genex-cli.ts";
-import type { ListingDraft } from "../shared/item-draft.ts";
+import { isLocalDraft, type ListingRecord } from "../shared/item-draft.ts";
+import { type CreatorItem, type StoreRefused, StoreRefusal } from "../shared/store-items.ts";
+import { ITEM_APPROVALS_FILE, ItemApprovals } from "./core/item-approvals.ts";
+import { hasLocalDrafts } from "./core/local-item-files.ts";
+import { LocalItems, type LocalItemsDeps } from "./core/local-items.ts";
 import { GenexPackageService } from "./core/genex-package.ts";
 import { boundGameFolder } from "./core/genex-bound-game.ts";
 import { assertPublishable } from "./core/genex-publish.ts";
@@ -460,6 +465,15 @@ export interface StudioCoreOptions {
    * Absent: genex.games, with the Genex plugin's account.
    */
   genexStand?: GenexStand;
+  /**
+   * A game's local item drafts after its publish: Put on sale as the app's Genex account, and in a
+   * fixture launch the fixture's own sync and sharing in place of the CLI's (`dev/fixture-items.ts`).
+   * Absent: nothing a local draft's settle uploads goes on sale.
+   */
+  localItems?: {
+    putOnSale(skuId: string): Promise<CreatorItem | StoreRefused>;
+    runs?: Pick<LocalItemsDeps, "sync" | "setShared">;
+  };
 }
 
 export type { CoreInternals };
@@ -499,6 +513,8 @@ export class StudioCore {
   pluginServices!: PluginServices;
   /** The plugins' native runtimes: detected for jobs, and for an engine a bridge game's play names. */
   #nativePlugins: PluginNativeServices | null = null;
+  /** A game's local item drafts, made on first use (`localItems`). */
+  #localItems: LocalItems | null = null;
   /** Each game's link to an engine project, kept for `game-engine` plugins (`game.engine.*`, Undo, the first call's link). */
   engineLinks!: EngineLinks;
   /**
@@ -1157,6 +1173,8 @@ export class StudioCore {
     };
     // The Genex account is the app's: Genex off takes the agent's tools, never the sign-in or Publish.
     this.plugins.appAccount = { id: GENEX_PLUGIN_ID, actions: GENEX_ACCOUNT_ACTIONS };
+    // A development profile on a stand: the Genex plugin (its publish) talks to the stand as its account.
+    this.plugins.hostAccount = genexPluginAccount(this.options.genexStand);
     this.plugins.onChange = (c) => {
       this.emit(UiEvent.PluginsChanged, c);
       this.#connections.changed();
@@ -1203,7 +1221,9 @@ export class StudioCore {
       resources: this.options.paths.resources,
       genexStorage: this.pluginServices.root(GENEX_PLUGIN_ID),
       protectedWrites: async () => [this.games.root, ...(await this.games.list()).map((game) => game.dir)],
-      onListingDraft: (draft, binding) => this.#recordListingDraft(draft, binding.threadId),
+      onListingDraft: (draft, binding, fingerprint) => this.#recordListingDraft(draft, binding.threadId, fingerprint),
+      onLocalDraftsRemoved: (project, localIds) => this.localItems.forget(project, localIds),
+      gameFolder: (project) => realpath(this.games.dirFor(project)),
       // A store item's files and a shared item's folder: the bound game's own folder or its Studio worktree.
       boundGame: (binding) =>
         boundGameFolder(binding, { gameDir: (project) => this.games.dirFor(project), scratch: this.layout.scratch }),
@@ -1214,11 +1234,44 @@ export class StudioCore {
   /**
    * A store item the game's agent made or changed through `genex__cli-paid`: its Listing draft card
    * in the chat that asked (`item_drafted`, a record only the host writes), and a nudge for Create ›
-   * Items. The card's buttons call genex.games from main; the agent never presses them (D40).
+   * Items. The card's buttons call genex.games from main; the agent never presses them (D40). A local
+   * draft is noted first, so the person's "Sell when published" can name only what the CLI printed.
    */
-  async #recordListingDraft(draft: ListingDraft, threadId: string | undefined): Promise<void> {
+  async #recordListingDraft(
+    draft: ListingRecord,
+    threadId: string | undefined,
+    fingerprint?: string | null,
+  ): Promise<void> {
+    if (isLocalDraft(draft)) await this.localItems.noteDraft(draft, fingerprint ?? null);
     if (threadId) await this.append([customEventData(CustomEvent.ItemDrafted, { ...draft })], threadId);
-    this.emit(UiEvent.ItemDrafted, { project: draft.project, itemId: draft.itemId, ...(threadId ? { threadId } : {}) });
+    const itemId = isLocalDraft(draft) ? draft.localId : draft.itemId;
+    this.emit(UiEvent.ItemDrafted, { project: draft.project, itemId, ...(threadId ? { threadId } : {}) });
+  }
+
+  /**
+   * A game's local item drafts (`core/local-items.ts`): the person's approvals, kept in this profile's
+   * app data, and the settle after the game's publish, which puts on sale only what they approved.
+   */
+  get localItems(): LocalItems {
+    this.#localItems ??= this.#makeLocalItems();
+    return this.#localItems;
+  }
+
+  #makeLocalItems(): LocalItems {
+    const cli = this.#genexCli();
+    const options = this.options.localItems;
+    const gameFolder = (project: string) => realpath(this.games.dirFor(project));
+    return new LocalItems({
+      approvals: new ItemApprovals(path.join(this.options.paths.userData, ITEM_APPROVALS_FILE)),
+      published: (project) => cli.published(project),
+      hasDrafts: async (project) => hasLocalDrafts(await gameFolder(project)),
+      sync: options?.runs?.sync ?? ((project) => cli.syncLocalItems(project)),
+      setShared:
+        options?.runs?.setShared ?? ((project, localId, shared) => cli.setLocalShared(project, localId, shared)),
+      putOnSale: (skuId) => (options ? options.putOnSale(skuId) : Promise.resolve({ refused: StoreRefusal.Unknown })),
+      now: Date.now,
+      changed: (project) => this.emit(UiEvent.ItemsLocal, { project }),
+    });
   }
 
   /** `genex__package`: a pinned Genex SDK install into the bound game or its Studio worktree. */

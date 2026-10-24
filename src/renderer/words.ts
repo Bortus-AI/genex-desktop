@@ -5447,6 +5447,22 @@ export const ITEMS_WORDS = {
   /** No design copy: the card once its item is on sale. */
   onSale: t("On sale"),
   listingLabel: (name: string) => t("Listing draft: {name}", { name }),
+  // A local draft's card: an item made before its game is on Genex.
+  localStatus: t("Draft · goes on sale when you publish"),
+  sellWhenPublished: t("Sell when published"),
+  /** "Sell when published", pressed. */
+  willSell: t("Will go on sale when you publish"),
+  undoSell: t("Undo"),
+  /** No design copy: the person approved what the draft held before the agent changed it. */
+  changedSinceApproved: t("It changed since you approved it."),
+  /** No design copy: after the publish, a draft changed since its approval stays a draft. */
+  stayedDraft: t("It changed since you approved it, so it stayed a draft."),
+  /** No design copy: Genex got a version of the item this card never showed (an edit outside Studio). */
+  unseenVersion: t("This item changed after this card. See it in Items › Selling before you put it on sale."),
+  /** No design copy: the agent removed the local draft. */
+  localRemoved: t("Removed from this game"),
+  /** No design copy: main could not run the change on the draft. */
+  localFailed: t("Genex couldn’t change this draft. Try again."),
   // Every read.
   failed: t("Items couldn’t load."),
   /** No design copy: the app's Genex account is signed out, or genex.games' store is off. */

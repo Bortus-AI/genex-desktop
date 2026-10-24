@@ -6071,6 +6071,16 @@ export default {
   "Its maker doesn’t let other games use it anymore.": "Son créateur ne laisse plus d’autres jeux l’utiliser.",
   "It’s already this game’s own item.": "C’est déjà un objet propre à ce jeu.",
   "Listing draft: {name}": "Brouillon de vente : {name}",
+  "Draft · goes on sale when you publish": "Brouillon · mis en vente quand tu publies",
+  "Sell when published": "Vendre à la publication",
+  "Will go on sale when you publish": "Sera mis en vente quand tu publieras",
+  "It changed since you approved it.": "Il a changé depuis que tu l’as approuvé.",
+  "This item changed after this card. See it in Items › Selling before you put it on sale.":
+    "Cet objet a changé après cette carte. Regarde-le dans Objets › Ventes avant de le mettre en vente.",
+  "It changed since you approved it, so it stayed a draft.":
+    "Il a changé depuis que tu l’as approuvé, il reste donc un brouillon.",
+  "Removed from this game": "Retiré de ce jeu",
+  "Genex couldn’t change this draft. Try again.": "Genex n’a pas pu modifier ce brouillon. Réessaie.",
   "New item": "Nouvel objet",
   "No items match.": "Aucun objet ne correspond.",
   "No one has shared an item yet.": "Personne n’a encore partagé d’objet.",

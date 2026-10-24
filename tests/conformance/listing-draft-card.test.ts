@@ -6,14 +6,28 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { listingCardView, ListingSale, shareChange } from "../../src/renderer/chat/listing-draft.ts";
+import {
+  holdsLocalDrafts,
+  listingCardView,
+  ListingSale,
+  LocalSale,
+  localCard,
+  shareChange,
+} from "../../src/renderer/chat/listing-draft.ts";
+import { finishedPublish, publishFinishedSince } from "../../src/renderer/chat/use-local-items.ts";
 import { EntryKind, toEntries } from "../../src/renderer/chat-entries.ts";
+import { GenexPublishJobState, type GenexPublishState } from "../../src/shared/genex.ts";
 import { composedInChat, composeInChatWhenOpen, takeWaitingCompose } from "../../src/renderer/compose-in-chat.ts";
 import { chatPlaceholder, COMPOSER_LINE_CHARS, ITEM_PLACEHOLDER } from "../../src/renderer/composer-placeholder.ts";
-import { createItemsStore, ItemAction } from "../../src/renderer/state/items.ts";
+import { createItemsStore, ItemAction, LocalAction } from "../../src/renderer/state/items.ts";
 import { CustomEvent } from "../../src/shared/custom-events.ts";
 import type { EventData, EventEnvelope } from "../../src/shared/event-log.ts";
-import type { ListingDraft } from "../../src/shared/item-draft.ts";
+import {
+  type ListingDraft,
+  type LocalItemsView,
+  type LocalListingDraft,
+  LocalOutcomeKind,
+} from "../../src/shared/item-draft.ts";
 import { type CreatorItem, ItemState, ItemType, StoreRefusal } from "../../src/shared/store-items.ts";
 import { fakeStudioApi } from "../helpers/fake-studio-api.ts";
 
@@ -224,5 +238,291 @@ describe("words left for a game's chat before it opens", () => {
     } finally {
       if (!hadWindow) delete scope.window;
     }
+  });
+});
+
+const ICE: LocalListingDraft = {
+  project: "ice-palace",
+  state: "local",
+  localId: "local_ab12cd34ef56",
+  name: "Ice Shield",
+  description: "Blocks one hit.",
+  type: ItemType.Durable,
+  priceCoins: 300,
+  tags: [],
+  shareable: false,
+  contentHash: "3f9a".repeat(16),
+};
+const NEWER = "b".repeat(64);
+
+const localView = (fields: Partial<LocalItemsView> = {}): LocalItemsView => ({
+  project: "ice-palace",
+  approvals: {},
+  drafts: {},
+  removed: [],
+  outcomes: {},
+  ...fields,
+});
+const approved = (contentHash = ICE.contentHash) => ({ [ICE.localId]: { contentHash, at: 1 } });
+const local = (view?: LocalItemsView, busy?: LocalAction, failed = false) => {
+  const card = localCard(ICE, view, busy, failed);
+  assert.ok("local" in card, "still a local draft");
+  return card.local;
+};
+
+describe("a local draft's card, before its game is published", () => {
+  it("is drawn from its host record, and replaced by a newer draft of it only", () => {
+    const sled = { ...ICE, localId: "local_0123456789ab", name: "Oak Sled" };
+    const events = [
+      drafted({ ...ICE }),
+      drafted({ ...sled }),
+      drafted({ ...ICE, priceCoins: 250, contentHash: NEWER }),
+    ];
+    const shown = cards(events);
+    assert.deepEqual(
+      shown.map((card) => [card.name, card.priceCoins]),
+      [
+        ["Oak Sled", 300],
+        ["Ice Shield", 250],
+      ],
+    );
+  });
+
+  it("is never confused with an item on genex.games of the same id", () => {
+    const shown = cards([drafted({ ...ICE }), drafted({ ...FROST_AXE, itemId: ICE.localId })]);
+    assert.equal(shown.length, 2);
+  });
+
+  it("offers Sell when published, and sharing for a durable", () => {
+    const card = local(localView());
+    assert.equal(card.sale, LocalSale.Offer);
+    assert.equal(card.canPress, true);
+    assert.equal(card.canShare, true);
+    assert.equal(local(undefined).sale, LocalSale.Offer, "before Studio's record is read");
+  });
+
+  it("says it will go on sale once the person approved what it holds", () => {
+    assert.equal(local(localView({ approvals: approved() })).sale, LocalSale.Approved);
+  });
+
+  it("says it changed since the approval when it holds something else now", () => {
+    const changed = local(
+      localView({ approvals: approved(), drafts: { [ICE.localId]: { ...ICE, contentHash: NEWER } } }),
+    );
+    assert.equal(changed.sale, LocalSale.Changed);
+    assert.equal(changed.canPress, true, "Sell when published is offered again");
+    assert.equal(changed.draft.contentHash, NEWER);
+  });
+
+  it("shows the draft after the person's own change, from Studio's record", () => {
+    const shared = local(localView({ drafts: { [ICE.localId]: { ...ICE, shareable: true, contentHash: NEWER } } }));
+    assert.equal(shared.shared, true);
+  });
+
+  it("offers nothing once the agent removed it, and nothing twice while a press is under way", () => {
+    const removed = local(localView({ removed: [ICE.localId] }));
+    assert.equal(removed.sale, LocalSale.Removed);
+    assert.equal(removed.canPress, false);
+    assert.equal(removed.canShare, false);
+    const pressing = local(localView(), LocalAction.Approve);
+    assert.equal(pressing.canPress, false);
+    assert.equal(pressing.canShare, false);
+  });
+
+  it("says why genex.games refused its upload; it stays local", () => {
+    const outcomes = {
+      [ICE.localId]: {
+        kind: LocalOutcomeKind.Refused,
+        skuId: null,
+        contentHash: ICE.contentHash,
+        refusal: StoreRefusal.PriceOffGrid,
+        field: "price",
+        at: 1,
+      },
+    };
+    assert.equal(local(localView({ outcomes })).refusal, StoreRefusal.PriceOffGrid);
+  });
+});
+
+describe("a local draft's card after its game's publish", () => {
+  const settled = (kind: LocalOutcomeKind, refusal: StoreRefusal | null = null, contentHash = ICE.contentHash) =>
+    localCard(
+      ICE,
+      localView({ outcomes: { [ICE.localId]: { kind, skuId: "sku_ice", contentHash, refusal, field: null, at: 1 } } }),
+      undefined,
+      false,
+    );
+
+  it("is the item's card on genex.games: On sale once Studio put it on sale", () => {
+    const card = settled(LocalOutcomeKind.OnSale);
+    assert.ok("uploaded" in card);
+    assert.equal(card.uploaded.itemId, "sku_ice");
+    assert.equal(listingCardView(card.uploaded, undefined, undefined, undefined).sale, ListingSale.OnSale);
+  });
+
+  it("shows the item as last changed before the upload, not as its chat card first said", () => {
+    const card = localCard(
+      ICE,
+      localView({
+        drafts: { [ICE.localId]: { ...ICE, shareable: true, contentHash: NEWER } },
+        outcomes: {
+          [ICE.localId]: {
+            kind: LocalOutcomeKind.OnSale,
+            skuId: "sku_ice",
+            contentHash: NEWER,
+            refusal: null,
+            field: null,
+            at: 1,
+          },
+        },
+      }),
+      undefined,
+      false,
+    );
+    assert.ok("uploaded" in card);
+    assert.equal(card.uploaded.shareable, true);
+    assert.equal(card.unseen, false);
+  });
+
+  it("offers nothing on a card whose item Genex got in a version the card never showed", () => {
+    for (const kind of [LocalOutcomeKind.Draft, LocalOutcomeKind.Changed, LocalOutcomeKind.OnSale]) {
+      const card = settled(kind, null, NEWER);
+      assert.ok("uploaded" in card);
+      assert.equal(card.unseen, true, kind);
+    }
+    const unknown = localCard(
+      ICE,
+      localView({
+        outcomes: {
+          [ICE.localId]: {
+            kind: LocalOutcomeKind.Draft,
+            skuId: "sku_ice",
+            contentHash: null,
+            refusal: null,
+            field: null,
+            at: 1,
+          },
+        },
+      }),
+      undefined,
+      false,
+    );
+    assert.ok("uploaded" in unknown);
+    assert.equal(unknown.unseen, true, "a record that does not say what went up offers nothing either");
+  });
+
+  it("offers Put on sale for an uploaded draft the person never approved", () => {
+    const card = settled(LocalOutcomeKind.Draft);
+    assert.ok("uploaded" in card);
+    assert.equal(listingCardView(card.uploaded, undefined, undefined, undefined).canPutOnSale, true);
+    assert.equal(card.changed, false);
+    assert.equal(card.unseen, false);
+  });
+
+  it("says a draft that changed since its approval stayed a draft", () => {
+    const card = settled(LocalOutcomeKind.Changed);
+    assert.ok("uploaded" in card);
+    assert.equal(card.changed, true);
+    assert.equal(listingCardView(card.uploaded, undefined, undefined, undefined).sale, ListingSale.Offer);
+  });
+
+  it("carries genex.games' refusal of Put on sale", () => {
+    const card = settled(LocalOutcomeKind.Refused, StoreRefusal.PictureMissing);
+    assert.ok("uploaded" in card);
+    assert.equal(card.refusal, StoreRefusal.PictureMissing);
+  });
+});
+
+describe("the local card's presses", () => {
+  it("approve the hash the card shows, undo it, and share through main", async () => {
+    const view = localView({ approvals: approved() });
+    const fake = fakeStudioApi({
+      itemsLocalApprove: async () => view,
+      itemsLocalWithdraw: async () => localView(),
+      itemsLocalShare: async () => ({ draft: { ...ICE, shareable: true, contentHash: NEWER } }),
+      itemsLocal: async () => localView({ drafts: { [ICE.localId]: { ...ICE, shareable: true, contentHash: NEWER } } }),
+    });
+    const items = createItemsStore(fake.api);
+    await items.pressLocal(ICE, LocalAction.Approve);
+    assert.deepEqual(fake.callsOf("itemsLocalApprove"), [["ice-palace", ICE.localId, ICE.contentHash]]);
+    assert.equal(local(items.getState().local["ice-palace"]).sale, LocalSale.Approved);
+    await items.pressLocal(ICE, LocalAction.Withdraw);
+    assert.deepEqual(fake.callsOf("itemsLocalWithdraw"), [["ice-palace", ICE.localId]]);
+    assert.equal(local(items.getState().local["ice-palace"]).sale, LocalSale.Offer);
+    await items.pressLocal(ICE, LocalAction.Share);
+    assert.deepEqual(fake.callsOf("itemsLocalShare"), [["ice-palace", ICE.localId, ICE.contentHash, true]]);
+    assert.equal(local(items.getState().local["ice-palace"]).shared, true);
+  });
+
+  it("says when main could not change the draft", async () => {
+    const fake = fakeStudioApi({ itemsLocalShare: async () => ({ failed: true as const }) });
+    const items = createItemsStore(fake.api);
+    await items.pressLocal(ICE, LocalAction.Unshare);
+    assert.equal(local(undefined, undefined, items.getState().localFailed[ICE.localId] === true).failed, true);
+    assert.equal(items.getState().localBusy[ICE.localId], undefined);
+  });
+
+  it("settles the game through main, and reads Selling again once something went up", async () => {
+    const outcomes = {
+      [ICE.localId]: {
+        kind: LocalOutcomeKind.OnSale,
+        skuId: "sku_ice",
+        contentHash: ICE.contentHash,
+        refusal: null,
+        field: null,
+        at: 1,
+      },
+    };
+    const fake = fakeStudioApi({ itemsLocalSettle: async () => localView({ outcomes }) });
+    const items = createItemsStore(fake.api);
+    await items.readSelling();
+    await items.settleLocal("ice-palace", true);
+    assert.deepEqual(fake.callsOf("itemsLocalSettle"), [["ice-palace", true]]);
+    assert.equal(fake.callsOf("itemsSelling").length, 2);
+    assert.ok("uploaded" in localCard(ICE, items.getState().local["ice-palace"], undefined, false));
+  });
+});
+
+describe("when a chat with a local draft asks main to settle it at once", () => {
+  const record = (state: GenexPublishJobState, finishedAt?: string) =>
+    ({ job: { state, ...(finishedAt ? { finishedAt } : {}) } }) as unknown as GenexPublishState;
+
+  it("is when the game's publish record names a publish finished since the last read", () => {
+    const done = finishedPublish(record(GenexPublishJobState.Done, "2026-10-23T12:00:00.000Z"));
+    assert.equal(done, "2026-10-23T12:00:00.000Z");
+    assert.equal(publishFinishedSince(null, done), true, "the first publish since the chat opened");
+    assert.equal(publishFinishedSince("2026-10-22T12:00:00.000Z", done), true, "a newer publish");
+  });
+
+  it("is never on the first read, for the same publish again, or while none finished", () => {
+    const done = "2026-10-23T12:00:00.000Z";
+    assert.equal(publishFinishedSince(undefined, done), false, "the first read names an earlier publish");
+    assert.equal(publishFinishedSince(done, done), false);
+    assert.equal(finishedPublish(record(GenexPublishJobState.Running)), null);
+    assert.equal(finishedPublish(record(GenexPublishJobState.Failed, done)), null);
+    assert.equal(finishedPublish(null), null);
+  });
+});
+
+describe("which of a game's chats watch for its publish", () => {
+  const uploadedAs = (kind: LocalOutcomeKind, skuId: string | null) => ({
+    [ICE.localId]: { kind, skuId, contentHash: ICE.contentHash, refusal: null, field: null, at: 1 },
+  });
+
+  it("every chat of a game whose record holds a local draft still waiting to go up", () => {
+    assert.equal(holdsLocalDrafts(localView({ drafts: { [ICE.localId]: ICE } })), true);
+    const refused = localView({
+      drafts: { [ICE.localId]: ICE },
+      outcomes: uploadedAs(LocalOutcomeKind.Refused, null),
+    });
+    assert.equal(holdsLocalDrafts(refused), true, "a refused upload stays local, and is tried again");
+  });
+
+  it("none once every draft went up or was removed, or before main's record is read", () => {
+    const up = localView({ drafts: { [ICE.localId]: ICE }, outcomes: uploadedAs(LocalOutcomeKind.OnSale, "sku_ice") });
+    assert.equal(holdsLocalDrafts(up), false);
+    assert.equal(holdsLocalDrafts(localView({ drafts: { [ICE.localId]: ICE }, removed: [ICE.localId] })), false);
+    assert.equal(holdsLocalDrafts(localView()), false);
+    assert.equal(holdsLocalDrafts(undefined), false);
   });
 });

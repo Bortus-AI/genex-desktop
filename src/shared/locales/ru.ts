@@ -6009,6 +6009,16 @@ export default {
   "Its maker doesn’t let other games use it anymore.": "Автор больше не разрешает другим играм его использовать.",
   "It’s already this game’s own item.": "Это уже собственный предмет этой игры.",
   "Listing draft: {name}": "Черновик товара: {name}",
+  "Draft · goes on sale when you publish": "Черновик · поступит в продажу, когда опубликуешь",
+  "Sell when published": "Продавать после публикации",
+  "Will go on sale when you publish": "Поступит в продажу после публикации",
+  "It changed since you approved it.": "Он изменился после твоего одобрения.",
+  "This item changed after this card. See it in Items › Selling before you put it on sale.":
+    "Этот предмет изменился после этой карточки. Посмотри его в разделе Предметы › Продажи, прежде чем выставлять на продажу.",
+  "It changed since you approved it, so it stayed a draft.":
+    "Он изменился после твоего одобрения, поэтому остался черновиком.",
+  "Removed from this game": "Удалён из этой игры",
+  "Genex couldn’t change this draft. Try again.": "Genex не смог изменить этот черновик. Попробуй ещё раз.",
   "New item": "Новый предмет",
   "No items match.": "Ничего не найдено.",
   "No one has shared an item yet.": "Пока никто не поделился предметами.",

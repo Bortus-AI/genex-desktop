@@ -357,10 +357,35 @@ frame only, `STUDIO_UI_ONLY`); prices, shares and counts are genex.games' own, n
   agent's `shop add|set` takes the description, tags, sharing, Free and the game's picture, model
   and package files ([host tools](plugins.md#first-party-privileges)). The card needs CLI 1.36.14
   (`kind`/`version` in `--json`); the pin is 1.36.13 until it is on npm.
+- **Local drafts** (an item made before its game is on Genex, contract "Local item drafts"): the CLI
+  keeps it in the game's `.genex/items/` (`<localId>.json` and a `<localId>/` folder). Studio copies
+  those drafts into each `shop` run's folder and carries a `shop add|set|remove`'s change back
+  (`main/core/local-item-files.ts`: drafts only, never through a link, capped). Its card (`state:
+  "local"`, keyed by local id) says "Draft · goes on sale when you publish" and offers **Sell when
+  published**, the person's approval of its `contentHash`, kept in this profile's app data
+  (`<userData>/item-approvals.json`, `main/core/item-approvals.ts`), never in the game; pressed it
+  says "Will go on sale when you publish", with Undo. An approval names only a hash the CLI printed
+  for that draft; a newer draft says "It changed since you approved it." **Other games can use it** on a
+  local draft is main's own `shop set <localId> --shared|--no-shared`; the approval follows it only
+  when that run changed the very bytes the card showed (Studio's fingerprint of what the run took from
+  the game). Once the game's publish record says its publish made it public (`status: "published"`,
+  written last: a publish that failed part-way or is still running has none), `main/core/local-items.ts`
+  settles the game while one of its chats shows a local card or Studio's record holds a draft not yet uploaded:
+  on open, on focus (at most every 15 s, one at a time) and at once when a Genex publish finishes
+  (`chat/use-local-items.ts`). It runs Studio's own `shop sync --json` (never
+  an agent's; uploaded drafts leave the game), then puts on sale only drafts whose approval equals
+  the hash the sync reports (`itemPutOnSale`). The card then becomes the item's: On sale, a draft
+  with Put on sale ("…so it stayed a draft." when it changed), or genex.games' refusal; a refused
+  upload stays local with its reason. The outcome keeps the hash the sync sent: when it is not the
+  draft the card shows (the files were edited outside Studio), the card offers neither Put on sale nor
+  sharing and sends the person to Items › Selling, which shows the item as Genex holds it. Nothing in the game folder is read as an approval or a sync
+  result, so a `last-sync.json` from a terminal `genex publish` puts nothing on sale (D40).
 
 Fixtures: with `STUDIO_FIXTURE_GENEX_ACCOUNT=1`, `dev/fixture-store.ts` answers the store (Stick &
 Steel's store; the account's Snowball items); `--fixture items-store` makes the fixture game the
-account's Snowball on Genex and puts Frost Axe's Listing draft card in its chat (`dev/fixture-items.ts`).
+account's Snowball on Genex and puts Frost Axe's Listing draft card in its chat, and adds `fixture-duty`
+(Claude of Duty, not on Genex yet) with Ice Shield's local draft; once its publish record names the
+account's `claude-of-duty` as published, the fixture's own sync uploads it to the fixture store (`dev/fixture-items.ts`).
 Selectors: the viewer's door `[data-play-bar="store"]` (`aria-pressed` while open), its Store
 `[data-play-viewer-store="<slug>"]` with `[data-play-viewer-store-back]`, a page's Store
 `[data-game-store="<slug>"]` (`[data-game-store-view="store|my-items"]`, `[data-store-item="<id>"]`),
@@ -373,7 +398,10 @@ the sheet's `[data-item-sheet-held]`, the shelf's `[data-shelf-item="<id>"]` / `
 `[data-items-new]`, `[data-items-row="<id>"]`, `[data-items-status="draft|under-review|off-sale"]`,
 `[data-items-put-on-sale="<id>"]`, `[data-items-actions="<id>"]` → `[data-items-action="<action>"]`;
 in the chat `[data-listing-draft="<id>"][data-listing-sale="offer|pressing|on-sale|taken-down"]`,
-`[data-listing-share="<id>"]`, `[data-listing-put-on-sale="<id>"]`, `[data-listing-on-sale]`.
+`[data-listing-share="<id>"]`, `[data-listing-put-on-sale="<id>"]`, `[data-listing-on-sale]`; a local draft's
+`[data-listing-draft="<localId>"][data-listing-local="offer|approved|changed|removed"]`,
+`[data-listing-local-status]`, `[data-listing-sell-when-published="<localId>"]` (`aria-pressed`),
+`[data-listing-undo-sell="<localId>"]`, `[data-listing-local-changed]`, `[data-listing-stayed-draft]`.
 
 ## Where to work
 
@@ -393,12 +421,17 @@ A live `studio:dev` profile can point Play at a local or test genex.games (a sta
 origins: https, or http on this Mac), plus `GENEX_DEV_PLAY_GAMES_CA` (an absolute PEM path;
 `src/main/play/origins.ts` `devStand`). A packaged app, a fixture launch and the normal profile
 ignore them. With another API the account signs in on that server's own device sign-in, for the
-launch only (`src/main/dev/dev-stand-account.ts`), and `genex__cli` runs against that API with that
-account. The games origin counts only with a stand API: the viewer plays
+launch only (`src/main/dev/dev-stand-account.ts`), and `genex__cli` and the Genex plugin's backend
+(its publish, and so its asset tools and account page) run against that API with that account
+(`launchStand`, `genexPluginAccount`: the registry's `hostAccount` names the API to the backend as
+`STUDIO_PLUGIN_API` and hands the stand's token as its lease; its saved genex.games account is
+neither read nor written). The games origin counts only with a stand API: the viewer plays
 `<scheme>://<slug>.<games host>/`, its pages may hop only to the stand's website, purchases are caught
 on that website (`purchaseConfirmOrigin`), and the CA is trusted for those game hosts alone
-(`play/dev-games-trust.ts`). Publish and the Genex plugin's own tools stay on genex.games, a
-development launch still takes no `genex://` link, and item pictures and models from hosts other
+(`play/dev-games-trust.ts`) and by the Genex plugin's publish, whose backend and CLI runs trust it
+beside the system's to push to the stand's source host and check its game host
+(`STUDIO_PLUGIN_CA`, `NODE_EXTRA_CA_CERTS`, `GIT_SSL_CAINFO`); that publish tests its draft on the
+stand's game host (`STUDIO_PLUGIN_GAMES`, `publish.ts` `stagingLink`). A development launch still takes no `genex://` link, and item pictures and models from hosts other
 than Genex's (a local MinIO) still draw the stand-in. Get coin opens the website's coin page as sign-in
 opens its pages (`websitePageOpener`), so a development website's http page opens too. See the
 [field guide](STUDIO-DEVELOPER-FIELD-GUIDE.md#run-an-owned-development-profile).

@@ -218,6 +218,11 @@ const METHODS = [
   "itemPutOnSale",
   "itemTakeOffSale",
   "itemSetShared",
+  "itemsLocal",
+  "itemsLocalApprove",
+  "itemsLocalWithdraw",
+  "itemsLocalShare",
+  "itemsLocalSettle",
   "genexAccount",
   "genexSignIn",
   "genexCancelSignIn",
@@ -348,6 +353,9 @@ function storeDefaults(): Partial<Record<StudioMethod, () => unknown>> {
     itemsBrowse: () => ({ items: [], nextCursor: null }),
     itemsBrowseDetail: () => ({ refused: "sku_not_found" }),
     itemsSelling: () => ({ earnedReady: 0, earnedHeld: 0, nextReleaseAt: null, holdDays: 0, items: [] }),
+    // A game with no local drafts in Studio's app data.
+    itemsLocal: () => ({ project: "", approvals: {}, drafts: {}, removed: [], outcomes: {} }),
+    itemsLocalSettle: () => ({ project: "", approvals: {}, drafts: {}, removed: [], outcomes: {} }),
   };
 }
 

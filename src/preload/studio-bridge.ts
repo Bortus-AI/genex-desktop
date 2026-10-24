@@ -286,6 +286,13 @@ function storeCalls(bridge: BridgeCalls) {
     itemPutOnSale: (itemId) => invoke("studio:items.put-on-sale", { itemId }),
     itemTakeOffSale: (itemId) => invoke("studio:items.take-off-sale", { itemId }),
     itemSetShared: (itemId, shared) => invoke("studio:items.shared", { itemId, shared }),
+    itemsLocal: (project) => invoke("studio:items.local", { project }),
+    itemsLocalApprove: (project, localId, contentHash) =>
+      invoke("studio:items.local-approve", { project, localId, contentHash }),
+    itemsLocalWithdraw: (project, localId) => invoke("studio:items.local-withdraw", { project, localId }),
+    itemsLocalShare: (project, localId, contentHash, shared) =>
+      invoke("studio:items.local-share", { project, localId, contentHash, shared }),
+    itemsLocalSettle: (project, force) => invoke("studio:items.local-settle", { project, force }),
   } satisfies Partial<StudioApi>;
 }
 

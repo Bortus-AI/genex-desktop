@@ -9,12 +9,15 @@
  * use it, each pressed by the person and carried out by main (D40). Browse's detail says which of the
  * account's games each item was added to, for Added and Remove from. A tab chosen and the window
  * coming back read the tab on show again, a burst of them once (`REREAD_GAP_MS`); a press that
- * changed something reads what it changed again at once. Pure actions; the store's commands call
- * `StudioApi`.
+ * changed something reads what it changed again at once. A game's local drafts (made before it is
+ * on Genex) are main's record (`studio:items.local`): the person's "Sell when published", sharing one,
+ * and the settle after the game's publish, each carried out by main. Pure actions; the store's
+ * commands call `StudioApi`.
  */
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { GENEX_PLUGIN_ID, GenexAction, GenexPublishStatusOperation } from "../../shared/genex.ts";
+import type { LocalItemsView, LocalListingDraft, LocalShareResult } from "../../shared/item-draft.ts";
 import { isPlayGameId } from "../../shared/play-manage.ts";
 import {
   type BrowseDetail,
@@ -77,6 +80,15 @@ export const ItemAction = {
 } as const;
 export type ItemAction = (typeof ItemAction)[keyof typeof ItemAction];
 
+/** A press on a local draft: the person's "Sell when published", its undo, and Other games can use it. */
+export const LocalAction = {
+  Approve: "approve",
+  Withdraw: "withdraw",
+  Share: "share",
+  Unshare: "unshare",
+} as const;
+export type LocalAction = (typeof LocalAction)[keyof typeof LocalAction];
+
 /** The actions that change the item itself, as genex.games answers them with the item. */
 export type ItemChange = Exclude<ItemAction, typeof ItemAction.Add | typeof ItemAction.Remove>;
 
@@ -117,6 +129,12 @@ export interface ItemsState {
   refused: Record<string, StoreRefusal>;
   /** New item opened this game's chat: its composer asks for an item until the person sends. */
   askingIn: string | null;
+  /** Each game's local drafts as main last answered, by game. */
+  local: Record<string, LocalItemsView>;
+  /** A press on a local draft under way, by local id. */
+  localBusy: Record<string, LocalAction>;
+  /** Local drafts whose last press main could not carry out, by local id. */
+  localFailed: Record<string, true>;
 }
 
 /** Nothing read yet. */
@@ -138,6 +156,9 @@ export const initialItems = (): ItemsState => ({
   changed: {},
   refused: {},
   askingIn: null,
+  local: {},
+  localBusy: {},
+  localFailed: {},
 });
 
 /** How a refused read shows: signed out, the store off, or a failure. */
@@ -275,6 +296,26 @@ export const actionEnded = (state: ItemsState, itemId: string): ItemsState => ({
   busy: without(state.busy, itemId),
 });
 
+/** Main answered a game's local drafts. */
+export const localRead = (state: ItemsState, view: LocalItemsView): ItemsState => ({
+  ...state,
+  local: { ...state.local, [view.project]: view },
+});
+
+/** A press on a local draft starts: its last failure goes. */
+export const localStarted = (state: ItemsState, localId: string, action: LocalAction): ItemsState => ({
+  ...state,
+  localBusy: { ...state.localBusy, [localId]: action },
+  localFailed: without(state.localFailed, localId),
+});
+
+/** A press on a local draft ended; `failed` when main could not carry it out. */
+export function localEnded(state: ItemsState, localId: string, failed: boolean): ItemsState {
+  const localBusy = without(state.localBusy, localId);
+  if (!failed) return { ...state, localBusy };
+  return { ...state, localBusy, localFailed: { ...state.localFailed, [localId]: true } };
+}
+
 /** New item opened `game`'s chat (or, null, the person sent from it): its composer asks for an item meanwhile. */
 export const askedForItem = (state: ItemsState, game: string | null): ItemsState =>
   state.askingIn === game ? state : { ...state, askingIn: game };
@@ -341,6 +382,12 @@ export interface ItemsStore extends StoreApi<ItemsState> {
   addToGame(itemId: string, game: string): Promise<ItemAdded | StoreRefused>;
   /** Remove from \<game>: take a shared item out of a local game that is on Genex. */
   removeFromGame(itemId: string, game: string): Promise<ItemAllowance | StoreRefused>;
+  /** Read a game's local drafts from main. */
+  readLocal(project: string): Promise<void>;
+  /** Press "Sell when published", its undo, or Other games can use it on a local draft as its card shows it. */
+  pressLocal(draft: LocalListingDraft, action: LocalAction): Promise<void>;
+  /** Settle a game's local drafts (main paces it; `force` right after its publish finished). */
+  settleLocal(project: string, force: boolean): Promise<void>;
 }
 
 /** What the store's reads and presses share: the store, its setter, Studio's calls and the clock. */
@@ -454,6 +501,46 @@ function gamePresses(ctx: ItemsContext, readDetail: (itemId: string) => Promise<
   };
 }
 
+/** The call each local press makes: main records the approval, or runs the CLI's `shop set` for sharing. */
+const LOCAL_CALL: Record<
+  LocalAction,
+  (api: StudioApi, draft: LocalListingDraft) => Promise<LocalItemsView | LocalShareResult>
+> = {
+  [LocalAction.Approve]: (api, draft) => api.itemsLocalApprove(draft.project, draft.localId, draft.contentHash),
+  [LocalAction.Withdraw]: (api, draft) => api.itemsLocalWithdraw(draft.project, draft.localId),
+  [LocalAction.Share]: (api, draft) => api.itemsLocalShare(draft.project, draft.localId, draft.contentHash, true),
+  [LocalAction.Unshare]: (api, draft) => api.itemsLocalShare(draft.project, draft.localId, draft.contentHash, false),
+};
+
+/** Whether main's answer is a game's local drafts (an approval or its undo), not a sharing result. */
+const isLocalView = (answer: LocalItemsView | LocalShareResult): answer is LocalItemsView => "approvals" in answer;
+
+/** The local-draft presses, each carried out by main; a sharing press reads the game's drafts again. */
+function localPresses(ctx: ItemsContext, readSelling: () => Promise<void>) {
+  const { set, api } = ctx;
+  const readLocal = async (project: string): Promise<void> => {
+    const view = await api.itemsLocal(project).catch(() => null);
+    if (view) set((state) => localRead(state, view));
+  };
+  const pressLocal = async (draft: LocalListingDraft, action: LocalAction): Promise<void> => {
+    set((state) => localStarted(state, draft.localId, action));
+    const answer = await LOCAL_CALL[action](api, draft).catch((): LocalShareResult => ({ failed: true }));
+    if (isLocalView(answer)) set((state) => localRead(state, answer));
+    else if ("draft" in answer) await readLocal(draft.project);
+    set((state) => localEnded(state, draft.localId, !isLocalView(answer) && "failed" in answer));
+  };
+  const settleLocal = async (project: string, force: boolean): Promise<void> => {
+    const view = await api.itemsLocalSettle(project, force).catch(() => null);
+    if (!view) return;
+    const before = ctx.store.getState().local[project];
+    set((state) => localRead(state, view));
+    const uploaded = Object.keys(view.outcomes).some((localId) => !before?.outcomes[localId]);
+    // An item that went up is the account's on genex.games now: Selling, once shown, reads it again.
+    if (uploaded && ctx.store.getState().selling.read !== ItemsRead.Idle) await readSelling();
+  };
+  return { readLocal, pressLocal, settleLocal };
+}
+
 /** The store and its commands over `api`; `timers` paces Browse's search while the person types, and the re-reads. */
 export function createItemsStore(api: StudioApi, timers: ItemsTimers = browserTimers): ItemsStore {
   const store = createStore<ItemsState>()(initialItems);
@@ -504,5 +591,6 @@ export function createItemsStore(api: StudioApi, timers: ItemsTimers = browserTi
       return { item: answer };
     },
     ...gamePresses(ctx, browse.readDetail),
+    ...localPresses(ctx, readSelling),
   });
 }

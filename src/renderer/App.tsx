@@ -14,7 +14,7 @@
  * here: the notifications App draws on its own root read it.
  */
 import type { JSX } from "react";
-import { useEffect, useRef } from "react";
+import { lazy, Suspense, useEffect, useRef } from "react";
 import { t } from "../shared/i18n.ts";
 import { ColorTweakerHost } from "./appearance/tweaker/ColorTweakerHost.tsx";
 import { Onboarding } from "./onboarding/Onboarding.tsx";
@@ -26,7 +26,6 @@ import { PlayPages } from "./play/PlayPages.tsx";
 import { PlayViewerLayer } from "./play/PlayViewerLayer.tsx";
 import { useGuestSignIn } from "./play/use-genex-sign-in.ts";
 import { usePlayRemixes } from "./play/use-play-remixes.ts";
-import { ItemsPage } from "./panels/items/ItemsPage.tsx";
 import { AppSidebar } from "./shell/AppSidebar.tsx";
 import { PluginsRoom, Toasts } from "./shell/store-leaves.tsx";
 import { useChatWidthVariable } from "./shell/use-shell-chrome.ts";
@@ -35,6 +34,9 @@ import { useShell } from "./shell/use-shell.ts";
 import { Workspace } from "./shell/Workspace.tsx";
 import { useEngines, usePlay, useUpdate } from "./state/hooks.ts";
 import { CodexLoginPanel } from "./ui/CodexLoginPanel.tsx";
+
+/** Create › Items, a room over the workspace: loaded the first time it opens, as most sessions never do. */
+const ItemsPage = lazy(() => import("./panels/items/ItemsPage.tsx").then((room) => ({ default: room.ItemsPage })));
 
 /** `data-room` while Plugins covers the workspace. */
 const PLUGINS_ROOM = "plugins";
@@ -71,12 +73,14 @@ function Rooms({
         />
       )}
       {chrome.itemsOpen && (
-        <ItemsPage
-          sidebarHidden={chrome.sidebarHidden}
-          onToggleSidebar={chrome.toggleSidebar}
-          onOpenGame={navigation.enterProject}
-          onNewGame={navigation.newGame}
-        />
+        <Suspense fallback={null}>
+          <ItemsPage
+            sidebarHidden={chrome.sidebarHidden}
+            onToggleSidebar={chrome.toggleSidebar}
+            onOpenGame={navigation.enterProject}
+            onNewGame={navigation.newGame}
+          />
+        </Suspense>
       )}
       {chrome.playOpen && !chrome.pluginsOpen && <PlayPages chrome={chrome} onNewGame={navigation.newGame} />}
     </>

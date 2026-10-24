@@ -104,7 +104,7 @@ const MATTHEW = "Matthew G";
 const ME = "Rab Neba";
 
 /** An item with the fixture's defaults: a durable on sale, shared with nobody. */
-const item = (id: FixtureStoreItem, name: string, fields: Partial<FixtureItem>): FixtureItem => ({
+const item = (id: string, name: string, fields: Partial<FixtureItem>): FixtureItem => ({
   id,
   name,
   description: null,
@@ -755,6 +755,49 @@ function authorsItem(state: StoreState, call: Call): FixtureItem | GalleryAnswer
 
 const isAnswer = (value: FixtureItem | GalleryAnswer): value is GalleryAnswer => "status" in value;
 
+/** The hue a new item's drawn picture takes: the fixture's stand-in for the picture it was made with. */
+const MADE_HUE = 200;
+
+/** A new item's fields as `genex shop add` and `shop sync` send them, or null when they do not read. */
+function newItemOf(
+  body: unknown,
+): Pick<FixtureItem, "name" | "description" | "type" | "priceCoins" | "tags" | "shareable"> | null {
+  if (!isRecord(body)) return null;
+  const { name, description, type, priceCoins, tags, shareable } = body;
+  const named = typeof name === "string" && name.trim() !== "";
+  const priced = typeof priceCoins === "number" && Number.isSafeInteger(priceCoins) && priceCoins >= 0;
+  const typed = type === ItemType.Durable || type === ItemType.Consumable;
+  if (!named || !priced || !typed) return null;
+  return {
+    name,
+    description: typeof description === "string" ? description : null,
+    type,
+    priceCoins,
+    tags: Array.isArray(tags) ? tags.filter((tag): tag is string => typeof tag === "string") : [],
+    shareable: shareable === true,
+  };
+}
+
+/** A new item in one of the account's games, as the CLI's `shop add` and `shop sync` make one: a draft, with its picture. */
+async function createSku(state: StoreState, call: Call): Promise<GalleryAnswer> {
+  if (!call.signedIn) return SIGNED_OUT;
+  const game = await accountGame(state, call.ids[0] ?? "");
+  if (!game) return refuse(HTTP.NotFound, StoreRefusal.ProjectNotFound);
+  const fields = newItemOf(call.body);
+  if (!fields) return { status: HTTP.Unprocessable, body: { error: StoreRefusal.NameRefused, field: "name" } };
+  state.made += 1;
+  const one = item(`fxm-${state.made}`, fields.name, {
+    ...fields,
+    home: game.slug,
+    author: ME,
+    state: ItemState.Draft,
+    hue: MADE_HUE,
+    publishedAt: null,
+  });
+  state.items.push(one);
+  return ok(await creatorView(state, one));
+}
+
 /** Put on sale: a draft or an item off sale goes on sale at once (P12); one with no picture is refused. */
 async function publish(state: StoreState, call: Call): Promise<GalleryAnswer> {
   const one = authorsItem(state, call);
@@ -860,6 +903,7 @@ const ROUTES: Readonly<Record<string, Handler>> = {
   "POST store/projects/:/allowances": addAllowance,
   "DELETE store/projects/:/allowances/:": removeAllowance,
   "GET store/selling": selling,
+  "POST coin/projects/:/skus": createSku,
   "POST coin/skus/:/publish": publish,
   "POST coin/skus/:/unpublish": unpublish,
   "PATCH coin/skus/:": patchSku,
