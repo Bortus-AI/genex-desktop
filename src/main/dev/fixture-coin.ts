@@ -18,7 +18,7 @@ import { takenAccount } from "./fixture-people.ts";
 export const FIXTURE_CONFIRM_ORIGIN = "https://confirm.genex.invalid";
 /** The coin a fixture account holds when the launch starts. */
 export const FIXTURE_BALANCE = 1240;
-/** What Get coin adds in a fixture launch, as though it were bought on genex.games. */
+/** What Get Nex adds in a fixture launch, as though it were bought on genex.games. */
 export const FIXTURE_TOP_UP = 1000;
 /** How long a purchase stays open to pay: genex.games' own intent TTL. */
 export const FIXTURE_INTENT_TTL_MS = 2 * MINUTE_MS;
@@ -47,7 +47,7 @@ export const FixtureCoinCase = {
   NoImage: "noimage",
   /** The longest name and terms a game may write. */
   Long: "long",
-  /** Costs more than the balance: Not enough coin before Pay, until Get coin tops the balance up. */
+  /** Costs more than the balance: Not enough coin before Pay, until Get Nex tops the balance up. */
   Poor: "poor",
   /** genex.games refuses Pay for want of coin (402) and ends the purchase. */
   Short: "short",
@@ -431,7 +431,7 @@ function intentAnswer(state: CoinState, pathname: string, init: Parameters<Galle
 
 /**
  * One launch's coin: `answer` answers genex.games' coin routes (null for any other route), and
- * `topUp` adds {@link FIXTURE_TOP_UP} coin, as Get coin does in a fixture launch.
+ * `topUp` adds {@link FIXTURE_TOP_UP} coin, as Get Nex does in a fixture launch.
  */
 export function createFixtureCoin(deps: FixtureCoinDeps) {
   const state: CoinState = { deps, balance: FIXTURE_BALANCE, intents: new Map() };

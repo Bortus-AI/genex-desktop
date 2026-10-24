@@ -17,7 +17,7 @@ export const GENEX_CLI_PROMPT = {
   UseTool: (command: string, tool: GenexStudioTool) =>
     `\`genex ${command}\` is ${tool} in Studio: call that tool instead.`,
   PaidTool: (command: string) =>
-    `\`genex ${command}\` spends coin or credits or changes what the game sells: call genex__cli-paid, which asks the user first.`,
+    `\`genex ${command}\` spends Nex or credits or changes what the game sells: call genex__cli-paid, which asks the user first.`,
   FreeTool: (command: string) => `\`genex ${command}\` spends nothing: call genex__cli.`,
   ReservedFlag: (name: string) => `--${name} is set by Studio and cannot be passed.`,
   UnknownOption: (command: string, name: string, allowed: readonly string[]) =>

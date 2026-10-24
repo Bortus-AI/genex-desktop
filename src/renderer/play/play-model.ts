@@ -281,7 +281,7 @@ export type PlateState = (typeof PlateState)[keyof typeof PlateState];
 export const PlateEnd = {
   /** The credits, which open Credits: in Create, and in Play while the coin is unknown. */
   Credits: "credits",
-  /** The coin the account may spend, which opens Get coin: in Play. */
+  /** The coin the account may spend, which opens Get Nex: in Play. */
   Coins: "coins",
   /** The Offline mark: neither balance is current. */
   Offline: "offline",

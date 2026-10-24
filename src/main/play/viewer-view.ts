@@ -136,7 +136,7 @@ export interface PlayViewDeps {
   coin: ViewerCoin;
   /** The app's Genex account: the purchase sheet's Sign in. */
   account: { signIn(): void };
-  /** A genex.games page the purchase sheet opens (Get coin): to the browser. */
+  /** A genex.games page the purchase sheet opens (Get Nex): to the browser. */
   openPage(url: string): void;
   /**
    * Where genex.games confirms a game's purchase (`purchaseConfirmOrigin`): the game's popup for it is

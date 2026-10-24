@@ -72,10 +72,10 @@ describe("the store sheet's one button (P7)", () => {
     assert.equal(paying.label, PLAY_WORDS.purchase.paying);
   });
 
-  it("offers Get coin, out to genex.games, while the coin is short, and Review once it lands", () => {
+  it("offers Get Nex, out to genex.games, while the coin is short, and Review once it lands", () => {
     const getCoin = storeSheetAction(short(PurchaseRecovery.Waiting));
     assert.equal(getCoin.answer, PurchaseAnswer.GetCoin);
-    assert.equal(getCoin.label, "Get coin");
+    assert.equal(getCoin.label, "Get Nex");
     assert.equal(getCoin.outside, true);
     assert.equal(storeSheetAction(short(PurchaseRecovery.Ready)).answer, PurchaseAnswer.Review);
     assert.equal(storeSheetAction(short(PurchaseRecovery.Over)).answer, PurchaseAnswer.GetCoin);
@@ -115,7 +115,7 @@ describe("the balance line under the price", () => {
     const held = { coins: 7500, releaseAt: Date.parse("2026-10-30T12:00:00.000Z") };
     assert.equal(
       storeHeldLine({ ...short(PurchaseRecovery.Waiting), held }),
-      "7,500 of your coin is on hold until Oct 30.",
+      "7,500 of your Nex is on hold until Oct 30.",
     );
     assert.equal(storeHeldLine(short(PurchaseRecovery.Waiting)), null, "nothing on hold: nothing more to say");
     assert.equal(storeHeldLine({ ...ASK, held }), null, "a balance that covers the price says nothing of it");
@@ -133,10 +133,10 @@ describe("the balance line under the price", () => {
 });
 
 describe("the note under the button", () => {
-  it("says where Get coin leads and that Pay comes back", () => {
+  it("says where Get Nex leads and that Pay comes back", () => {
     assert.equal(
       storeSheetNote(short(PurchaseRecovery.Waiting)),
-      "Opens genex.games. Pay comes back once the coin lands.",
+      "Opens genex.games. Pay comes back once the Nex lands.",
     );
   });
 
@@ -180,7 +180,7 @@ describe("what the sheet says on a game's page instead of the item's description
   it("only a refund says the coin went back; the rest say none was charged", () => {
     assert.match(storeNotice(failed(PurchaseProblem.Refunded))?.body ?? "", /went back/);
     for (const problem of [PurchaseProblem.Expired, PurchaseProblem.Canceled, PurchaseProblem.Refused])
-      assert.match(storeNotice(failed(problem))?.body ?? "", /No coin was/, problem);
+      assert.match(storeNotice(failed(problem))?.body ?? "", /No Nex was/, problem);
   });
 
   it("asks a signed-out player to sign in, then to review", () => {

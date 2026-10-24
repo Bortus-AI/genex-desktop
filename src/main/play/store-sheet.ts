@@ -80,7 +80,7 @@ export interface StoreSheetDeps {
   coin: ViewerCoin;
   /** The sheet's Sign in: the app's own Genex sign-in in the browser. */
   account: { signIn(): void };
-  /** Get coin: genex.games' coin page in the browser (a fixture launch tops its balance up instead). */
+  /** Get Nex: genex.games' coin page in the browser (a fixture launch tops its balance up instead). */
   openPage(url: string): void;
   /** The website Play links to. */
   web: string;

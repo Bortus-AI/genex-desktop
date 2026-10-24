@@ -645,7 +645,7 @@ export interface StudioApi {
   storeShelf(userId: string): Promise<ShelfItem[]>;
   /** The coin the Genex account may spend, for the account plate in Play; null signed out or with coin off. */
   storeCoins(): Promise<number | null>;
-  /** Get coin: genex.games' coin page in the browser. */
+  /** Get Nex: genex.games' coin page in the browser. */
   storeGetCoin(): Promise<void>;
   /** Store: report an item (Copy, Doesn't work, Inappropriate, Scam), as the account when there is one. */
   storeReport(itemId: string, reason: ItemReportReason, message: string | null): Promise<true | StoreRefused>;

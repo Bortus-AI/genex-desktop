@@ -1,7 +1,7 @@
 /**
  * The Genex account at the foot of the sidebar, in Play and in Create, always in the same place.
  * Signed in: its avatar, its name, and beside it the credits in Create, which open Credits, or the
- * coin it may spend in Play, which opens Get coin (the friends are listed under the games); a Pro's
+ * coin it may spend in Play, which opens Get Nex (the friends are listed under the games); a Pro's
  * name has a PRO tag, and under the pointer their row lights up
  * with their nameplate: the moving art behind the name and sparkles on the face (`nameplate/`).
  * The name opens a menu: Profile, Friends, Credits, Coin, Nameplate (Pro), Account settings and
@@ -73,13 +73,13 @@ function Credits(): JSX.Element {
   );
 }
 
-/** Get coin: genex.games' coin page in the browser; nothing to do when main cannot open it. */
+/** Get Nex: genex.games' coin page in the browser; nothing to do when main cannot open it. */
 const getCoin = (): void =>
   void studio()
     .api.storeGetCoin()
     .catch(() => undefined);
 
-/** The coin the account may spend, once read; it opens Get coin. */
+/** The coin the account may spend, once read; it opens Get Nex. */
 function Coins(): JSX.Element | null {
   const coins = usePeople((s) => s.coins);
   if (coins === null) return null;
@@ -170,7 +170,7 @@ function PlateCredits(): JSX.Element | null {
   );
 }
 
-/** The coin beside the name in Play, as last read; it opens Get coin, as the menu's Coin does. */
+/** The coin beside the name in Play, as last read; it opens Get Nex, as the menu's Coin does. */
 function PlateCoins({ coins }: { coins: number }): JSX.Element {
   const amount = formatCount(coins);
   return (

@@ -1464,12 +1464,12 @@ function playCoinFor(studio: StudioCore): PlayCoin {
 /** The store's parts: its client, the purchase sheet, and the requests both make. */
 type PlayStoreParts = Omit<StoreIpcDeps, "local" | "coin"> & { sheet: StoreSheetControl; request: GalleryRequest };
 
-/** The account's coin for the plate in Play, and Get coin, read as the purchase sheet's is (`playCoinFor`). */
+/** The account's coin for the plate in Play, and Get Nex, read as the purchase sheet's is (`playCoinFor`). */
 function plateCoinFor(studio: StudioCore): StoreIpcDeps["coin"] {
   const coin = playCoinFor(studio);
   return {
     spendable: () => coin.spendableOrNone(),
-    // Get coin: genex.games in the browser; a fixture launch opens nothing and tops its balance up.
+    // Get Nex: genex.games in the browser; a fixture launch opens nothing and tops its balance up.
     getCoin: () => {
       if (fixtureNativePolicy) fixtureGetCoin();
       else if (window) openGenexWebsitePage(studio, window, playCoinPageUrl(playOrigin.web));
@@ -1500,7 +1500,7 @@ function storeFor(studio: StudioCore): PlayStoreParts {
     world: (slug) => playCatalogFor(studio).world(slug),
     coin: playCoin(deps),
     account: { signIn: () => signInToGenex(studio) },
-    // Get coin: genex.games in the browser; a fixture launch opens nothing and tops its balance up.
+    // Get Nex: genex.games in the browser; a fixture launch opens nothing and tops its balance up.
     openPage: (url) => {
       if (fixtureNativePolicy) fixtureGetCoin();
       else if (window) openGenexWebsitePage(studio, window, url);
@@ -1517,7 +1517,7 @@ function storeFor(studio: StudioCore): PlayStoreParts {
 }
 
 /**
- * A genex.games page the app links to (Get coin): a page of Play's website opens as a sign-in page
+ * A genex.games page the app links to (Get Nex): a page of Play's website opens as a sign-in page
  * does, which takes a development website's plain http; anything else as every other link does.
  */
 function openGenexWebsitePage(studio: StudioCore, win: BrowserWindow, url: string): void {
@@ -1562,7 +1562,7 @@ function attachPlay(studio: StudioCore, win: BrowserWindow): void {
     storeShown: async (slug) => (await storeFor(studio).store.items(slug)).items.length > 0,
     coin: playCoinFor(studio),
     account: { signIn: () => signInToGenex(studio) },
-    // Get coin: genex.games in the browser; a fixture launch opens nothing and tops its balance up.
+    // Get Nex: genex.games in the browser; a fixture launch opens nothing and tops its balance up.
     openPage: (url) => {
       if (fixtureNativePolicy) fixtureGetCoin();
       else openGenexWebsitePage(studio, win, url);
