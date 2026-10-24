@@ -1104,6 +1104,8 @@ export default {
   "Couldn’t install: this game is larger than it says.":
     "Installation fehlgeschlagen: Dieses Spiel ist größer als angegeben.",
   "Couldn’t install: this game isn’t signed.": "Installation fehlgeschlagen: Dieses Spiel ist nicht signiert.",
+  "Couldn’t install: this game needs Rosetta to run on this Mac.":
+    "Installation fehlgeschlagen: Dieses Spiel braucht Rosetta auf diesem Mac.",
   "Couldn’t install: this game’s files aren’t safe to open.":
     "Installation fehlgeschlagen: Die Dateien dieses Spiels sind nicht sicher.",
   "Couldn’t load other versions.": "Andere Versionen konnten nicht geladen werden.",

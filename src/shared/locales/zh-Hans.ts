@@ -977,6 +977,8 @@ export default {
   "Couldn’t install: this game doesn’t run on this Mac.": "无法安装：这个游戏无法在这台 Mac 上运行。",
   "Couldn’t install: this game is larger than it says.": "无法安装：这个游戏比标注的更大。",
   "Couldn’t install: this game isn’t signed.": "无法安装：这个游戏没有签名。",
+  "Couldn’t install: this game needs Rosetta to run on this Mac.":
+    "无法安装：这个游戏需要 Rosetta 才能在这台 Mac 上运行。",
   "Couldn’t install: this game’s files aren’t safe to open.": "无法安装：打开这个游戏的文件不安全。",
   "Couldn’t load other versions.": "无法加载其他版本。",
   "Couldn’t load the comments": "无法加载评论",
