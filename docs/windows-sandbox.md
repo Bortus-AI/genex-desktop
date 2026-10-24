@@ -8,6 +8,13 @@ drives sandbox-runtime's srt-win backend (vendored `srt-win.exe` from `app.asar.
 commands run as the local `srt-sandbox` user under Git Bash (no Git for Windows opens the setup
 screen on `git-missing`). What differs from macOS:
 
+- A per-user install keeps `srt-win.exe` under the profile (`%LOCALAPPDATA%\genex`). The sandbox
+  account cannot walk that profile, so `CreateProcessWithLogonW` returns access denied and srt-win
+  names Secondary Logon even when the service is running. Every apply grants the account traverse
+  (no listing) from the profile down to the program, and read-execute on the program, before
+  initialize and again after srt-win's stamps. A verify that still fails (`wfp_verify_unparseable`,
+  `wfp_verify_inconclusive`, `wfp_verify_bind_failed`) opens the setup screen; Set up reinstalls
+  the account and filters.
 - Grants are NTFS ACL entries set at `initialize()` for the whole process. One
   `WindowsSandboxSession` holds the union of every `ProcessSandbox`'s roots. A folder opened later,
   or a disposed member's folders, queue one `reset()` + `initialize()` that runs once no command

@@ -2077,7 +2077,8 @@ export const SANDBOX_SETUP_WORDS = {
     "missing-tools": "This computer is missing the programs it needs:",
     "unsupported-platform":
       "This system can’t run the protected workspace. Studio needs macOS, Windows, or Linux (not WSL 1).",
-    "not-provisioned": "Windows needs a one-time setup of the protected workspace, approved by an administrator.",
+    "not-provisioned":
+      "Windows needs a one-time setup of the protected workspace, approved by an administrator. If the account is already there but cannot start, Set up repairs it.",
     "git-missing":
       "Agents run their commands in Git Bash, which comes with Git for Windows. Install it from git-scm.com, then retry.",
   } satisfies Record<SandboxProblemCode, string>,

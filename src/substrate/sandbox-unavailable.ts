@@ -18,8 +18,30 @@ import {
   type SandboxTool,
 } from "../shared/boot.ts";
 
-/** sandbox-runtime's Windows error codes that mean "not set up yet", not "broken". */
-const WINDOWS_SETUP_CODES: ReadonlySet<string> = new Set(["not_provisioned", "wfp_fence_inactive"]);
+/**
+ * sandbox-runtime's Windows error codes that mean "needs setup or repair", not "broken".
+ * The verify codes are the egress check (`srt-win wfp verify`): its logon failure is this
+ * screen, including when the account cannot read the program. `spawn_failed` stays a crash.
+ */
+const WFP_VERIFY_CODES: ReadonlySet<string> = new Set([
+  "wfp_verify_unparseable",
+  "wfp_verify_inconclusive",
+  "wfp_verify_bind_failed",
+]);
+const WINDOWS_SETUP_CODES: ReadonlySet<string> = new Set([
+  "not_provisioned",
+  "wfp_fence_inactive",
+  ...WFP_VERIFY_CODES,
+]);
+/**
+ * The sentence srt-win adds to every `CreateProcessWithLogonW` error except a wrong password
+ * and a stopped service. Access denied gets it too, so it is removed from a verify failure's
+ * detail; the code, not this sentence, decides that the failure is a setup problem.
+ */
+const SECLOGON_HINTS = [
+  "— ensure the Secondary Logon service (seclogon) is running.",
+  "- ensure the Secondary Logon service (seclogon) is running.",
+] as const;
 
 /** Why a sandboxed command could not start, when the sandbox itself is set up. */
 export const SandboxLaunchCode = {
@@ -44,6 +66,9 @@ const WINDOWS_LAUNCH_CODES: ReadonlyMap<string, SandboxLaunchCode> = new Map([
 const MESSAGE = {
   Unavailable: (problem: SandboxProblem) =>
     [`sandbox unavailable on ${problem.platform} (${problem.code})`, ...problem.details].join(": "),
+  /** Shown above a verify failure's own text, which no longer names Secondary Logon as the fix. */
+  WfpVerify:
+    "The sandbox account could not be signed in to check its network fence. Secondary Logon being stopped is only one cause; this also happens when that account cannot read the sandbox program in your user folder. Set up repairs the account and its filters.",
   Launch: {
     [SandboxLaunchCode.ArgvTooLong]:
       "The command is too long for Windows to start (over 32,767 characters). Put it in a script file and run that.",
@@ -108,6 +133,18 @@ export function sandboxProblem(check: SandboxCheck): SandboxProblem | null {
   };
 }
 
+/** A verify failure's detail without srt-win's Secondary Logon sentence, which is not the cause. */
+function verifyDetails(details: readonly string[]): string[] {
+  const kept = details
+    .map((detail) => {
+      let text = detail;
+      for (const hint of SECLOGON_HINTS) text = text.replaceAll(hint, "");
+      return text.trim();
+    })
+    .filter((detail) => detail.length > 0);
+  return [MESSAGE.WfpVerify, ...kept];
+}
+
 /** The setup problem a Windows `initialize` error stands for, by its `code`; null for any other error. */
 export function windowsSetupProblem(error: unknown, details: string[] = []): SandboxProblem | null {
   const code = error instanceof Error && "code" in error ? error.code : undefined;
@@ -117,7 +154,7 @@ export function windowsSetupProblem(error: unknown, details: string[] = []): San
     platform: StudioPlatform.Windows,
     missingTools: [],
     installCommands: [],
-    details,
+    details: WFP_VERIFY_CODES.has(code) ? verifyDetails(details) : details,
   };
 }
 

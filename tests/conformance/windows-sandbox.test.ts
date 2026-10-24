@@ -41,6 +41,7 @@ import {
   msysPath,
   msysPathList,
   renderEnvFile,
+  grantSandboxProgram,
   srtWinExecFailure,
   srtWinPath,
   windowsGrantHolders,
@@ -50,12 +51,14 @@ import {
 import {
   type FolderAceEdit,
   type FolderAceEditor,
+  FolderAceMask,
   FolderAceOp,
   folderAceCommand,
   folderAceEditor,
   folderAceOutcomes,
   FOLDER_ACE_SCRIPT,
   icaclsArgs,
+  sandboxProgramEdits,
 } from "../../src/substrate/windows-folder-ace.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
@@ -323,6 +326,17 @@ describe("an entry on one folder alone", () => {
     ]);
   });
 
+  it("asks icacls for traverse or read-execute when the grant says so", () => {
+    assert.deepEqual(
+      icaclsArgs({ dir: "C:\\Users\\Alex", sid: SID, op: FolderAceOp.Grant, mask: FolderAceMask.Traverse }),
+      ["C:\\Users\\Alex", "/grant", `*${SID}:(X,RA)`],
+    );
+    assert.deepEqual(
+      icaclsArgs({ dir: "C:\\App\\srt-win.exe", sid: SID, op: FolderAceOp.Grant, mask: FolderAceMask.ReadExecute }),
+      ["C:\\App\\srt-win.exe", "/grant", `*${SID}:(RX)`],
+    );
+  });
+
   it("uses PowerShell's answer when it gives one, and runs nothing for no edits", async () => {
     let runs = 0;
     const editor = folderAceEditor({
@@ -335,6 +349,89 @@ describe("an entry on one folder alone", () => {
     assert.deepEqual(await editor(edits), [{ ok: true }, { ok: true }]);
     assert.deepEqual(await editor([]), []);
     assert.equal(runs, 1);
+  });
+});
+
+describe("the sandbox program's own entries", () => {
+  const SID = "S-1-5-21-9";
+  const profile = "C:\\Users\\Alex";
+  const exe = [
+    profile,
+    "AppData",
+    "Local",
+    "genex",
+    "app-0.1.3",
+    "resources",
+    "app.asar.unpacked",
+    "vendor",
+    "srt-win",
+    "x64",
+    "srt-win.exe",
+  ].join("\\");
+
+  it("grants traverse from the profile down to the program, and read-execute on the program", () => {
+    const edits = sandboxProgramEdits(exe, profile, SID);
+    assert.deepEqual(edits[0], { dir: profile, sid: SID, op: FolderAceOp.Grant, mask: FolderAceMask.Traverse });
+    assert.deepEqual(edits.at(-1), { dir: exe, sid: SID, op: FolderAceOp.Grant, mask: FolderAceMask.ReadExecute });
+    assert.deepEqual(
+      edits.slice(0, -1).map((edit) => edit.dir),
+      [
+        profile,
+        `${profile}\\AppData`,
+        `${profile}\\AppData\\Local`,
+        `${profile}\\AppData\\Local\\genex`,
+        `${profile}\\AppData\\Local\\genex\\app-0.1.3`,
+        `${profile}\\AppData\\Local\\genex\\app-0.1.3\\resources`,
+        `${profile}\\AppData\\Local\\genex\\app-0.1.3\\resources\\app.asar.unpacked`,
+        `${profile}\\AppData\\Local\\genex\\app-0.1.3\\resources\\app.asar.unpacked\\vendor`,
+        `${profile}\\AppData\\Local\\genex\\app-0.1.3\\resources\\app.asar.unpacked\\vendor\\srt-win`,
+        `${profile}\\AppData\\Local\\genex\\app-0.1.3\\resources\\app.asar.unpacked\\vendor\\srt-win\\x64`,
+      ],
+    );
+    assert.ok(edits.slice(0, -1).every((edit) => edit.mask === FolderAceMask.Traverse));
+  });
+
+  it("does not grant a parent of the profile, a sibling profile, or a program that lives outside it", () => {
+    const outside = sandboxProgramEdits("C:\\Program Files\\Genex\\srt-win.exe", profile, SID);
+    assert.deepEqual(outside, [
+      {
+        dir: "C:\\Program Files\\Genex\\srt-win.exe",
+        sid: SID,
+        op: FolderAceOp.Grant,
+        mask: FolderAceMask.ReadExecute,
+      },
+    ]);
+    const sibling = sandboxProgramEdits("C:\\Users\\Alexandra\\AppData\\Local\\genex\\srt-win.exe", profile, SID);
+    assert.deepEqual(
+      sibling.map((edit) => edit.dir),
+      ["C:\\Users\\Alexandra\\AppData\\Local\\genex\\srt-win.exe"],
+    );
+    const escaped = sandboxProgramEdits(
+      `${profile}\\AppData\\..\\..\\..\\Windows\\System32\\srt-win.exe`,
+      profile,
+      SID,
+    );
+    assert.deepEqual(
+      escaped.map((edit) => edit.dir),
+      ["C:\\Windows\\System32\\srt-win.exe"],
+    );
+    const otherCase = sandboxProgramEdits(exe.toUpperCase(), "c:\\users\\alex", SID);
+    assert.equal(otherCase[0]?.mask, FolderAceMask.Traverse);
+    assert.equal(otherCase.at(-1)?.mask, FolderAceMask.ReadExecute);
+  });
+
+  it("grants nothing while the account does not exist, and a refused grant does not throw", async () => {
+    const edits: FolderAceEdit[] = [];
+    await grantSandboxProgram(exe, profile, { sid: async () => null, edit: async () => assert.fail("no account") });
+    await grantSandboxProgram(exe, profile, {
+      sid: async () => SID,
+      edit: async (batch) => {
+        edits.push(...batch);
+        throw new Error("Access is denied.");
+      },
+    });
+    assert.equal(edits[0]?.dir, profile);
+    assert.equal(edits.at(-1)?.dir, exe);
   });
 });
 
@@ -722,6 +819,46 @@ describe("the grant session", () => {
     await value.settled();
     assert.deepEqual(runtime.calls, ["initialize", "ancestors", "reset", "initialize", "ancestors"]);
     assert.deepEqual(synced.at(-1), synced[0], "every folder is granted again after the regrant");
+  });
+
+  it("lets the sandbox account run srt-win before initialize and again after the stamps", async () => {
+    const runtime = fakeSessionRuntime();
+    const ancestors: AncestorGrants = {
+      sync: async () => {
+        runtime.calls.push("ancestors");
+      },
+      revokeAll: async () => {},
+      revokeAllSync: () => {},
+    };
+    let refused = false;
+    const value = new WindowsSandboxSession({
+      runtime: runtime.runtime,
+      profile: PROFILE,
+      ancestors,
+      grantProgram: async () => {
+        runtime.calls.push("program");
+        if (!refused) {
+          refused = true;
+          throw new Error("Access is denied.");
+        }
+      },
+    });
+    const owner = {};
+    await value.join(owner, { grants: { write: [WS], read: [] }, config: BASE_CONFIG });
+    assert.deepEqual(runtime.calls, ["program", "initialize", "ancestors", "program"]);
+    value.update(owner, { write: [WS, LATE], read: [] });
+    await value.settled();
+    assert.deepEqual(runtime.calls, [
+      "program",
+      "initialize",
+      "ancestors",
+      "program",
+      "reset",
+      "program",
+      "initialize",
+      "ancestors",
+      "program",
+    ]);
   });
 
   it("a failed grant above the roots undoes the initialize and fails the join", async () => {

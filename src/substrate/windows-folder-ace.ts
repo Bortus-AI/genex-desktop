@@ -1,5 +1,5 @@
 /**
- * The sandbox user's read-attributes entry on one folder, set or taken back on that folder alone.
+ * The sandbox user's entry on one folder, set or taken back on that folder alone.
  *
  * `icacls`, like every call that sets a folder's DACL by name or handle (SetNamedSecurityInfo,
  * SetSecurityInfo, PowerShell's Set-Acl), re-propagates the folder's inheritable entries to
@@ -21,18 +21,32 @@ const run = promisify(execFile);
 
 /** What one edit does to the sandbox user's entry on its folder. */
 export const FolderAceOp = {
-  /** Allow FILE_READ_ATTRIBUTES, without inheritance: merged into an explicit allow it already has. */
+  /** Allow the edit's mask, without inheritance: merged into an explicit allow it already has. */
   Grant: "grant",
   /** Remove every explicit allow for the SID, as `icacls /remove:g` does; its denies stay. */
   Remove: "remove",
 } as const;
 export type FolderAceOp = (typeof FolderAceOp)[keyof typeof FolderAceOp];
 
-/** One change to one folder's own DACL. */
+/**
+ * Access masks a grant may ask for. Values are Win32 `FILE_*` bits.
+ * Read-attributes is the ancestor grant. Traverse walks a directory without listing it.
+ * Read-execute is `FILE_GENERIC_READ | FILE_GENERIC_EXECUTE` on a program.
+ */
+export const FolderAceMask = {
+  ReadAttributes: 0x80,
+  Traverse: 0x20 | 0x80,
+  ReadExecute: 0x120089 | 0x1200a0,
+} as const;
+export type FolderAceMask = (typeof FolderAceMask)[keyof typeof FolderAceMask];
+
+/** One change to one folder's own DACL. `dir` may be a file when the mask is read-execute. */
 export interface FolderAceEdit {
   dir: string;
   sid: string;
   op: FolderAceOp;
+  /** Grant only. Defaults to {@link FolderAceMask.ReadAttributes}. */
+  mask?: FolderAceMask;
 }
 
 /** What became of one edit: done, or the reason Windows refused it. */
@@ -75,7 +89,7 @@ foreach ($native in @(
 }
 $api = $type.CreateType()
 $DACL = 4
-$READ_ATTRIBUTES = 0x80
+$READ_ATTRIBUTES = ${FolderAceMask.ReadAttributes}
 # Read the call's error before anything else runs: a function call or a variable lookup in
 # between makes PowerShell's own calls, which overwrite it.
 function Refused($code) { New-Object ComponentModel.Win32Exception ([int]$code) }
@@ -83,19 +97,19 @@ function ExplicitAllow($ace, $sid) {
   ($ace -is [Security.AccessControl.QualifiedAce]) -and (-not $ace.IsInherited) -and
     ($ace.AceQualifier -eq [Security.AccessControl.AceQualifier]::AccessAllowed) -and ($ace.SecurityIdentifier -eq $sid)
 }
-function Grant($acl, $sid) {
+function Grant($acl, $sid, $mask) {
   for ($i = 0; $i -lt $acl.Count; $i++) {
     $ace = $acl[$i]
     if ((ExplicitAllow $ace $sid) -and $ace.AceFlags -eq [Security.AccessControl.AceFlags]::None) {
-      if (($ace.AccessMask -band $READ_ATTRIBUTES) -ne 0) { return $false }
-      $ace.AccessMask = $ace.AccessMask -bor $READ_ATTRIBUTES
+      if (($ace.AccessMask -band $mask) -eq $mask) { return $false }
+      $ace.AccessMask = $ace.AccessMask -bor $mask
       $acl[$i] = $ace
       return $true
     }
   }
   $at = 0
   while ($at -lt $acl.Count -and -not $acl[$at].IsInherited -and "$($acl[$at].AceType)" -like '*Denied*') { $at++ }
-  $acl.InsertAce($at, (New-Object Security.AccessControl.CommonAce([Security.AccessControl.AceFlags]::None, [Security.AccessControl.AceQualifier]::AccessAllowed, $READ_ATTRIBUTES, $sid, $false, $null)))
+  $acl.InsertAce($at, (New-Object Security.AccessControl.CommonAce([Security.AccessControl.AceFlags]::None, [Security.AccessControl.AceQualifier]::AccessAllowed, $mask, $sid, $false, $null)))
   return $true
 }
 function Remove($acl, $sid) {
@@ -116,7 +130,9 @@ function Edit($edit) {
   $acl = $sd.DiscretionaryAcl
   if ($null -eq $acl) { return }
   $sid = New-Object Security.Principal.SecurityIdentifier ([string]$edit.sid)
-  $changed = if ($edit.op -eq '${FolderAceOp.Grant}') { Grant $acl $sid } else { Remove $acl $sid }
+  $mask = $READ_ATTRIBUTES
+  if ($null -ne $edit.mask) { $mask = [int]$edit.mask }
+  $changed = if ($edit.op -eq '${FolderAceOp.Grant}') { Grant $acl $sid $mask } else { Remove $acl $sid }
   if (-not $changed) { return }
   $sd.DiscretionaryAcl = $acl
   $out = New-Object byte[] $sd.BinaryLength
@@ -166,11 +182,52 @@ export function folderAceOutcomes(stdout: string, count: number): FolderAceOutco
   }
 }
 
+/** The `icacls` spelling of a grant mask. A grant with no mask is read-attributes. */
+const ICACLS_RIGHTS = {
+  [FolderAceMask.ReadAttributes]: "(RA)",
+  [FolderAceMask.Traverse]: "(X,RA)",
+  [FolderAceMask.ReadExecute]: "(RX)",
+} as const satisfies Record<FolderAceMask, string>;
+
 /** The `icacls` arguments that make the same change, walking everything under the folder. */
 export function icaclsArgs(edit: FolderAceEdit): string[] {
-  return edit.op === FolderAceOp.Grant
-    ? [edit.dir, "/grant", `*${edit.sid}:(RA)`]
-    : [edit.dir, "/remove:g", `*${edit.sid}`];
+  if (edit.op !== FolderAceOp.Grant) return [edit.dir, "/remove:g", `*${edit.sid}`];
+  return [edit.dir, "/grant", `*${edit.sid}:${ICACLS_RIGHTS[edit.mask ?? FolderAceMask.ReadAttributes]}`];
+}
+
+const win = path.win32;
+
+/** A Windows path's identity: resolved and case-folded, as NTFS compares names. */
+function pathKey(file: string): string {
+  return win.resolve(file).toLowerCase();
+}
+
+/** Is `target` `profile` itself or inside it, by Windows path rules? */
+function insideProfile(profile: string, target: string): boolean {
+  const root = pathKey(profile);
+  const key = pathKey(target);
+  const prefix = root.endsWith("\\") ? root : `${root}\\`;
+  return key === root || key.startsWith(prefix);
+}
+
+/**
+ * Entries that let the sandbox account run `exe`. Under the profile, traverse (no listing) on
+ * every directory from the profile down to the program. Always read-execute on the program.
+ * Nothing above the profile: `C:\` and another user's folder stay untouched.
+ */
+export function sandboxProgramEdits(exe: string, profile: string, sid: string): FolderAceEdit[] {
+  const program = win.resolve(exe);
+  const edits: FolderAceEdit[] = [];
+  if (insideProfile(profile, program)) {
+    const dirs: string[] = [];
+    for (let dir = win.dirname(program); insideProfile(profile, dir); dir = win.dirname(dir)) {
+      dirs.push(dir);
+      if (pathKey(dir) === pathKey(profile)) break;
+    }
+    for (const dir of dirs.reverse()) edits.push({ dir, sid, op: FolderAceOp.Grant, mask: FolderAceMask.Traverse });
+  }
+  edits.push({ dir: program, sid, op: FolderAceOp.Grant, mask: FolderAceMask.ReadExecute });
+  return edits;
 }
 
 /** A failed icacls call's own words: Node's message names only the command, icacls writes to stdout. */

@@ -15,6 +15,9 @@
  *    They are granted after srt-win initializes, every time: its deny stamp puts a deny on each
  *    denied path's parent that replaces the sandbox user's entry there (userData, the parent of
  *    the secrets folder, lost its grant that way), and its reset removes that entry.
+ *    A per-user install keeps srt-win under the profile, which the sandbox account cannot walk.
+ *    Each apply grants it traverse down to that program and read-execute on the program, before
+ *    initialize and again after the stamps ({@link grantSandboxProgram}).
  *  - The environment given to `spawn()` never reaches the child: it starts with the sandbox
  *    user's own. A run's variables travel in an env file in its scratch folder that the command
  *    sources first and deletes ({@link renderEnvFile}).
@@ -40,6 +43,7 @@ import {
   type FolderAceEditor,
   type FolderAceEditorSync,
   FolderAceOp,
+  sandboxProgramEdits,
 } from "./windows-folder-ace.ts";
 
 const win = path.win32;
@@ -664,6 +668,11 @@ export interface WindowsSessionDeps {
   ancestors: AncestorGrants;
   /** Filters deny paths before they reach srt-win ({@link keepWindowsDenies}). */
   keepDenies?: (paths: readonly string[], scope: DenyScope) => string[];
+  /**
+   * Lets the sandbox account run srt-win. Called before every initialize and again after
+   * srt-win's stamps. A refusal must not throw: initialize reports the typed failure.
+   */
+  grantProgram?: () => Promise<void>;
 }
 
 /**
@@ -829,8 +838,12 @@ export class WindowsSandboxSession {
       this.#applied = null;
       if (wasApplied) await this.#deps.runtime.reset();
       const denies = [...this.#members.values()].flatMap(memberDenies);
+      // Before initialize, so the egress check can sign in as the sandbox account, and again
+      // after the stamps, which can replace that account's entry on a parent folder.
+      await this.#grantProgram();
       await this.#initialize(this.#config(grants));
       await this.#grantAncestors(grants);
+      await this.#grantProgram();
       this.#applied = grants;
       this.#appliedDenies = new Set(denies.map(pathKey));
       if (this.#networkChanged) this.#deps.runtime.updateConfig(this.#config(grants));
@@ -852,6 +865,11 @@ export class WindowsSandboxSession {
     this.#appliedDenies = new Set();
     if (wasApplied) await this.#deps.runtime.reset();
     await this.#deps.ancestors.revokeAll();
+  }
+
+  /** The sandbox account's access to srt-win. A refusal is ignored; initialize then says why. */
+  async #grantProgram(): Promise<void> {
+    await this.#deps.grantProgram?.().catch(() => {});
   }
 
   /**
@@ -907,6 +925,33 @@ export function windowsGrantHolders(profile: string, localAppData = process.env.
   return win.join(localAppData || win.join(profile, "AppData", "Local"), GRANT_HOLDERS);
 }
 
+/** How {@link grantSandboxProgram} finds the account and writes entries. The defaults are the real ones. */
+export interface SandboxProgramGrantDeps {
+  /** The `srt-sandbox` SID, or null while the sandbox is not provisioned. Default: {@link srtSandboxSid}. */
+  sid?: () => Promise<string | null>;
+  /** Applies the entries (default {@link editFolderAces}). */
+  edit?: FolderAceEditor;
+}
+
+/**
+ * Let the sandbox account read and run `exe` before srt-win signs in as that account.
+ * No account yet, or a folder Windows will not change, is not a failure: initialize reports
+ * the typed setup problem, and the setup screen can repair the account.
+ */
+export async function grantSandboxProgram(
+  exe: string,
+  profile: string,
+  deps: SandboxProgramGrantDeps = {},
+): Promise<void> {
+  try {
+    const sid = await (deps.sid ?? (() => srtSandboxSid(exe)))();
+    if (!sid) return;
+    await (deps.edit ?? editFolderAces)(sandboxProgramEdits(exe, profile, sid));
+  } catch {
+    /* the following initialize is what the window reports */
+  }
+}
+
 /** The `srt-sandbox` user's SID, or null while the sandbox is not provisioned. */
 export async function srtSandboxSid(srtWin: string): Promise<string | null> {
   try {
@@ -933,7 +978,12 @@ export function windowsSessionFor(
   if (existing) return existing;
   const holders = windowsGrantHolders(options.profile);
   const ancestors = ancestorGrants(holders, { sid: () => srtSandboxSid(options.srtWin) });
-  const session = new WindowsSandboxSession({ runtime, profile: options.profile, ancestors });
+  const session = new WindowsSandboxSession({
+    runtime,
+    profile: options.profile,
+    ancestors,
+    grantProgram: () => grantSandboxProgram(options.srtWin, options.profile),
+  });
   process.once("exit", () => ancestors.revokeAllSync());
   sessions.set(runtime, session);
   return session;

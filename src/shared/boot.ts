@@ -27,7 +27,7 @@ export const SandboxProblemCode = {
   MissingTools: "missing-tools",
   /** An operating system (or WSL 1) sandbox-runtime cannot contain processes on. */
   UnsupportedPlatform: "unsupported-platform",
-  /** Windows: the sandbox user and its network filter have not been installed yet. */
+  /** Windows: the sandbox user and its network filter are missing, or the account cannot start. */
   NotProvisioned: "not-provisioned",
   /** Windows: Git for Windows is not installed, so there is no Git Bash to run commands in. */
   GitMissing: "git-missing",
