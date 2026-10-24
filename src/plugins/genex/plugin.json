@@ -1,7 +1,7 @@
 {
   "apiVersion": 3,
   "id": "genex",
-  "version": "1.10.35",
+  "version": "1.10.36",
   "name": "Genex plugin",
   "publisher": "Genex",
   "description": "3D models, characters, sound and art for your games, made in chat with Genex credits. Coding stays on your own provider.",
@@ -223,7 +223,7 @@
     {
       "name": "genex-items",
       "engines": ["web"],
-      "summary": "Read first when anything is priced in Nex, Genex's currency, or is to be sold for real money: each such thing is a store item, listed with genex__cli-paid shop add without asking, so its card shows, before publish too. Coins or gold are the game's own. Also: getEntitlements(), items add.",
+      "summary": "Read first when anything is priced in Nex, Genex's currency, or is to be sold for real money: list each such thing with genex__cli-paid shop add first, without asking and before the SDK or publish, so its card shows. Coins or gold are the game's own. Also: getEntitlements(), items add.",
       "file": "skills/genex-items/SKILL.md"
     },
     {
