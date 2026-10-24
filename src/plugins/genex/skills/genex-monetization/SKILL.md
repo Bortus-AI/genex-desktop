@@ -26,7 +26,7 @@ unchanged. Where it disagrees with this preface, this preface wins.
 - Other commands map onto Studio tools as the `genex` skill describes
   (`genex__skill {"name":"genex"}`).
 
-<!-- upstream genex-demo@claude/marketplace(c61f99a86):apps/cli/templates/skills/genex-monetization/SKILL.md v1.36.14 sha256 058581a7f0a2b83e0c510b1e8f01aa169a9be98ee963b2428389d4d466319f19 -->
+<!-- upstream @genex-ai/cli-demo/templates/skills/genex-monetization/SKILL.md v1.36.15 sha256 8fadc7b7500c8e68b8e766c526e9dd33e76e64a0d4d972cc57d5278eabdf6abd -->
 ---
 name: genex-monetization
 description: Add dynamic coin payments for game goods or actions — platform consent, recoverable receipts, and idempotent delivery without a required product catalog. Use when the player asks to sell things, add a shop, monetize, or make the game earn. Carries the hard rules: no paid randomness, no gambling in coin, no donation mechanics, and a real-money price beside every coin price.
@@ -144,7 +144,15 @@ currency without touching balance.
 
 ## Dynamic payment requests
 
-From `@genex-ai/embed-sdk`, after `initEmbed()` and player identity are ready:
+Requires `@genex-ai/embed-sdk` **>= 0.33.0**. Earlier versions, including
+`^0.32.0`, do not export these payment helpers. Update the game's dependency
+before wiring them, then rebuild and publish the game:
+
+```bash
+npm install @genex-ai/embed-sdk@latest
+```
+
+After `initEmbed()` and player identity are ready:
 
 ```ts
 import { requestPayment, getPayment, getPayments } from '@genex-ai/embed-sdk';
@@ -280,7 +288,9 @@ and `priceDisplayUsdCents`; use an image of the actual item for its icon.
 removing a buyer's ownership. When the Genex store is on, `genex shop add`
 makes a draft: `getShop()` leaves it out of the live game and `buy()` cannot
 sell it until the person puts it on sale. Add `--json` so the Genex app shows
-its **Put on sale** card, and never put it on sale yourself.
+its **Put on sale** card, and never put it on sale yourself. Before the game
+is published, items can be made all the same: they wait as local drafts and go
+up as drafts with `genex publish`; still, only the person puts one on sale.
 
 Items for the Genex store — a picture, a description, a draft the person puts
 on sale, items other games can use, and adding another creator's item — are

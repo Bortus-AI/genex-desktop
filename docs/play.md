@@ -368,7 +368,7 @@ frame only, `STUDIO_UI_ONLY`); prices, shares and counts are genex.games' own, n
   says On sale, and `picture_missing` / `picture_invalid` ask the agent to upload the picture. The
   agent's `shop add|set` takes the description, tags, sharing, Free and the game's picture, model
   and package files ([host tools](plugins.md#first-party-privileges)). The card needs CLI 1.36.14
-  (`kind`/`version` in `--json`); the pin is 1.36.13 until it is on npm.
+  (`kind`/`version` in `--json`); the pin is 1.36.15.
 - **Local drafts** (an item made before its game is on Genex, contract "Local item drafts"): the CLI
   keeps it in the game's `.genex/items/` (`<localId>.json` and a `<localId>/` folder). Studio copies
   those drafts into each `shop` run's folder and carries a `shop add|set|remove`'s change back
