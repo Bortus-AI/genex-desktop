@@ -539,7 +539,10 @@ the last no's `done` and `notDone`, why it stopped (`StopWhy`: its time, the no'
 its hours (`loopHoursOf`); a time-out with no no lists nothing and still has the card. The chat's card
 reads only that, so a page that lost the run's start still shows it. A Stop pauses every Loop (a web
 finish whose landing it refused too; one after the landing ends nothing more), and a pause keeps its
-own reason and Resume. Keep building is offered on the
+own reason and Resume. A Stop while a web Loop first looks at the game ends that look at once
+(`director/setup.ts` `lookAtStart`, `observeStart`): a page that never answers holds each call for
+the host's whole deadline, and the run closes as the user's stop instead of waiting it out. Keep
+building is offered on the
 chat's newest card until the person writes again, and on Builds' newest ended build, while nothing runs
 or waits paused. It sends through the composer's Loop (`loopOn`) marked `keepBuilding`, and goes once
 it went out. That mark reopens the finished build, or launches the next Loop as the launch tool would (an
