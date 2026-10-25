@@ -2424,6 +2424,7 @@ export default {
   "No comments on {title} yet": "Ainda não há comentários em {title}",
   "No compatible newer release is available for this installed plugin":
     "Não há uma versão mais nova e compatível para este plugin instalado",
+  "No cover yet, so it goes out without a picture.": "Ainda não tem capa, então ele vai sair sem imagem.",
   "No dash at the ends": "Sem hífen no início ou no fim",
   "No friends yet — send your link and play together.": "Nenhum amigo ainda — envie seu link e joguem juntos.",
   "No games for “{query}”.": "Nenhum jogo para “{query}”.",
@@ -6182,6 +6183,8 @@ export default {
   "That price isn’t one the store takes. Ask the agent to pick another.":
     "A loja não aceita esse preço. Peça ao agente para escolher outro.",
   "The item store is off right now.": "A loja de itens está desligada agora.",
+  "This game is still the empty starter: build something first, then publish.":
+    "Este jogo ainda é o projeto inicial vazio: crie algo primeiro e depois publique.",
   "This game sells as many items as it can.": "Este jogo já vende o máximo de itens possível.",
   "You get per sale": "Você recebe por venda",
   "You get per sale ({share})": "Você recebe por venda ({share})",

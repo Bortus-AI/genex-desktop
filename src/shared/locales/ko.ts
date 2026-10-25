@@ -2318,6 +2318,7 @@ export default {
   "No comments on {title} yet": "{title}에 아직 댓글이 없어요",
   "No compatible newer release is available for this installed plugin":
     "설치된 이 플러그인에 호환되는 새 버전이 없어요",
+  "No cover yet, so it goes out without a picture.": "아직 커버가 없어서 사진 없이 공개돼요.",
   "No dash at the ends": "양 끝에 대시 불가",
   "No friends yet — send your link and play together.": "아직 친구가 없어요 — 링크를 보내고 같이 플레이해 보세요.",
   "No games for “{query}”.": "“{query}”에 해당하는 게임이 없어요.",
@@ -5966,6 +5967,8 @@ export default {
   "That price isn’t one the store takes. Ask the agent to pick another.":
     "스토어에서 받지 않는 가격이에요. 에이전트에게 다른 가격을 골라 달라고 하세요.",
   "The item store is off right now.": "지금은 아이템 스토어가 꺼져 있어요.",
+  "This game is still the empty starter: build something first, then publish.":
+    "이 게임은 아직 빈 시작 프로젝트예요. 먼저 뭔가 만들고 나서 공개하세요.",
   "This game sells as many items as it can.": "이 게임은 이미 최대한 많은 아이템을 팔고 있어요.",
   "You get per sale": "판매당 받는 금액",
   "You get per sale ({share})": "판매당 받는 금액 ({share})",

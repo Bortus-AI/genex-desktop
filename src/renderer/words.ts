@@ -4697,6 +4697,8 @@ export const GENEX_WORDS = {
     coverLeft: (minutes: number) => t("~{minutes} min", { minutes }),
     /** Under the presses while the agent makes it: who is making it, and where it shows. */
     coverMakingSoon: t("The agent is making it in the chat. It shows here when it’s ready."),
+    /** Under the presses when the game has no picture to go out with. */
+    withoutCover: t("No cover yet, so it goes out without a picture."),
     /** What Another cover sends in the game's chat, with what the person typed. */
     coverAnotherPrompt: (want: string) =>
       want

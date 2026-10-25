@@ -2236,6 +2236,7 @@ export default {
   "No checks yet": "暂无检查",
   "No comments on {title} yet": "{title} 还没有评论",
   "No compatible newer release is available for this installed plugin": "这个已安装的插件没有可用的兼容新版本",
+  "No cover yet, so it goes out without a picture.": "还没有封面，所以会不带图片发布。",
   "No dash at the ends": "开头和结尾不能是短横线",
   "No friends yet — send your link and play together.": "还没有好友——发送你的链接，一起玩吧。",
   "No games for “{query}”.": "没有与“{query}”匹配的游戏。",
@@ -5763,6 +5764,8 @@ export default {
   "Take off sale": "下架",
   "That price isn’t one the store takes. Ask the agent to pick another.": "商店不接受这个价格。请让智能体换一个价格。",
   "The item store is off right now.": "物品商店目前已关闭。",
+  "This game is still the empty starter: build something first, then publish.":
+    "这个游戏还是空的初始项目：先做点东西，再发布。",
   "This game sells as many items as it can.": "这个游戏出售的物品已达上限。",
   "You get per sale": "每笔销售你获得",
   "You get per sale ({share})": "每笔销售你获得（{share}）",

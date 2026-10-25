@@ -2374,6 +2374,7 @@ export default {
   "No comments on {title} yet": "{title}にはまだコメントがありません",
   "No compatible newer release is available for this installed plugin":
     "このインストール済みプラグインに、互換性のある新しいリリースはありません",
+  "No cover yet, so it goes out without a picture.": "まだカバーがないので、画像なしで公開されます。",
   "No dash at the ends": "先頭と末尾にハイフンは使えません",
   "No friends yet — send your link and play together.": "フレンドはまだいません。リンクを送って一緒に遊びましょう。",
   "No games for “{query}”.": "「{query}」に一致するゲームはありません。",
@@ -6099,6 +6100,8 @@ export default {
   "That price isn’t one the store takes. Ask the agent to pick another.":
     "この価格はストアで使えません。エージェントに別の価格を選んでもらいましょう。",
   "The item store is off right now.": "アイテムストアは現在停止中です。",
+  "This game is still the empty starter: build something first, then publish.":
+    "このゲームはまだ空のスタータープロジェクトです。何か作ってから公開してね。",
   "This game sells as many items as it can.": "このゲームはすでに上限までアイテムを販売しています。",
   "You get per sale": "1回の売上での受け取り",
   "You get per sale ({share})": "1回の売上での受け取り（{share}）",
