@@ -23,6 +23,7 @@ const REFRESHABLE: ReadonlySet<string> = new Set([
   EngineId.Codex,
   EngineId.OpenCode,
   EngineId.Grok,
+  EngineId.Cursor,
   EngineId.OpenRouter,
   EngineId.LocalServer,
 ]);
@@ -30,6 +31,7 @@ const REFRESHABLE: ReadonlySet<string> = new Set([
 const RECHECKED_BY_MODELS: readonly string[] = [
   EngineId.OpenCode,
   EngineId.Grok,
+  EngineId.Cursor,
   EngineId.OpenRouter,
   EngineId.LocalServer,
 ];

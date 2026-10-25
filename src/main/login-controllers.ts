@@ -8,6 +8,7 @@ import { UiEvent } from "../shared/ui-events.ts";
 import { findClaudeBinary } from "../substrate/engines/claude-cli.ts";
 import { requireCodingCli } from "../substrate/engines/external-cli.ts";
 import { openCodeSignInArgs } from "../substrate/engines/opencode-cli.ts";
+import { CURSOR_FILE_STORE, CursorCommand } from "../substrate/engines/cursor-cli.ts";
 import { childEnv } from "../substrate/child-env.ts";
 import { grokHome } from "../substrate/credential-homes.ts";
 import type { ClaudeLoginState } from "../shared/claude-login.ts";
@@ -69,6 +70,8 @@ export interface LoginControllerDeps {
   onOpenCodeSignedIn?(): Promise<unknown>;
   /** Grok Build's sign-in ended: read whose sign-in it runs on, and its models, now. */
   onGrokSignedIn?(): Promise<unknown>;
+  /** Cursor's sign-in ended: check the sign-in and read the models it can run now. */
+  onCursorSignedIn?(): Promise<unknown>;
   /** The installed CLI each sign-in runs; the studio's own resolver unless a test gives another. */
   requireCli?: typeof requireCodingCli;
   findBinary?: typeof findClaudeBinary;
@@ -85,11 +88,13 @@ export function createLoginControllers({
   findBinary = findClaudeBinary,
   onOpenCodeSignedIn,
   onGrokSignedIn,
+  onCursorSignedIn,
 }: LoginControllerDeps): {
   codexLogin: CodexLoginController;
   claudeLogin: ClaudeLoginController;
   openCodeLogin: OpenCodeLogin;
   grokLogin: CliLogin;
+  cursorLogin: CliLogin;
 } {
   let lastCodexLoginPhase = "idle";
   const codexLogin = new CodexLoginController({
@@ -185,10 +190,47 @@ export function createLoginControllers({
       return { started: true };
     },
   };
-  return { codexLogin, claudeLogin, openCodeLogin, grokLogin };
+  const cursorLogin = cursorSignIn({ terminals, requireCli, onCursorSignedIn });
+  return { codexLogin, claudeLogin, openCodeLogin, grokLogin, cursorLogin };
 }
 
-/** A CLI's own sign-in, run in a terminal in its Settings row; the CLI keeps what it is given. */
+/**
+ * Cursor's sign-in: `cursor-agent login` in a terminal in its Settings row, its sign-in kept in its
+ * file as every session reads it (never the Keychain, which no sandboxed session reaches); when the
+ * terminal closes, the studio checks the sign-in and reads the models again.
+ */
+function cursorSignIn({
+  terminals,
+  requireCli,
+  onCursorSignedIn,
+}: Pick<LoginControllerDeps, "terminals" | "onCursorSignedIn"> & {
+  requireCli: typeof requireCodingCli;
+}): CliLogin {
+  return {
+    async start() {
+      const cli = await requireCli(EngineId.Cursor).catch(() => null);
+      if (!cli) return { started: false, missingCli: true };
+      terminals.open({
+        file: cli.path,
+        args: [CursorCommand.SignIn],
+        cwd: os.tmpdir(),
+        // No other vendor's variables and no credential: the person signs in with their account.
+        env: childEnv(cli.env, { base: "contractor", vendor: "cursor", set: { ...CURSOR_FILE_STORE } }),
+        title: t("Cursor sign-in"),
+        kind: TerminalKind.CursorLogin,
+        onExit: () => {
+          void onCursorSignedIn?.()?.catch(() => {});
+        },
+      });
+      return { started: true };
+    },
+  };
+}
+
+/**
+ * A CLI's own sign-in, run in a terminal in its Settings row; the CLI keeps what it is given. Cursor
+ * opens the browser itself and prints the page too; its account goes into its own file.
+ */
 export interface CliLogin {
   start(): Promise<{ started: boolean; missingCli?: boolean }>;
 }

@@ -537,6 +537,7 @@ export default {
   "Ben-Day": "Ben-Day",
   "Best fit": "Mejor opción",
   Better: "Mejora",
+  Beta: "Beta",
   "Between builds": "Entre builds",
   "Billed by each provider you use": "Cada proveedor que uses te cobra aparte",
   "Billed by each provider you use.": "Te cobra cada proveedor que uses.",
@@ -853,6 +854,18 @@ export default {
     "La búsqueda de habilidades de Codex se cerró. Actualiza para reintentar.",
   "Codex skill discovery timed out. Refresh to retry.":
     "La búsqueda de habilidades de Codex tardó demasiado. Actualiza para reintentar.",
+  "Cursor didn't answer. Check the installation, then try again.":
+    "Cursor no respondió. Revisa la instalación y vuelve a intentarlo.",
+  "Cursor is unavailable": "Cursor no está disponible",
+  "Cursor isn't installed on this computer.": "Cursor no está instalado en este equipo.",
+  "Cursor sign-in": "Inicio de sesión de Cursor",
+  "Cursor {version}, {count, plural, other {# model(s)}}":
+    "Cursor {version}, {count, plural, one {# modelo} other {# modelos}}",
+  "Cursor's CLI forgets this computer's sign-in": "La CLI de Cursor olvida el inicio de sesión de este equipo",
+  "Cursor's model list could not be read.": "No se pudo leer la lista de modelos de Cursor.",
+  "Cursor's sign-in status could not be read.": "No se pudo leer el estado de inicio de sesión de Cursor.",
+  "Finish signing in to Cursor in your browser. Cursor keeps the sign-in.":
+    "Termina de iniciar sesión en Cursor en tu navegador. Cursor guarda la sesión.",
   "Finish signing in to Grok in your browser.": "Termina de iniciar sesión en Grok en tu navegador.",
   "Grok Build didn't answer. Check the installation, then try again.":
     "Grok Build no respondió. Revisa la instalación y vuelve a intentarlo.",
@@ -862,9 +875,13 @@ export default {
   "Grok Build {version}, {count, plural, one {# model} other {# models}}":
     "Grok Build {version}, {count, plural, one {# modelo} other {# modelos}}",
   "Grok Build's model list could not be read.": "No se pudo leer la lista de modelos de Grok Build.",
+  "Install Cursor": "Instalar Cursor",
+  "Install Cursor from Settings › Model Providers.": "Instala Cursor desde Ajustes › Proveedores de modelos.",
+  "Install Cursor's CLI to build with your Cursor plan.": "Instala la CLI de Cursor para crear con tu plan de Cursor.",
   "Install Grok Build": "Instalar Grok Build",
   "Install Grok Build from Settings › Model Providers.": "Instala Grok Build desde Ajustes › Proveedores de modelos.",
   "Install it to build games with your Grok account.": "Instálalo para crear juegos con tu cuenta de Grok.",
+  "Installing Cursor. This can take a minute.": "Instalando Cursor. Puede tardar un minuto.",
   "Installing Grok Build. This can take a minute.": "Instalando Grok Build. Puede tardar un minuto.",
   "Nex lives in your Genex account. Sign in once, then pay here.":
     "Tus Nex están en tu cuenta de Genex. Inicia sesión una vez y paga aquí.",
@@ -1695,14 +1712,23 @@ export default {
   "Get a key": "Obtener una clave",
   "Get Nex": "Conseguir Nex",
   Nex: "Nex",
+  "Not signed in to Cursor.": "No has iniciado sesión en Cursor.",
   "Runs on your Grok account": "Funciona con tu cuenta de Grok",
   "Sign in again…": "Volver a iniciar sesión…",
+  "Sign in to Cursor from Settings › Model Providers.":
+    "Inicia sesión en Cursor desde Ajustes › Proveedores de modelos.",
   "Sign in to Grok from Settings › Model Providers.": "Inicia sesión en Grok desde Ajustes › Proveedores de modelos.",
+  "Sign in with your Cursor account to build with your plan.":
+    "Inicia sesión con tu cuenta de Cursor para crear con tu plan.",
   "Sign in with your Grok account. Grok Build keeps the sign-in.":
     "Inicia sesión con tu cuenta de Grok. Grok Build guarda la sesión.",
+  "Switch to another Cursor account": "Cambiar a otra cuenta de Cursor",
   "Switch to another Grok account": "Cambiar a otra cuenta de Grok",
+  "Update Cursor": "Actualizar Cursor",
   "Update Grok Build": "Actualizar Grok Build",
   "Update Grok Build from Settings › Model Providers.": "Actualiza Grok Build desde Ajustes › Proveedores de modelos.",
+  "Uses your Cursor plan": "Usa tu plan de Cursor",
+  "Your Cursor account has no model it can run.": "Tu cuenta de Cursor no tiene ningún modelo que pueda ejecutar.",
   "xAI blocked this Grok account: {reason}": "xAI bloqueó esta cuenta de Grok: {reason}",
   "xAI no longer accepts this Grok Build.": "xAI ya no acepta esta versión de Grok Build.",
   "xAI no longer accepts this version. Update it to keep building.":

@@ -426,6 +426,8 @@ function accountCalls(bridge: BridgeCalls) {
     claudeLoginCancel: () => invoke("studio:claude-login.cancel"),
     openCodeSignIn: () => invoke("studio:opencode.signin"),
     grokSignIn: () => invoke("studio:grok.signin"),
+    cursorSignIn: () => invoke("studio:cursor.signin"),
+    cursorSignOut: () => invoke("studio:cursor.signout"),
     openRouterKeySave: (key) => invoke("studio:openrouter.key.save", { key }),
     openRouterKeyClear: () => invoke("studio:openrouter.key.clear"),
     openRouterSignIn: () => invoke("studio:openrouter.signin"),

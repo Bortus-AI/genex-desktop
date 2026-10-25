@@ -1,6 +1,6 @@
 /**
  * Settings → Model Providers, the metered rows: OpenCode, which signs in to providers itself in
- * Studio's terminal, Grok Build, which signs in to the person's Grok account there the same way,
+ * Studio's terminal, Grok Build and Cursor, which sign in to the person's account there the same way,
  * and OpenRouter, whose API key is pasted here. Each row keeps the shape of a
  * subscription's (`ModelsSection.tsx`): one status plate, one line, at most one visible action, an
  * Account menu once connected, and the picker's model list under it. The OpenRouter key goes
@@ -10,7 +10,7 @@
 import { type JSX, lazy, Suspense, useState } from "react";
 import { type EngineStatus, EngineStatusCode } from "../../shared/engine-descriptor.ts";
 import { t } from "../../shared/i18n.ts";
-import { EngineId } from "../../shared/providers.ts";
+import { EngineId, isBeta } from "../../shared/providers.ts";
 import type { EngineDescriptor } from "../types.ts";
 import { Button } from "../ui/Button.tsx";
 import {
@@ -119,6 +119,7 @@ export function ProviderCard({
         tone={checking ? RowTone.Busy : view.tone}
         status={checking ? WORDS.checking : view.status}
         view={view}
+        beta={isBeta(engine.id)}
       />
       {children}
       {connected && <PickerModels engine={engine} name={words.name} />}
@@ -272,6 +273,7 @@ function OpenRouterRow({
 export function MeteredProviderRows({ engines, onEnginesRefresh }: MeteredProviderProps): JSX.Element {
   const openCode = engines.find((engine) => engine.id === EngineId.OpenCode);
   const grok = engines.find((engine) => engine.id === EngineId.Grok);
+  const cursor = engines.find((engine) => engine.id === EngineId.Cursor);
   const openRouter = engines.find((engine) => engine.id === EngineId.OpenRouter);
   return (
     <>
@@ -281,6 +283,7 @@ export function MeteredProviderRows({ engines, onEnginesRefresh }: MeteredProvid
           <CliSignInRow engine={openCode} onEnginesRefresh={onEnginesRefresh} provider={EngineId.OpenCode} />
         )}
         {grok && <CliSignInRow engine={grok} onEnginesRefresh={onEnginesRefresh} provider={EngineId.Grok} />}
+        {cursor && <CliSignInRow engine={cursor} onEnginesRefresh={onEnginesRefresh} provider={EngineId.Cursor} />}
       </Suspense>
       {openRouter && <OpenRouterRow engine={openRouter} onEnginesRefresh={onEnginesRefresh} />}
     </>

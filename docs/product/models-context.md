@@ -22,9 +22,9 @@ surviving a main-agent change. Each Ollama job takes its own model; Reviewers mu
 check a Loop's finish.
 
 Local Models (Bonsai/Ollama) downloads and deletes. Metered
-[OpenRouter, OpenCode](../connections-and-context.md#openrouter-and-opencode) and
-[Grok Build](../connections-and-context.md#grok-build) are never auto-chosen unless Free and alone;
-the first two show three, no default. Local server connects your LM
+[OpenRouter, OpenCode](../connections-and-context.md#openrouter-and-opencode),
+[Grok Build](../connections-and-context.md#grok-build) and [Cursor](../connections-and-context.md#cursor)
+are never auto-chosen unless Free and alone; OpenRouter, OpenCode and Cursor show three. Local server connects your LM
 Studio, llama.cpp or TabbyAPI ([details](../connections-and-context.md#your-own-model-server)).
 
 ## What the model knows

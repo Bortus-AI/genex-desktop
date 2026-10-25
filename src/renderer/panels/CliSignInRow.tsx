@@ -1,6 +1,6 @@
 /**
- * Settings → Model Providers: the rows of the CLIs that sign in in their own terminal, OpenCode and
- * Grok Build. One row, each CLI's words and sign-in: install, sign in (the terminal opens inside
+ * Settings → Model Providers: the rows of the CLIs that sign in in their own terminal, OpenCode,
+ * Grok Build and Cursor. One row, each CLI's words and sign-in: install, sign in (the terminal opens inside
  * the row, so Settings stays open), the Account menu once connected, and the picker's models.
  * Loaded when Settings shows it (`MeteredProviders.tsx`): it is not on the first screen.
  */
@@ -31,7 +31,7 @@ import { useSignInTerminal } from "./use-sign-in-terminal.ts";
 const WORDS = METERED_PROVIDER_WORDS;
 const TerminalView = lazy(() => import("./TerminalView.tsx"));
 
-/** What OpenCode's and Grok Build's rows can do: install, recheck, sign in or stop signing in, update. */
+/** What a CLI's row can do: install, recheck, sign in or stop signing in, sign out (Cursor), update. */
 type CliRowActions = {
   install: () => void;
   recheck: () => void;
@@ -39,6 +39,8 @@ type CliRowActions = {
   cancelSignIn: () => void;
   /** Open the sign-in page the CLI printed, when it printed one. */
   openSignInPage: (() => void) | null;
+  /** Have the CLI forget its sign-in, for a CLI Genex signs out (Cursor); null for one it does not. */
+  signOut: (() => void) | null;
   update: () => void;
 };
 
@@ -62,6 +64,8 @@ interface CliRowWords {
   freeOnly?: { status: string; line: string };
   /** Why an installed CLI too old to run needs its update; a row without one says it could not check. */
   outdatedLine?: string;
+  /** The Account menu's item that signs the CLI out (Cursor). */
+  signOut?: { title: string; line: string };
 }
 
 /** Grok Build's row, in the person's language (the renderer loads it before this module). */
@@ -84,6 +88,27 @@ const GROK_WORDS = {
   outdatedLine: t("xAI no longer accepts this version. Update it to keep building."),
 } as const;
 
+/** Cursor's row, in the person's language (the renderer loads it before this module). */
+const CURSOR_WORDS = {
+  name: "Cursor",
+  guide: "https://cursor.com/docs/cli/overview",
+  install: t("Install Cursor"),
+  installLine: t("Install Cursor's CLI to build with your Cursor plan."),
+  installingLine: t("Installing Cursor. This can take a minute."),
+  signIn: t("Sign in"),
+  signInLine: t("Sign in with your Cursor account to build with your plan."),
+  signingIn: t("Finish signing in to Cursor in your browser. Cursor keeps the sign-in."),
+  cancelSignIn: t("Cancel"),
+  openSignInPage: t("Open sign-in page"),
+  signInAgain: t("Sign in again…"),
+  signInAgainLine: t("Switch to another Cursor account"),
+  signOut: t("Sign out"),
+  signOutLine: t("Cursor's CLI forgets this computer's sign-in"),
+  update: t("Update Cursor"),
+  connectedLine: t("Uses your Cursor plan"),
+  unreachable: t("Cursor didn't answer. Check the installation, then try again."),
+} as const;
+
 const OPEN_CODE_ROW: CliRowWords = {
   ...WORDS.openCode,
   card: { name: WORDS.openCode.name, plans: "", guide: WORDS.openCode.guide },
@@ -95,6 +120,13 @@ const GROK_ROW: CliRowWords = {
   ...GROK_WORDS,
   card: { name: GROK_WORDS.name, plans: "", guide: GROK_WORDS.guide },
   again: { title: GROK_WORDS.signInAgain, line: GROK_WORDS.signInAgainLine },
+};
+
+const CURSOR_ROW: CliRowWords = {
+  ...CURSOR_WORDS,
+  card: { name: CURSOR_WORDS.name, plans: "", guide: CURSOR_WORDS.guide },
+  again: { title: CURSOR_WORDS.signInAgain, line: CURSOR_WORDS.signInAgainLine },
+  signOut: { title: CURSOR_WORDS.signOut, line: CURSOR_WORDS.signOutLine },
 };
 
 /** The row by its state: installing, missing, signing in, free models only, connected, outdated or unreachable. */
@@ -231,7 +263,10 @@ function freeOnlyView(act: CliRowActions, words: CliRowWords, free: { status: st
   };
 }
 
-/** Signed in: OpenCode is billed by each provider and can add one; Grok Build can switch accounts. */
+/**
+ * Signed in: OpenCode is billed by each provider and can add one; Grok Build and Cursor can switch
+ * accounts, and Cursor can sign out.
+ */
 function connectedView(act: CliRowActions, words: CliRowWords): RowView {
   return {
     tone: RowTone.Connected,
@@ -243,6 +278,11 @@ function connectedView(act: CliRowActions, words: CliRowWords): RowView {
           <DropdownMenuItem onSelect={act.signIn}>
             <ItemWords title={words.again.title} line={words.again.line} />
           </DropdownMenuItem>
+          {words.signOut && act.signOut && (
+            <DropdownMenuItem onSelect={act.signOut}>
+              <ItemWords title={words.signOut.title} line={words.signOut.line} />
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem onSelect={act.update}>{words.update}</DropdownMenuItem>
         </>
       </AccountMenu>
@@ -251,12 +291,17 @@ function connectedView(act: CliRowActions, words: CliRowWords): RowView {
 }
 
 /** The CLIs whose row this is. */
-type CliProvider = typeof EngineId.OpenCode | typeof EngineId.Grok;
+type CliProvider = typeof EngineId.OpenCode | typeof EngineId.Grok | typeof EngineId.Cursor;
 
-/** Each CLI's sign-in terminal, its sign-in call and its words. */
+/** Each CLI's sign-in terminal, its sign-in call (and sign-out, for Cursor) and its words. */
 const CLI_ROWS: Record<
   CliProvider,
-  { terminal: TerminalKind; signIn: () => Promise<{ started: boolean }>; words: CliRowWords }
+  {
+    terminal: TerminalKind;
+    signIn: () => Promise<{ started: boolean }>;
+    signOut?: () => Promise<unknown>;
+    words: CliRowWords;
+  }
 > = {
   [EngineId.OpenCode]: {
     terminal: TerminalKind.OpenCodeLogin,
@@ -264,6 +309,12 @@ const CLI_ROWS: Record<
     words: OPEN_CODE_ROW,
   },
   [EngineId.Grok]: { terminal: TerminalKind.GrokLogin, signIn: () => window.studio.grokSignIn(), words: GROK_ROW },
+  [EngineId.Cursor]: {
+    terminal: TerminalKind.CursorLogin,
+    signIn: () => window.studio.cursorSignIn(),
+    signOut: () => window.studio.cursorSignOut(),
+    words: CURSOR_ROW,
+  },
 };
 
 /** The row of one CLI that signs in in its own terminal. */
@@ -272,7 +323,7 @@ export default function CliSignInRow({
   onEnginesRefresh,
   provider,
 }: { engine: EngineDescriptor; provider: CliProvider } & Pick<MeteredProviderProps, "onEnginesRefresh">) {
-  const { terminal: terminalKind, signIn: startSignIn, words } = CLI_ROWS[provider];
+  const { terminal: terminalKind, signIn: startSignIn, signOut: forgetSignIn, words } = CLI_ROWS[provider];
   const install = useCliInstall(provider);
   const { run, error } = useRun();
   const { checking, recheck } = useRecheck(provider, onEnginesRefresh);
@@ -298,6 +349,13 @@ export default function CliSignInRow({
       signIn,
       cancelSignIn,
       openSignInPage: terminal?.signInPage ? () => void run(() => window.studio.terminalOpenLink(terminal.id)) : null,
+      signOut: forgetSignIn
+        ? () =>
+            void run(async () => {
+              await forgetSignIn();
+              await onEnginesRefresh();
+            })
+        : null,
       update: () => void install.update(),
     },
     words,

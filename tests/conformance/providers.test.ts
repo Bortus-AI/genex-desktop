@@ -20,6 +20,7 @@ import {
   PROVIDERS,
   SUBSCRIPTION_ENGINES,
   isLocalEngine,
+  isBeta,
   isMetered,
   loginKind,
   providerInfo,
@@ -98,8 +99,11 @@ describe("provider table", () => {
       openrouter: "metered",
       // Flipped (a local server): a server the person runs is local, never metered.
       "local-server": "local",
+      // Flipped (Cursor): third-party models in Cursor, and Cursor's own past the plan's pool, are paid
+      // from the account's credit, so the app never picks it by itself.
+      cursor: "metered",
     });
-    for (const id of ["openrouter", "opencode", "grok"]) assert.equal(isMetered(id), true, id);
+    for (const id of ["openrouter", "opencode", "grok", "cursor"]) assert.equal(isMetered(id), true, id);
     for (const id of ["bonsai", "ollama", "local-server"]) assert.equal(isLocalEngine(id), true, id);
     for (const id of ["claude-code", "codex", "gemini-cli", "constructor", null, undefined]) {
       assert.equal(isMetered(id), false, String(id));
@@ -107,6 +111,14 @@ describe("provider table", () => {
     }
     for (const provider of PROVIDERS)
       assert.equal(provider.billing === "subscription", provider.subscription, provider.id);
+  });
+
+  it("names the providers that ship in beta: Cursor, until a live test proves it", () => {
+    assert.deepEqual(
+      PROVIDERS.filter((provider) => isBeta(provider.id)).map((provider) => provider.id),
+      ["cursor"],
+    );
+    for (const id of ["gemini-cli", "constructor", null, undefined]) assert.equal(isBeta(id), false, String(id));
   });
 
   it("is served on each engine descriptor; an unlisted engine carries none", async () => {

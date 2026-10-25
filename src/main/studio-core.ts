@@ -91,8 +91,9 @@ import { ClaudeCodeEngine } from "../substrate/engines/claude-code.ts";
 import { CodexEngine } from "../substrate/engines/codex.ts";
 import { OllamaEngine, OllamaSidecar } from "../substrate/engines/ollama.ts";
 import { OpenCodeEngine, openCodeSessionFolders } from "../substrate/engines/opencode.ts";
+import { CursorEngine } from "../substrate/engines/cursor.ts";
 import { GrokEngine } from "../substrate/engines/grok.ts";
-import { grokHome } from "../substrate/credential-homes.ts";
+import { cursorHomes, grokHome } from "../substrate/credential-homes.ts";
 import { LOCK_RECOVERY_DIR } from "../substrate/engines/ownership-locks.ts";
 import { OpenRouterEngine } from "../substrate/engines/openrouter.ts";
 import { LocalServerEngine } from "../substrate/engines/local-server.ts";
@@ -1043,9 +1044,9 @@ export class StudioCore {
     // Windows: native jobs work in, and read pinned runtimes from, folders granted now. srt-win
     // changes grants only while no sandboxed command runs, and agents keep commands running.
     const windows = process.platform === StudioPlatform.Windows;
-    // OpenCode's and Grok Build's own folders too: their sessions run as the sandbox user and read
-    // their sign-ins there.
-    const cliFolders = windows ? [...openCodeSessionFolders(), grokHome()] : [];
+    // OpenCode's, Grok Build's and Cursor's own folders too: their sessions run as the sandbox user
+    // and read their sign-ins there.
+    const cliFolders = windows ? [...openCodeSessionFolders(), grokHome(), ...cursorHomes()] : [];
     if (windows)
       await Promise.all([this.layout.nativeRuntimes, ...cliFolders].map((dir) => mkdir(dir, { recursive: true })));
     return ProcessSandbox.create({
@@ -1462,6 +1463,7 @@ export class StudioCore {
       ...SUBSCRIPTION_ENGINES,
       EngineId.OpenCode,
       EngineId.Grok,
+      EngineId.Cursor,
       EngineId.OpenRouter,
     ]);
   }
@@ -1507,6 +1509,15 @@ export class StudioCore {
         engineHome: path.join(this.layout.engineHomes, EngineId.Codex),
         protectedPaths: this.#protectedPaths(),
         ...(this.options.codexExecutable ? { executable: this.options.codexExecutable } : {}),
+      }),
+      // Cursor on the person's Cursor plan, signed in in its own CLI. Registered whether or not the
+      // CLI is on this computer, so the picker and Settings can offer it.
+      new CursorEngine({
+        scratchRoot: path.join(this.layout.scratch, EngineId.Cursor),
+        protectedPaths: this.#protectedPaths(),
+        toolPath: async () => (await this.sandbox.toolPath()) ?? process.env.PATH ?? "",
+        lockRecovery: path.join(this.layout.engineHomes, LOCK_RECOVERY_DIR),
+        onModelsChanged: () => this.emit(UiEvent.EnginesChanged, { engine: EngineId.Cursor }),
       }),
       // Metered: OpenCode on whatever the person signed it in to, OpenRouter on the key pasted in
       // Settings. Registered like the subscriptions, so the picker can offer them.

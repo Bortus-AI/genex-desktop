@@ -73,7 +73,7 @@ describe("engines", () => {
     assert.deepEqual(
       PROVIDERS.map((provider) => provider.id),
       // Flipped (OpenCode, OpenRouter, a local server, Grok Build): the metered providers follow the
-      // local ones, and a server the person runs comes last.
+      // local ones, and a server the person runs comes last. Flipped (Cursor): a metered one, after Grok Build.
       [
         EngineId.ClaudeCode,
         EngineId.Codex,
@@ -81,6 +81,7 @@ describe("engines", () => {
         EngineId.Ollama,
         EngineId.OpenCode,
         EngineId.Grok,
+        EngineId.Cursor,
         EngineId.OpenRouter,
         EngineId.LocalServer,
       ],

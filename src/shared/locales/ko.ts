@@ -473,6 +473,7 @@ export default {
   "Ben-Day": "벤데이",
   "Best fit": "가장 적합",
   Better: "개선",
+  Beta: "베타",
   "Between builds": "빌드 사이",
   "Billed by each provider you use": "사용하는 제공자마다 따로 청구돼요",
   "Billed by each provider you use.": "사용하는 제공자마다 따로 청구돼요.",
@@ -777,6 +778,17 @@ export default {
   "Codex skill discovery closed. Refresh to retry.": "Codex 스킬 검색이 종료됐어요. 새로 고침해서 다시 시도하세요.",
   "Codex skill discovery timed out. Refresh to retry.":
     "Codex 스킬 검색 시간이 초과됐어요. 새로 고침해서 다시 시도하세요.",
+  "Cursor didn't answer. Check the installation, then try again.":
+    "Cursor가 응답하지 않았어요. 설치를 확인한 뒤 다시 시도해 주세요.",
+  "Cursor is unavailable": "Cursor를 사용할 수 없어요",
+  "Cursor isn't installed on this computer.": "이 컴퓨터에 Cursor가 설치되어 있지 않아요.",
+  "Cursor sign-in": "Cursor 로그인",
+  "Cursor {version}, {count, plural, other {# model(s)}}": "Cursor {version}, 모델 {count, plural, other {#개}}",
+  "Cursor's CLI forgets this computer's sign-in": "Cursor CLI가 이 컴퓨터의 로그인을 지워요",
+  "Cursor's model list could not be read.": "Cursor의 모델 목록을 읽을 수 없어요.",
+  "Cursor's sign-in status could not be read.": "Cursor의 로그인 상태를 읽을 수 없어요.",
+  "Finish signing in to Cursor in your browser. Cursor keeps the sign-in.":
+    "브라우저에서 Cursor 로그인을 마쳐 주세요. 로그인은 Cursor가 보관해요.",
   "Finish signing in to Grok in your browser.": "브라우저에서 Grok 로그인을 마쳐 주세요.",
   "Grok Build didn't answer. Check the installation, then try again.":
     "Grok Build가 응답하지 않았어요. 설치를 확인한 뒤 다시 시도해 주세요.",
@@ -786,9 +798,13 @@ export default {
   "Grok Build {version}, {count, plural, one {# model} other {# models}}":
     "Grok Build {version}, 모델 {count, plural, other {#개}}",
   "Grok Build's model list could not be read.": "Grok Build의 모델 목록을 읽을 수 없었어요.",
+  "Install Cursor": "Cursor 설치",
+  "Install Cursor from Settings › Model Providers.": "설정 › 모델 제공자에서 Cursor를 설치해 주세요.",
+  "Install Cursor's CLI to build with your Cursor plan.": "Cursor CLI를 설치하면 Cursor 요금제로 만들 수 있어요.",
   "Install Grok Build": "Grok Build 설치",
   "Install Grok Build from Settings › Model Providers.": "설정 › 모델 제공자에서 Grok Build를 설치해 주세요.",
   "Install it to build games with your Grok account.": "설치하면 Grok 계정으로 게임을 만들 수 있어요.",
+  "Installing Cursor. This can take a minute.": "Cursor를 설치하는 중이에요. 1분 정도 걸릴 수 있어요.",
   "Installing Grok Build. This can take a minute.": "Grok Build를 설치하는 중이에요. 1분 정도 걸릴 수 있어요.",
   "Nex lives in your Genex account. Sign in once, then pay here.":
     "Nex는 Genex 계정에 있어요. 한 번 로그인하면 여기서 결제할 수 있어요.",
@@ -1601,14 +1617,21 @@ export default {
   "Get a key": "키 받기",
   "Get Nex": "Nex 받기",
   Nex: "Nex",
+  "Not signed in to Cursor.": "Cursor에 로그인되어 있지 않아요.",
   "Runs on your Grok account": "Grok 계정으로 실행돼요",
   "Sign in again…": "다시 로그인…",
+  "Sign in to Cursor from Settings › Model Providers.": "설정 › 모델 제공자에서 Cursor에 로그인해 주세요.",
   "Sign in to Grok from Settings › Model Providers.": "설정 › 모델 제공자에서 Grok에 로그인해 주세요.",
+  "Sign in with your Cursor account to build with your plan.": "Cursor 계정으로 로그인하면 요금제로 만들 수 있어요.",
   "Sign in with your Grok account. Grok Build keeps the sign-in.":
     "Grok 계정으로 로그인해 주세요. 로그인 정보는 Grok Build가 보관해요.",
+  "Switch to another Cursor account": "다른 Cursor 계정으로 전환",
   "Switch to another Grok account": "다른 Grok 계정으로 전환",
+  "Update Cursor": "Cursor 업데이트",
   "Update Grok Build": "Grok Build 업데이트",
   "Update Grok Build from Settings › Model Providers.": "설정 › 모델 제공자에서 Grok Build를 업데이트해 주세요.",
+  "Uses your Cursor plan": "Cursor 요금제를 사용해요",
+  "Your Cursor account has no model it can run.": "Cursor 계정에서 실행할 수 있는 모델이 없어요.",
   "xAI blocked this Grok account: {reason}": "xAI가 이 Grok 계정을 차단했어요: {reason}",
   "xAI no longer accepts this Grok Build.": "xAI가 이 Grok Build를 더 이상 받지 않아요.",
   "xAI no longer accepts this version. Update it to keep building.":
