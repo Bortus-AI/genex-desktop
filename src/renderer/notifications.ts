@@ -24,21 +24,38 @@ import {
 } from "../shared/custom-events.ts";
 import { DAY_MS, MINUTE_MS } from "../shared/duration.ts";
 import { EventKind } from "../shared/event-log.ts";
+import { t } from "../shared/i18n.ts";
 import { ExecutionStatus, executionStep } from "../shared/run-state.ts";
+import { LoopProfile } from "../shared/project-facts.ts";
 import { contractorIdentity } from "./chat-labels.ts";
 import { StageView } from "./stage.ts";
 import { STORAGE_KEYS } from "./storage.ts";
 import type { EventEnvelope } from "./types.ts";
-import { A_PLUGIN, NOTICE_WORDS, permissionTitleWords, permissionWords, problemWords, wasCancelled } from "./words.ts";
+import {
+  A_PLUGIN,
+  NATIVE_WORDS,
+  nativeHereWords,
+  NOTICE_WORDS,
+  permissionTitleWords,
+  permissionWords,
+  problemWords,
+  wasCancelled,
+} from "./words.ts";
+import { sizeWords } from "../shared/byte-size.ts";
+import { InstallFailure, isInstallFailure } from "../shared/play-native.ts";
 import { ToolPermissionState } from "../shared/permissions.ts";
 
-/** What a notice is about: a question, a plan, a plugin's permission, a build's ending, a sign-in. */
+/**
+ * What a notice is about: a question, a plan, a plugin's permission, a build's ending, a sign-in, or
+ * a game from Play installed, failed to install or updated (`slug` names it; it opens its page).
+ */
 export const NoticeKind = {
   Question: "question",
   Plan: "plan",
   Permission: "permission",
   Build: "build",
   SignIn: "signin",
+  Play: "play",
 } as const;
 export type NoticeKind = (typeof NoticeKind)[keyof typeof NoticeKind];
 
@@ -66,6 +83,9 @@ export interface Notice {
   view?: typeof StageView.Live | typeof StageView.Builds;
   /** The provider a sign-in notice is about. */
   engine?: string;
+  /** A Play notice's game, and its name as the row says it. */
+  slug?: string;
+  title?: string;
 }
 
 export interface NoticeState {
@@ -87,6 +107,7 @@ const noticeKey = {
   permission: (requestId: string) => `permission:${requestId}`,
   build: (runId: string) => `build:${runId}`,
   signIn: (engine: string) => `signin:${engine}`,
+  play: (slug: string) => `play:${slug}`,
 };
 const AUTOPLAN_PREFIX = noticeKey.autoplan("");
 
@@ -125,7 +146,11 @@ export function buildNotice(
   }
   if (endedEarly(status, payload, because))
     return { tone: NoticeTone.Stopped, view: StageView.Builds, text: NOTICE_WORDS.buildStopped };
-  if (payload.landed === true) return { tone: NoticeTone.Done, view: StageView.Live, text: NOTICE_WORDS.buildLive };
+  if (payload.landed === true) {
+    // A Loop led in its project's own folder kept its work there: Live may only show it as stills.
+    const text = payload.profile === LoopProfile.Open ? NOTICE_WORDS.buildKept : NOTICE_WORDS.buildLive;
+    return { tone: NoticeTone.Done, view: StageView.Live, text };
+  }
   return { tone: NoticeTone.Stopped, view: StageView.Builds, text: NOTICE_WORDS.buildNothingNew };
 }
 
@@ -218,6 +243,11 @@ function readNoticeEvent(feed: FeedDraft, event: EventEnvelope): void {
       break;
     case CustomEvent.ConversationRewound:
       onRewound(feed, event);
+      break;
+    case CustomEvent.PlayInstallFinished:
+    case CustomEvent.PlayInstallFailed:
+    case CustomEvent.PlayUpdateAvailable:
+      onPlayInstall(feed, event, custom.event_type);
       break;
     default:
       break;
@@ -350,9 +380,48 @@ function onSignedOut(feed: FeedDraft, event: EventEnvelope): void {
   raise(feed, event, { kind: NoticeKind.SignIn, key: noticeKey.signIn(engine), engine, text: NOTICE_WORDS.signedOut });
 }
 
-/** Who a row is from: the provider for a sign-in, else the game, a game still being named, or the Harness chat. */
+/** What a Play install's row says: ready, why it failed, or a new version waiting. */
+function playInstallText(event: EventEnvelope, kind: PlayInstallEvent): Pick<Notice, "text" | "tone"> {
+  if (kind === CustomEvent.PlayInstallFinished) {
+    const { platform } = payloadOf(event, CustomEvent.PlayInstallFinished);
+    return { text: nativeHereWords(String(platform)).readyToPlay, tone: NoticeTone.Done };
+  }
+  if (kind === CustomEvent.PlayUpdateAvailable) {
+    const size = payloadOf(event, CustomEvent.PlayUpdateAvailable).sizeBytes;
+    return { text: NOTICE_WORDS.newVersion(sizeWords(typeof size === "number" ? size : 0)) };
+  }
+  const failed = payloadOf(event, CustomEvent.PlayInstallFailed);
+  const failure = isInstallFailure(failed.failure) ? failed.failure : InstallFailure.Failed;
+  const needed = typeof failed.neededBytes === "number" ? failed.neededBytes : 0;
+  const here = nativeHereWords(String(failed.platform));
+  return { text: NATIVE_WORDS.installFailed[failure](sizeWords(needed), here), tone: NoticeTone.Failed };
+}
+
+/** The Play install events a row is raised for. */
+type PlayInstallEvent =
+  | typeof CustomEvent.PlayInstallFinished
+  | typeof CustomEvent.PlayInstallFailed
+  | typeof CustomEvent.PlayUpdateAvailable;
+
+/** A game from Play installed, failed to install, or has a new version: one row per game, the newest. */
+function onPlayInstall(feed: FeedDraft, event: EventEnvelope, kind: PlayInstallEvent): void {
+  const about = payloadOf(event, kind);
+  const slug = words(about.slug);
+  if (!slug) return;
+  const title = words(about.title) ?? slug;
+  raise(feed, event, {
+    kind: NoticeKind.Play,
+    key: noticeKey.play(slug),
+    slug,
+    title,
+    ...playInstallText(event, kind),
+  });
+}
+
+/** Who a row is from: the provider for a sign-in, a Play game, else the game, a game still being named, or the Harness chat. */
 export function noticeSource(notice: Notice, gameTitle: string | undefined, gameThread = true): string {
   if (notice.kind === NoticeKind.SignIn) return contractorIdentity(notice.engine ?? "").label;
+  if (notice.kind === NoticeKind.Play) return notice.title ?? "";
   return gameTitle ?? (gameThread ? NOTICE_WORDS.newGame : NOTICE_WORDS.harness);
 }
 
@@ -367,13 +436,29 @@ export function activityNotices(items: readonly Notice[]): Notice[] {
   return items.filter((item) => !item.waiting).sort((a, b) => compareIds(b.at, a.at));
 }
 
-/** Today / Yesterday / Earlier: coarse on purpose, the row carries its own time. */
-export function dayGroup(iso: string, now = new Date()): "Today" | "Yesterday" | "Earlier" {
+/** The coarse day something happened on, by the local calendar. */
+export const DayGroup = { Today: "today", Yesterday: "yesterday", Earlier: "earlier" } as const;
+export type DayGroup = (typeof DayGroup)[keyof typeof DayGroup];
+
+/** The notifications menu's heading for each day. */
+const DAY_HEADINGS = {
+  [DayGroup.Today]: t("Today"),
+  [DayGroup.Yesterday]: t("Yesterday"),
+  [DayGroup.Earlier]: t("Earlier"),
+} as const satisfies Record<DayGroup, string>;
+
+/** Which day `iso` falls on, seen from `now`: today, yesterday or earlier. */
+export function dayOf(iso: string, now = new Date()): DayGroup {
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const at = Date.parse(iso);
-  if (at >= today) return "Today";
-  if (at >= today - DAY_MS) return "Yesterday";
-  return "Earlier";
+  if (at >= today) return DayGroup.Today;
+  if (at >= today - DAY_MS) return DayGroup.Yesterday;
+  return DayGroup.Earlier;
+}
+
+/** Today / Yesterday / Earlier: coarse on purpose, the row carries its own time. */
+export function dayGroup(iso: string, now = new Date()): (typeof DAY_HEADINGS)[DayGroup] {
+  return DAY_HEADINGS[dayOf(iso, now)];
 }
 
 /** An activity row not yet read, among the ones asked for (all when none are named). */

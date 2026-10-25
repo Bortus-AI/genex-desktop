@@ -1,13 +1,14 @@
 /**
  * The director's wake loop, without a rig: when the lead is woken and why (wake-schedule.ts),
  * what the message that wakes it says (wake-prompts.ts), what the journal keeps (wake.ts), and
- * the typed lines the night's producers write so the waker never reads English.
+ * the typed lines the run's producers write so the waker never reads English.
  *
  * The lead used to stay inside one long turn — `wait` in a loop and a "continue" prompt whenever
- * the turn ended with time left — which is how one night stretched a single session over
- * seventeen hours. Now it ends its turn after every decision and the studio wakes the same
+ * the turn ended with time left, which stretched a single session over the whole run. Now it ends its turn after every decision and the studio wakes the same
  * session with a digest when something happens. Every clock here is a number the test chooses.
  */
+import { CoreFact } from "../../src/harness-seed/loop/folder-facts.ts";
+import { appIdentity } from "../../src/harness-seed/loop/project-prompts.ts";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
@@ -237,6 +238,86 @@ describe("when the lead is woken (wake-schedule.ts)", () => {
     });
   });
 
+  it("W7c. asked to finish, the lead rests while its workers end the rounds they are in, and the wrap-up starts once no loop worker runs", () => {
+    const asked = {
+      ok: true,
+      closed: false,
+      running: 2,
+      planWindowOpen: false,
+      workersLimitPending: false,
+      idleAsked: false,
+      workingTimeLeft: false,
+      finishRequested: true,
+      lastRoundsRunning: true,
+    };
+    assert.deepEqual(afterTurn(asked), { next: TurnEnd.Sleep, idleAsked: false });
+    assert.deepEqual(
+      afterTurn({ ...asked, ok: false }),
+      { next: TurnEnd.Sleep, idleAsked: false },
+      "a failed turn waits too",
+    );
+    assert.deepEqual(afterTurn({ ...asked, running: 0, lastRoundsRunning: false }), {
+      next: TurnEnd.WrapUp,
+      idleAsked: false,
+      wrapCause: WrapCause.Finish,
+    });
+    assert.deepEqual(afterTurn({ ...asked, closed: true }), { next: TurnEnd.Close, idleAsked: false });
+  });
+
+  it("W7b (provider lost). a turn a lost provider failed closes the run paused — never the wrap-up that lands a build", () => {
+    // A wrap-up after a lost provider would land a build nobody could check.
+    const lost = {
+      ok: false,
+      closed: false,
+      providerLost: true,
+      running: 3,
+      planWindowOpen: false,
+      workersLimitPending: false,
+      idleAsked: false,
+      workingTimeLeft: true,
+      finishRequested: false,
+    };
+    assert.deepEqual(afterTurn(lost), { next: TurnEnd.Close, idleAsked: false });
+    assert.deepEqual(afterTurn({ ...lost, workingTimeLeft: false }), { next: TurnEnd.Close, idleAsked: false });
+    assert.deepEqual(afterTurn({ ...lost, ok: true, idleAsked: true }), { next: TurnEnd.Close, idleAsked: true });
+    assert.deepEqual(
+      afterTurn({ ...lost, providerLost: false }),
+      { next: TurnEnd.WrapUp, idleAsked: false, wrapCause: WrapCause.Failed },
+      "any other failed turn keeps today's wrap-up",
+    );
+  });
+
+  it("a turn cut by its own cap goes on at once, never into the wrap-up as a failed turn", () => {
+    const idle = {
+      ok: true,
+      closed: false,
+      running: 0,
+      planWindowOpen: false,
+      workersLimitPending: false,
+      idleAsked: false,
+      workingTimeLeft: true,
+      finishRequested: false,
+    };
+    const capped = { ...idle, ok: false, capped: true };
+    assert.deepEqual(afterTurn(capped), { next: TurnEnd.Continue, idleAsked: false });
+    assert.deepEqual(afterTurn({ ...capped, ok: true, idleAsked: true }), { next: TurnEnd.Continue, idleAsked: false });
+    assert.deepEqual(afterTurn({ ...capped, running: 2 }), { next: TurnEnd.Continue, idleAsked: false });
+    // The run is over, or its working time is: the cap changes nothing then.
+    assert.deepEqual(afterTurn({ ...capped, closed: true }), { next: TurnEnd.Close, idleAsked: false });
+    assert.deepEqual(afterTurn({ ...capped, providerLost: true }), { next: TurnEnd.Close, idleAsked: false });
+    assert.deepEqual(afterTurn({ ...capped, workingTimeLeft: false }), {
+      next: TurnEnd.WrapUp,
+      idleAsked: false,
+      wrapCause: WrapCause.Deadline,
+    });
+    // Without the cap, a failed turn wraps up as it always did.
+    assert.deepEqual(afterTurn({ ...capped, capped: false }), {
+      next: TurnEnd.WrapUp,
+      idleAsked: false,
+      wrapCause: WrapCause.Failed,
+    });
+  });
+
   it("W8. a lead that went to sleep busy is asked what next the moment nothing runs and nothing else is ahead", () => {
     // The lead stopped its last worker and ended its turn; the worker has settled since.
     const stopped = { at: T0, seq: 11, kind: NoteKind.WorkerStopped };
@@ -270,13 +351,88 @@ describe("when the lead is woken (wake-schedule.ts)", () => {
     assert.equal(
       passDeadline({ ...clocks, now: T0 + HOUR_MS + MINUTE_MS }),
       T0 + 2 * HOUR_MS - WRAP_UP_MARGIN_MS,
-      "wrapping up: the night's end, less the wrap-up's margin",
+      "wrapping up: the run's end, less the wrap-up's margin",
     );
     // A finish request moved the working deadline to the moment it started the wrap-up.
     assert.equal(
       passDeadline({ now: T0, softDeadline: T0, finalDeadline: T0 + HOUR_MS }),
       T0 + HOUR_MS - WRAP_UP_MARGIN_MS,
     );
+  });
+
+  it("W10. the finish mark is a timer: it wakes the lead once at its time, uncapped, and never in the wrap-up", () => {
+    const mark = T0 + 10 * MINUTE_MS;
+    assert.deepEqual(nextWake(view({ finishMarkAt: mark })), { at: mark, reasons: [WakeCause.FinishMark] });
+    // The hourly cap holds the heartbeat back, never the mark.
+    const wakesAt = Array.from({ length: MAX_WAKES_PER_HOUR }, (_, i) => T0 - 50 * MINUTE_MS + i * MINUTE_MS);
+    assert.deepEqual(nextWake(view({ finishMarkAt: mark, wakesAt })), { at: mark, reasons: [WakeCause.FinishMark] });
+    // A mark already past (a goal run sent to art direction, a Resume after it) is due now.
+    assert.deepEqual(nextWake(view({ now: mark + MINUTE_MS, finishMarkAt: mark })), {
+      at: mark + MINUTE_MS,
+      reasons: [WakeCause.FinishMark],
+    });
+    // Wrapping up, the mark is gone; once said, the loop hands the schedule none.
+    assert.equal(nextWake(view({ finishMarkAt: mark, wrapping: true, running: 0 })), null);
+    assert.deepEqual(nextWake(view({ finishMarkAt: null })), { at: T0 + HEARTBEAT_MS, reasons: [WakeCause.Heartbeat] });
+    // A timer ahead, like the wrap-up: a run gone idle before its mark is still asked what next.
+    assert.deepEqual(nextWake(view({ running: 0, finishMarkAt: mark })), { at: T0, reasons: [WakeCause.IdleAsk] });
+  });
+
+  it("W10c. the art director's regular look is a timer of its own: due at its time, uncapped, and never in the wrap-up", () => {
+    const shipLook = WakeCause.ShipLook;
+    const look = T0 + 10 * MINUTE_MS;
+    const at = (over: Partial<WakeView>) => nextWake(view(over));
+    assert.deepEqual(at({ shipLookAt: look }), { at: look, reasons: [shipLook] });
+    // The hourly cap holds the heartbeat back, never the look: four busy workers fill the cap.
+    const wakesAt = Array.from({ length: MAX_WAKES_PER_HOUR }, (_, i) => T0 - 50 * MINUTE_MS + i * MINUTE_MS);
+    assert.deepEqual(at({ shipLookAt: look, wakesAt }), { at: look, reasons: [shipLook] });
+    // Due already (the wave came in while the lead was busy): now.
+    assert.deepEqual(at({ now: look + MINUTE_MS, shipLookAt: look }), { at: look + MINUTE_MS, reasons: [shipLook] });
+    // The wrap-up takes no look: wrapping, or a working time already over.
+    assert.equal(at({ shipLookAt: look, wrapping: true, running: 0 }), null);
+    assert.deepEqual(at({ softDeadline: T0 - 1_000, shipLookAt: look, running: 2 })?.reasons, [WakeCause.WrapUp]);
+  });
+
+  it("W10b. a finish mark still unsaid when the wrap-up is due gives way to the wrap-up: the two never share a wake", () => {
+    // A Mac that slept through both times, or a Resume of a run paused in its wrap-up (soft deadline now).
+    const mark = T0 - 40 * MINUTE_MS;
+    const due = nextWake(view({ softDeadline: T0 - 1_000, finishMarkAt: mark, running: 2 }));
+    assert.deepEqual(due?.reasons, [WakeCause.WrapUp]);
+    assert.deepEqual(nextWake(view({ softDeadline: T0, finishMarkAt: mark, running: 0 })), {
+      at: T0,
+      reasons: [WakeCause.WrapUp],
+    });
+    // Ahead of the wrap-up, the mark still wakes the lead on its own.
+    assert.deepEqual(nextWake(view({ now: mark, finishMarkAt: mark })), { at: mark, reasons: [WakeCause.FinishMark] });
+  });
+
+  it("W11. a goal run idle twice with no ship review on its head is sent to art direction once, then wraps up", () => {
+    const idle = {
+      ok: true,
+      closed: false,
+      running: 0,
+      planWindowOpen: false,
+      workersLimitPending: false,
+      idleAsked: true,
+      workingTimeLeft: true,
+      finishRequested: false,
+      artDirectionOwed: true,
+    };
+    assert.deepEqual(afterTurn(idle), { next: TurnEnd.ArtDirection, idleAsked: true });
+    // Art direction said (or never owed): the second idle turn wraps up as before.
+    assert.deepEqual(afterTurn({ ...idle, artDirectionOwed: false }), {
+      next: TurnEnd.WrapUp,
+      idleAsked: true,
+      wrapCause: WrapCause.Idle,
+    });
+    // The first idle turn is still asked what next, a busy one sleeps, and no working time wraps up.
+    assert.deepEqual(afterTurn({ ...idle, idleAsked: false }), { next: TurnEnd.AskIdle, idleAsked: true });
+    assert.deepEqual(afterTurn({ ...idle, running: 1 }), { next: TurnEnd.Sleep, idleAsked: false });
+    assert.deepEqual(afterTurn({ ...idle, workingTimeLeft: false }), {
+      next: TurnEnd.WrapUp,
+      idleAsked: true,
+      wrapCause: WrapCause.Deadline,
+    });
   });
 
   it("the wake loop is the default; the long turn is only asked for by name", () => {
@@ -330,14 +486,14 @@ const facts = (over: Partial<DigestFacts> = {}): DigestFacts => ({
     project: "skate",
     goal: "a dusk plaza",
     direction: true,
-    plan: { summary: "Tonight: a dusk sky over the plaza.", parts: ["sky"] },
+    plan: { summary: "This run: a dusk sky over the plaza.", parts: ["sky"] },
   },
   closing: "Decide, act, and end your turn — the studio wakes you when something happens.",
   ...over,
 });
 
 describe("what the message that wakes the lead says (wake-prompts.ts)", () => {
-  it("P1. the digest: the user's words first and verbatim, then what happened, then where the night stands, then a build card of at most fifteen lines — no worktree path", () => {
+  it("P1. the digest: the user's words first and verbatim, then what happened, then where the run stands, then a build card of at most fifteen lines — no worktree path", () => {
     const digest = wakeDigest(facts());
     assert.match(digest, /^WOKEN AT 14:00 UTC — /);
     const order = ["THE USER SAYS", "make the sky red", "WHAT HAPPENED", "worker sky done", "WHERE THE RUN STANDS"];
@@ -352,12 +508,15 @@ describe("what the message that wakes the lead says (wake-prompts.ts)", () => {
     assert.match(digest, /- worker sky \(Dusk sky\): running · 12 min left · round 2 · 1 accepted · passing 3\/5/);
     const card = digest.slice(digest.indexOf("BUILD CARD")).split("\n\n")[0]!.split("\n");
     assert.ok(card.length <= CARD_MAX_LINES, `the card is ${card.length} lines:\n${card.join("\n")}`);
-    assert.match(card.join("\n"), /Plan: Tonight: a dusk sky over the plaza\. — parts: sky/);
+    assert.match(card.join("\n"), /Plan: This run: a dusk sky over the plaza\. — parts: sky/);
     assert.match(card.join("\n"), /end your turn after each decision/i);
     assert.doesNotMatch(digest, /autopilot\/run_w|\/integration\b/, "no worktree path");
     assert.doesNotMatch(digest, /THE USER ASKED TO FINISH/);
     const finishing = wakeDigest(facts({ userSays: [], finishNew: true, finishRequested: true }));
-    assert.match(finishing, /THE USER ASKED TO FINISH: integrate what is ready and call finish\./);
+    assert.match(
+      finishing,
+      /THE USER ASKED TO FINISH: no new workers or rounds\. Each running loop worker ends the round it is in/,
+    );
     assert.doesNotMatch(finishing, /THE USER SAYS/, "no section for nobody's words");
     const nothing = wakeDigest(facts({ userSays: [], happened: [], card: { ...facts().card, plan: null } }));
     assert.match(nothing, /WHAT HAPPENED:\n- nothing new since your last turn/);
@@ -366,6 +525,12 @@ describe("what the message that wakes the lead says (wake-prompts.ts)", () => {
     assert.match(many, /line 49/, "the newest are kept");
     assert.doesNotMatch(many, /line 0\n/);
     assert.match(many, /10 earlier lines not shown/);
+  });
+
+  it("P1b. a wake with nothing for the user ends with no words in the chat: no 'waiting', no 'nothing new'", () => {
+    const digest = wakeDigest(facts());
+    assert.match(digest, /A wake with nothing of that kind ends with no text at all/);
+    assert.match(digest, /never "waiting" or "nothing new"/);
   });
 
   it("P2. an idle ask on a direction build says the timed build still has its minutes; a wrap-up says why it started", () => {
@@ -378,7 +543,7 @@ describe("what the message that wakes the lead says (wake-prompts.ts)", () => {
       idleAsk({ direction: false, minutesLeft: 42 }),
       /^Nothing is running and 42 working minutes remain\. What next\?/,
     );
-    const wrap = "Run run_w: your session reached its deadline; 9 minutes remain.";
+    const wrap = "Run run_w: the working time is over; 9 minutes remain.";
     assert.equal(wrapLead(WrapCause.Deadline, wrap), wrap, "the deadline needs no reason");
     assert.match(
       wrapLead(WrapCause.Idle, wrap),
@@ -398,7 +563,7 @@ describe("what the message that wakes the lead says (wake-prompts.ts)", () => {
       digest: "WOKEN AT 14:00 UTC — a worker ended",
     };
     const fresh = freshStart({ ...lost, lead: true });
-    // One session: a lead has no memory file to read first — the notes and the night so far follow.
+    // One session: a lead has no memory file to read first — the notes and the run so far follow.
     const order = [
       "YOUR EARLIER SESSION WAS LOST (the session was not found)",
       "Your notes and the run so far are below",
@@ -427,7 +592,7 @@ describe("what the message that wakes the lead says (wake-prompts.ts)", () => {
     assert.doesNotMatch(hands, /Your notes and the run so far are below/);
   });
 
-  it("P3b (P08-V1). a fresh session gets the build card the lost one had already been shown", () => {
+  it("P3b. a fresh session gets the build card the lost one had already been shown", () => {
     const card = "THE BUILD — run run_w · a dusk plaza · plan: sky, plaza";
     const fresh = freshStart({
       why: "the session was not found",
@@ -446,13 +611,14 @@ describe("what the message that wakes the lead says (wake-prompts.ts)", () => {
 
   it("P4. a waking lead's tools have no wait and tell it to end its turn", () => {
     const tools = wakeTools(DIRECTOR_TOOLS, { lead: true });
+    // Flipped (one worker model): the wait a waking lead is not offered is `worker_wait` now.
     assert.deepEqual(
       tools.map((t) => t.name),
-      DIRECTOR_TOOLS.map((t) => t.name).filter((name) => name !== "wait"),
+      DIRECTOR_TOOLS.map((t) => t.name).filter((name) => name !== "worker_wait"),
     );
     const start = tools.find((t) => t.name === "worker_start")!;
     assert.match(start.description, /end your turn/);
-    assert.doesNotMatch(start.description, /use wait/);
+    assert.doesNotMatch(start.description, /use worker_wait/);
     // A waking lead writes nothing (one session): a conflict `integrate` meets goes to a worker.
     const integrate = tools.find((t) => t.name === "integrate")!;
     assert.match(integrate.description, /A conflict elsewhere goes to a worker/);
@@ -472,9 +638,9 @@ describe("what the message that wakes the lead says (wake-prompts.ts)", () => {
       assert.ok(tool.description.length > 40, `${tool.name} is described`);
     }
     assert.ok(JSON.stringify(tools).length <= JSON.stringify(DIRECTOR_TOOLS).length, "no bigger than the old set");
-    // The set the long turn is offered is left as it was, `wait` and all.
-    assert.ok(DIRECTOR_TOOLS.some((t) => t.name === "wait"));
-    assert.match(DIRECTOR_TOOLS.find((t) => t.name === "worker_start")!.description, /use wait/);
+    // The set the long turn is offered is left as it was, its wait (`worker_wait` now) and all.
+    assert.ok(DIRECTOR_TOOLS.some((t) => t.name === "worker_wait"));
+    assert.match(DIRECTOR_TOOLS.find((t) => t.name === "worker_start")!.description, /use worker_wait/);
   });
 
   it("P7. the build card gives a lead its rule (it builds in the integration worktree), and a director with its own hands its memory file — each within the card's bound", () => {
@@ -492,6 +658,45 @@ describe("what the message that wakes the lead says (wake-prompts.ts)", () => {
     }
     for (const card of [lead, cardOf(false)])
       assert.ok(card.split("\n").length <= CARD_MAX_LINES, `the card is ${card.split("\n").length} lines`);
+  });
+
+  it("P7b. a goal build's card and brief say the art director's blockers are required finishing, and its visible flaws and nits go in the report, never a round", () => {
+    const goal = wakeDigest(facts({ card: { ...facts().card, direction: false, goalCommission: true } }));
+    const card = goal.slice(goal.indexOf("BUILD CARD")).split("\n\n")[0]!;
+    assert.match(card, /do not continue optional polish/, "optional polish is still not the goal build's work");
+    // Flipped: visible defects were required finishing too.
+    assert.match(card, /art director's blockers are required finishing/);
+    assert.match(card, /visible flaws and nits go in your report and never start a round/);
+    assert.ok(card.split("\n").length <= CARD_MAX_LINES, `the card is ${card.split("\n").length} lines`);
+    // A legacy run that is neither a goal nor a duration commission has no finish the art director
+    // turns back: its card, like its brief, says nothing of the art director's defects.
+    const legacy = wakeDigest(facts({ card: { ...facts().card, direction: false } }));
+    const legacyCard = legacy.slice(legacy.indexOf("BUILD CARD")).split("\n\n")[0]!;
+    assert.match(legacyCard, /do not continue optional polish/);
+    assert.doesNotMatch(legacyCard, /art director/, "only a goal commission's card names the art director's defects");
+
+    const now = Date.now();
+    const brief = directorBrief({
+      run: {
+        runId: "run_g",
+        project: "skate",
+        goal: "a plaza to skate",
+        engine: "claude-code",
+        budgets: { completionPolicy: "goal" },
+      },
+      shape: { entry: "index.html", main: "src/main.js", build: null },
+      ownShape: false,
+      capacity: { max: 6, free: 5, memory: { freeMb: 9000 } },
+      skill: "# playbook",
+      softDeadline: now + HOUR_MS,
+      finalDeadline: now + 2 * HOUR_MS,
+      integrationWorktree: "/w",
+      baseCommit: "abcdef1234567890",
+      loop: DirectorLoop.Wake,
+    } as never);
+    const time = brief.split("\n").find((line) => line.startsWith("TIME:"))!;
+    assert.match(time, /Report blockers instead of optional polish/);
+    assert.match(time, /art director's blockers are required finishing; its visible flaws and nits go in your report/);
   });
 
   it("P8. a worker from before a pause is brought in by a worker for a lead, and by a merge in its worktree for a director with its own hands", () => {
@@ -527,7 +732,11 @@ describe("what the message that wakes the lead says (wake-prompts.ts)", () => {
     const turn = directorBrief(base as never);
     assert.equal(directorBrief({ ...base, loop: DirectorLoop.Turn } as never), turn, "the default brief is unchanged");
     const wake = directorBrief({ ...base, loop: DirectorLoop.Wake } as never);
-    assert.ok(wake.length - skill.length < 5_000, `the wake brief's own words are ${wake.length - skill.length}`);
+    // Genex's identity, which every brief opens with, is not the wake brief's own words.
+    const identity = appIdentity({ folderLabel: "skate", facts: [{ id: CoreFact.WebGame, path: "." }] });
+    assert.ok(wake.includes(identity), "the brief carries Genex's identity");
+    const own = wake.length - skill.length - identity.length;
+    assert.ok(own < 5_000, `the wake brief's own words are ${own}`);
     const tools = wake.split("\n").find((line) => line.startsWith("- The run's own tools:"))!;
     assert.equal(
       tools,
@@ -550,8 +759,8 @@ describe("what the message that wakes the lead says (wake-prompts.ts)", () => {
       `the plan review adds ${reviewed.length - wake.length} characters`,
     );
     assert.ok(
-      reviewed.length - skill.length < 5_000 + WAKE_BRIEF.planReview.length,
-      `the reviewed wake brief's own words are ${reviewed.length - skill.length}`,
+      reviewed.length - skill.length - identity.length < 5_000 + WAKE_BRIEF.planReview.length,
+      `the reviewed wake brief's own words are ${reviewed.length - skill.length - identity.length}`,
     );
     assert.match(reviewed, /THE USER ASKED TO READ IT FIRST: your first worker waits for their word/);
     assert.match(reviewed, /end your turn after plan/);
@@ -590,7 +799,7 @@ describe("what the message that wakes the lead says (wake-prompts.ts)", () => {
 
 describe("what the journal keeps of the wake loop (journal.ts wakeRecord)", () => {
   /**
-   * The night's own record — its clock, its workers, the defects nobody owns, the plan window, the
+   * The run's own record — its clock, its workers, the defects nobody owns, the plan window, the
    * log — is written on every save now (director-journal.test.ts K2); the wake loop's record keeps
    * only the loop's own state, and a Resume takes back the idle question and the wakes (K5).
    */
@@ -607,7 +816,7 @@ describe("what the journal keeps of the wake loop (journal.ts wakeRecord)", () =
     assert.deepEqual(record, {
       loop: DirectorLoop.Wake,
       idleAsked: true,
-      // P08-F9: the lost sessions it replaced, so a Resume does not start that allowance again.
+      // The lost sessions it replaced, so a Resume does not start that allowance again.
       freshSessions: 0,
       wrapCause: WrapCause.Idle,
       wakes: 2,
@@ -618,7 +827,7 @@ describe("what the journal keeps of the wake loop (journal.ts wakeRecord)", () =
   });
 });
 
-describe("the lines the night writes, typed for the waker", () => {
+describe("the lines the run writes, typed for the waker", () => {
   it("M1. a fresh violation is a waking line; its clearing and a silent round are not", () => {
     const look = (over: Record<string, unknown>) => ({
       id: "plaza",
@@ -720,7 +929,7 @@ describe("one session: whose session the lead is (lead-session.ts)", () => {
     assert.equal(
       seat(other, { director: { sessionId: "pre-one-session" } }).sessionId,
       null,
-      "an older night's director session sat elsewhere",
+      "an older run's director session sat elsewhere",
     );
     // The chat's latest session wins, whatever engine an older one was on.
     const latest = chatBookmark([
@@ -808,7 +1017,11 @@ describe("one session: whose session the lead is (lead-session.ts)", () => {
       contract: null,
       lead: { gameFolder: "/games/skate" },
     } as never);
-    assert.ok(plain.length - skill.length < 5_000, `the lead's brief's own words are ${plain.length - skill.length}`);
+    // Genex's identity, which every brief opens with, is not the lead's own words.
+    const identity = appIdentity({ folderLabel: "games/skate", facts: [{ id: CoreFact.WebGame, path: "." }] });
+    assert.ok(plain.includes(identity), "the lead's brief carries Genex's identity");
+    const own = plain.length - skill.length - identity.length;
+    assert.ok(own < 5_000, `the lead's brief's own words are ${own}`);
     const turn = directorBrief({ ...base, loop: DirectorLoop.Turn } as never);
     assert.match(turn, /Keep \.studio\/DIRECTOR\.md in your worktree current/);
     assert.match(turn, /Edit here yourself/);
@@ -837,7 +1050,7 @@ describe("a conflict worker's files, read for conflict markers (conflict-worker.
   });
 });
 
-describe("a wake digest over its budget (P08-F7)", () => {
+describe("a wake digest over its budget", () => {
   it("leaves out the oldest news and says so, keeping the newest", async () => {
     const { fitHappened } = await import("../../src/harness-seed/loop/director/wake.ts");
     const happened = Array.from({ length: 400 }, (_, i) => `worker sky landed round ${i}: ${"detail ".repeat(30)}`);
@@ -854,8 +1067,8 @@ describe("a wake digest over its budget (P08-F7)", () => {
   });
 });
 
-describe("the lost-session allowance across a Resume (P08-F9)", () => {
-  it("is kept on the journal, so a Resume does not hand a night fresh sessions it already spent", async () => {
+describe("the lost-session allowance across a Resume", () => {
+  it("is kept on the journal, so a Resume does not hand a run fresh sessions it already spent", async () => {
     const { wakeRecord, restoredWake } = await import("../../src/harness-seed/loop/director/journal.ts");
     const now = Date.now();
     const saved = wakeRecord({
@@ -869,5 +1082,28 @@ describe("the lost-session allowance across a Resume (P08-F9)", () => {
     } as never);
     const restored = restoredWake(JSON.parse(JSON.stringify(saved)), now) as { freshSessions?: number };
     assert.equal(restored.freshSessions, 2);
+  });
+});
+
+describe("the art director's cadence and the outcome nudge across a Resume", () => {
+  it("are kept on the journal in working time, so a Resume neither looks again at once nor forgets the next nudge", async () => {
+    const { wakeRecord, restoredWake } = await import("../../src/harness-seed/loop/director/journal.ts");
+    const now = Date.now();
+    const saved = wakeRecord({
+      idleAsked: false,
+      wrapCause: null,
+      wakes: 7,
+      wakesAt: [],
+      lastWakeAt: now - 1000,
+      asleepSince: null,
+      nextShipLookWorkedMs: 150 * MINUTE_MS,
+      verifyNudgedWorkedMs: 90 * MINUTE_MS,
+    } as never);
+    const restored = restoredWake(JSON.parse(JSON.stringify(saved)), now);
+    assert.equal(restored.nextShipLookWorkedMs, 150 * MINUTE_MS);
+    assert.equal(restored.verifyNudgedWorkedMs, 90 * MINUTE_MS);
+    const garbled = restoredWake({ nextShipLookWorkedMs: "soon", verifyNudgedWorkedMs: -5 }, now);
+    assert.equal(garbled.nextShipLookWorkedMs, undefined, "a value that is no working time is none");
+    assert.equal(garbled.verifyNudgedWorkedMs, undefined);
   });
 });

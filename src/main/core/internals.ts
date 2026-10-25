@@ -4,9 +4,11 @@
  * flags, and the core's views, checks and services. `StudioCore` builds the one object that
  * holds it and hands it only to what it composes.
  */
+import path from "node:path";
 import type { BuildProblem } from "../../shared/build-problem.ts";
 import type { AgentScreen, AgentScreenFrame } from "../../shared/agent-screen.ts";
 import type { Revision } from "../../shared/optimization.ts";
+import type { PermissionMode } from "../../shared/permissions.ts";
 import type { PluginAppliedSet, PluginBinding } from "../../shared/plugins.ts";
 import type { LiveToolResult } from "../../substrate/engines/types.ts";
 import type { GameProject } from "../../substrate/game-workspace.ts";
@@ -15,21 +17,30 @@ import type { PreviewPool } from "../../substrate/preview-pool.ts";
 import type { SeedUpgradeReport } from "../../substrate/seed-upgrade.ts";
 import type { TurnHandle } from "../../substrate/turns.ts";
 import type { EventEnvelope } from "../../substrate/types.ts";
+import { workerLockKey } from "../../shared/workers.ts";
 import type { PlanReviewController } from "../plan-review.ts";
 import type { PluginConsent } from "../plugin-consent.ts";
+import type { AssetCall } from "./asset-calls.ts";
 import type { AssetService } from "./assets.ts";
 import type { ChatPermissionService } from "./chat-permissions.ts";
 import type { SteerDoor } from "./chat-steer.ts";
 import type { CapabilityAudience } from "../planning-capabilities.ts";
 import type { ConversationService } from "./conversation.ts";
+import type { CutOffCall } from "./cut-off-calls.ts";
+import type { UnsavedFile } from "./unsaved-files.ts";
 import type { DelegationService } from "./delegation.ts";
 import type { StudioSettings } from "./settings.ts";
+import type { ObserverService } from "./observers.ts";
+import type { FinishReviews } from "./finish-review.ts";
+import type { HookService } from "./plugin-hooks.ts";
+import type { LockService, PersonWrote } from "./plugin-locks.ts";
 import type { PluginToolService } from "./plugin-tools.ts";
 import type { PreviewService } from "./previews.ts";
 import type { RecoveryService } from "./recovery.ts";
 import type { ChatRewindService } from "./rewind.ts";
 import type { SelfEditGateService } from "./self-edit-gate.ts";
 import type { SelfImprovementService } from "./self-improvement.ts";
+import type { ToolsInFlight } from "./steer-cut.ts";
 
 /** One brief in flight: the lock on its folder, and the contractor working there once it starts. */
 export interface ActiveDelegation {
@@ -42,15 +53,60 @@ export interface ActiveDelegation {
   /**
    * Steer (`chat-steer.ts`): this session is its chat's current turn — the message it answers — so
    * what the person sends meanwhile can reach it (`engine.steer`). Only a chat's own session, or a
-   * night's lead, whose turn is its run id.
+   * run's lead, whose turn is its run id.
    */
   chatTurn?: string;
   /** Its input mid-turn, when its engine reads messages as it works (`Engine.steersMidTurn`). */
   steer?: SteerDoor;
-  /** Interrupted to take steered messages: its caller resumes it with them rather than reading a Stop. */
+  /**
+   * Interrupted to take steered messages, or to be at its next step: its caller resumes it with them
+   * rather than reading a Stop.
+   */
   steered?: boolean;
+  /** A chat turn's session: its tool calls in flight, as its events say. A cut for a steer waits for them (`steer-cut.ts`). */
+  tools?: ToolsInFlight;
+  /** A cut for a steer waits for its tools in flight to end (`cutAtNextStep`). */
+  cutPending?: boolean;
+  /** A chat turn's session: the person's word that ends its plugin calls' waits for a lock (`engine.steer`). */
+  personWrote?: PersonWrote;
   /** Its engine call has returned: nothing more is handed in. */
   ended?: boolean;
+  /** A Loop's reviewer the host seated: the run it checks (`engine.abort` reaches it by that run alone). */
+  reviewer?: string;
+  /**
+   * A Loop's lead in place the host seated: its run. `engine.abort` with that run as `lead` reaches
+   * it alone, never another chat's session in the same folder; its run's unseated workers hold keys
+   * of their own beside it.
+   */
+  leadsInPlace?: string;
+  /** An unseated worker of this run in the game folder, on a key of its own beside the run's lead in place. */
+  besideLeadOf?: string;
+  /**
+   * A worker of a chat's lead, as the host honoured it: its id (Stop reaches an in-place one by
+   * it) and the chat it answers to, whose Settings ceiling it counts against, reader or writer.
+   */
+  worker?: { id: string; chatThreadId: string };
+  /**
+   * The worker id the harness's grant named, honoured or not: Stop and an interrupt by a worker's
+   * id find it by this (`delegationAt`), seated or not.
+   */
+  askedWorker?: string;
+  /** The lock holder its calls pass as (`workerHolder`): a worker whose in-place holds the harness took. */
+  holder?: string;
+  /** Aborts once its engine has let go (the session's end), however it ended. */
+  settled?: AbortSignal;
+}
+
+/**
+ * The delegations working in `dir`: the one keyed by the folder itself, and every in-place worker's
+ * there, each under its own lock (`workerLockKey`). What "anyone building in the folder" means.
+ */
+export function delegationsIn(delegations: ReadonlyMap<string, ActiveDelegation>, dir: string): ActiveDelegation[] {
+  const folder = path.resolve(dir);
+  const workers = workerLockKey(folder, "");
+  return [...delegations.entries()]
+    .filter(([key]) => key.startsWith(workers) || path.resolve(key) === folder)
+    .map(([, delegation]) => delegation);
 }
 
 /** Work in flight, keyed so Stop, a turn's end and a crash can find and settle it. */
@@ -63,12 +119,27 @@ export interface WorkInFlight {
   readonly activeCompletions: Map<string, Set<AbortController>>;
   /**
    * Connector calls in flight, by the chat and game they were made for. A build's lead's call
-   * outlives the chat's turns (`outlivesTurn`): only its session's end or a Stop ends it.
+   * outlives the chat's turns (`outlivesTurn`): only its session's end or a Stop ends it. One the
+   * harness itself made (`mcp.invoke`, `byHarness`) ends with that harness, planned or not.
    */
   readonly activeConnectorCalls: Map<
     AbortController,
-    { project?: string | null; threadId?: string; outlivesTurn?: boolean }
+    { project?: string | null; threadId?: string; outlivesTurn?: boolean; byHarness?: boolean }
   >;
+  /** Calls making an asset, in flight, by call id: the games' waiting jobs while they run (`asset-calls.ts`). */
+  readonly assetCalls: Map<string, AssetCall>;
+  /** Genex's moments the harness asked for, in flight, by the game and chat they answer to (`moment-stops.ts`). */
+  readonly activeMoments: Map<AbortController, { project: string; threadId?: string }>;
+  /**
+   * Plugin and connector calls cut off before they answered (outcome unknown), by the thread that
+   * made them, until that thread's next delegated session is told of them (`cut-off-calls.ts`).
+   */
+  readonly cutOffCalls: Map<string, CutOffCall[]>;
+  /**
+   * Files too large to save that a thread's chat said a checkpoint or a rewind left, until that
+   * thread's next delegated session is told of them (`unsaved-files.ts`).
+   */
+  readonly unsavedFiles: Map<string, UnsavedFile[]>;
   /**
    * One contractor per *directory* (live game folder or facet worktree), keyed by resolved cwd.
    * The first live build proved why a dir takes a lock: a crash mid-delegation left the
@@ -82,8 +153,15 @@ export interface WorkInFlight {
    * does not list it — a Stop that lands in that gap aborts a contractor that never started.
    */
   readonly activeDelegations: Map<string, ActiveDelegation>;
+  /**
+   * How many times each game was announced changed (`GameChanged`) in this app run: a session's end
+   * announces a game that took its kind during the session only when nothing else announced it.
+   */
+  readonly gameChanges: Map<string, number>;
   /** Runs currently holding keep-awake (run.keepawake → run.settled) — idle means none. */
   readonly activeRunIds: Set<string>;
+  /** Settled runs whose jobs are still stopping, until each job's end is in its chat. */
+  readonly runJobStops: Set<string>;
   readonly openTurns: Map<string, TurnHandle>;
   /**
    * Bumped whenever the harness stops being ready (a planned restart too): a `turn.begin` from an
@@ -154,7 +232,7 @@ export interface PreviewState {
   readonly profileSources: Map<string, { candidateId: string; revision: Revision }>;
   /**
    * Folders the user named in chat that sit outside the project — stills to look at, not to write.
-   * Keyed by project id. Restored from thread metadata so an overnight run still sees them.
+   * Keyed by project id. Restored from thread metadata so an unattended run still sees them.
    */
   readonly readRoots: Map<string, Set<string>>;
   runPreview: RunPreview;
@@ -234,6 +312,14 @@ export interface CoreServices {
   readonly selfImprovement: SelfImprovementService;
   readonly selfEditGate: SelfEditGateService;
   readonly pluginTools: PluginToolService;
+  /** The locks plugin tools and connectors wait their turn for, the person first (`plugin-locks.ts`). */
+  readonly locks: LockService;
+  /** Genex's moments and the plugin steps they run (`plugin-hooks.ts`). */
+  readonly hooks: HookService;
+  /** A game's observers run inside a run, their pictures kept with it (`observers.ts`). */
+  readonly observers: ObserverService;
+  /** A Loop's finish checks: the reviewer's verdict is the host's to read and record (`finish-review.ts`). */
+  readonly finishReviews: FinishReviews;
   readonly conversation: ConversationService;
   readonly assets: AssetService;
   readonly rewind: ChatRewindService;
@@ -241,6 +327,8 @@ export interface CoreServices {
   readonly permissions: ChatPermissionService;
   /** Whether a game chat is in Plan mode, when nothing may act on its behalf (`ChatPermissionService.planning`). */
   planning(threadId: string): Promise<boolean>;
+  /** A game chat's permission mode now, as its questions are answered by (`ChatPermissionService.modeOf`). */
+  chatMode(threadId: string): Promise<PermissionMode>;
 }
 
 /**
@@ -260,8 +348,14 @@ export function idleWork(): WorkInFlight {
   return {
     activeCompletions: new Map(),
     activeConnectorCalls: new Map(),
+    assetCalls: new Map(),
+    activeMoments: new Map(),
+    cutOffCalls: new Map(),
+    unsavedFiles: new Map(),
     activeDelegations: new Map(),
+    gameChanges: new Map(),
     activeRunIds: new Set(),
+    runJobStops: new Set(),
     openTurns: new Map(),
     harnessGeneration: 0,
     pluginCallAttribution: new WeakMap(),

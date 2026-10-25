@@ -17,16 +17,20 @@
  * vendored three.js — so restore is a pure checkout. {@link SnapshotEngine.restore} still calls
  * the `afterRestore` hook where an install step would go.
  */
-import { cp, symlink, writeFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { copyFile, cp, lstat, mkdir, readdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { setTimeout as sleep } from "node:timers/promises";
 import path from "node:path";
 import { ensureDir, pathExists } from "./fsx.ts";
 import { shortId } from "./ids.ts";
 import { throughClaudeFolder } from "./paths.ts";
 import type { SnapshotGitRefs } from "./types.ts";
+import { StudioPlatform } from "../shared/boot.ts";
 import { type SnapshotRecord, SnapshotScope } from "../shared/event-log.ts";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { startWithRecovery } from "./process-start.ts";
+import { MINUTE_MS, SECOND_MS } from "../shared/duration.ts";
 import { errorMessage } from "../shared/errors.ts";
 import { hostGitArgs, hostGitConfig, hostGitEnv } from "./git-policy.ts";
 
@@ -43,11 +47,90 @@ export const SnapshotRefusal = {
   BranchChanged: "branch-changed",
   HistoryChanged: "history-changed",
   RescueFailed: "rescue-failed",
+  /** A worker's copy of the game would be larger than a copy may be (`WRITER_COPY_MAX_BYTES`). */
+  CopyTooLarge: "copy-too-large",
 } as const;
 export type SnapshotRefusal = (typeof SnapshotRefusal)[keyof typeof SnapshotRefusal];
 
 /** git output a host call may buffer before it fails. */
 const GIT_MAX_BUFFER_BYTES = 32 * 1024 * 1024;
+
+/**
+ * The most disk a worker's copy of a game may take. Up to eight workers copy one game at once; past
+ * this a copy costs the person's disk more than the work is worth, and the lead should work in the
+ * game folder itself instead.
+ */
+export const WRITER_COPY_MAX_BYTES = 2 * 1024 ** 3;
+
+/** Folders a copy never receives from a nested repository: its history, and packages it links instead. */
+const NEVER_COPIED = new Set([".git", "node_modules"]);
+
+/**
+ * Clone `files` (paths inside the game) from the game folder into a copy of it, each to the same
+ * path: a clone shares the file's blocks until either side changes it, so it takes neither the
+ * time of writing the file again nor its disk. A file it could not clone is left out (git writes
+ * it); it may fail as a whole.
+ */
+export type CloneFiles = (gameDir: string, targetDir: string, files: readonly string[]) => Promise<void>;
+/** macOS's own `cp`: with `-c` it clones through clonefile(2) on APFS (and copies elsewhere). */
+const MAC_CP = "/bin/cp";
+/** How many files one `cp -c` clones: one folder's files, a batch at a time, well under the argument limit. */
+const CLONE_BATCH = 200;
+/** How many files a copy looks at at once. */
+const FILES_AT_ONCE = 64;
+/** How many `cp -c` batches run at once. */
+const CLONE_BATCHES_AT_ONCE = 4;
+
+/** Clone with `cp -c`, one batch per folder of the copy. */
+async function cloneByCp(gameDir: string, targetDir: string, files: readonly string[]): Promise<void> {
+  const byFolder = new Map<string, string[]>();
+  for (const file of files) {
+    const folder = path.posix.dirname(file);
+    const inFolder = byFolder.get(folder) ?? [];
+    inFolder.push(file);
+    byFolder.set(folder, inFolder);
+  }
+  const batches = [...byFolder].flatMap(([folder, inFolder]) =>
+    Array.from({ length: Math.ceil(inFolder.length / CLONE_BATCH) }, (_, i) => ({
+      folder,
+      files: inFolder.slice(i * CLONE_BATCH, (i + 1) * CLONE_BATCH),
+    })),
+  );
+  const one = async ({ folder, files: batch }: { folder: string; files: string[] }) => {
+    const to = path.join(targetDir, folder);
+    await mkdir(to, { recursive: true });
+    const from = batch.map((file) => path.join(gameDir, file));
+    await execFileAsync(MAC_CP, ["-c", "--", ...from, `${to}${path.sep}`], { windowsHide: true });
+  };
+  for (let at = 0; at < batches.length; at += CLONE_BATCHES_AT_ONCE)
+    await Promise.all(batches.slice(at, at + CLONE_BATCHES_AT_ONCE).map((batch) => one(batch).catch(() => {})));
+}
+
+/** Clone with a reflink where the file system has them (Btrfs, XFS); the first refusal ends it. */
+async function cloneByReflink(gameDir: string, targetDir: string, files: readonly string[]): Promise<void> {
+  for (const file of files) {
+    const to = path.join(targetDir, file);
+    await mkdir(path.dirname(to), { recursive: true });
+    await copyFile(path.join(gameDir, file), to, constants.COPYFILE_FICLONE_FORCE);
+  }
+}
+
+/** The clone each platform makes; none on another (Windows): git checks every file out, as it always did. */
+const PLATFORM_CLONES: Partial<Record<NodeJS.Platform, CloneFiles>> = {
+  [StudioPlatform.Mac]: cloneByCp,
+  [StudioPlatform.Linux]: cloneByReflink,
+};
+const PLATFORM_CLONE: CloneFiles | null = PLATFORM_CLONES[process.platform] ?? null;
+/** `git ls-tree -r -z` modes of the files a copy may clone: plain and executable regular files. */
+const CLONABLE_MODES = new Set(["100644", "100755"]);
+/** One `git ls-tree -r -z` entry: its mode and path. */
+const TREE_ENTRY = /^(\d+) \w+ [0-9a-f]+\t(.+)$/s;
+
+/** What a worker's copy of a game would take, in all and by top-level folder, largest first. */
+export interface CopySize {
+  bytes: number;
+  folders: Array<{ folder: string; bytes: number }>;
+}
 
 const MESSAGE = {
   UnknownWorkspace: (name: string) => `unknown workspace: ${name}`,
@@ -61,6 +144,8 @@ const MESSAGE = {
   NotDescendant: "the folder's HEAD no longer descends from the snapshot",
   ForeignCommits: "the branch holds commits since the snapshot that the studio did not make",
   RescueReason: (snapshotId: string) => `pre-restore rescue before ${snapshotId}`,
+  IndexLockHeld: (lock: string, waitedMs: number) =>
+    `${lock} was still held after ${waitedMs / SECOND_MS} s: another git is writing this folder's first commit`,
 } as const;
 
 /** A refusal with a typed `code`; the folder was left exactly as it was. */
@@ -101,10 +186,10 @@ export interface WorkspaceSpec {
 }
 
 /**
- * One committer, everywhere the studio writes history — here, in the night's worktrees
+ * One committer, everywhere the studio writes history — here, in the run's worktrees
  * (`harness-seed/loop/repo.ts`) and in `landBuild`. A user's `git log` used to name five
  * (studio-substrate, studio-facet, studio-integrator, studio-director, studio-base) as if a
- * committee had been through their game overnight.
+ * committee had been through their game unattended.
  */
 export const STUDIO_COMMITTER = { name: "AI Game Studio", email: "studio@ai-game-studio.local" };
 
@@ -130,17 +215,48 @@ export const GIT_ENV = {
  */
 export { HOST_GIT_CONFIG } from "./git-policy.ts";
 
-export async function git(dir: string, args: string[], env: Record<string, string> = {}): Promise<string> {
+/** How long a git command of the studio waits for another git (a turn's checkpoint, the person's own) to let go of the index. */
+const HELD_INDEX_WAIT_MS = 15 * SECOND_MS;
+/** How often it tries again meanwhile. */
+const HELD_INDEX_POLL_MS = 100;
+
+/** Whether git refused only because another git holds the repository's index: it changed nothing. */
+const heldIndex = (error: unknown): boolean => /index\.lock'?: File exists/.test(errorMessage(error));
+
+/**
+ * Git as the studio in `dir`; `input`, when given, is written to its standard input. A command
+ * another git's index.lock refused is run again once that git lets go, for {@link HELD_INDEX_WAIT_MS}:
+ * two writers of one game (a run starting as a chat turn ends) must not fail the second.
+ */
+export async function git(
+  dir: string,
+  args: string[],
+  env: Record<string, string> = {},
+  input?: string | Buffer,
+): Promise<string> {
   const environment = hostGitEnv({ ...GIT_ENV, ...env });
   const config = await hostGitConfig(dir, environment);
-  const { stdout } = await startWithRecovery(() =>
-    execFileAsync("git", [...config, "-C", dir, ...hostGitArgs(args)], {
-      windowsHide: true,
-      env: environment,
-      maxBuffer: GIT_MAX_BUFFER_BYTES,
-    }),
-  );
-  return stdout;
+  const run = async (): Promise<string> => {
+    const { stdout } = await startWithRecovery(() => {
+      const running = execFileAsync("git", [...config, "-C", dir, ...hostGitArgs(args)], {
+        windowsHide: true,
+        env: environment,
+        maxBuffer: GIT_MAX_BUFFER_BYTES,
+      });
+      if (input !== undefined) running.child.stdin?.end(input);
+      return running;
+    });
+    return stdout;
+  };
+  const deadline = Date.now() + HELD_INDEX_WAIT_MS;
+  for (;;) {
+    try {
+      return await run();
+    } catch (error) {
+      if (!heldIndex(error) || Date.now() >= deadline) throw error;
+      await sleep(HELD_INDEX_POLL_MS);
+    }
+  }
 }
 
 /**
@@ -185,24 +301,274 @@ export async function resolveCommit(dir: string, revision: string): Promise<stri
   return hash;
 }
 
-/** `git init` + an initial commit if the directory is not a repo yet. */
-export async function ensureRepo(dir: string): Promise<void> {
+/**
+ * Written into `.git` before a new repository's first commit and removed once that commit lands. A
+ * start that ended inside the commit (the harness seed's took minutes on a busy Windows PC, and the
+ * window's Try again relaunches) leaves it behind, so the next start finishes the commit instead of
+ * taking `.git` for a finished repository. A person's own repository never has it.
+ */
+export const FIRST_COMMIT_MARKER = "genex-first-commit";
+/** How long a new repository's first commit waits for an index.lock that another git holds. */
+export const INDEX_LOCK_WAIT_MS = 2 * MINUTE_MS;
+/** How often it looks again, and how old an unheld lock must be before it is a dead start's. */
+const INDEX_LOCK_POLL_MS = 2 * SECOND_MS;
+const INDEX_LOCK_STALE_MS = 30 * SECOND_MS;
+/** Errors from removing a lock that a running process still has open (Windows). */
+const LOCK_HELD_CODES = new Set(["EBUSY", "EPERM", "EACCES"]);
+
+/** How {@link ensureRepo} waits on a held index.lock; the test's clock and removal in tests. */
+export interface FirstCommitDeps {
+  clock?: { now: () => number; sleep: (ms: number) => Promise<unknown> };
+  removeLock?: (file: string) => Promise<void>;
+  /** Called as each git step of a first commit finishes (`init`, `add`, `commit`), for the start's log. */
+  onStep?: (step: FirstCommitStep) => void;
+}
+
+/** The git steps of a new repository's first commit. */
+export const FirstCommitStep = { Init: "init", Add: "add", Commit: "commit" } as const;
+export type FirstCommitStep = (typeof FirstCommitStep)[keyof typeof FirstCommitStep];
+
+/** Whether `dir` has no repository yet, or one whose first commit an earlier start left unfinished. */
+export async function needsFirstCommit(dir: string): Promise<boolean> {
+  const dotGit = path.join(dir, ".git");
+  return !(await pathExists(dotGit)) || (await pathExists(path.join(dotGit, FIRST_COMMIT_MARKER)));
+}
+
+/** The commit message of a repository's first commit. */
+const INITIAL_COMMIT = "substrate: initial";
+
+/**
+ * Git's bulk check-in for one call: every blob past `core.bigFileThreshold` (here every non-empty
+ * file) streams into a single pack instead of a loose object file of its own. A first commit of a
+ * folder with thousands of files (an adopted game) otherwise creates, writes and renames a file per
+ * file, slow wherever each file operation costs milliseconds. Set through the environment, so `add`
+ * stays the subcommand `hostGitArgs` reads; a Git older than 2.31 ignores it and writes loose objects.
+ */
+const ONE_PACK_ENV = { GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "core.bigFileThreshold", GIT_CONFIG_VALUE_0: "1" };
+
+/** `git init` + an initial commit if the directory is not a repo yet, or finish one an earlier start left. */
+export async function ensureRepo(dir: string, deps: FirstCommitDeps = {}): Promise<void> {
   await ensureDir(dir);
-  if (await pathExists(path.join(dir, ".git"))) return;
+  if (!(await needsFirstCommit(dir))) return;
+  const dotGit = path.join(dir, ".git");
+  // The marker goes in before git writes anything, so no interrupted start looks finished.
+  await ensureDir(dotGit);
+  await writeFile(path.join(dotGit, FIRST_COMMIT_MARKER), "");
   await git(dir, ["init", "-q", "-b", "main"]);
-  await stagePublicChanges(dir);
-  await git(dir, ["commit", "-q", "--allow-empty", "-m", "substrate: initial"]);
+  deps.onStep?.(FirstCommitStep.Init);
+  await releaseIndexLock(dotGit, deps);
+  await stagePublicChanges(dir, ONE_PACK_ENV);
+  deps.onStep?.(FirstCommitStep.Add);
+  if (!(await gitOrNull(dir, ["rev-parse", "--verify", "--quiet", "HEAD"])))
+    await git(dir, ["commit", "-q", "--allow-empty", "-m", INITIAL_COMMIT]);
+  deps.onStep?.(FirstCommitStep.Commit);
+  await rm(path.join(dotGit, FIRST_COMMIT_MARKER), { force: true });
+}
+
+/**
+ * Wait for a first commit's index.lock to go: a git an earlier start left running holds it (Windows
+ * refuses to remove an open file) until it ends; one nothing holds is a killed git's, removed once it
+ * is old enough that no git of this start can own it. Throws, naming the lock, past {@link INDEX_LOCK_WAIT_MS}.
+ */
+async function releaseIndexLock(dotGit: string, deps: FirstCommitDeps): Promise<void> {
+  const clock = deps.clock ?? { now: Date.now, sleep: (ms: number) => sleep(ms) };
+  const removeLock = deps.removeLock ?? ((file: string) => rm(file));
+  const lock = path.join(dotGit, "index.lock");
+  const deadline = clock.now() + INDEX_LOCK_WAIT_MS;
+  for (;;) {
+    const found = await stat(lock).catch(() => null);
+    if (!found) return;
+    if (clock.now() - found.mtimeMs >= INDEX_LOCK_STALE_MS && (await removed(lock, removeLock))) return;
+    if (clock.now() >= deadline) throw new Error(MESSAGE.IndexLockHeld(lock, INDEX_LOCK_WAIT_MS));
+    await clock.sleep(INDEX_LOCK_POLL_MS);
+  }
+}
+
+/** Whether `lock` could be removed; false while a running process holds it open. */
+async function removed(lock: string, removeLock: (file: string) => Promise<void>): Promise<boolean> {
+  try {
+    await removeLock(lock);
+    return true;
+  } catch (error) {
+    if (LOCK_HELD_CODES.has((error as NodeJS.ErrnoException).code ?? "")) return false;
+    throw error;
+  }
+}
+
+/**
+ * A new repository in `dir` whose first commit holds `files` (POSIX paths inside `fromDir`), laid
+ * down by git: it commits the bytes read here from `fromDir` (`fast-import`, one pack) and then
+ * checks the files out itself. Nothing written into `dir` is read back, by this process or by git:
+ * right after an install, Windows held the first read of each file Genex had just copied for
+ * minutes, and the harness workspace's first commit read back all of them.
+ */
+export async function checkOutNewRepo(fromDir: string, dir: string, files: readonly string[]): Promise<void> {
+  await ensureDir(dir);
+  // As in ensureRepo: a start that ends before the checkout leaves the marker, and the next start
+  // copies the seed and finishes the first commit.
+  const dotGit = path.join(dir, ".git");
+  await ensureDir(dotGit);
+  await writeFile(path.join(dotGit, FIRST_COMMIT_MARKER), "");
+  await git(dir, ["init", "-q", "-b", "main"]);
+  await git(dir, ["fast-import", "--quiet", "--done"], {}, await firstCommitStream(fromDir, files));
+  await git(dir, ["reset", "-q", "--hard", "HEAD"]);
+  await rm(path.join(dotGit, FIRST_COMMIT_MARKER), { force: true });
+}
+
+/** A `git fast-import` stream of one commit on `main` holding `files` as `fromDir` has them. */
+async function firstCommitStream(fromDir: string, files: readonly string[]): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  const entries: string[] = [];
+  for (const [index, rel] of files.entries()) {
+    const file = path.join(fromDir, ...rel.split("/"));
+    const bytes = await readFile(file);
+    const executable = process.platform !== StudioPlatform.Windows && ((await lstat(file)).mode & 0o111) !== 0;
+    chunks.push(Buffer.from(`blob\nmark :${index + 1}\ndata ${bytes.length}\n`), bytes, Buffer.from("\n"));
+    entries.push(`M ${executable ? "100755" : "100644"} :${index + 1} ${fastImportPath(rel)}\n`);
+  }
+  const when = `${Math.floor(Date.now() / SECOND_MS)} +0000`;
+  const who = `${STUDIO_COMMITTER.name} <${STUDIO_COMMITTER.email}> ${when}`;
+  const messageBytes = Buffer.byteLength(INITIAL_COMMIT);
+  chunks.push(
+    Buffer.from(
+      `commit refs/heads/main\nauthor ${who}\ncommitter ${who}\ndata ${messageBytes}\n${INITIAL_COMMIT}\n${entries.join("")}\ndone\n`,
+    ),
+  );
+  return Buffer.concat(chunks);
+}
+
+/** A path as a `fast-import` file command takes it: quoted, C-style, when it holds a quote, backslash or line break. */
+function fastImportPath(rel: string): string {
+  if (!/["\\\n]/.test(rel)) return rel;
+  return `"${rel.replaceAll("\\", "\\\\").replaceAll('"', '\\"').replaceAll("\n", "\\n")}"`;
 }
 
 /** Environment files never enter host-created commits, even when an adopted folder has no ignore file. */
-async function stagePublicChanges(dir: string): Promise<void> {
-  await git(dir, ["add", "-A"]);
+async function stagePublicChanges(dir: string, env: Record<string, string> = {}): Promise<void> {
+  await git(dir, ["add", "-A"], env);
+}
+
+/** One `git ls-tree -r -l -z` entry of a file: its size and path (a nested repository's pointer is no blob). */
+const TRACKED_BLOB = /^\d+ blob [0-9a-f]+ +(\d+)\t(.+)$/s;
+
+/** A path inside the game, POSIX, as copy rules read it. */
+const gameRelative = (gameDir: string, file: string): string => path.relative(gameDir, file).split(path.sep).join("/");
+
+/** A copy's size rule and tally: what it leaves out, by the path inside the game, and where sizes add up. */
+interface CopyTally {
+  skip: (rel: string) => boolean;
+  add: (rel: string, bytes: number) => void;
+}
+
+/** Tally the files of one folder a copy receives, never through a link; answers its subfolders it receives. */
+async function tallyFolder(gameDir: string, folder: string, tally: CopyTally): Promise<string[]> {
+  const subfolders: string[] = [];
+  for (const entry of await readdir(path.join(gameDir, folder), { withFileTypes: true }).catch(() => [])) {
+    const child = `${folder}/${entry.name}`;
+    if (NEVER_COPIED.has(entry.name) || tally.skip(child)) continue;
+    if (entry.isDirectory()) subfolders.push(child);
+    else if (entry.isFile()) tally.add(child, (await lstat(path.join(gameDir, child)).catch(() => null))?.size ?? 0);
+  }
+  return subfolders;
+}
+
+/**
+ * Tally each file a copy receives from the nested repository at `rel`: never its history or
+ * packages, nor what the tally skips, and never through a link.
+ */
+async function tallyNested(gameDir: string, rel: string, tally: CopyTally): Promise<void> {
+  const root = await lstat(path.join(gameDir, rel)).catch(() => null);
+  if (!root?.isDirectory() || tally.skip(rel)) return;
+  const pending = [rel];
+  for (let folder = pending.pop(); folder !== undefined; folder = pending.pop())
+    pending.push(...(await tallyFolder(gameDir, folder, tally)));
+}
+
+/** The NUL-separated paths git printed with `-z`. */
+const zPaths = (out: string | null): string[] => (out ?? "").split("\0").filter(Boolean);
+
+/**
+ * The tracked paths of `commit` the game folder no longer holds as committed: changed, deleted, of
+ * another mode or kind. Null when git cannot say, and then nothing is cloned.
+ */
+async function changedSince(gameDir: string, commit: string): Promise<Set<string> | null> {
+  const out = await gitOrNull(gameDir, ["diff", "--name-only", "--no-renames", "-z", "--end-of-options", commit, "--"]);
+  return out === null ? null : new Set(zPaths(out));
+}
+
+/** Whether `file` is a regular file at `root`, reached as written (its last part no link). */
+const isRegularFile = async (root: string, file: string): Promise<boolean> =>
+  Boolean((await lstat(path.join(root, file)).catch(() => null))?.isFile());
+
+/** The files of `files` that are regular files at `root`, looked at a few at once. */
+async function regularFiles(root: string, files: readonly string[]): Promise<Set<string>> {
+  const found = new Set<string>();
+  for (let at = 0; at < files.length; at += FILES_AT_ONCE) {
+    const batch = files.slice(at, at + FILES_AT_ONCE);
+    const regular = await Promise.all(batch.map((file) => isRegularFile(root, file)));
+    for (const [i, file] of batch.entries()) if (regular[i]) found.add(file);
+  }
+  return found;
+}
+
+/** Git writes `files` into the copy from its index (the commit), recording their stat. */
+async function checkoutFiles(targetDir: string, files: string[]): Promise<void> {
+  if (files.length) await git(targetDir, ["checkout-index", "-f", "-u", "--stdin", "-z"], {}, `${files.join("\0")}\0`);
+}
+
+/**
+ * Fill a copy made without a checkout with `commit`'s files. Each regular file the game folder still
+ * holds as committed is cloned from there (`CloneFiles`: copy-on-write where the volume can, so a
+ * large project costs neither the time of writing its files again nor the disk); git writes every
+ * other entry. Git then records each file's stat, and any clone that does not read as committed (the
+ * folder changed between the look and the clone) is written again from the commit: the copy is
+ * exactly the commit's, however it was made.
+ */
+async function fillWorktree(gameDir: string, targetDir: string, commit: string, clone: CloneFiles): Promise<void> {
+  await git(targetDir, ["read-tree", "--end-of-options", commit]);
+  const entries = zPaths(await git(gameDir, ["ls-tree", "-r", "-z", "--end-of-options", commit])).flatMap((line) => {
+    const entry = TREE_ENTRY.exec(line);
+    return entry?.[1] && entry[2] ? [{ mode: entry[1], file: entry[2] }] : [];
+  });
+  const changed = await changedSince(gameDir, commit);
+  const same = changed ? entries.filter((e) => CLONABLE_MODES.has(e.mode) && !changed.has(e.file)) : [];
+  // Only a regular file reached as git saw it; anything put there since (a link) git writes.
+  const clonable = [
+    ...(await regularFiles(
+      gameDir,
+      same.map((e) => e.file),
+    )),
+  ];
+  await clone(gameDir, targetDir, clonable).catch(() => {});
+  const cloned = await regularFiles(targetDir, clonable);
+  await checkoutFiles(
+    targetDir,
+    entries.map((e) => e.file).filter((file) => !cloned.has(file)),
+  );
+  if (!cloned.size) return;
+  await gitOrNull(targetDir, ["update-index", "-q", "--refresh"]);
+  await checkoutFiles(targetDir, zPaths(await git(targetDir, ["diff", "--name-only", "--no-renames", "-z"])));
 }
 
 export class SnapshotEngine {
   readonly workspaces: Map<string, string>;
   /** Optional hook for dependency restore; no-op by design (see file header). */
   afterRestore?: (workspace: WorkspaceSpec) => Promise<void>;
+  /**
+   * Called before the engine commits a game folder (never the harness's): its owner tops up the
+   * folder's ignore rules for what it holds now and may answer those rules' lines (a string
+   * array), which a restore then never deletes. A rejection never stops the commit; the owner reports it.
+   */
+  beforeCommit?: (workspace: WorkspaceSpec) => Promise<readonly string[] | undefined>;
+  /**
+   * Called after a restore put a game folder back, with the ignore lines its last `beforeCommit`
+   * answered: its owner writes them into the restored ignore file, so what a restore leaves on disk
+   * because they ignore it stays out of every commit after it, though the restored folder may no
+   * longer hold what named those rules. A rejection never stops the restore; the owner reports it.
+   */
+  keepIgnoring?: (workspace: WorkspaceSpec, lines: readonly string[]) => Promise<void>;
+  /** Per game folder, the ignore lines its last `beforeCommit` answered. */
+  readonly #ruleLines = new Map<string, readonly string[]>();
 
   constructor(workspaces: WorkspaceSpec[]) {
     this.workspaces = new Map(workspaces.map((w) => [w.name, w.dir]));
@@ -218,8 +584,27 @@ export class SnapshotEngine {
     this.workspaces.set(spec.name, spec.dir);
   }
 
-  async init(): Promise<void> {
-    for (const dir of this.workspaces.values()) await ensureRepo(dir);
+  /**
+   * A repository for every workspace that has none yet; a game's rules are topped up before its
+   * first commit. `onStep` hears each first commit's git steps by workspace name.
+   */
+  async init(onStep?: (workspace: string, step: FirstCommitStep) => void): Promise<void> {
+    for (const [name, dir] of this.workspaces) {
+      // Only a folder about to get its first commit: init runs for every game at each start.
+      if (await needsFirstCommit(dir)) await this.#beforeCommit(name, dir);
+      await ensureRepo(dir, onStep ? { onStep: (step) => onStep(name, step) } : {});
+    }
+  }
+
+  /** The `beforeCommit` hook for a game folder, keeping the lines it answers; what it throws stays with its owner. */
+  async #beforeCommit(name: string, dir: string): Promise<void> {
+    if (name === HARNESS_WORKSPACE || !this.beforeCommit) return;
+    const lines = await this.beforeCommit({ name, dir }).catch(() => undefined);
+    const answered: unknown[] = Array.isArray(lines) ? lines : [];
+    this.#ruleLines.set(
+      dir,
+      answered.filter((line): line is string => typeof line === "string" && line !== ""),
+    );
   }
 
   #namesForScope(scope: SnapshotScope, gameWorkspace?: string): string[] {
@@ -248,16 +633,20 @@ export class SnapshotEngine {
     const refs: SnapshotRecordGit = {};
     for (const name of this.#namesForScope(options.scope, options.gameWorkspace)) {
       const dir = this.dirFor(name);
-      await ensureRepo(dir);
       // `add -A` in the middle of the user's merge would commit their conflict markers for them.
-      if (name !== HARNESS_WORKSPACE) await this.#refuseMidOperation(name, dir);
+      // Refused before the rules are topped up, so a refusal writes nothing; a folder with no
+      // repository yet is in no git operation.
+      const hasRepo = await pathExists(path.join(dir, ".git"));
+      if (name !== HARNESS_WORKSPACE && hasRepo) await this.#refuseMidOperation(name, dir);
+      await this.#beforeCommit(name, dir);
+      await ensureRepo(dir);
       await stagePublicChanges(dir);
       // --allow-empty: a snapshot must exist even when nothing changed, so that timeline
       // positions and `healthy` marks stay addressable.
       await git(dir, [...NO_HOOKS, "commit", "-q", "--allow-empty", "-m", `snapshot ${snapshotId}: ${options.reason}`]);
       const commit = (await git(dir, ["rev-parse", "HEAD"])).trim();
       // `refs/studio/snap/…`, not `refs/tags/snap/…`: a tag in the user's repository is theirs,
-      // it shows in `git tag`, and `git push --tags` would ship every night's bookkeeping to
+      // it shows in `git tag`, and `git push --tags` would ship every run's bookkeeping to
       // their remote. The ref is just as reachable and nothing but the studio ever lists it.
       await git(dir, ["update-ref", snapshotRef(snapshotId), commit]);
       if (name === HARNESS_WORKSPACE) refs.harness = commit;
@@ -316,12 +705,21 @@ export class SnapshotEngine {
         throw new SnapshotRefusedError(SnapshotRefusal.RescueFailed, name, MESSAGE.RescueFailed(errorMessage(err)));
       }
     }
-    for (const { name, dir, commit } of targets) {
-      await git(dir, ["reset", "-q", "--hard", "--end-of-options", commit]);
-      await git(dir, ["clean", "-qfd"]);
-      await this.afterRestore?.({ name, dir });
-    }
+    for (const { name, dir, commit } of targets) await this.#resetTo(name, dir, commit);
     return rescue;
+  }
+
+  /**
+   * Put a workspace back to `commit` and remove what it did not hold. What a game's rules ignore
+   * now stayed out of its rescue, so it is never cleaned either: an older save point's ignore file
+   * may not name the engine's scratch yet, so its owner writes those rules back into it (`keepIgnoring`).
+   */
+  async #resetTo(name: string, dir: string, commit: string): Promise<void> {
+    const kept = name === HARNESS_WORKSPACE ? [] : (this.#ruleLines.get(dir) ?? []);
+    await git(dir, ["reset", "-q", "--hard", "--end-of-options", commit]);
+    if (kept.length > 0) await this.keepIgnoring?.({ name, dir }, kept).catch(() => {});
+    await git(dir, ["clean", "-qfd", ...kept.flatMap((line) => ["-e", line])]);
+    await this.afterRestore?.({ name, dir });
   }
 
   /** `refs/heads/<branch>`, or null when HEAD is detached. */
@@ -374,7 +772,7 @@ export class SnapshotEngine {
    * A playable fork of a game workspace at a snapshot — pairs with an event-log fork.
    *
    * `versionNested` is the user's answer to "may the studio version the repositories inside my
-   * game folder" (decision 1, 2026-09-08): with it, the fork's copy of a nested repository is
+   * game folder": with it, the fork's copy of a nested repository is
    * committed here, so a worker's edits inside it are real work the studio can keep, roll back
    * and merge. Without it the copy is what it always was — files to read and run, versioned by
    * nothing.
@@ -383,18 +781,22 @@ export class SnapshotEngine {
     workspace: string,
     commit: string,
     targetDir: string,
-    options: { versionNested?: boolean } = {},
+    options: { versionNested?: boolean; skip?: (rel: string) => boolean; cloneFiles?: CloneFiles | null } = {},
   ): Promise<string> {
     const dir = this.dirFor(workspace);
+    const skip = options.skip ?? (() => false);
     const resolved = await resolveCommit(dir, commit);
-    await git(dir, ["worktree", "add", "--detach", "-f", "--end-of-options", targetDir, resolved]);
+    const clone = options.cloneFiles === undefined ? PLATFORM_CLONE : options.cloneFiles;
+    if (clone) {
+      await git(dir, ["worktree", "add", "--no-checkout", "--detach", "-f", "--end-of-options", targetDir, resolved]);
+      await fillWorktree(dir, targetDir, resolved, clone);
+    } else await git(dir, ["worktree", "add", "--detach", "-f", "--end-of-options", targetDir, resolved]);
     // A game with its own build needs its dependencies in the copy too: node_modules is
     // ignored by git, so the worktree gets a link to the workspace's own.
     await this.#linkModules(dir, targetDir, "");
     // A nested git repository inside the game (the user's own project dropped into the folder)
     // is a bare pointer in the studio's history and an empty directory in a worktree. Copy its
-    // working tree in (without its .git) so agents see and run the game — a director once spent
-    // its first quarter hour discovering this.
+    // working tree in (without its .git) so agents see and run the game.
     const nested = await this.nestedRepositories(workspace, resolved);
     for (const rel of nested) {
       const source = path.join(dir, rel);
@@ -403,7 +805,11 @@ export class SnapshotEngine {
       await cp(source, target, {
         recursive: true,
         force: true,
-        filter: (from) => path.basename(from) !== ".git" && path.basename(from) !== "node_modules",
+        // A reflink where Linux's file system makes one; a plain copy elsewhere.
+        mode: constants.COPYFILE_FICLONE,
+        // Besides its history and packages, what the game's copy rules leave out (`skip`, by the
+        // path inside the game): an engine's scratch a worker never needs.
+        filter: (from) => !NEVER_COPIED.has(path.basename(from)) && !skip(gameRelative(dir, from)),
       }).catch(() => {});
     }
     if (options.versionNested) await this.#versionNested(targetDir, nested, resolved);
@@ -432,8 +838,7 @@ export class SnapshotEngine {
   /**
    * Replace the pointers to the game's own repositories with the files themselves — in this fork
    * only. A gitlink is committed by nothing: a worker's edits under `wreckage/` never reached an
-   * "accepted" commit, survived a lost iteration's `reset --hard`, or landed (flautout-remix,
-   * 2026-09-07). The live folder keeps its pointer until the user agrees to the same conversion
+   * "accepted" commit, survived a lost iteration's `reset --hard`, or landed. The live folder keeps its pointer until the user agrees to the same conversion
    * at landing (`studio-core.landBuild`).
    *
    * The commit is deterministic — same parent, same files, same identity, same date as the commit
@@ -456,6 +861,31 @@ export class SnapshotEngine {
       ["commit", "-q", "-m", `studio: version ${staged.join(", ")} — the game's own repositories`],
       date ? { GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date } : {},
     );
+  }
+
+  /**
+   * What a worker's copy of `commit` would take: every file the commit tracks (a copy checks them
+   * all out) and the working files of each nested repository that the copy receives (`skip` names
+   * what it leaves out, by the path inside the game; links are never followed), by top-level
+   * folder, largest first.
+   */
+  async copySize(workspace: string, commit: string, skip: (rel: string) => boolean): Promise<CopySize> {
+    const dir = this.dirFor(workspace);
+    const resolved = await resolveCommit(dir, commit);
+    const byFolder = new Map<string, number>();
+    const add = (rel: string, bytes: number) => {
+      const folder = rel.split("/")[0] ?? rel;
+      byFolder.set(folder, (byFolder.get(folder) ?? 0) + bytes);
+    };
+    for (const entry of (await git(dir, ["ls-tree", "-r", "-l", "-z", "--end-of-options", resolved])).split("\0")) {
+      const blob = TRACKED_BLOB.exec(entry);
+      if (blob?.[1] && blob[2]) add(blob[2], Number(blob[1]));
+    }
+    for (const rel of await this.nestedRepositories(workspace, resolved)) await tallyNested(dir, rel, { skip, add });
+    const folders = [...byFolder]
+      .map(([folder, bytes]) => ({ folder, bytes }))
+      .sort((a, b) => b.bytes - a.bytes || a.folder.localeCompare(b.folder));
+    return { bytes: folders.reduce((sum, folder) => sum + folder.bytes, 0), folders };
   }
 
   /** Paths a commit records as nested repositories (gitlinks, mode 160000). */

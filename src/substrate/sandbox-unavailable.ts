@@ -16,32 +16,19 @@ import {
   linuxInstallCommands,
   type SandboxProblem,
   type SandboxTool,
+  WindowsSetupNeed,
 } from "../shared/boot.ts";
 
 /**
- * sandbox-runtime's Windows error codes that mean "needs setup or repair", not "broken".
- * The verify codes are the egress check (`srt-win wfp verify`): its logon failure is this
- * screen, including when the account cannot read the program. `spawn_failed` stays a crash.
+ * sandbox-runtime's Windows error codes that mean "not set up yet", not "broken", and what Set up
+ * does about each; null is the sandbox install, which the problem then leaves unsaid.
  */
-const WFP_VERIFY_CODES: ReadonlySet<string> = new Set([
-  "wfp_verify_unparseable",
-  "wfp_verify_inconclusive",
-  "wfp_verify_bind_failed",
+const WINDOWS_SETUP_CODES: ReadonlyMap<string, WindowsSetupNeed | null> = new Map([
+  ["not_provisioned", null],
+  ["wfp_fence_inactive", null],
+  ["reinstall_required", WindowsSetupNeed.Reinstall],
+  ["seclogon_disabled", WindowsSetupNeed.LogonService],
 ]);
-const WINDOWS_SETUP_CODES: ReadonlySet<string> = new Set([
-  "not_provisioned",
-  "wfp_fence_inactive",
-  ...WFP_VERIFY_CODES,
-]);
-/**
- * The sentence srt-win adds to every `CreateProcessWithLogonW` error except a wrong password
- * and a stopped service. Access denied gets it too, so it is removed from a verify failure's
- * detail; the code, not this sentence, decides that the failure is a setup problem.
- */
-const SECLOGON_HINTS = [
-  "— ensure the Secondary Logon service (seclogon) is running.",
-  "- ensure the Secondary Logon service (seclogon) is running.",
-] as const;
 
 /** Why a sandboxed command could not start, when the sandbox itself is set up. */
 export const SandboxLaunchCode = {
@@ -53,6 +40,10 @@ export const SandboxLaunchCode = {
   NetworkDrive: "network-drive",
   /** Windows: a run asked to write or read a folder outside the session's grants. */
   NotGranted: "not-granted",
+  /** Windows: every port of srt-win's proxy range is reserved by Windows or held by another program. */
+  ProxyPortsRefused: "proxy-ports-refused",
+  /** Windows: Windows kept refusing to start srt-win as the sandbox user, after Genex tried again. */
+  SandboxUserRefused: "sandbox-user-refused",
 } as const;
 export type SandboxLaunchCode = (typeof SandboxLaunchCode)[keyof typeof SandboxLaunchCode];
 
@@ -63,6 +54,15 @@ const WINDOWS_LAUNCH_CODES: ReadonlyMap<string, SandboxLaunchCode> = new Map([
   ["mapped_drive_cwd", SandboxLaunchCode.NetworkDrive],
 ]);
 
+/**
+ * The loopback ports srt-win's egress filter lets the sandbox user reach, where its network proxies
+ * must listen: sandbox-runtime's default, which Genex's install keeps.
+ */
+const SRT_PROXY_PORTS = "60080-60089";
+/** What Windows answers a listen on a port it reserved (EACCES) or another program holds. */
+const PORT_REFUSED: ReadonlySet<string> = new Set(["EACCES", "EADDRINUSE"]);
+const LISTEN_SYSCALL = "listen";
+
 const MESSAGE = {
   Unavailable: (problem: SandboxProblem) =>
     [`sandbox unavailable on ${problem.platform} (${problem.code})`, ...problem.details].join(": "),
@@ -72,11 +72,15 @@ const MESSAGE = {
   Launch: {
     [SandboxLaunchCode.ArgvTooLong]:
       "The command is too long for Windows to start (over 32,767 characters). Put it in a script file and run that.",
-    [SandboxLaunchCode.SrtWinTimeout]: "The Windows sandbox did not answer in time. Try again in a moment.",
+    [SandboxLaunchCode.SrtWinTimeout]:
+      "The Windows sandbox did not answer in time. An antivirus that scans every file can slow it this much: add Genex's folders to its exclusions, then try again.",
     [SandboxLaunchCode.NetworkDrive]:
       "Commands cannot run in a folder on a mapped or network drive. Move the game to a local drive.",
     [SandboxLaunchCode.NotGranted]:
       "This folder is not open to sandboxed commands yet. It opens once the running commands finish; try again then.",
+    [SandboxLaunchCode.ProxyPortsRefused]: `Windows did not let Genex's sandbox use its network ports (${SRT_PROXY_PORTS}). Hyper-V, WSL or Docker often reserve them. Restart the PC, or run "net stop winnat" and then "net start winnat" in a terminal opened as administrator, and try again.`,
+    [SandboxLaunchCode.SandboxUserRefused]:
+      "Windows would not start Genex's sandbox user. Restart the PC, then try again.",
   } satisfies Record<SandboxLaunchCode, string>,
 } as const;
 
@@ -95,6 +99,18 @@ export function windowsLaunchError(error: unknown): SandboxLaunchError | null {
   const code = typeof error === "object" && error !== null && "code" in error ? error.code : undefined;
   const launch = typeof code === "string" ? WINDOWS_LAUNCH_CODES.get(code) : undefined;
   return launch ? new SandboxLaunchError(launch, undefined, { cause: error }) : null;
+}
+
+/**
+ * The launch failure for a Windows start whose network proxies found no port they could listen
+ * on, by the error's code and call; null for any other error. SRT tries each port of its range
+ * and throws the last refusal.
+ */
+export function windowsProxyPortsError(error: unknown): SandboxLaunchError | null {
+  if (!(error instanceof Error) || !("syscall" in error) || error.syscall !== LISTEN_SYSCALL) return null;
+  const code = "code" in error ? error.code : undefined;
+  if (typeof code !== "string" || !PORT_REFUSED.has(code)) return null;
+  return new SandboxLaunchError(SandboxLaunchCode.ProxyPortsRefused, error.message, { cause: error });
 }
 
 /** The sandbox cannot start on this computer; `problem` says why and how to fix it. */
@@ -116,6 +132,8 @@ export interface SandboxCheck {
   dependencyErrors: string[];
   /** Linux tools not found on PATH ({@link missingLinuxTools}). */
   missingTools: SandboxTool[];
+  /** Windows: what Set up does about the dependency errors, when the check says. */
+  windowsNeeds?: WindowsSetupNeed[];
 }
 
 /** The setup problem the checks describe, or null when the sandbox may initialize. */
@@ -123,7 +141,10 @@ export function sandboxProblem(check: SandboxCheck): SandboxProblem | null {
   const base = { platform: check.platform, missingTools: [], installCommands: [], details: check.dependencyErrors };
   if (!check.supported) return { ...base, code: SandboxProblemCode.UnsupportedPlatform };
   if (check.dependencyErrors.length === 0) return null;
-  if (check.platform === StudioPlatform.Windows) return { ...base, code: SandboxProblemCode.NotProvisioned };
+  if (check.platform === StudioPlatform.Windows) {
+    const needs = check.windowsNeeds ? { windowsNeeds: check.windowsNeeds } : {};
+    return { ...base, code: SandboxProblemCode.NotProvisioned, ...needs };
+  }
   if (check.platform !== StudioPlatform.Linux) return { ...base, code: SandboxProblemCode.MissingTools };
   return {
     ...base,
@@ -149,12 +170,14 @@ function verifyDetails(details: readonly string[]): string[] {
 export function windowsSetupProblem(error: unknown, details: string[] = []): SandboxProblem | null {
   const code = error instanceof Error && "code" in error ? error.code : undefined;
   if (typeof code !== "string" || !WINDOWS_SETUP_CODES.has(code)) return null;
+  const need = WINDOWS_SETUP_CODES.get(code);
   return {
     code: SandboxProblemCode.NotProvisioned,
     platform: StudioPlatform.Windows,
     missingTools: [],
     installCommands: [],
-    details: WFP_VERIFY_CODES.has(code) ? verifyDetails(details) : details,
+    details,
+    ...(need ? { windowsNeeds: [need] } : {}),
   };
 }
 

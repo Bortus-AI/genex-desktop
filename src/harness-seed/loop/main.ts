@@ -18,6 +18,8 @@ import { EngineId, supportsSessions } from "./model-roles.ts";
 import { compactThread } from "./compact.ts";
 import { compactSession } from "./session-compact.ts";
 import { directorTool } from "./director.ts";
+import { chatWorkerTool } from "./workers/chat-workers.ts";
+import { CHAT_JUDGE_CAPABILITY, judgeFromChat, servesChatJudge } from "./chat-judge.ts";
 import { runSkillOpt } from "./skillopt.ts";
 import { learningOn } from "./learning.ts";
 import { loadSkills } from "./skills.ts";
@@ -30,19 +32,20 @@ import { handleRunStart, resumeRun } from "./run-dispatch.ts";
 import { handleBootNotice } from "./boot-notice.ts";
 import { buildHolds, chatWaitsFor, leadDoor, stopRun, stopRunsOf } from "./live-chat.ts";
 import { serveLiveChat } from "./live-chat-served.ts";
+import { LOCAL_ROLES_CAPABILITY, servesLocalRoles } from "./local-roles-served.ts";
 import { heldRuns, StatusLane, type Studio } from "./studio-state.ts";
 import type { AnyRecord, ForwardedCall, HarnessCtx, Host, HostCall } from "../types/harness.d.ts";
 import type { DispatchAction } from "../types/host-api.d.ts";
 
 export { judgeableFirst } from "./chat-dispatch.ts";
-export { nightRefusal } from "./run-dispatch.ts";
+export { loopRunRefusal } from "./run-dispatch.ts";
 
 /** The status a thread has when nothing is working on it; the host reads it as the empty line. */
 const IDLE_STATUS = "idle";
 
 /**
  * What this self can dispatch, reported in the bootstrap's ready message. A stale copy of this
- * file simply lacks the property — that absence is how the host knows not to hand an overnight
+ * file simply lacks the property — that absence is how the host knows not to hand an unattended
  * commission to a loop that predates the feature. Keep this list honest when editing dispatch
  * below.
  */
@@ -60,6 +63,7 @@ const CAPABILITIES = [
   "message-queue",
   "rewind",
   "steer",
+  "workers",
 ];
 
 /**
@@ -89,7 +93,7 @@ export async function createStudio(host: Host) {
   const messages = new MessageQueue(
     host,
     (action, steer) => handleUserMessage(studio, action, steer),
-    // Follow-ups wait for the current build to close — or go to its night's lead, when the lead
+    // Follow-ups wait for the current build to close — or go to its run's lead, when the lead
     // takes the chat (live-chat.ts). Stop closes it early and hands its saved journal to the next
     // message, so new instructions cannot race cancelled builders; the self-improvement pass after
     // a run never holds the chat. A message sent during Compact now waits for it: the session it
@@ -103,7 +107,7 @@ export async function createStudio(host: Host) {
     (threadId, action) => !buildHolds(studio, threadId, action.project),
     (threadId, action) => leadDoor(studio, threadId, action),
   );
-  // A waking night's start says its lead takes the chat only when this queue hands messages to it.
+  // A waking run's start says its lead takes the chat only when this queue hands messages to it.
   serveLiveChat(queueParts);
 
   function scoped(threadId: string, lane: StatusLane = StatusLane.Run): HarnessCtx {
@@ -128,7 +132,12 @@ export async function createStudio(host: Host) {
 
   return {
     status: () => status.summarize(),
-    capabilities: [...CAPABILITIES],
+    // A build whose jobs cross to or from a local engine only when every part it needs serves it.
+    capabilities: [
+      ...CAPABILITIES,
+      ...(servesLocalRoles() ? [LOCAL_ROLES_CAPABILITY] : []),
+      ...(servesChatJudge() ? [CHAT_JUDGE_CAPABILITY] : []),
+    ],
 
     async healthcheck() {
       // Prove the loaded self can talk to the substrate and read its own state.
@@ -178,6 +187,14 @@ async function dispatch({ studio, messages, compactions, busyThreads }: Loop, ac
       // The director's session called one of its run tools; the answer travels back on
       // the dispatch result. Never throws: a tool's failure is a sentence to the director.
       return directorTool(action);
+    case "worker_tool":
+      // The chat's own session called a worker tool; the pool of its turn answers on the dispatch
+      // result. Never throws: a refusal is a sentence to the lead.
+      return chatWorkerTool(action);
+    case "chat_judge":
+      // The chat's own session asked a blind judge to play its game; the outcome travels back on
+      // the dispatch result for the host to record. Never throws: a refusal is an answer.
+      return judgeFromChat(studio.scoped(action.threadId, StatusLane.Chat), action);
     case "run_stop": {
       const active = studio.activeRuns.get(action.runId);
       if (active) {
@@ -186,13 +203,13 @@ async function dispatch({ studio, messages, compactions, busyThreads }: Loop, ac
         studio.cancels.add(active.threadId);
         abortEngineWork(host, active.threadId);
         // The director and its workers are delegations of the project, not completions
-        // of the thread (director, 2026-09-07).
+        // of the thread.
         void host.call(HostMethod.EngineAbort, { project: active.run.project }).catch(() => {});
       } else {
         // Nobody here started this run — the loop that did died under it. Its contractors
         // are hosted in the app, not in this process, so some of them may still be editing
         // worktrees; the project the run started on is the address Stop reaches them at.
-        // Skipped when a *live* run owns that project, so a stale card cannot stop tonight.
+        // Skipped when a *live* run owns that project, so a stale card cannot stop this run.
         const project = studio.orphanRuns.get(action.runId);
         if (project && ![...studio.activeRuns.values()].some((a) => a.run.project === project)) {
           void host.call(HostMethod.EngineAbort, { project }).catch(() => {});

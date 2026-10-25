@@ -1,3 +1,4 @@
+import { PermissionMode } from "../../src/shared/permissions.ts";
 import assert from "node:assert/strict";
 import { it } from "node:test";
 import { coreLite } from "../helpers/core-lite.ts";
@@ -45,7 +46,12 @@ it("records one actionable parent card and resolves the original worker exactly 
     pluginCallAttribution: attribution,
     mcpSecrets: null,
     activeConnectorCalls: new Map(),
+    assetCalls: new Map(),
+    cutOffCalls: new Map(),
     planning: async () => false,
+    chatMode: async () => PermissionMode.Manual,
+    locks: core.locks,
+    hooks: core.hooks,
   });
   const binding = { project: "chess", directory: "/unused", threadId: child };
   attribution.set(binding, { runId: "run-c", facetId: "online" });
@@ -97,7 +103,7 @@ it("a denied prerequisite stays blocked across worker retries until an explicit 
         prompt: "Install?",
         args,
         state: "declined",
-        by: "timeout",
+        by: "user",
         runId: "run-d",
       }),
     ],
@@ -105,7 +111,7 @@ it("a denied prerequisite stays blocked across worker retries until an explicit 
   );
   assert.deepEqual(await priorConsentDecline(core, parent, "run-d", "genex__package", args), {
     approved: false,
-    by: "timeout",
+    by: "user",
   });
   assert.equal(await priorConsentDecline(core, parent, "other-run", "genex__package", args), null);
   assert.equal(await priorConsentDecline(core, parent, "run-d", "genex__package", { package: "different" }), null);
@@ -113,7 +119,7 @@ it("a denied prerequisite stays blocked across worker retries until an explicit 
   assert.equal(await priorConsentDecline(core, parent, "run-d", "genex__package", args), null);
 });
 
-it("P06-F6. a chat's declined tool call is not asked again until the user speaks", async () => {
+it("a chat's declined tool call is not asked again until the user speaks", async () => {
   const { priorConsentDecline } = await import("../../src/main/core/consent-audience.ts");
   const { core } = await coreLite();
   const chat = await core.store.createThread({ metadata: { project: "chess" } });
@@ -175,7 +181,12 @@ for (const answer of ["stop", "decline", "timeout"] as const) {
       pluginCallAttribution: attribution,
       mcpSecrets: null,
       activeConnectorCalls: new Map(),
+      assetCalls: new Map(),
+      cutOffCalls: new Map(),
       planning: async () => false,
+      chatMode: async () => PermissionMode.Manual,
+      locks: core.locks,
+      hooks: core.hooks,
     });
     t.mock.timers.enable({ apis: ["setTimeout"] });
     const pending = service.requestConsent(

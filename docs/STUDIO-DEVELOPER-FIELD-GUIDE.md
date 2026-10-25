@@ -2,7 +2,9 @@
 
 Run commands from the repository root with Node 24 (`nvm use` reads `.nvmrc`). First-time setup
 is in [CONTRIBUTING](../CONTRIBUTING.md#set-up). `package.json` and the lockfile own current
-dependencies; install them with `npm ci` once, not before every restart or check.
+dependencies; install them with `npm run deps` once, not before every restart or check. On macOS
+it gives each worktree a copy-on-write clone of one install per lockfile, kept in the main
+checkout's `.studio-dev/deps` (the newest two); elsewhere it runs `npm ci`.
 
 ## Run an owned development profile
 
@@ -46,12 +48,50 @@ its `npm install -g` stays in the profile. A Claude Code sign-in leaves a
 `Claude Code-credentials-<hash>` item in your login keychain that neither sign-out nor `clean`
 removes; delete it in Keychain Access when you like.
 
+A live launch keeps the caller's environment except its agent session's own variables: the
+keys and endpoint it routes model calls through, Claude Code's and the Agent SDK's switches, the
+session's nesting, effort, context, timeout, MCP and OAuth markers, and `ELECTRON_RUN_AS_NODE`
+([live-env.ts](../scripts/studio-dev/live-env.ts); the eval lanes strip the same routing names and
+prefixes). `CLAUDE_CONFIG_DIR` and `CODEX_HOME` stay: they are your choice of account. A
+`CLAUDE_CODE_OAUTH_TOKEN` login is not carried into a live launch (it shows in `envStripped`);
+pick the account with `CLAUDE_CONFIG_DIR` instead. The start JSON names what it dropped (`envStripped`, never values). Start and status
+warn (`games-root-under-claude-folder`) when the profile's games sit under a `.claude` folder,
+as in a worktree under `.claude/`, where native Claude Write refuses or asks
+([live acceptance](#full-regression-and-failure-evidence)).
+
 Live profiles isolate Studio data, not all machine accounts, Keychain, quotas, local models
 or compute. They do not copy credentials. Follow the [credential restriction](agent/verification.md#credentials)
 for account-connected checks. Preserve active user work; inspect ownership/status before a restart.
 
+A live profile can run against a local or test genex.games (a stand) instead of genex.games itself
+(`src/main/play/origins.ts`, `devStand`):
+
+```sh
+GENEX_DEV_PLAY_API_ORIGIN=http://localhost:3000 GENEX_DEV_PLAY_WEB_ORIGIN=http://localhost:5173 \
+GENEX_DEV_PLAY_GAMES_ORIGIN=https://localhost:8443 GENEX_DEV_PLAY_GAMES_CA=/abs/path/certs/ca.pem \
+  npm run studio:dev -- start --profile stand-review --providers live
+```
+
+Origins are bare (https, or http on this Mac); the CA is an absolute path to a PEM file. With the stand's
+API the account signs in on the stand's device sign-in, for the launch only; Play, the store,
+`genex__cli`/`genex__cli-paid` (the CLI's `--api-url` and token) and the Genex plugin's backend (Publish,
+its asset tools and its account page) use the stand and that account, never genex.games or the Genex
+plugin's saved account. With a games origin too, the Play viewer plays
+`https://<slug>.localhost:8443/`, trusts that CA for those game hosts only, and catches their purchases
+on the stand's website; the Genex plugin's Publish trusts the CA too (its backend and CLI runs, beside
+the system's), so it can push to a local stand's source host and test its draft on the stand's
+game host. `genex://` links stay on genex.games: a development launch never registers as
+the system's link handler. To tie a local game to a stand
+project, write the stand's `{ "id", "slug" }` to `.studio-dev/profiles/<name>/core/engine-homes/genex/publish/<game>/.genex/project.json`.
+The pinned CLI decides which `genex` commands exist (shop JSON drafts need 1.36.14, local item drafts
+and `shop sync` 1.36.15). A packaged app, a
+fixture launch, smoke and the normal profile ignore every one of these variables, and a malformed value
+leaves that side on genex.games.
+
 The controller builds immutable output under `.studio-dev/builds/<id>` and returns actual
 readiness and profile/build/source/runtime identity. Rebuilding does not update a running app.
+Each start removes the builds no profile's `launch.json` or `attempt.json` names, once they are an
+hour old.
 Use the controller to stop owned sessions; a PID alone is not authority to signal a process.
 `clean --profile <name>` removes only stopped recognized disposable state. Retained live
 profiles, evidence and normal games are not disposable fixture cleanup.
@@ -90,6 +130,7 @@ warnings); the UI clears its per-render timing measures each minute there. `npm 
 | Profile `workspaces/harness/` | Active editable game-building harness; upgrades preserve self-edits |
 | Profile `engine-homes/`, `runs/`, `exoharness/` | Provider/plugin/runtime state, run artifacts and persisted events |
 | Profile `scratch/`, `exports/` | App-managed build workspaces and export destinations |
+| Profile `jobs/<game>/<id>/` | Agent jobs' records (`job.json`) and logs (`output.log`); the last 50 ended jobs per game are kept |
 | Profile `opened-files/` | Read-only copies of build-only files a chat link opened in their app |
 | Profile `Crashpad/` | Local crash dumps, never uploaded. Dumps hold process memory; review before sharing |
 | Profile `run-sharing/` | Share build metrics' state, install identity and unsent rows (owner-only files) |
@@ -191,7 +232,7 @@ paths remain unavailable. Paid account acceptance remains a separate live gate. 
 logs even when an isolated retry passes: sandbox-runtime's one-second executable lookup has
 intermittently reported a missing bash during loaded test runs.
 
-Unity retirement (2026-09-15): the active app supports browser games only. The CLI, editor, bridge, Unity templates, tools and UI are archived in `archive/unity/`; no feature flag enables them. There is no Unity-specific compatibility or migration path. Ordinary browser-project validation remains. Historical Unity plans describe archived behavior; existing user work and the source archive remain preserved.
+Unity retirement: the earlier built-in Unity integration (CLI, editor, bridge, Unity templates, tools and UI) is archived in `archive/unity/`; no feature flag enables it. There is no compatibility or migration path from it. Unity is now reached through the [bundled Unity plugin](plugins.md#the-bundled-unity-plugin), which shares no code with the archive. Ordinary browser-project validation remains. Historical Unity plans describe archived behavior; existing user work and the source archive remain preserved.
 
 Full regression coverage: `npm run typecheck`, `npm test`, `npm run test:e2e` (real sandbox, scripted
 Ollama wire, Chromium and CSS), `npm run test:build-ui` (build/history fixture, and since M1.8
@@ -210,7 +251,8 @@ link and pruned in place, so the `prePackage` hook refuses it. On Windows, `node
 tests/e2e/run-squirrel-install.mjs` installs `Genex-Setup.exe` for the current user, checks its
 shortcuts and path lengths, then uninstalls it. CI: `package.yml` makes and smokes unsigned packages on
 PRs into `main` and pushes to `main` (with that install on Windows, and there a packaged fixture chat turn:
-`node tests/e2e/run-electron-e2e.mjs --packaged`), and a dispatch with `only` (`darwin`, `linux` or `win32`)
+`node tests/e2e/run-electron-e2e.mjs --packaged --claude-worker`, the last a Claude Code worker on a
+scripted Anthropic stand-in), and a dispatch with `only` (`darwin`, `linux` or `win32`)
 builds one platform; `release.yml` signs, notarizes, verifies and uploads to a draft release ([release operations](release-operations.md)).
 Optimization UI replay additionally needs prior AG-931 result data; it is conditional, not a
 clean-checkout gate. Seed-upgrade, interrupted, snapshots, sandbox, harness-host and
@@ -238,8 +280,8 @@ passed, and nothing installs a package — the one fixture that builds links the
 `node_modules` and builds with esbuild. `--only <id>` and `--engine fixture|codex|claude` keep the
 inner loop under ten seconds; the full regression gate runs the whole set.
 
-`tests/conformance/director.test.ts` runs a whole night on the plain-Node rig, once per shape a
-night can take — every `it` in its own describe block, so the list is read there rather than
+`tests/conformance/director.test.ts` runs a whole run on the plain-Node rig, once per shape a
+run can take — every `it` in its own describe block, so the list is read there rather than
 counted here. They cover the finish and its landing; a game from scratch getting its base stage,
 and a starting point that could not be built; the fork gate refusing a base that does not run and
 exempting the run's own starting points; a game that cannot be judged until the contract is
@@ -247,8 +289,8 @@ installed, and a wiring session whose page still does not answer; a worker the l
 mid-round; a steer that interrupts a loop worker, a user steer addressed to one, and a steered
 single session; the director's own commit becoming the head it lands; a landing that conflicts
 with the user's own commits and changes nothing; a merge that carries nothing from a repository
-inside the game, and a consented one whose landing is left to the user; a night whose director
-dies of the engine's session limit; a night killed outright and then resumed; a reviewed plan
+inside the game, and a consented one whose landing is left to the user; a run whose director
+dies of the engine's session limit; a run killed outright and then resumed; a reviewed plan
 held for the user's go, and one the user answers in their own words; a worker's commit outliving
 its worktree; the restored `.studio/DIRECTOR.md`; and a close that looks through the studio's
 stand-in because the pool has none free, leaving the user's window alone. The head must be on
@@ -258,14 +300,14 @@ what the landing may claim, the run must pause where it can be picked up, and `s
 `tests/conformance/engine-limits.test.ts` covers limit classification, reset-time parsing and the
 inherited-console rule.
 
-The night's surface is verified by pure conformance suites and one real window.
+The run's surface is verified by pure conformance suites and one real window.
 `words.test.ts` is both a vocabulary test and a gate: it reads every `ctx.setStatus` literal
 out of `src/harness-seed/loop/*.ts` (a call it cannot read fails the test rather than being
 skipped) and asserts no run id, sha or ref survives translation, and that no renderer file but
-words.ts holds a translation. `morning-words`/`run-graph`/`build-progress` replay synthetic director and probe fixtures (`tests/fixtures/director-night.json` and
+words.ts holds a translation. `morning-words`/`run-graph`/`build-progress` replay synthetic director and probe fixtures (`tests/fixtures/director-loop-run.json` and
 `tests/fixtures/nested-probes.json`) and pin what the morning
 card, the Builds header and the stage say about it. `door.test.ts` covers the opening chat and
-the night's promised clock, `stopped-round.test.ts` the grey stopped round, `sidebar.test.ts`
+the run's promised clock, `stopped-round.test.ts` the grey stopped round, `sidebar.test.ts`
 the ported rail's tokens, and `run-controls.test.ts` the one-Stop rule across the whole
 renderer plus the keep-awake wiring in main. Behaviour that needs a window — the two chat Stop
 controls, immediate thread cancellation, the blocker held past the request, the morning card
@@ -281,10 +323,10 @@ the chat's `TOOL` line without a window.
 
 Milestones 2 and 3 added four suites of their own. `verdict.test.ts` pins the one record every
 judged build leaves (`loop/verdict.ts`) and the sentence it hands the screen — including that
-each pass of a real night writes one. `learning.test.ts` replays the first real night's journal
-and then two rig nights on one game: the ledger's records, the lessons they add up to, the briefs
+each pass of a real run writes one. `learning.test.ts` replays the first real run's journal
+and then two rig runs on one game: the ledger's records, the lessons they add up to, the briefs
 that carry them, the check that stops being written, the morning card's learned line, and what
-SkillOpt sees in a director's night. `engines.test.ts` covers external Claude login wiring and explicitly injected SDK paths.
+SkillOpt sees in a director's run. `engines.test.ts` covers external Claude login wiring and explicitly injected SDK paths.
 `external-cli.test.ts` covers discovery priority, spaces/symlinks, excluded project dependencies,
 missing Node, incompatible commands, override persistence, update/removal, and no SDK fallback.
 It also proves Stop kills an active diagnostic, both Claude SDK entry points refuse launch after
@@ -326,15 +368,55 @@ transport credentials from reports. No permanent monitor or performance threshol
 `npm run studio:dev -- start --profile ag-933 --fixture app-basics` builds current inputs
 into `.studio-dev/builds/<build-id>`, creates fresh owned fixture state and returns actual
 readiness/identity JSON. `npm run studio:dev -- fixtures` lists the named fixtures. Among them:
-build-graph (two sword-in-ice nights: folded tries, an undone step, a lead-merged unjudged round),
+build-graph (two sword-in-ice runs: folded tries, an undone step, a lead-merged unjudged round),
+lead-graph (two Unreal lead runs: milestone columns, save points, sub-agents with their cards, the
+critic's advice on a round),
+chat-workers (a chat message's two workers on Builds and as chat lines, after an earlier Loop; three
+more games, written after the start so their Loops read as going: Fixture Loop with three workers,
+the lead's background work and the finish check not run yet; Fixture web Loop with build-graph's
+runs and Fixture Unreal Loop with lead-graph's, each with its workers' records, drawn as trees),
+finish-check (four Loops written after the start, one per finish check look: Done and Stopped in
+the Builds history, Not yet after one no, and the newest Checking),
+paused-build (a Loop a usage limit paused and resumed, written after the start: one worker's try
+Paused, one Added after the resume, one Left out by the lead's stop),
+building-card (a 4h Loop still going after five finished ones, written after the start, for the chat's
+Building card and its parts: two added, one working with its time left, one restarted on one row,
+one waiting; `[data-build-checklist]` open, `[data-build-toggle]` closes it; Builds holds its six
+builds in the picker `[data-build-picker]`),
+stills-game (Pine valley, a Blender scene with no web page, whose finished Loop kept the lead's two
+renders as proof: Live's run pictures, `[data-live-view="stills"]` `[data-live-still]`; and
+Mountain pass, a Blender game with no run, whose Live says where pictures come from),
+open-projects (projects that aren't web games: Moon base, a Godot folder whose earlier timed Loop
+closed not checked by a reviewer and whose Loop in place, written after the start, has a worker's
+question waiting; Level tools, an Unreal plugin project with the sidebar's kind label, its Loop sent
+back once and, about four seconds after launch, waiting for you to finish in Unreal; Lantern racer,
+a web game beside an Unreal project, with Live's Web game and Unreal tabs; Paper plane, a web game
+ported to Unreal, its chat holding the port's turn and the line asking for the access `app_look`
+needs (Open Screen Recording and Accessibility settings); Moon tools, a plugin
+loaded from a folder with one tool that runs without asking; and the web game's chat offering the
+Unreal plugin, which is off),
 first-launch (an empty library and the welcome; Claude Code needs a sign-in, Codex is not
 installed, and sign-in, links and downloads are refused as in every fixture) and notifications
 (six games; about four seconds after launch a question, a plan, a plugin permission, a sign-out
 and delivered, failed and stopped builds arrive as news; macOS notifications are refused) and
 sandbox-setup (the window opens on "Set up the protected workspace" for a Linux machine missing
 bubblewrap and socat, `[data-sandbox-setup]`; `[data-sandbox-retry]` opens the studio) and
-update-ready (the sidebar offers `[data-update-restart]` for a stand-in Genex 0.2.0; the restart
-itself is refused as native).
+agents-start-failed (the open studio's sidebar says "Agents didn't start", `[data-agents-start]`, with
+a stand-in srt-win timeout under its details; Try again clears it) and update-ready (the sidebar offers `[data-update-restart]` for a stand-in Genex 0.2.0; the restart
+itself is refused as native) and plugin-updates (Genex and Blender installed one version back: their
+rows and pages offer `Update to <version>` and the sidebar `[data-plugins-update]`, each refused as
+native) and unreal-game (the game linked to a stand-in Unreal project inside
+its folder with the Unreal plugin on: the chat's link line with Undo, the Unreal Live card with a
+stand-in viewport shot from one finished run, and the steps card, whose rows come from the real plugin, so it stays hidden on a Mac whose Xcode is ready)
+and unreal-chat (a short synthetic Unreal chat, `tests/fixtures/unreal-chat/sample-chat.json`:
+connector rows in words, Worked in Unreal headings, failures, play views and a Blender delivery)
+and roblox-game (the game linked to a stand-in place, `FixtureGame.rbxlx`, at its top with the
+Roblox Studio plugin on: the toolbar's Roblox Studio button, the chat's link line with Undo and the
+steps card `[data-engine-steps]` (rows `[data-step=studio|sign-in|helper|mcp|place]`), whose rows come from the real plugin on
+this machine; Set up, Open Studio and Get Roblox Studio are native, so a fixture refuses them)
+and items-store (with `STUDIO_FIXTURE_GENEX_ACCOUNT=1`: the fixture game is the account's Snowball on
+Genex, so Create › Items' Add to and New item reach its chat, which ends with Frost Axe's Listing draft
+card; [the item store](play.md#the-item-store)).
 Use `--reuse` explicitly for a stopped existing profile with the same fixture/provider mode.
 `--providers live` is explicit, retained, and uses existing ambient account semantics; no auth
 or account copying is performed. Fixtures park background improvement but keep the real core,
@@ -356,22 +438,29 @@ Requests are JSON files to avoid shell quoting:
 
 Send with `npm run studio:dev -- ui --profile ag-933 --request /tmp/request.json`.
 `ui` and `diagnostics` take exactly one of `--request FILE`, `--request -` (stdin) or `--json '<op>'`;
-`snapshot --profile P [--scope SEL] [--limit N]` and `logs --profile P [--surface S] [--cursor N] [--limit N]`
-are shortcuts. The [verify-ui-via-dev-control skill](../.agents/skills/verify-ui-via-dev-control/SKILL.md)
+`snapshot --profile P [--scope SEL] [--limit N]`, `logs --profile P [--surface S] [--cursor N] [--limit N]`
+and `runs --profile P` are shortcuts. The [verify-ui-via-dev-control skill](../.agents/skills/verify-ui-via-dev-control/SKILL.md)
 walks the full loop.
 The request union/runtime validator is src/main/dev/protocol.ts. Operations are status,
-snapshot (desktop, scope/limit), click (selector/scope), type (plus text/replace), key
-(surface/key/code/modifiers), select (selector/scope/value), scroll (surface/deltas/target),
-game.input (existing bounded action union), game.state, window.resize, capture, logs, cpu.start/stop,
+snapshot (desktop or `play-bar`, scope/limit; its `play` part counts Play's cards, the covers on
+screen still blank and the clips playing), click (selector/scope, desktop or `play-bar`), type
+(plus text/replace, the same surfaces), key (surface/key/code/modifiers), move (surface/x/y: the pointer over a
+surface, as a mouse would), select (selector/scope/value), scroll (surface/deltas/target),
+game.input (existing bounded action union), game.state, window.resize, capture, logs, runs, cpu.start/stop,
 main.cpu.start/stop (a profile of the main process), heap,
 trace.start/stop and stop. `graph.drag` takes bounded duration/distance/steps and returns
 commit counters through release; `window.resize` takes bounded width/height deltas, steps and
 duration, resizes the studio window step by step with a game in Live, and returns how far the
 game view trailed its slot right after each change and before the next ([performance](performance.md));
 `fixture.graph` takes `other-project-frames` or `append-round`
-only in `large-build-graph`. Traces accept `toplevel` for renderer task durations.
+only in `large-build-graph`. `file.drag` (target, `stage` over/drop/leave, `file` picture/text)
+drags the control's own sample file onto it; it takes no path. Traces accept `toplevel` for renderer task durations.
 No arbitrary eval, PID, webContents ID or output path is accepted.
-Scoped DOM inspection resolves one visible enabled non-occluded target. CDP dispatches actual
+Scoped DOM inspection resolves one visible enabled non-occluded target. A modal dialog or menu
+that has just opened takes pointer input one render later, so an input sent at once can be
+refused `target-not-visible` with nothing dispatched: send it with `requestWhenReachable`
+(`scripts/studio-dev/client.ts`), which tries again until the target is reachable, rather
+than sleeping. CDP dispatches actual
 pointer-down/up, keyboard and Unicode insertText to the desktop without system focus/pointer
 movement. The native macOS select did not accept background keys on pinned Electron. The select
 operation reports unsupported-surface if keys do not apply. Open an earlier build with its chat
@@ -385,7 +474,9 @@ providers, credential isolation and native-action restrictions remain unchanged.
 opt-in unset for automated acceptance.
 
 `capture --profile ag-933 --surface desktop --name after` writes an owned surface-labelled PNG;
-repeat for game. Renderer captures do not include the native game child. The capture records
+repeat for game. Renderer captures do not include the native game child. While Play's viewer has a
+game open, `play-bar` is its bar's layer (the bar and Comments) and `play-game` the game's own view
+below it. The capture records
 image dimensions, image-pixel/CSS-pixel scale, renderer zoom, visibility, focus and time. For diagnostics use a JSON request
 with `diagnostics --profile ag-933 --request FILE`. Start/stop a matching CPU profile ID; heap
 needs surface/name. Trace needs traceId, durationMs (100–30000) and supported categories from
@@ -393,9 +484,42 @@ needs surface/name. Trace needs traceId, durationMs (100–30000) and supported 
 missing surfaces, detached debugger, reused artifact names and interrupted operations fail.
 Do not open DevTools while the development controller owns its debugger attachment.
 
+`runs` (no parameters) lists every open run of the profile and the newest run of the chat the
+window shows: thread, project, state, journal phase and clock, worked time, its own newest record,
+the last close's stop reason, integration head and landing, and `resumable` (paused with a
+journal that is not done). It reads the event log and journals ([runs.ts](../src/main/dev/runs.ts))
+and asks the window which chat it shows,
+so like `status` and `stop` it answers on a stale build, under a sign-in sheet and while the
+harness is not ready. `key` gives Enter, Escape, Tab, Backspace, the four arrows, PageUp,
+PageDown, Home and End their real key codes.
+
+### An unattended live Loop
+
+A long live run spends the owner's subscription: get their go for that run itself, since a
+live-profile request does not cover it ([credentials](connections-and-context.md#credentials)). Run from a
+checkout outside any `.claude` folder (the start `warnings` say when it is not) and change no
+source there until it ends: a stale build refuses every UI operation, and a restart stops the run.
+Drive only through hooks: the welcome's `[data-onboarding-action="next"]`, then `"start"` (only
+`"skip"` means nothing is signed in: stop and ask; never sign in yourself); the home composer's
+`[aria-label="Model settings"]` role rows `[data-role]` and `[data-model-choice]`, the
+`[aria-label^="Effort:"]` pill, then arrow keys on `[data-effort-slider]`, `[aria-label="Mode"]` with
+`[aria-label="Loop time limit"] [data-value]`, and `textarea[aria-label="Prompt"]`. Answer a
+`[data-chat-question]`, plan review or permission card only as a recorded human intervention.
+Watch with `runs` and `status`; no new record for a long while, or a `lastFailure`, is the cue to
+read `logs`. A run paused by an engine limit or a loop crash continues from
+`[data-run-resume="<runId>"]` once the limit resets. Never restart or drive the window while the
+owner is using it; leave the profile running at the end.
+
+Run overrides reach the harness from the studio's environment only by name (`harnessRunEnv`):
+`STUDIO_DIRECTOR_LOOP=turn` picks the long turn for a run that names no loop, and
+`STUDIO_UNREAL_RUNNER=lead` sends a new Loop on an Unreal project, and the resume of a run that
+runner wrote, to the Unreal runner from before the one Loop. Neither is a run record field or shown
+in the UI; set it on start and restart.
+
 Transport descriptors are private local capabilities under the owned profile; never copy them
 into task records. Unix sockets live in a short 0700 temporary directory, with owner-only socket
-permissions. Protocol v1 uses bounded newline-delimited JSON, request IDs and one operation at
+permissions; on Windows the control is a named pipe with a fresh random name, which other accounts
+can open only read-only. Protocol v1 uses bounded newline-delimited JSON, request IDs and one operation at
 a time. A timeout is not success and does not authorize retrying a mutation blindly.
 
 ## Embedded terminal acceptance
@@ -442,6 +566,9 @@ record actual isolated-app restarts and staging marker checks separately.
 
 Chat question changes: `node tests/e2e/run-chat-feedback-ui.mjs` uses the named `chat-feedback` fixture to check explicit choice submission, custom answers, restart restoration, model inheritance and compact results with learning links to Studio. `node tests/e2e/run-chat-ui.mjs` retains long-history, stream reconciliation, tool/worker and permission coverage; active runs also open Builds. `turn-loop.test.ts` checks question-to-answer provider-session continuation with successful turn endings, not only request receipt. These scripted providers do not certify live vendor behavior.
 
+`node tests/e2e/run-operator-hooks-ui.mjs` renders the production result card, chat Resume line
+and welcome, and checks the `data-run-resume` and `data-onboarding-action` hooks an operator presses.
+
 `node tests/e2e/run-results-ui.mjs` renders the production asset tiles, model dialog,
 chat outcome and learning components with local fixture media. It checks lazy model thumbnails,
 cached remounts, hover/focus actions, automatic captures, modal focus restoration, corrupt-file
@@ -450,9 +577,33 @@ and reduced motion. Evidence lives in `.studio-dev/evidence/results-ui/`. Pair w
 `run-chat-ui.mjs` and `run-chat-feedback-ui.mjs` for real host reads, history/streaming and Studio
 navigation; component fixtures do not prove account access or native game layering.
 
-Genex account regressions: `run-genex-account-ui.mjs` renders the Genex page's own account card
-and checks that a failed connect keeps its reason after the status is read again. It does not
+`node tests/e2e/run-builds-bar-ui.mjs` renders the production Builds bar with synthetic builds:
+tabs up to three, the picker past them or in a narrow bar (never flipped by Play's label), focus
+following the swap, the list's order, open row, rows, Escape, ten rows without scrolling, the fade
+and shadow past ten, and the open row shown on opening (focused when opened by keyboard). Evidence
+lives in `.studio-dev/evidence/builds-bar-ui/`.
+
+Genex account regressions: `run-genex-account-ui.mjs` renders the Genex page's account in its
+Connect band and checks that a failed connect keeps its reason after the status is read again. It does not
 establish real browser/Keychain authorization.
+`run-publish-cover-ui.mjs` renders the production Publish dialog beside the production
+ChatPanel of the same game with a fake `window.studio`: with no shot the dialog asks the plugin to
+take one, the arrows pick a recent frame, Another cover sends its request through that chat and
+closes the dialog, the banner opened again says one is being made until a new frame arrives (with
+the time left once one was timed, in dark and light), and a kept clip plays behind its switch
+(screenshots in `.studio-dev/evidence/`). A fixture
+profile cannot show this dialog's body, since its Genex account is never connected.
+`run-publish-test-link-ui.mjs` renders the same dialog for its test link: it shows under "Publish
+to the web" for a tested draft before the first publish and under the labelled public link while
+live changes wait, never when the draft is the live build; its line names a second player only for
+a multiplayer game; no row is wider than the main press; and each main press still makes exactly
+one `genexPublish` call (screenshots in `.studio-dev/evidence/`).
+`run-chat-cover-card-ui.mjs` renders the production ChatPanel beside the production stage strip:
+the thread's latest kept `genex__cover` shot is one Genex cover card once its turn has ended (none
+mid-turn, the turn's work one group), read through the `genex-cover` scope, whose Publish opens
+the Publish dialog through the strip; Publish is gone while a publish runs, with Genex off or once
+Genex took the frame, the card is gone with its shot, light and dark are captured (screenshots in
+`.studio-dev/evidence/`).
 `planning-capabilities.test.ts` and the host cases in
 `promptbar-redesign.test.ts` check current planning context and the tool-free boundary.
 

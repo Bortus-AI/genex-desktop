@@ -1,11 +1,12 @@
 /**
  * The defensive readers behind `run-graph.ts`: every payload field the Builds graph reads comes
- * through here, so a record the harness wrote in another shape (or an older night's) reads as
+ * through here, so a record the harness wrote in another shape (or an older run's) reads as
  * absent rather than breaking the page.
  */
 import { customRecord } from "../shared/custom-events.ts";
 import type { EventEnvelope } from "../shared/event-log.ts";
 import type {
+  AdviceInfo,
   CheckResult,
   DiffInfo,
   FixInfo,
@@ -115,7 +116,7 @@ function parseChecks(value: unknown): CheckResult[] {
   return value.map((raw) => parseCheck(raw, false));
 }
 
-/** A verdict record off an event payload. Null when the payload has no sentence — an older night. */
+/** A verdict record off an event payload. Null when the payload has no sentence — an older run. */
 export function parseVerdict(value: unknown): VerdictRecord | null {
   const row = record(value);
   const because = row ? str(row.because, "") : "";
@@ -246,6 +247,23 @@ export function parseShots(value: unknown): Shot[] {
   return records(value)
     .filter((row) => typeof row.path === "string" && row.path !== "")
     .map((row) => ({ camera: str(row.camera, "shot"), path: String(row.path) }));
+}
+
+/** One picture a round names on its own (`shown`): null when it names none. */
+export function parseShot(value: unknown): Shot | null {
+  const [shot] = parseShots([value]);
+  return shot ?? null;
+}
+
+/** A critic's advice as the round shows it; null without one defect, a bold move or a gate answer. */
+export function parseAdvice(payload: Payload, at: string): AdviceInfo | null {
+  const defects = records(payload.defects)
+    .map((row) => ({ defect: str(row.defect, ""), fix: str(row.fix, "") }))
+    .filter((row) => row.defect);
+  const boldMove = str(payload.boldMove, "");
+  const gates = strings(payload.gates).filter(Boolean);
+  if (!defects.length && !boldMove && !gates.length) return null;
+  return { at: strOrNull(payload.at) ?? at, defects, boldMove, gates, shots: strings(payload.shots) };
 }
 
 /** The per-camera pixel diffs of a round. */

@@ -1,11 +1,13 @@
 /** Harness RPC: previews — load, look, drive and measure a game in a window. */
 import { readFile } from "node:fs/promises";
 import { HostMethod, type HarnessHostHandlers, type HarnessParams } from "../../shared/harness-api.ts";
+import { keepPathsOf } from "../../shared/studio-state-shape.ts";
 import { availableMemory } from "../../substrate/hardware.ts";
 import type { CaptureSurface } from "../../substrate/preview-port.ts";
 import { LIVE_HANDLE, STAND_IN_HANDLE } from "../../substrate/preview-pool.ts";
 import { awaitReady, bootBudget, unlockGesture } from "../../substrate/preview-ready.ts";
 import { observeBuild } from "../../substrate/build-probe.ts";
+import { computerRpc } from "../core/computer-rpc.ts";
 import type { CoreInternals, StudioCore } from "../studio-core.ts";
 import {
   DEFAULT_STILL_QUALITY,
@@ -34,6 +36,37 @@ const MESSAGE = {
   pairNeedsTwoImages: "preview.pair needs two images",
   harnessRestarted: "the harness that asked for this preview window has restarted",
 } as const;
+
+/** One computer service per core: the harness's leased windows outlive any one `api()` table. */
+const COMPUTERS = new WeakMap<CoreInternals, ReturnType<typeof computerRpc>>();
+
+/** The core's `preview.computer` service, made on first use. */
+function computersOf(core: StudioCore, x: CoreInternals): ReturnType<typeof computerRpc> {
+  const known = COMPUTERS.get(x);
+  if (known) return known;
+  const made = computerRpc({
+    gameDir: (project) => core.games.dirFor(project),
+    scratch: () => core.layout.scratch,
+    runs: () => core.layout.runs,
+    port: (handle) => x.previews.preview(handle),
+    // The harness's own loop writes the judge's rubric itself: an engine judge's brief opens its first answer.
+    computerTools: (grant, root, outDir, session) =>
+      core._computerToolsFor(grant, root, outDir, session, { judgeBrief: true }),
+    runOfGame: (project, runId) => core._runOfGame(project, runId),
+  });
+  COMPUTERS.set(x, made);
+  return made;
+}
+
+/**
+ * Forget the computers on windows a harness that ended had leased, stopping what each started (a
+ * Play Protocol game's process, an editor's play): its own `preview.release` never comes.
+ */
+export async function forgetHarnessComputers(x: CoreInternals, handles: readonly string[]): Promise<void> {
+  const computers = COMPUTERS.get(x);
+  if (!computers) return;
+  await Promise.all(handles.map((handle) => computers.forget(handle).catch(() => {})));
+}
 
 /** A still named by its bytes or by a path the previews may read. */
 type StillSource = { base64?: string; path?: string } | null | undefined;
@@ -74,9 +107,13 @@ export function previewRpc(core: StudioCore, x: CoreInternals) {
       const ui = port.pageUi ? await port.pageUi().catch(() => null) : null;
       return ui ?? { ...NO_PAGE_UI };
     }),
-    [HostMethod.PreviewState]: routed(async (p: HarnessParams<typeof HostMethod.PreviewState>) =>
-      x.previews.preview(p?.handle).studioState(),
-    ),
+    // Bounded by structure in the page; `keep` reaches it only through the host's validation,
+    // and a malformed one is ignored rather than refused, so an older seed still reads its state.
+    [HostMethod.PreviewState]: routed(async (p: HarnessParams<typeof HostMethod.PreviewState>) => {
+      const keep = keepPathsOf(p?.keep);
+      const port = x.previews.preview(p?.handle);
+      return keep.length > 0 ? port.studioState({ keep }) : port.studioState();
+    }),
     [HostMethod.PreviewCall]: routed(async (p: HarnessParams<typeof HostMethod.PreviewCall>) =>
       x.previews.preview(p.handle).studioCall(String(p.method), p.arg),
     ),
@@ -92,6 +129,7 @@ export function previewRpc(core: StudioCore, x: CoreInternals) {
     [HostMethod.PreviewCrop]: async (p) => crop(core, x, p),
     // Challenger vs incumbent on one camera: diff fraction + heatmap, the invisible-diff detector.
     [HostMethod.PreviewDiff]: async (p) => diff(core, x, p),
+    [HostMethod.PreviewComputer]: async (p) => computersOf(core, x).call(p),
     [HostMethod.PreviewInput]: routed(async (p: HarnessParams<typeof HostMethod.PreviewInput>) =>
       x.previews.preview(p?.handle).input(Array.isArray(p?.actions) ? p.actions : []),
     ),
@@ -102,9 +140,13 @@ export function previewRpc(core: StudioCore, x: CoreInternals) {
       const preview = x.previews.preview(p?.handle);
       return preview.gpuErrors ? preview.gpuErrors() : [];
     }),
-    [HostMethod.PreviewStatus]: routed(async (p: HarnessParams<typeof HostMethod.PreviewStatus>) =>
-      x.previews.preview(p?.handle).status(),
-    ),
+    [HostMethod.PreviewStatus]: routed(async (p: HarnessParams<typeof HostMethod.PreviewStatus>) => {
+      const port = x.previews.preview(p?.handle);
+      const status = port.status();
+      // The size it is at now, so a look `preview.viewport` set and a session put back is visible.
+      const viewSize = port.viewSize?.();
+      return viewSize ? { ...status, viewSize } : status;
+    }),
     // Readiness is a fact the page reports, not a sleep — and a HOST call, not an agent tool:
     // the loop asks over the substrate RPC, so no MCP schema and no bridge entry change.
     [HostMethod.PreviewReady]: routed(async (p: HarnessParams<typeof HostMethod.PreviewReady>) => {
@@ -127,9 +169,12 @@ export function previewRpc(core: StudioCore, x: CoreInternals) {
     [HostMethod.PreviewAcquire]: async (p) => acquire(x, p),
     [HostMethod.PreviewRelease]: async (p) => {
       x.profileSources.delete(p.handle);
+      await computersOf(core, x).forget(p.handle);
       await x.previewPool?.release(p.handle);
       return true;
     },
+    // One leased window at another size for a look (the art director's), for that lease only.
+    [HostMethod.PreviewViewport]: async (p) => x.previews.viewport(p),
     // Pixel stats of an encoded still — the same numbers a capture yields.
     [HostMethod.PreviewStatsOf]: async (p) => {
       const preview = x.previews.preview(p?.handle);
@@ -270,9 +315,11 @@ async function acquire(x: CoreInternals, p: HarnessParams<typeof HostMethod.Prev
 }
 
 async function capacity(core: StudioCore, x: CoreInternals) {
-  // Memory rides along (director, 2026-09-07): six windows of a big game is not a number the pool
+  // Memory rides along: six windows of a big game is not a number the pool
   // knows; whoever starts workers reads the free memory beside the free slots.
   const memory = await availableMemory();
+  // The Settings ceiling the host holds every chat's workers to (`delegation.ts` `#assertWorkerRoom`).
+  const workers = core.settings.buildersMax;
   try {
     const pool = x.previews.pool();
     return {
@@ -282,8 +329,9 @@ async function capacity(core: StudioCore, x: CoreInternals) {
       live: Boolean(core.options.preview),
       headless: Boolean(core.options.createHeadlessPreview),
       memory,
+      workers,
     };
   } catch {
-    return { max: 0, inUse: 0, free: 0, live: false, headless: false, memory };
+    return { max: 0, inUse: 0, free: 0, live: false, headless: false, memory, workers };
   }
 }

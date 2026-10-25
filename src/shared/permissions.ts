@@ -4,11 +4,19 @@
  * engine's chat session follows the chat's mode as far as it can (`permissionModesFor`).
  *
  * Whoever answers the person in a game chat asks: the chat's own session, and a build's lead or the
- * run's coordinator on Claude Code while it answers a message the person sent. Unattended work (builders,
- * workers, playtesters, scouts, judges, candidates) never waits on a person: it keeps the sandboxed
- * contract of the engine that runs it. The host decides which is which from what it recorded
- * itself, and keeps the mode and every saved grant; the harness can neither read nor set them.
+ * run's coordinator on Claude Code while it answers a message the person sent. Workers of the
+ * chat's lead follow the chat's mode: Bypass in a box that writes the home folder too, Auto, Accept
+ * edits and Manual in a box that writes only their folders, Plan read-only; their questions wait in the chat, naming the
+ * worker, until the person answers, and "always" counts for the whole chat. A Codex worker cannot
+ * ask, so it is always boxed. In every mode, Bypass included, a worker never reaches a sign-in,
+ * Genex's own data or another game (the never-touch list). A web Loop snapshots the game before its
+ * first turn; the Unreal Loop's lead takes its first snapshot at its first save point, so its
+ * in-place workers before then have only the chat's checkpoints behind them. Other unattended work (playtesters, scouts, judges, candidates, a classic Autopilot's
+ * builders) keeps the sandboxed contract of the engine that runs it. The host decides which is
+ * which from what it recorded itself, and keeps the mode and every saved grant; the harness can
+ * neither read nor set them, and no agent's message ever counts as the person's answer.
  */
+import { tc, t } from "./i18n.ts";
 import { EngineId } from "./providers.ts";
 
 /** Claude Code's permission modes, in their SDK spelling. */
@@ -73,8 +81,11 @@ interface EnginePermissions {
  * Each engine's row. Claude Code asks mid-turn in every mode. Bonsai's tools run in the studio,
  * which asks before each edit or command; its commands always run in the studio's sandbox, so it
  * has no Bypass. Codex (`codex exec`) cannot ask mid-turn: Auto keeps its sandbox, Plan only reads,
- * Bypass drops its sandbox. Any other engine (Ollama, whose tools run in the harness, or one added
- * later) keeps its own sandboxed contract, which is Auto.
+ * Bypass drops its sandbox. OpenRouter's and a local server's tools run in the studio's own session
+ * loop, as Bonsai's do.
+ * OpenCode (`opencode run`), Grok Build (`grok -p`) and Cursor (`cursor-agent --print`) cannot ask
+ * mid-turn and always run in the studio's sandbox: Auto, or Plan (read only). Any other engine (Ollama, whose tools run in the harness, or one added later) keeps its
+ * own sandboxed contract, which is Auto.
  */
 const ENGINE_PERMISSIONS: Readonly<Record<string, EnginePermissions>> = {
   [EngineId.ClaudeCode]: { modes: PERMISSION_MODES, withheld: UnavailableModeReason.CannotAsk, plansMidTurn: true },
@@ -86,10 +97,24 @@ const ENGINE_PERMISSIONS: Readonly<Record<string, EnginePermissions>> = {
     modes: [PermissionMode.Auto, PermissionMode.Plan, PermissionMode.Bypass],
     withheld: UnavailableModeReason.CannotAsk,
   },
-  // Headless `grok` cannot ask mid-turn (`streaming-json` is read-only). Auto keeps the
-  // workspace sandbox, Plan is read-only, Bypass turns the sandbox off.
+  [EngineId.OpenRouter]: {
+    modes: [PermissionMode.Auto, PermissionMode.Manual, PermissionMode.AcceptEdits, PermissionMode.Plan],
+    withheld: UnavailableModeReason.AlwaysSandboxed,
+  },
+  [EngineId.LocalServer]: {
+    modes: [PermissionMode.Auto, PermissionMode.Manual, PermissionMode.AcceptEdits, PermissionMode.Plan],
+    withheld: UnavailableModeReason.AlwaysSandboxed,
+  },
+  [EngineId.OpenCode]: {
+    modes: [PermissionMode.Auto, PermissionMode.Plan],
+    withheld: UnavailableModeReason.CannotAsk,
+  },
   [EngineId.Grok]: {
-    modes: [PermissionMode.Auto, PermissionMode.Plan, PermissionMode.Bypass],
+    modes: [PermissionMode.Auto, PermissionMode.Plan],
+    withheld: UnavailableModeReason.CannotAsk,
+  },
+  [EngineId.Cursor]: {
+    modes: [PermissionMode.Auto, PermissionMode.Plan],
     withheld: UnavailableModeReason.CannotAsk,
   },
 };
@@ -143,14 +168,28 @@ export function isSteadyPermissionMode(value: unknown): value is SteadyPermissio
   return isPermissionMode(value) && STEADY_PERMISSION_MODES.has(value);
 }
 
-/** The menu's words: Claude Code's mode names, each described in one line of the menu. */
-export const PERMISSION_MODE_WORDS: Record<PermissionMode, { label: string; description: string }> = {
-  [PermissionMode.Auto]: { label: "Auto", description: "Stops only for risky actions" },
-  [PermissionMode.Manual]: { label: "Manual", description: "Asks before every change" },
-  [PermissionMode.AcceptEdits]: { label: "Accept edits", description: "Edits files without asking" },
-  [PermissionMode.Plan]: { label: "Plan", description: "Plans first, asks to proceed" },
-  [PermissionMode.Bypass]: { label: "Bypass permissions", description: "Never asks, works anywhere" },
+/** Claude Code's mode names in English, as a session reads them in a notice. */
+export const PERMISSION_MODE_NAMES: Record<PermissionMode, string> = {
+  [PermissionMode.Auto]: "Auto",
+  [PermissionMode.Manual]: "Manual",
+  [PermissionMode.AcceptEdits]: "Accept edits",
+  [PermissionMode.Plan]: "Plan",
+  [PermissionMode.Bypass]: "Bypass permissions",
 };
+
+/**
+ * The menu's words: Claude Code's mode names, each described in one line of the menu, in the
+ * app's language. A function, as main reads it too and sets its language after loading.
+ */
+export function permissionModeWords(): Record<PermissionMode, { label: string; description: string }> {
+  return {
+    [PermissionMode.Auto]: { label: tc("permission mode", "Auto"), description: t("Stops only for risky actions") },
+    [PermissionMode.Manual]: { label: tc("permission mode", "Manual"), description: t("Asks before every change") },
+    [PermissionMode.AcceptEdits]: { label: t("Accept edits"), description: t("Edits files without asking") },
+    [PermissionMode.Plan]: { label: tc("permission mode", "Plan"), description: t("Plans first, asks to proceed") },
+    [PermissionMode.Bypass]: { label: t("Bypass permissions"), description: t("Never asks, works anywhere") },
+  };
+}
 
 /** The tool whose question is a plan waiting for approval. */
 export const PLAN_TOOL = "ExitPlanMode";
@@ -193,8 +232,9 @@ export const ToolPermissionState = { Pending: "pending", Allowed: "allowed", Den
 export type ToolPermissionState = (typeof ToolPermissionState)[keyof typeof ToolPermissionState];
 
 /**
- * Who settled a request: the person, the work ending around it, or nobody answering a lead's card in
- * time (`timeout`). Persisted: never rename a value.
+ * Who settled a request: the person, the work ending around it, nobody answering a lead's or a run
+ * worker's card in time (`timeout`), or the person's switch to Bypass (`mode`). Persisted: never
+ * rename a value.
  */
 export const ToolPermissionBy = {
   User: "user",
@@ -202,6 +242,8 @@ export const ToolPermissionBy = {
   Turn: "turn",
   Restart: "restart",
   Timeout: "timeout",
+  /** The person switched the chat to Bypass while the card waited: allowed, as Bypass asks nothing. */
+  Mode: "mode",
 } as const;
 export type ToolPermissionBy = (typeof ToolPermissionBy)[keyof typeof ToolPermissionBy];
 
@@ -235,6 +277,8 @@ export interface ToolPermissionEvent {
   always?: PermissionGrant[];
   /** Set when a subagent asked. */
   agentId?: string;
+  /** Set when a worker of the chat's lead asked: the card names it. */
+  worker?: { id: string; title: string };
   state: ToolPermissionState;
   by?: ToolPermissionBy;
   /** Settled allow: once, or with its `always` grants. */

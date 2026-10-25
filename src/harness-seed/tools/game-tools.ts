@@ -5,7 +5,7 @@
  * and change notification stay true no matter how the agent rewrites this file.
  */
 import type { AnyRecord, HarnessTool, ToolCtx } from "../types/harness.d.ts";
-import { clampRunHours, MAX_RUN_HOURS } from "../loop/config.ts";
+import { clampRunHours, hoursNamed, MAX_RUN_HOURS } from "../loop/config.ts";
 import { HostMethod } from "../loop/host-methods.ts";
 import { EngineId } from "../loop/model-roles.ts";
 import { StopReason } from "../loop/outage.ts";
@@ -13,6 +13,10 @@ import { REFERENCE_MIN_STILLS, ReferenceKind, RunMode } from "../loop/run-events
 import { MINUTE_MS } from "../loop/time.ts";
 import { TurnStop } from "../loop/turn-record.ts";
 import { isRecord } from "../loop/json.ts";
+import { LoopProfile, loopProfileOf, ProjectStarter, ProjectTool } from "../loop/folder-facts.ts";
+import { OPEN_LAUNCH_WORDS } from "../loop/open-loop-prompts.ts";
+import { UNTIL_DONE_WORDS } from "../loop/until-done-prompts.ts";
+import { scopeItems } from "../loop/scope.ts";
 
 /** How long `run_command` lets a command run when the call names no timeout. */
 const COMMAND_TIMEOUT_MS = 2 * MINUTE_MS;
@@ -46,6 +50,39 @@ const SLUG_STOP = new Set([
 ]);
 
 const str = (description: string) => ({ type: "string", description });
+/**
+ * A list parameter. Engines that declare intake fields as strings (claude-code.ts `intakeTool`) send
+ * it as a JSON array in a string or one item per line: the registry lets that text through
+ * (`acceptJsonString`) and `scopeItems` reads every shape.
+ */
+const list = (description: string) => ({
+  type: "array",
+  items: { type: "string" },
+  acceptJsonString: true,
+  description,
+});
+
+/** What a launch's goal is: the user's ask, nothing they did not ask for. */
+const GOAL_WORDS = "one paragraph in the user's words; add nothing they did not ask for — put it in cut, or ask";
+/** What a launch delivers. */
+const IN_SCOPE_WORDS = "what this build delivers, each item in the user's words";
+/** What a launch leaves out: a named reference is a look bar, not a feature list. */
+const CUT_WORDS =
+  "what a game like this often has that this build will not (a reference is a look bar, not a feature list)";
+
+/**
+ * A launch's hours, for a Loop an Auto chat was asked for in words (delegated-turn.ts `autoLaunchFor`
+ * bridges this tool only while it has them); with Loop on the composer's hours win.
+ */
+const LOOP_HOURS_WORDS =
+  "The hours the user named, digits only (3, 1.5); 0 when they said until done; leave it out when they named none (the Loop switch's hours, if on, else until done).";
+
+/** A launch's in-scope and cut lists as the run carries them to its scope (chat-dispatch.ts `intakeRun`); none when unnamed. */
+function scopeArgs(args: AnyRecord): { inScope?: string[]; cut?: string[] } {
+  const inScope = scopeItems(args.in_scope);
+  const cut = scopeItems(args.cut);
+  return { ...(inScope.length ? { inScope } : {}), ...(cut.length ? { cut } : {}) };
+}
 
 /** Does the call name a folder other than the one this chat is pinned to? */
 function pinnedElsewhere(args: AnyRecord, ctx: ToolCtx): boolean {
@@ -63,6 +100,20 @@ function pinProject(args: AnyRecord, ctx: ToolCtx): { project?: string; error?: 
   if (!args.project) return { error: "No project is open in this chat." };
   return { project: args.project };
 }
+
+/**
+ * The Loop a chat's own turn asks for in words, when no Loop switch's commission reached the call (a
+ * direct engine's tool loop, Loop off): the hours named, else until done. None in a run's turn, a
+ * coordinator's follow-up or the Studio's own chat: those never start a Loop.
+ */
+function loopAskedInChat(args: AnyRecord, ctx: ToolCtx): AnyRecord | null {
+  if (ctx.runId || ctx.followupOf || ctx.studioThread) return null;
+  const hours = hoursNamed(args.hours);
+  return hours > 0 ? { hours } : {};
+}
+
+/** The Loop a launch is for: the Loop switch's commission, else the one the chat asked for in words. */
+const autopilotOf = (args: AnyRecord, ctx: ToolCtx): AnyRecord | null => ctx.autopilot ?? loopAskedInChat(args, ctx);
 
 export const tools: HarnessTool[] = [
   {
@@ -83,19 +134,50 @@ export const tools: HarnessTool[] = [
   {
     name: "new_game",
     description:
-      "Create a new game project from the three.js template. The template already satisfies the studio contract (window.__studio), so the first screenshot works immediately.",
+      "Create a new game project. With kind 'web' Genex writes its three.js starter, which already satisfies the studio contract (window.__studio), so the first screenshot works immediately. Leave kind out for an empty folder you fill yourself.",
     parameters: {
       type: "object",
-      properties: { name: str("lowercase project id, e.g. 'pong'"), title: str("human title") },
+      properties: {
+        name: str("lowercase project id, e.g. 'pong'"),
+        title: str("human title"),
+        kind: { type: "string", enum: [ProjectStarter.Web], description: "'web' for the three.js starter" },
+      },
       required: ["name"],
     },
     async execute(args, ctx) {
       if (ctx.project) {
         return `This chat is already working in "${ctx.project}". Do not create another folder. Write files here with write_file.`;
       }
-      const project = await ctx.call(HostMethod.GameScaffold, { name: args.name, title: args.title ?? args.name });
+      const web = args.kind === ProjectStarter.Web;
+      const project = await ctx.call(HostMethod.GameScaffold, {
+        name: args.name,
+        title: args.title ?? args.name,
+        ...(web ? { kind: ProjectStarter.Web } : {}),
+      });
+      if (!web) return `Created ${project.name} at ${project.dir}: an empty folder, yours to fill.`;
       await ctx.call(HostMethod.PreviewLoad, { project: args.name });
       return `Created ${project.name} at ${project.dir} and loaded it in the preview.`;
+    },
+  },
+
+  {
+    name: ProjectTool.StartWebGame,
+    description:
+      "Make this game a web game: Genex writes its three.js starter here, which Live shows beside the chat. Only while the folder has no kind yet.",
+    parameters: { type: "object", properties: { project: str("project id; defaults to this chat's folder") } },
+    async execute(args, ctx) {
+      const pin = pinProject(args, ctx);
+      if (pin.error) return { ok: false, content: pin.error };
+      const project = pin.project as string;
+      // The chat this turn answers: while it is in Plan the host writes nothing and says why.
+      const started = await ctx.call(HostMethod.GameStart, {
+        project,
+        starter: ProjectStarter.Web,
+        threadId: ctx.threadId,
+      });
+      if ("blocker" in started) return started.message;
+      await ctx.call(HostMethod.PreviewLoad, { project });
+      return "The web starter is in the folder; build on it.";
     },
   },
 
@@ -280,10 +362,12 @@ export const tools: HarnessTool[] = [
     parameters: {
       type: "object",
       properties: {
-        goal: str("one paragraph: what exists when the build ends, in the user's words plus the feeling"),
+        goal: str(GOAL_WORDS),
         direction: str("the feeling bar — AAA photoreal rainy city, etc. Titles optional"),
         project: str("folder slug for a chat that has no folder yet, lowercase; a chat already bound to one keeps it"),
         notes: str("optional extra for the critic"),
+        in_scope: list(IN_SCOPE_WORDS),
+        cut: list(CUT_WORDS),
       },
       required: ["goal", "direction"],
     },
@@ -293,14 +377,15 @@ export const tools: HarnessTool[] = [
       if (!loop || noHours) {
         return {
           ok: false,
-          content: "Loop is off in the composer. Ask the user to turn on Loop and set hours, then call this again.",
+          content:
+            "No Loop hours reached this call, so nothing started. Start the Loop with start_autopilot and the hours the user named instead.",
         };
       }
       const frames = attachedFrames(loop.frames);
       const kind = referenceKind(frames);
       // This slug only ever names a chat that has no folder yet: the launch stamps the chat's
       // own folder over it (turn-loop) and a bound thread wins outright (main.ts). It used to
-      // outrank the binding, and the night then built in a second, empty folder while the user
+      // outrank the binding, and the run then built in a second, empty folder while the user
       // typed into the chat attached to the first.
       const project = slugProject(args.project || args.direction || args.goal);
       const hours = clampRunHours(loop.hours);
@@ -318,6 +403,7 @@ export const tools: HarnessTool[] = [
         hours,
         engine: builderEngine,
         ...(builderModel ? { model: builderModel } : {}),
+        ...scopeArgs(args),
       };
       return {
         ok: true,
@@ -331,36 +417,38 @@ export const tools: HarnessTool[] = [
   {
     name: "start_autopilot",
     description:
-      "Launch a build — only when Loop is on and the ask is to build the game or change it substantially, never for research, a plan or a small change. Know first what the game is and how it should look; when nobody said, ask_user instead. The build decomposes into facets, builds each against a blind critic, and integrates; it starts from this folder as you leave it when your reply ends. Call it once, last, then recap.",
+      "Launch a build (a Loop) — when Loop is on and the ask is to build the game or change it substantially, or, Loop on or off, when the user asks for a Loop in words; never for research, a plan or a small change. Know first what the game is and how it should look; when nobody said, ask_user instead. The build runs as the launch rules say for this project; it starts from this folder as you leave it when your reply ends. Call it once, last, then recap.",
     parameters: {
       type: "object",
       properties: {
-        goal: str("one paragraph: what should exist, in the user's words plus the feeling"),
+        goal: str(GOAL_WORDS),
         direction: str("the visual/feeling bar — a named game or film, or a described feeling"),
         project: str("folder slug for a chat that has no folder yet, lowercase; a chat already bound to one keeps it"),
         notes: str("optional extra for the critics — what makes the reference good"),
         textual_reference: str("if the user had no images: the game/film they named as the vibe"),
+        in_scope: list(IN_SCOPE_WORDS),
+        cut: list(CUT_WORDS),
+        hours: { type: "number", description: LOOP_HOURS_WORDS },
       },
       required: ["goal", "direction"],
     },
     async execute(args, ctx) {
-      const autopilot = ctx.autopilot;
+      const autopilot = autopilotOf(args, ctx);
       if (!autopilot) {
         return {
           ok: false,
-          content:
-            "No hours are set in the composer. Ask the user to pick hours there (∞ until satisfied, or a number of hours), then call this again.",
+          content: "A Loop starts from the chat, not from a build's own turn: nothing started.",
         };
       }
       const frames = attachedFrames(autopilot.frames);
       const kind = referenceKind(frames);
       // This slug only ever names a chat that has no folder yet: the launch stamps the chat's
       // own folder over it (turn-loop) and a bound thread wins outright (main.ts). It used to
-      // outrank the binding, and the night then built in a second, empty folder while the user
+      // outrank the binding, and the run then built in a second, empty folder while the user
       // typed into the chat attached to the first.
       const project = slugProject(args.project || args.direction || args.goal);
-      // No cap set means run until the critics are satisfied — with a 24h safety ceiling so a
-      // wedged night can never hold the machine forever.
+      // No cap set means run until what was asked is verified and nothing blocks it — with a 24h
+      // safety ceiling so a wedged run can never hold the machine forever.
       const capped = typeof autopilot.hours === "number" && autopilot.hours > 0;
       const hours = capped ? clampRunHours(autopilot.hours) : MAX_RUN_HOURS;
       const notes = criticNotes(args);
@@ -387,8 +475,9 @@ export const tools: HarnessTool[] = [
         // (model-roles.ts) — the interview's own model is never inferred as the builders'.
         ...(autopilot.roles && typeof autopilot.roles === "object" ? { roles: autopilot.roles } : {}),
         ...(autopilot.reviewPlan === true ? { reviewPlan: true } : {}),
+        ...scopeArgs(args),
       };
-      const clock = capped ? `Building for up to ${hours} h` : `Building until the critics are satisfied`;
+      const clock = capped ? `Building for up to ${hours} h` : await untilDoneWords(ctx, ctx.project ?? project);
       return {
         ok: true,
         content: `${clock}${towardTheBar(kind, run.reference.name, frames.length)}`,
@@ -398,6 +487,16 @@ export const tools: HarnessTool[] = [
     },
   },
 ];
+
+/** How an ∞ build runs, as the launch tool answers: a web game's until what was asked is verified, any other project's until a reviewer's yes. */
+async function untilDoneWords(ctx: ToolCtx, project: string): Promise<string> {
+  // A game list Genex can't read leaves the web words, as before.
+  const listed = await Promise.resolve()
+    .then(() => ctx.call(HostMethod.GameList, {}))
+    .catch(() => null);
+  const game = Array.isArray(listed) ? listed.find((one) => one?.name === project) : undefined;
+  return game && loopProfileOf(game) === LoopProfile.Open ? OPEN_LAUNCH_WORDS.building : `Building ${UNTIL_DONE_WORDS}`;
+}
 
 /** The reference stills the composer attached, without empty slots. */
 function attachedFrames(frames: AnyRecord[] | null | undefined): AnyRecord[] {

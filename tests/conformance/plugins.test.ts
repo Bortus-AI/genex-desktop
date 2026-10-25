@@ -1,20 +1,28 @@
 import { test } from "node:test";
 import { createHash } from "node:crypto";
 import assert from "node:assert/strict";
-import { mkdtemp, cp, mkdir, readFile, writeFile, rename, rm, stat, symlink, utimes } from "node:fs/promises";
+import { mkdtemp, cp, mkdir, readFile, writeFile, rename, rm, stat, symlink } from "node:fs/promises";
+import { EventEmitter } from "node:events";
+import { setTimeout as delay } from "node:timers/promises";
 import os from "node:os";
 import net from "node:net";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { PluginConsentDeclined, PluginRegistry, type PluginMcpLaunch } from "../../src/substrate/plugins/registry.ts";
-import { EXAMPLE_PLUGIN, copyOfExample as copyOf, pluginFixture as fixture } from "../helpers/plugins.ts";
+import { SecretStorageIssue } from "../../src/shared/secret-storage.ts";
+import { SecretStorageUnavailableError } from "../../src/substrate/secrets.ts";
 import {
-  RESERVED_TOOLBAR_LABELS,
-  canonicalManifest,
-  inspectPackage,
-  validateManifest,
-} from "../../src/substrate/plugins/manifest.ts";
+  EXAMPLE_PLUGIN,
+  copyOfExample as copyOf,
+  installLocalOn,
+  personAllowsLocalTools,
+  pluginFixture as fixture,
+} from "../helpers/plugins.ts";
+import { canonicalManifest, inspectPackage, validateManifest } from "../../src/substrate/plugins/manifest.ts";
+import { RESERVED_TOOLBAR_LABELS } from "../../src/substrate/plugins/reserved-labels.ts";
 import type { PluginChange, PluginInfo, PluginManifest, PluginSource } from "../../src/shared/plugins.ts";
+import { CallCutOff } from "../../src/shared/plugins.ts";
+import { PluginCallCutOff } from "../../src/substrate/plugins/process.ts";
 const source = EXAMPLE_PLUGIN;
 test("bundled plugin uses a real child, tools and settings share one contract; disabled fails closed", async () => {
   const f = await fixture();
@@ -164,7 +172,11 @@ test("permission expansion requires approval, process crashes do not replay", as
       "export async function activate(){return {tool(){process.exit(9)}}}",
     );
     await f.registry.installLocal(dir, "local", m.capabilities);
-    await assert.rejects(f.registry.tool("example__greet", { name: "Ada" }, f.binding), /exited/);
+    await assert.rejects(
+      f.registry.tool("example__greet", { name: "Ada" }, f.binding),
+      (error: unknown) =>
+        error instanceof PluginCallCutOff && error.reason === CallCutOff.PluginEnded && /exited/.test(error.message),
+    );
     assert.equal(f.registry.list()[0]!.health, "failed");
   } finally {
     await f.close();
@@ -374,6 +386,22 @@ test("API 2 fields are rejected under apiVersion 1 instead of being ignored", as
     /scalar/,
   );
 });
+test("a toolbar item's facts: API 3 only, fact ids, kept on the canonical item", async () => {
+  const manifest = await manifestOf();
+  const item = manifest.toolbar![0]!;
+  const v3 = (facts: unknown) => ({ ...manifest, apiVersion: 3, toolbar: [{ ...item, facts }] });
+  assert.deepEqual(validateManifest(v3(["unreal-project", "unreal-plugin"])).toolbar![0]!.facts, [
+    "unreal-project",
+    "unreal-plugin",
+  ]);
+  assert.ok(!("facts" in validateManifest({ ...manifest, apiVersion: 3 }).toolbar![0]!), "none named: every game");
+  assert.throws(
+    () => validateManifest({ ...manifest, toolbar: [{ ...item, facts: ["unreal-project"] }] }),
+    /toolbar\[\]\.facts requires apiVersion 3/,
+  );
+  for (const facts of [[], ["Unreal Project"], ["a", "a"], "unreal-project", [7]])
+    assert.throws(() => validateManifest(v3(facts)), /facts/, JSON.stringify(facts));
+});
 test("toolbar validation: reserved labels, undeclared targets, confirmed status actions and the item cap", async () => {
   const manifest = await manifestOf();
   const item = manifest.toolbar![0]!;
@@ -534,10 +562,14 @@ test("confirmed tools fail closed without a consent hook, honour a decline and r
       (e: unknown) => e instanceof PluginConsentDeclined && e.by === "user" && /declined/.test(e.message),
     );
     f.registry.consent = async () => ({ approved: false, by: "timeout" });
-    await assert.rejects(
-      f.registry.tool("example__shout", { text: "hi" }, f.binding),
-      (e: unknown) => e instanceof PluginConsentDeclined && e.by === "timeout" && /declined/.test(e.message),
-    );
+    // Flipped: a card nobody answered is not a no, so its error no longer says "declined".
+    await assert.rejects(f.registry.tool("example__shout", { text: "hi" }, f.binding), (e: unknown) => {
+      assert.ok(e instanceof PluginConsentDeclined);
+      assert.equal(e.by, "timeout");
+      assert.match(e.message, /^Nobody answered example__shout\..*not a no/);
+      assert.doesNotMatch(e.message, /declined/);
+      return true;
+    });
     const seen: unknown[] = [];
     f.registry.consent = async (id, tool, args, binding) => {
       seen.push({ id, tool: tool.name, confirmation: tool.confirmation, args, binding });
@@ -614,6 +646,8 @@ test("onChange reports install, update (including a leased update), enable, disa
         return d;
       }),
     );
+    // Loaded from a folder, it starts off: the person turns it on.
+    await f.registry.setEnabled("crash", true);
     changes.length = 0;
     await assert.rejects(f.registry.tool("crash__greet", { name: "Ada" }, f.binding), /exited/);
     assert.deepEqual(changes, [{ id: "crash", reason: "failed" }]);
@@ -665,7 +699,7 @@ test("restore re-acquires a local plugin from its recorded origin and names a go
       m.id = "local-one";
       m.name = "Local one";
     });
-    await f.registry.installLocal(dir);
+    await installLocalOn(f.registry, dir);
     const find = (r: PluginRegistry) => r.list().find((p) => p.manifest.id === "local-one")!;
     assert.deepEqual(find(f.registry).origin, { kind: "local", directory: dir });
     assert.equal(find(f.registry).state, "enabled");
@@ -679,7 +713,9 @@ test("restore re-acquires a local plugin from its recorded origin and names a go
     try {
       assert.deepEqual(find(next).origin, { kind: "local", directory: dir });
       await next.restore("local-one");
-      assert.equal(next.enabled("local-one"), true);
+      assert.equal(next.enabled("local-one"), false, "loaded again from its folder, it starts off");
+      await next.setEnabled("local-one", true);
+      personAllowsLocalTools(next);
       assert.deepEqual(await next.tool("local-one__greet", { name: "Ada" }, f.binding), {
         text: "Hello Ada",
         project: "game",
@@ -739,6 +775,9 @@ test("code dropped under packages is listed as not-enabled until allowed; record
       assert.match(find("outside").error!, /outside Studio storage/);
       await assert.rejects(next.tool("outside__greet", { name: "Ada" }, f.binding), /unavailable/);
       await next.allowUnlisted("dropped", ["settings"]);
+      assert.equal(find("dropped").state, "disabled", "allowed, it is installed off");
+      await next.setEnabled("dropped", true);
+      personAllowsLocalTools(next);
       assert.equal(find("dropped").state, "enabled");
       assert.equal(find("dropped").unlisted, undefined);
       assert.equal(next.list().filter((p) => p.manifest.id === "dropped").length, 1);
@@ -992,24 +1031,59 @@ test("assets.deliver reports the delivered files to the host ledger and a failin
   }
 });
 
-/** Poll a best-effort condition; fs.watch coalesces events, so hot reload is asserted with a deadline, never a sleep. */
-const until = async (probe: () => Promise<boolean>, ms = 5000, nudge?: () => Promise<void>) => {
+/** Poll a condition the registry reaches on its own; asserted with a deadline, never a sleep. */
+const until = async (probe: () => Promise<boolean>, ms = 5000) => {
   const deadline = Date.now() + ms;
-  let nudged = Date.now();
   for (;;) {
     if (await probe().catch(() => false)) return true;
     if (Date.now() >= deadline) return false;
-    if (nudge && Date.now() - nudged > 1500) {
-      nudged = Date.now();
-      await nudge().catch(() => {});
-    }
-    await new Promise((r) => setTimeout(r, 150));
+    await delay(150);
   }
 };
-const touch = (file: string) => async () => {
-  const now = new Date();
-  await utimes(file, now, now);
-};
+/**
+ * Hands the registry's folder watcher to the test: when the OS reports an edit is its own business
+ * (fs.watch coalesces, and runs late under load), so each edit is announced right after it is written.
+ */
+function watchByHand(registry: PluginRegistry) {
+  const open = new Set<() => void>();
+  const folders: string[] = [];
+  registry.watchFolder = (directory, onChange) => {
+    folders.push(directory);
+    open.add(onChange);
+    return {
+      close() {
+        open.delete(onChange);
+      },
+    };
+  };
+  return {
+    /** Every folder the registry asked to watch, in order. */
+    folders,
+    /** Report an edit to every watcher still open, as the file system would. */
+    edited() {
+      for (const onChange of open) onChange();
+    },
+  };
+}
+test("by default a watched folder listens with the file system's own watcher, whose change event is the edit", async () => {
+  const f = await fixture();
+  try {
+    let heard = 0;
+    const watcher = f.registry.watchFolder(f.root, () => {
+      heard += 1;
+    });
+    try {
+      assert.ok(watcher instanceof EventEmitter, "the default is a real fs.watch handle");
+      // Emitted by hand, synchronously: nothing awaits the OS, so no real event can land in between.
+      watcher.emit("change", "change", "backend.mjs");
+      assert.equal(heard, 1);
+    } finally {
+      watcher.close();
+    }
+  } finally {
+    await f.close();
+  }
+});
 test("watch reloads a local plugin from the folder it was loaded from, defers under a lease and refuses other origins", async () => {
   const f = await fixture();
   try {
@@ -1017,7 +1091,9 @@ test("watch reloads a local plugin from the folder it was loaded from, defers un
       m.id = "watched";
       m.name = "Watched";
     });
-    await f.registry.installLocal(dir);
+    await installLocalOn(f.registry, dir);
+    personAllowsLocalTools(f.registry);
+    const watcher = watchByHand(f.registry);
     const find = () => f.registry.list().find((p) => p.manifest.id === "watched")!;
     assert.equal(find().watching, false);
     await assert.rejects(f.registry.watch("example", true), /loaded from a local folder/);
@@ -1026,30 +1102,27 @@ test("watch reloads a local plugin from the folder it was loaded from, defers un
     f.registry.onChange = (c) => changes.push(c);
     await f.registry.watch("watched", true);
     assert.equal(find().watching, true);
+    assert.deepEqual(watcher.folders, [dir]);
     await writeFile(
       path.join(dir, "backend.mjs"),
       "export async function activate(){return {tool(n,a,c){return {text:`Reloaded ${a.name}`,project:c.project};}}}",
     );
+    watcher.edited();
     assert.ok(
-      await until(
-        async () =>
-          ((await f.registry.tool("watched__greet", { name: "Ada" }, f.binding)) as { text: string }).text ===
-          "Reloaded Ada",
-        5000,
-        touch(path.join(dir, "backend.mjs")),
-      ),
-      "the edit did not reload within 5 s",
+      await until(async () => changes.some((c) => c.id === "watched" && c.reason === "reloaded")),
+      `the edit did not reload within 5 s: ${JSON.stringify(changes)}`,
     );
-    assert.ok(
-      changes.some((c) => c.id === "watched" && c.reason === "reloaded"),
-      JSON.stringify(changes),
+    assert.equal(
+      ((await f.registry.tool("watched__greet", { name: "Ada" }, f.binding)) as { text: string }).text,
+      "Reloaded Ada",
     );
     const release = f.registry.lease();
     const m = JSON.parse(await readFile(path.join(dir, "plugin.json"), "utf8"));
     m.version = "1.2.0";
     await writeFile(path.join(dir, "plugin.json"), JSON.stringify(m));
+    watcher.edited();
     assert.ok(
-      await until(async () => find().pendingVersion === "1.2.0", 5000, touch(path.join(dir, "plugin.json"))),
+      await until(async () => find().pendingVersion === "1.2.0"),
       "the leased edit never became pending within 5 s",
     );
     assert.equal(find().manifest.version, "1.0.0");
@@ -1091,17 +1164,19 @@ test("code that is read again is scanned again: a reload and a restore never kee
         scannedAt: new Date().toISOString(),
       };
     };
-    await f.registry.installLocal(dir);
+    await installLocalOn(f.registry, dir);
     const find = () => f.registry.list().find((p) => p.manifest.id === "rescanned")!;
     assert.equal(find().scan!.verdict, "safe");
     assert.equal(scanned.length, 1);
+    const watcher = watchByHand(f.registry);
     await f.registry.watch("rescanned", true);
     await writeFile(
       path.join(dir, "backend.mjs"),
       "export async function activate(){return {tool(n,a,c){return {text:'ok',project:c.project};}}}\n// now shells out: execSync\n",
     );
+    watcher.edited();
     assert.ok(
-      await until(async () => find().scan!.verdict === "dangerous", 5000, touch(path.join(dir, "backend.mjs"))),
+      await until(async () => find().scan?.verdict === "dangerous"),
       "the reload kept the verdict of code that is no longer there",
     );
     assert.ok(scanned.length > 1, "the reloaded copy was scanned, not the one already on the card");
@@ -1123,7 +1198,7 @@ test("code that is read again is scanned again: a reload and a restore never kee
 /**
  * The race the serialized queue exists for: a remove already waiting in line when a watched edit
  * fires. The reload is queued behind it, so by the time it runs the plugin is gone — and it must
- * stay gone. The first, ordinary reload proves the watcher is delivering events at all here.
+ * stay gone. The first, ordinary reload proves an announced edit reloads at all here.
  */
 test("a watched edit never brings back a plugin removed while the reload was queued", async () => {
   const f = await fixture();
@@ -1132,25 +1207,27 @@ test("a watched edit never brings back a plugin removed while the reload was que
       m.id = "racing";
       m.name = "Racing";
     });
-    await f.registry.installLocal(dir);
+    await installLocalOn(f.registry, dir);
+    personAllowsLocalTools(f.registry);
     const find = () => f.registry.list().find((p) => p.manifest.id === "racing")!;
+    const watcher = watchByHand(f.registry);
+    const changes: PluginChange[] = [];
+    f.registry.onChange = (c) => changes.push(c);
     await f.registry.watch("racing", true);
     await writeFile(
       path.join(dir, "backend.mjs"),
       "export async function activate(){return {tool(n,a,c){return {text:`Reloaded ${a.name}`,project:c.project};}}}",
     );
+    watcher.edited();
     assert.ok(
-      await until(
-        async () =>
-          ((await f.registry.tool("racing__greet", { name: "Ada" }, f.binding)) as { text: string }).text ===
-          "Reloaded Ada",
-        5000,
-        touch(path.join(dir, "backend.mjs")),
-      ),
-      "the edit did not reload within 5 s",
+      await until(async () => changes.some((c) => c.id === "racing" && c.reason === "reloaded")),
+      `the edit did not reload within 5 s: ${JSON.stringify(changes)}`,
     );
-    const changes: PluginChange[] = [];
-    f.registry.onChange = (c) => changes.push(c);
+    assert.equal(
+      ((await f.registry.tool("racing__greet", { name: "Ada" }, f.binding)) as { text: string }).text,
+      "Reloaded Ada",
+    );
+    changes.length = 0;
     // One slow install holds the queue, so the remove behind it has not run when the watcher fires.
     const slowDir = await copyOf(f.root, "slow", (m) => {
       m.id = "slow";
@@ -1166,6 +1243,7 @@ test("a watched edit never brings back a plugin removed while the reload was que
       path.join(dir, "backend.mjs"),
       "export async function activate(){return {tool(n,a,c){return {text:`Resurrected ${a.name}`,project:c.project};}}}",
     );
+    watcher.edited();
     await Promise.all([blocked, removal]);
     assert.equal(find().removed, true);
     assert.equal(
@@ -1175,15 +1253,10 @@ test("a watched edit never brings back a plugin removed while the reload was que
     );
     assert.equal(f.registry.enabled("racing"), false);
     assert.equal(find().watching, false);
-    // Only what follows the remove can be a resurrection. On a loaded machine the first reload
-    // outlasts `until`'s nudge, and that nudge's debounced reload may land before the remove: a
-    // legitimate "reloaded" of a plugin that was still installed then.
-    const removedAt = changes.findIndex((c) => c.id === "racing" && c.reason === "removed");
-    assert.notEqual(removedAt, -1, JSON.stringify(changes));
-    assert.equal(
-      changes.slice(removedAt + 1).some((c) => c.id === "racing" && c.reason !== "removed"),
-      false,
-      JSON.stringify(changes),
+    assert.deepEqual(
+      changes.filter((c) => c.id === "racing"),
+      [{ id: "racing", reason: "removed" }],
+      "the remove is the last word on the plugin",
     );
     await assert.rejects(f.registry.tool("racing__greet", { name: "Ada" }, f.binding), /unavailable/);
   } finally {
@@ -1245,7 +1318,8 @@ test("backend stderr reaches the developer debug sink without becoming plugin st
     f.registry.debug = (id, line) => {
       lines.push({ id, line });
     };
-    await f.registry.installLocal(dir);
+    await installLocalOn(f.registry, dir);
+    personAllowsLocalTools(f.registry);
     assert.equal(lines.length, 0);
     assert.deepEqual(await f.registry.tool("noisy__greet", { name: "Ada" }, f.binding), {
       text: "ok",
@@ -1346,6 +1420,20 @@ test("mcpServers is API 2 only, and what a plugin may declare about a server it 
     () => validateManifest(withServers([mcpServer({ requires: { settings: ["missing"] } })])),
     /requires.settings: "missing" is not declared/,
   );
+  // The tools a server says only read: a list of distinct names, nothing else.
+  for (const reads of [
+    "list",
+    [""],
+    [1],
+    ["list", "list"],
+    Array.from({ length: 65 }, (_, i) => `t${i}`),
+    ["x".repeat(129)],
+  ])
+    assert.throws(
+      () => validateManifest(withServers([mcpServer({ reads })])),
+      /mcpServers reads/,
+      JSON.stringify(reads),
+    );
   // What survives is canonical: the section last, its keys in one order, unknown fields dropped.
   const canonical = validateManifest(
     withServers([
@@ -1353,6 +1441,7 @@ test("mcpServers is API 2 only, and what a plugin may declare about a server it 
         extra: "dropped",
         env: { ZED: "literal:z", ALPHA: "setting:greeting" },
         toolPolicy: { deny: ["dangerous"] },
+        reads: ["list", "describe"],
         maxTools: 8,
         callTimeoutMs: 900_000,
       }),
@@ -1367,6 +1456,7 @@ test("mcpServers is API 2 only, and what a plugin may declare about a server it 
     "cwd",
     "env",
     "toolPolicy",
+    "reads",
     "maxTools",
     "callTimeoutMs",
     "description",
@@ -1575,6 +1665,51 @@ test("an unlock that fails leaves the plugin locked, and its servers without a c
     await assert.rejects(registry.action("example", "unlock", {}), /Keychain access was denied/);
     assert.equal(await launch.credentialFile(), undefined, "a refused unlock does not authorize the server");
     assert.equal(seen.at(-1)!.kind, "register", "and the server is republished, so the card still says why");
+  } finally {
+    registry.cancel();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("an unlock refused by a locked secret store says why, though the backend reports a generic failure", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "studio-plugin-keyring-"));
+  const seeds = path.join(root, "seeds"),
+    seed = path.join(seeds, "example");
+  await mkdir(seeds);
+  await cp(source, seed, { recursive: true });
+  const manifest = await manifestOf();
+  manifest.capabilities.push("credentials");
+  manifest.actions.push(
+    ...["connect", "unlock", "disconnect"].map((name) => ({
+      name,
+      label: name,
+      confirmation: "Explicit account action",
+    })),
+    { name: "status", label: "Status" },
+  );
+  manifest.account = { connect: "connect", unlock: "unlock", disconnect: "disconnect", status: "status" };
+  await writeFile(path.join(seed, "plugin.json"), JSON.stringify(manifest));
+  // Like the Genex backend: whatever the host answers, the backend raises its own generic error.
+  await writeFile(
+    path.join(seed, "backend.mjs"),
+    `export async function activate(){return {async action(n,a,c){if(n==='unlock'){try{await c.host('credentials.read',{});}catch{throw new Error('Saved account could not be unlocked. Automatic retries are paused.');}}return {};}};}`,
+  );
+  const registry = new PluginRegistry(
+    path.join(root, "installed"),
+    seeds,
+    path.resolve("src/plugin-sdk/backend.mjs"),
+    async () => {
+      throw new SecretStorageUnavailableError(SecretStorageIssue.NoKeyring);
+    },
+  );
+  try {
+    await registry.init();
+    await assert.rejects(registry.action("example", "unlock", {}), /Start GNOME Keyring or KWallet/);
+    await assert.rejects(
+      registry.action("example", "unlock", {}),
+      /Start GNOME Keyring or KWallet/,
+      "and says so again",
+    );
   } finally {
     registry.cancel();
     await rm(root, { recursive: true, force: true });
@@ -1957,8 +2092,8 @@ test("re-enable and reinstall restore prior account consent once without retryin
 
 /**
  * R5: an installed bundled plugin is replaced only through an offered update, and one is offered
- * only for a newer version. This build's Genex (publish settle, "Allow a new upload", telemetry
- * off) must reach a profile that still holds the last released Genex, 1.4.2.
+ * only for a newer version. This build's Genex (the game's Genex cover: genex__cover, genex__cover-set
+ * and the cover card) must reach a profile that still holds the last released Genex, 1.5.0.
  */
 test("a profile holding the last released Genex is offered this build's Genex", async () => {
   const { makeResources } = await import("../helpers/resources.ts");
@@ -1968,7 +2103,7 @@ test("a profile holding the last released Genex is offered this build's Genex", 
   await mkdir(released);
   await cp(path.join(resources, "plugins", "genex"), path.join(released, "genex"), { recursive: true });
   const manifest = JSON.parse(await readFile(path.join(released, "genex", "plugin.json"), "utf8"));
-  manifest.version = "1.4.2";
+  manifest.version = "1.5.0";
   await writeFile(path.join(released, "genex", "plugin.json"), JSON.stringify(manifest));
   const installed = path.join(root, "installed");
   const bootstrap = path.join(resources, "plugin-sdk", "backend.mjs");
@@ -1982,7 +2117,7 @@ test("a profile holding the last released Genex is offered this build's Genex", 
   try {
     await after.init();
     const genex = after.list().find((p) => p.manifest.id === "genex")!;
-    assert.equal(genex.manifest.version, "1.4.2", "the installed copy stays until the user updates");
+    assert.equal(genex.manifest.version, "1.5.0", "the installed copy stays until the user updates");
     assert.ok(genex.availableVersion, "an update to this build's Genex is offered");
   } finally {
     after.cancel();
@@ -2036,11 +2171,27 @@ test("bundled Genex indexes its vendored skills, serves them through genex__skil
     assert.match(guidance, /genex__skill \{"name":"genex-threejs-multiplayer"\}/);
     assert.doesNotMatch(guidance, /Two rules that decide whether it feels good/, "a card's body is never in the brief");
     assert.doesNotMatch(guidance, /\[genex\/asset-workflow\]/, "the duplicate of the asset tool's description is gone");
+    // The Genex cover: an inline skill every brief carries, beside the card read on demand.
+    assert.match(guidance, /\[genex\/cover\]\n[^\n]*set_game_cover[^\n]*genex-cover/);
+    assert.match(guidance, /\[genex\/genex-cover\] [^\n]*genex__skill \{"name":"genex-cover"\}/);
     const tools = registry.tools().filter((t) => t.name.startsWith("genex__"));
     for (const text of [guidance, ...tools.map((t) => t.description)]) assert.doesNotMatch(text, /npx genex/);
     const names = tools.map((t) => t.name);
-    for (const name of ["genex__skill", "genex__cli", "genex__cli-paid", "genex__package"])
+    for (const name of [
+      "genex__skill",
+      "genex__cli",
+      "genex__cli-paid",
+      "genex__package",
+      "genex__cover",
+      "genex__cover-set",
+    ])
       assert.ok(names.includes(name), `${name} in ${names.join(", ")}`);
+    const cover = splitVendoredSkill(await readGenexSkill(registry, "genex-cover", binding));
+    assert.equal(
+      cover.preface,
+      await readFile(path.resolve("src/plugins/genex/skills/genex-cover/PREFACE.md"), "utf8"),
+      "Studio's own way to stage, check and send the cover comes first",
+    );
     const multiplayer = splitVendoredSkill(await readGenexSkill(registry, "genex-threejs-multiplayer", binding));
     const preface = await readFile(
       path.resolve("src/plugins/genex/skills/genex-threejs-multiplayer/PREFACE.md"),
@@ -2054,6 +2205,7 @@ test("bundled Genex indexes its vendored skills, serves them through genex__skil
     await noAgentFiles();
     await registry.setEnabled("genex", false);
     assert.doesNotMatch(registry.guidance(), /\[genex\//);
+    assert.doesNotMatch(registry.guidance(), /genex-cover/, "a game's cover demo is Genex's only while Genex is on");
     assert.ok(!registry.tools().some((t) => t.name.startsWith("genex__")));
     await assert.rejects(
       registry.tool("genex__skill", { name: "genex-threejs-multiplayer" }, binding),
@@ -2090,4 +2242,27 @@ test("a plugin server whose connector id would be too long is refused by the man
   // `<plugin>-<server>` becomes the connector id, which is at most 32 characters.
   assert.throws(() => validateManifest(withServer("a-long-plugin-name-for-tools", "server")), /connector id/);
   assert.doesNotThrow(() => validateManifest(withServer("short-plugin", "server")));
+});
+
+test("a start names each part of the plugin setup as it finishes, and a first launch each seed it copies", async () => {
+  // Windows 11's first start never logged `core:plugins` (release canary 39440536691): the step's
+  // parts need marks of their own before anyone can say which one held it.
+  const f = await fixture();
+  try {
+    const steps: string[] = [];
+    const record = (step: string, plugin?: string) => steps.push(plugin ? `${step}:${plugin}` : step);
+    const first = new PluginRegistry(path.join(f.root, "fresh"), f.seeds, f.registry.bootstrap, async () => null);
+    first.onInitStep = record;
+    await first.init();
+    first.cancel();
+    assert.deepEqual(steps, ["records", "seed:example", "pending", "saved", "swept", "unlisted", "accounts"]);
+    steps.length = 0;
+    const again = new PluginRegistry(path.join(f.root, "fresh"), f.seeds, f.registry.bootstrap, async () => null);
+    again.onInitStep = record;
+    await again.init();
+    again.cancel();
+    assert.deepEqual(steps, ["records", "pending", "saved", "swept", "unlisted", "accounts"], "nothing copied again");
+  } finally {
+    await f.close();
+  }
 });

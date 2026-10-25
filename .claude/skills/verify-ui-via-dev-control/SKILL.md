@@ -12,9 +12,14 @@ description: Verify renderer, IPC, preview or startup changes through owned stud
   That request authorizes the live launch; do not ask again. The window is visible and focusable.
   Isolated app data does not isolate provider accounts, Keychain, quotas or compute. Do not copy
   or inspect credentials, and do not perform paid generations merely to check startup.
+  The launch drops your agent session's own variables (`envStripped` in the start JSON) and
+  warns when the games root sits under a `.claude` folder (`warnings`).
 - A new user's first launch (no Claude Code, Codex or sign-in): add `--fresh-machine` to that live
   start; `shell --profile <name>` is that account's terminal.
 - Human review explicitly using fixture data: set `STUDIO_FIXTURE_INTERACTIVE=1` on start/restart.
+- Fixtures run in English. `STUDIO_FIXTURE_LANGUAGE=ru` (any app language) shows one;
+  `STUDIO_FIXTURE_LANGUAGE=system STUDIO_FIXTURE_SYSTEM_LANGUAGES=ja-JP,en-US` lets the app detect it
+  as on a Mac with that language list (macOS; the computer's settings are untouched).
 
 Inspect ownership/status before reusing a profile. Preserve active user work. Leave human testing
 sessions running and retain their state. The stop/clean steps below apply only to disposable
@@ -40,7 +45,7 @@ npm run studio:dev -- clean --profile ui-check                   # disposable st
 ```
 
 Pick the fixture that already shows the surface (`app-basics`, `chat-history`, `run-controls`,
-`sidebar`, `build-history`, `game-surface`, ...). Changing source makes the session stale:
+`sidebar`, `build-history`, `game-surface`, `asset-library`, ...). Changing source makes the session stale:
 `restart --profile ui-check` rebuilds with the same fixture. `start --reuse` reopens a stopped one.
 
 ## Requests
@@ -59,12 +64,25 @@ Templates (one per request; `--request FILE` also works):
 
 ```json
 {"method":"click","params":{"selector":"button[aria-label=\"Hide sidebar\"]"}}
+{"method":"click","params":{"selector":"[data-asset-card=\"assets/a.glb\"] button","modifiers":["Meta"]}}
 {"method":"key","params":{"surface":"desktop","key":"Enter","code":"Enter"}}
 {"method":"select","params":{"selector":"select[aria-label=\"Build history\"]","value":"<runId from snapshot>"}}
 {"method":"scroll","params":{"surface":"desktop","deltaX":0,"deltaY":600,"selector":"[data-chat-scroll]"}}
+{"method":"file.drag","params":{"selector":"[data-promptbar] textarea[aria-label=\"Prompt\"]","stage":"drop","file":"picture"}}
 {"method":"game.input","params":{"actions":[{"type":"tap","keys":["ArrowRight"]},{"type":"wait","ms":300}]}}
 {"method":"game.state","params":{}}
 ```
+
+A fixture's Genex account signs in with `STUDIO_FIXTURE_GENEX_ACCOUNT=1` (the full account; `new`,
+`quiet`, `fresh` are others); `asset-library` signs in by itself.
+
+Hooks for the controls an unattended operator presses: `[data-run-resume="<runId>"]` (Resume on
+the result card and on the chat's paused line), `[data-onboarding-action="next|skip|start"]` (the
+welcome). `key` sends Arrow keys (all four), PageUp/PageDown, Home/End with real key codes, so
+sliders and segment groups move as they do under a keyboard. `runs --profile P` lists each open
+run and the open chat's newest (state, phase, clock, last record, stop reason, `resumable`); it
+reads the profile's records, asks the window which chat is open, and answers on a stale build
+or with the harness down.
 
 ## Evidence
 

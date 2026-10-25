@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   CARD_IMAGE_H,
+  CARD_LINE_H,
   CARD_W,
   COLUMNS,
   cardHeight,
@@ -17,6 +18,7 @@ import {
   sourceLabel,
 } from "../../src/renderer/assets-layout.ts";
 import { assetKind, type ProjectAsset } from "../../src/shared/game-assets.ts";
+import { MakingKind, type MakingJob, MakingPhase } from "../../src/shared/asset-making.ts";
 import { boundsOf, type Rect } from "../../src/renderer/run-graph.ts";
 
 /** Two cards share pixels. */
@@ -33,6 +35,14 @@ function asset(file: string, over: Partial<ProjectAsset> = {}): ProjectAsset {
     ...over,
   };
 }
+
+/** A job still on its way, as the inventory lists it. */
+const waitingJob = (over: Partial<MakingJob> = {}): MakingJob => ({
+  source: "genex",
+  jobId: "w",
+  phase: MakingPhase.Making,
+  ...over,
+});
 
 describe("assetKind", () => {
   it("names a file by its extension, and says so honestly when it cannot", () => {
@@ -52,9 +62,28 @@ describe("sourceLabel", () => {
     assert.equal(sourceLabel("imported"), "Your files");
     assert.equal(sourceLabel("soundsmith"), "soundsmith");
   });
+
+  it("names what Add brought in by where it came from", () => {
+    assert.equal(sourceLabel("library"), "My library");
+    assert.equal(sourceLabel("community"), "Community");
+  });
 });
 
 describe("groupAssets", () => {
+  it("puts what Add brought in after the plugins and before the files dropped in by hand", () => {
+    const groups = groupAssets([
+      asset("assets/loose.png"),
+      asset("assets/community/c/hut.glb", { source: "community" }),
+      asset("assets/library/l/moss.png", { source: "library" }),
+      asset("assets/soundsmith/s/a.mp3", { source: "soundsmith" }),
+      asset("assets/genex/g/a.glb", { source: "genex" }),
+    ]);
+    assert.deepEqual(
+      groups.map((group) => group.source),
+      ["genex", "soundsmith", "library", "community", "imported"],
+    );
+  });
+
   it("puts the sources in a fixed order, whatever order the walk returned", () => {
     const groups = groupAssets([
       asset("assets/loose.png"),
@@ -67,7 +96,7 @@ describe("groupAssets", () => {
       groups.map((group) => group.source),
       ["genex", "blender", "alpha", "zebra", "imported"],
     );
-    // A plugin installed tonight must not be able to reshuffle the canvas above it.
+    // A plugin installed during a run must not be able to reshuffle the canvas above it.
     const reversed = groupAssets([
       asset("assets/genex/x.png", { source: "genex", jobId: "g1" }),
       asset("assets/alpha/x.png", { source: "alpha", jobId: "a1" }),
@@ -122,15 +151,21 @@ describe("groupAssets", () => {
   });
 
   it("draws a job that has started and delivered nothing, and drops it once its files land", () => {
-    const pendingOnly = groupAssets([], [{ source: "genex", jobId: "genex:image", pluginStatus: "requested" }]);
-    assert.equal(pendingOnly[0]!.jobs[0]!.pending, true);
+    const requested = waitingJob({ jobId: "genex:image", pluginStatus: "requested", phase: MakingPhase.Queued });
+    const pendingOnly = groupAssets([], [requested]);
+    assert.equal(pendingOnly[0]!.jobs[0]!.waiting, requested, "the card gets the waiting job itself");
     assert.equal(pendingOnly[0]!.count, 0, "a placeholder is not a file");
-    const landed = groupAssets(
-      [asset("assets/genex/j/a.png", { source: "genex", jobId: "genex:image" })],
-      [{ source: "genex", jobId: "genex:image", pluginStatus: "requested" }],
-    );
+    const landed = groupAssets([asset("assets/genex/j/a.png", { source: "genex", jobId: "genex:image" })], [requested]);
     assert.equal(landed[0]!.jobs.length, 1);
-    assert.equal(landed[0]!.jobs[0]!.pending, undefined, "the real files replace the placeholder");
+    assert.equal(landed[0]!.jobs[0]!.waiting, undefined, "the real files replace the placeholder");
+  });
+
+  it("puts any plugin's waiting job in its own source's group", () => {
+    const groups = groupAssets([], [waitingJob({ source: "sprite-forge", jobId: "call-1", kind: MakingKind.Image })]);
+    assert.deepEqual(
+      groups.map((group) => [group.source, group.jobs[0]!.waiting?.jobId]),
+      [["sprite-forge", "call-1"]],
+    );
   });
 });
 
@@ -161,12 +196,34 @@ describe("layoutAssets", () => {
     assert.ok(sixth.y >= first.y + first.h, "and below the row above it");
   });
 
+  it("leaves room for a card's line under its row, and only its row", () => {
+    const plain = layoutAssets(many);
+    const lined = layoutAssets(many, [], new Map([[many[1]!.file, 1]]));
+    const at = (layout: ReturnType<typeof layoutAssets>, i: number) => layout.rects[`asset:${many[i]!.file}`]!;
+    assert.deepEqual(at(lined, 1), at(plain, 1), "the lined card stays where it was");
+    assert.equal(at(lined, 4).y, at(plain, 4).y, "and so does its row");
+    assert.equal(at(lined, 5).y, at(plain, 5).y + CARD_LINE_H, "the next row moves down by the line");
+    assert.equal(at(lined, 10).y, at(plain, 10).y + CARD_LINE_H, "once");
+    assert.equal(lined.height, plain.height + CARD_LINE_H);
+    const cards = many.map((_, i) => at(lined, i));
+    for (const card of cards) assert.ok(cards.every((other) => other === card || !rectsOverlap(card, other)));
+    const twoRows = layoutAssets(
+      many,
+      [],
+      new Map([
+        [many[1]!.file, 1],
+        [many[3]!.file, 2],
+      ]),
+    );
+    assert.equal(at(twoRows, 5).y, at(plain, 5).y + 2 * CARD_LINE_H, "the row takes its tallest line");
+  });
+
   it("packs separate generations into the same row and reserves a full preview while pending", () => {
     const files = [
       asset("assets/a.glb", { source: "genex", jobId: "a", at: "2026-09-22" }),
       asset("assets/b.glb", { source: "genex", jobId: "b", at: "2026-09-21" }),
     ];
-    const layout = layoutAssets(files, [{ source: "genex", jobId: "c", at: "2026-09-20" }]);
+    const layout = layoutAssets(files, [waitingJob({ jobId: "c", at: "2026-09-20" })]);
     const a = layout.rects["asset:assets/a.glb"]!,
       b = layout.rects["asset:assets/b.glb"]!,
       pending = layout.rects["pending:genex:c"]!;
@@ -204,7 +261,7 @@ describe("layoutAssets", () => {
         asset("assets/blender/rock.glb", { source: "blender", jobId: "rock" }),
         asset("assets/loose.wav"),
       ],
-      [{ source: "genex", jobId: "genex:image" }],
+      [waitingJob({ jobId: "genex:image" })],
     );
     const cards = Object.entries(layout.rects).filter(([id]) => id.startsWith("asset:") || id.startsWith("pending:"));
     for (let i = 0; i < cards.length; i += 1) {

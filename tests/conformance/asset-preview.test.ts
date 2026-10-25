@@ -9,6 +9,9 @@ import {
   assetCompanion,
   assetExtension,
   assetPreviewMode,
+  loadFailure,
+  PreviewFailure,
+  PreviewFileError,
 } from "../../src/shared/asset-preview.ts";
 import { ASSET_FORMATS, assetFormat, assetKind } from "../../src/shared/game-assets.ts";
 
@@ -53,6 +56,12 @@ it("model companions stay within the asset root and reject remote, encoded trave
   ])
     assert.throws(() => assetCompanion("assets/models/a.gltf", uri));
   assert.throws(() => assetCompanion("@genex/job/a.gltf", "../other/a.png"));
+  // A model in an engine's or a plugin's asset folder loads what lies beside it in its top folder;
+  // the main side holds the read to the game's asset folders.
+  assert.equal(assetCompanion("Assets/m/car.gltf", "car.bin"), "Assets/m/car.bin");
+  assert.equal(assetCompanion("Assets/m/car.obj", "../textures/car.png"), "Assets/textures/car.png");
+  assert.equal(assetCompanion("car.gltf", "car.bin"), "car.bin", "a model at the game's root");
+  assert.throws(() => assetCompanion("Assets/m/car.gltf", "../../secret.bin"), /leaves its asset folder/);
 });
 it("each advertised media format chooses a viewer while authoring and executable formats stay unsupported", () => {
   for (const ext of ["glb", "gltf", "fbx", "obj", "stl", "ply"]) assert.equal(assetPreviewMode(`a.${ext}`), "model");
@@ -98,4 +107,22 @@ it("one format table answers kind, viewer, type and thumbnail for every extensio
       [null, "other", name === "png" ? "image/png" : null],
       name,
     );
+});
+
+it("a model that fails to load is the file's fault only when its format or parts are wrong, never for memory or a decoder", () => {
+  // What the viewer itself refuses in a file (not a GLB, too many parts, bounds) and malformed JSON.
+  assert.equal(loadFailure(new PreviewFileError("This file is not a valid GLB model.")), PreviewFailure.File);
+  assert.equal(loadFailure(new SyntaxError("Unexpected token")), PreviewFailure.File);
+  let companion: unknown;
+  try {
+    assetCompanion("assets/a.gltf", "../../b.bin");
+  } catch (error) {
+    companion = error;
+  }
+  assert.equal(loadFailure(companion), PreviewFailure.File, "a part that leaves its folder is the file's");
+  // Out of memory, a decoder's own failure, anything else: they may pass.
+  assert.equal(loadFailure(new RangeError("Array buffer allocation failed")), PreviewFailure.Interrupted);
+  assert.equal(loadFailure(new Error("THREE.DRACOLoader: decoder failed")), PreviewFailure.Interrupted);
+  assert.equal(loadFailure("thrown words"), PreviewFailure.Interrupted);
+  assert.equal(loadFailure(undefined), PreviewFailure.Interrupted);
 });

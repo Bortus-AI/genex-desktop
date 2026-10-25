@@ -88,40 +88,60 @@ describe("a run's inbox, read from the log", () => {
 
     log.append(custom("autopilot_paused", { runId: RUN }), custom("run_registered", { runId: RUN, resumed: true }));
     const resumedAt = log.events.length;
-    // The resumed night's director may be a fresh session that never heard A.
+    // The resumed run's director may be a fresh session that never heard A.
     const second = createRunInbox(log.ctx as never, { threadId: THREAD, runId: RUN });
     assert.deepEqual(await second.steering(undefined, true, { onlyNew: true }), ["A"]);
     assert.deepEqual(await second.steering(undefined, true, { onlyNew: true }), [], "once per inbox");
     assert.deepEqual(log.deliveredSince(resumedAt), [], "the first session already handed A over");
   });
 
+  it("a message a lead in its wrap-up was only told is the chat's once it answers it: a resumed run never tells it again", async () => {
+    const told = custom("run_steering", {
+      runId: RUN,
+      text: "add a boss",
+      sourceMessageId: "m1",
+      how: "lead",
+      kept: true,
+    });
+    const log = fakeLog([custom("run_registered", { runId: RUN }), told]);
+    // The run closed before its lead heard it; the chat answers it as a turn of its own, which resumes the run.
+    log.append(
+      custom("autopilot_paused", { runId: RUN }),
+      custom("coordinator_message_processing", { messageId: "m1" }),
+      custom("run_registered", { runId: RUN, resumed: true }),
+      steer("add a boss, from the chat"),
+    );
+    const resumed = createRunInbox(log.ctx as never, { threadId: THREAD, runId: RUN });
+    assert.deepEqual(await resumed.steering(undefined, true, { onlyNew: true }), ["add a boss, from the chat"]);
+  });
+
   it("the lead's wait says USER SAYS once per steer", async () => {
     const log = fakeLog([custom("run_registered", { runId: RUN }), steer("make the sky red")]);
     const lead = waitingLead(log);
-    await wait(lead.night as never, { seconds: 5 });
-    await wait(lead.night as never, { seconds: 5 });
+    await wait(lead.loopRun as never, { seconds: 5 });
+    await wait(lead.loopRun as never, { seconds: 5 });
     assert.deepEqual(lead.userSays(), ["USER SAYS: make the sky red"]);
   });
 
   it("a lead that restarts in a fresh session after a Resume still hears the user's earlier instruction", async () => {
     const log = fakeLog([custom("run_registered", { runId: RUN }), steer("make the sky red")]);
-    await wait(waitingLead(log).night as never, { seconds: 5 });
+    await wait(waitingLead(log).loopRun as never, { seconds: 5 });
 
     log.append(custom("autopilot_paused", { runId: RUN }), custom("run_registered", { runId: RUN, resumed: true }));
-    // The resumed night could not resume the old session: its brief names no instruction.
+    // The resumed run could not resume the old session: its brief names no instruction.
     const resumed = waitingLead(log);
-    await wait(resumed.night as never, { seconds: 5 });
-    await wait(resumed.night as never, { seconds: 5 });
+    await wait(resumed.loopRun as never, { seconds: 5 });
+    await wait(resumed.loopRun as never, { seconds: 5 });
     assert.deepEqual(resumed.userSays(), ["USER SAYS: make the sky red"]);
   });
 });
 
-/** A night whose lead only waits, on its own inbox; every wait wakes on its first pass. */
+/** A run whose lead only waits, on its own inbox; every wait wakes on its first pass. */
 function waitingLead(log: ReturnType<typeof fakeLog>) {
   const notes: Array<{ at: number; seq: number; text: string }> = [];
   const note = (text: string) => notes.push({ at: Date.now(), seq: notes.length + 1, text });
   const hour = Date.now() + 60 * 60 * 1000;
-  const night = {
+  const loopRun = {
     ctx: log.ctx,
     inbox: createRunInbox(log.ctx as never, { threadId: THREAD, runId: RUN }),
     note,
@@ -135,5 +155,5 @@ function waitingLead(log: ReturnType<typeof fakeLog>) {
     state: { integrationHead: null, integrationHealthy: null, ledger: [], workers: new Map() },
   };
   const userSays = () => notes.filter((entry) => entry.text.startsWith("USER SAYS:")).map((entry) => entry.text);
-  return { night, userSays };
+  return { loopRun, userSays };
 }

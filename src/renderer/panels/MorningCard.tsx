@@ -1,15 +1,17 @@
+import type { KeepBuildingTap } from "../keep-building.ts";
 import { LearningSummary } from "../chat/LearningSummary.tsx";
 /**
- * The morning card — the last thing a night writes into the chat, and usually the first thing
+ * The morning card — the last thing a run writes into the chat, and usually the first thing
  * the user reads.
  *
  * What it replaced: "RUN · ended after 21 iterations — the director finished the run", under
- * thirty judge cards, over a night that had built, merged and judged a game. Everything here is
+ * thirty judge cards, over a run that had built, merged and judged a game. Everything here is
  * the answer to one of the three questions a person actually has at 8 am — what happened, what
  * does it look like now, and can I play it.
  */
 import { type JSX, type ReactNode, useEffect, useState } from "react";
 import { SECOND_MS } from "../../shared/duration.ts";
+import { t } from "../../shared/i18n.ts";
 import type { RunSummary } from "../../shared/run-summary.ts";
 import { useRunSummary } from "../use-run-summary.ts";
 import { RunOutcome } from "./RunOutcome.tsx";
@@ -21,7 +23,11 @@ import { Markdown } from "../ui/Markdown.tsx";
 import { FileText } from "../ui/FileText.tsx";
 import { AssetResults } from "../chat/AssetResults.tsx";
 import type { AssetDeliveredPayload } from "../../shared/game-assets.ts";
+import type { LoopProfile } from "../../shared/project-facts.ts";
 import { Presence, type PresenceChild } from "../ui/Presence.tsx";
+import { webBuildShown } from "../web-build-shown.ts";
+import { type StillToFix, stopWhyLine } from "../chat-entries.ts";
+import { StillToFixCard } from "../chat/StillToFixCard.tsx";
 
 /** How long a finished build's card keeps the place of a result that has not come yet. */
 const RESULT_WAIT_MS = 3 * SECOND_MS;
@@ -55,17 +61,21 @@ export interface MorningCardProps {
   kept: number;
   undone: number;
   landed: boolean | null;
-  /** the night is paused: Resume is the card's own primary action, not a grey line under it */
+  /** the run is paused: Resume is the card's own primary action, not a grey line under it */
   paused?: boolean;
+  /** the provider failure that paused it (the close's `limit.kind`), when one did */
+  pausedOn?: string | null;
   stoppedBecause?: string | null;
-  /** the night's report to the user, when it wrote one */
+  /** the run's report to the user, when it wrote one */
   summary: string | null;
   /** the plain sentence the close wrote about landing, when it wrote one */
   landingLine?: string | null;
-  /** what the studio itself took from the night — its own ledger's one line, when it had one */
+  /** what the studio itself took from the run — its own ledger's one line, when it had one */
   learned?: string | null;
+  /** how the Loop worked on its project (`run_finished.profile`), until its run summary says so too */
+  profile?: LoopProfile | null;
   project: string | null;
-  /** the merged build, when the night left one that is not the live game */
+  /** the merged build, when the run left one that is not the live game */
   commit: string | null;
   before: string | null;
   after: string | null;
@@ -73,11 +83,49 @@ export interface MorningCardProps {
   assets?: AssetDeliveredPayload[];
   /** stopped with a follow-up waiting: that message answers "what next", so the card only shows the result */
   handedOff?: boolean;
+  /** ended without the reviewer's yes: what is done and still to fix, which the card lists in place of the report */
+  stillToFix?: StillToFix | null;
+  /** Keep building on what is left (the chat's Loop again); none where no chat can take it */
+  onKeepBuilding?: KeepBuildingTap | null;
   onShowLive?: () => void;
   onOpenAssets?: () => void;
   onOpenStudio?: () => void;
   onResume?: () => void;
   onNotice?: Notify;
+}
+
+/** Keep building on what is left, when there is something left and a chat to take it. */
+function keepOf(
+  stillToFix: StillToFix | null,
+  onKeepBuilding: KeepBuildingTap | null,
+): (() => Promise<boolean>) | null {
+  return stillToFix && onKeepBuilding ? () => onKeepBuilding(stillToFix.notDone) : null;
+}
+
+/** The card's lead: what is done and still to fix with its actions, else the run's report. */
+function ReportOrLeft({
+  summary,
+  stillToFix,
+  onKeepBuilding,
+  children,
+}: {
+  summary: string | null;
+  stillToFix: StillToFix | null;
+  onKeepBuilding: (() => Promise<boolean>) | null;
+  children: ReactNode;
+}): JSX.Element | null {
+  if (stillToFix)
+    return (
+      <StillToFixCard
+        done={stillToFix.done}
+        notDone={stillToFix.notDone}
+        why={stopWhyLine(stillToFix.why, stillToFix.hours, stillToFix.notDone.length > 0)}
+        onKeepBuilding={onKeepBuilding}
+      >
+        {children}
+      </StillToFixCard>
+    );
+  return summary ? <Markdown text={summary} /> : null;
 }
 
 export function MorningCard({
@@ -87,15 +135,19 @@ export function MorningCard({
   undone,
   landed,
   paused = false,
+  pausedOn = null,
   stoppedBecause,
   summary,
   landingLine,
   learned,
+  profile = null,
   project,
   commit,
   after,
   assets,
   handedOff = false,
+  stillToFix = null,
+  onKeepBuilding = null,
   onShowLive,
   onOpenAssets,
   onOpenStudio,
@@ -110,12 +162,15 @@ export function MorningCard({
     undone,
     landed,
     paused,
+    pausedOn,
     // The sentence and the buttons read the same fact: a build exists only if there is one to open.
     hasBuild: Boolean(project && commit),
     stoppedBecause: stoppedBecause ?? null,
     summary,
     landingLine: landingLine ?? null,
     learned: learned ?? null,
+    // The close says how the Loop worked before its summary loads: an in-place Loop never promises Live meanwhile.
+    profile: outcome?.profile ?? profile,
   });
   const outcomeHasPlayback = Boolean(project && outcome?.head && outcome.head !== outcome.base);
   const actions = handedOff
@@ -127,21 +182,31 @@ export function MorningCard({
         return Boolean(outcome.head) || outcome.landed === true;
       });
   // A landed build the outcome already plays speaks for itself; the "because" line would repeat it.
-  const showBecause = !handedOff && !(outcomeHasPlayback && outcome?.landed === true);
+  // What is left to fix says why the Loop stopped and what to do: no report or "because" beside it.
+  const showBecause = !handedOff && !stillToFix && !(outcomeHasPlayback && outcome?.landed === true);
+  const keep = keepOf(stillToFix, handedOff ? null : onKeepBuilding);
   const showLive = (): void => {
     // A landed build is already the game folder; loading it puts the stage back on the real
-    // thing after a night in which a merged build may have been shown from a worktree.
-    if (project) void window.studio.loadPreview(project).catch((err) => onNotice?.(problemWords(err), ToastTone.Error));
+    // thing after a run in which a merged build may have been shown from a worktree.
+    if (project) {
+      webBuildShown(project);
+      void window.studio.loadPreview(project).catch((err) => onNotice?.(problemWords(err), ToastTone.Error));
+    }
     onShowLive?.();
   };
   const button = (action: MorningAction): JSX.Element | null => {
     if (action === MorningAction.Resume) {
       return (
-        <Button key={action} title="Pick the build up where it left off" onClick={() => onResume?.()}>
+        <Button
+          key={action}
+          title={t("Pick the build up where it left off")}
+          data-run-resume={runId ?? undefined}
+          onClick={() => onResume?.()}
+        >
           <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
             <path d="M8 5v14l11-7z" />
           </svg>
-          Resume
+          {t("Resume")}
         </Button>
       );
     }
@@ -151,7 +216,7 @@ export function MorningCard({
           <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
             <path d="M8 5v14l11-7z" />
           </svg>
-          Play
+          {t("Play")}
         </Button>
       );
     }
@@ -159,8 +224,9 @@ export function MorningCard({
     return (
       <Button
         key={action}
-        title="Load this build in the Live tab from a copy; your game folder stays as it is"
+        title={t("Load this build in the Live tab from a copy; your game folder stays as it is")}
         onClick={() => {
+          webBuildShown(project);
           void window.studio.showBuild(project, commit).catch((err) => onNotice?.(problemWords(err), ToastTone.Error));
           onShowLive?.();
         }}
@@ -168,13 +234,15 @@ export function MorningCard({
         <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
           <path d="M8 5v14l11-7z" />
         </svg>
-        Play
+        {t("Play")}
       </Button>
     );
   };
   return (
     <div data-testid="morning-card" className="flex min-w-0 flex-col gap-1.5">
-      {words.summary && <Markdown text={words.summary} />}
+      <ReportOrLeft summary={words.summary} stillToFix={stillToFix} onKeepBuilding={keep}>
+        {actions.map(button)}
+      </ReportOrLeft>
       {/* The result loads after the card shows: its place is kept, silently, while it may still come, so
           nothing moves when it lands; a result that never comes closes the place, a late one opens in it. */}
       <Presence>
@@ -187,7 +255,10 @@ export function MorningCard({
               if (project && summary.head)
                 return window.studio
                   .showBuild(project, summary.head)
-                  .then(() => onShowLive?.())
+                  .then(() => {
+                    webBuildShown(project);
+                    onShowLive?.();
+                  })
                   .catch((error) => onNotice?.(String(error), ToastTone.Error));
             }}
           />
@@ -204,7 +275,7 @@ export function MorningCard({
           <LearningSummary text={words.learned} onOpenStudio={onOpenStudio} />
         </div>
       ) : null}
-      {actions.length > 0 && <div className="flex flex-wrap gap-1.5">{actions.map(button)}</div>}
+      {!stillToFix && actions.length > 0 && <div className="flex flex-wrap gap-1.5">{actions.map(button)}</div>}
     </div>
   );
 }

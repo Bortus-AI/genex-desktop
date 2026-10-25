@@ -1,6 +1,7 @@
 /**
- * The scripted engines of a fixture session: Ollama, Claude Code and Codex stand-ins that answer
- * from fixed text, never reach an account or the network, and start no vendor worker. Markers in
+ * The scripted engines of a fixture session: Ollama, Claude Code, Codex, OpenCode, Grok Build, Cursor,
+ * OpenRouter and local server stand-ins that answer from fixed text, never reach an account, a key, a server or the
+ * network, and start no vendor worker. Markers in
  * the user's words (`fixture:pending`, `fixture:stream`, `fixture:plan`, …) choose the script.
  */
 import { ChatActivityPhase } from "../../shared/chat-activity.ts";
@@ -8,6 +9,8 @@ import { EngineKind, EngineStatusCode } from "../../shared/engine-descriptor.ts"
 import { EngineFailureKind, StopReason } from "../../shared/engine-requests.ts";
 import { HOUR_MS } from "../../shared/duration.ts";
 import { EngineId } from "../../shared/providers.ts";
+import { MODEL_LIMIT_PREFIX } from "../../shared/provider-usage.ts";
+import { type LocalServerInfo, LocalServerKind } from "../../shared/local-server.ts";
 import {
   type CompleteRequest,
   DelegateEventType,
@@ -17,16 +20,85 @@ import {
   EngineError,
   type EngineStatus,
 } from "../../substrate/engines/types.ts";
+import { BACKDROP_SYSTEM_PROMPT, REPAIR_OPENING } from "../core/backdrop-generation-prompts.ts";
 import { GAME_NAME_SYSTEM_PROMPT } from "../core/game-naming-prompts.ts";
 import { FIXTURE_MODEL } from "./fixture-kit.ts";
 import { setTimeout as sleep } from "node:timers/promises";
+import { readFileSync } from "node:fs";
 import { ReasoningEffort } from "../../shared/model-preferences.ts";
 
 const DAY_MS = 24 * HOUR_MS;
-const FIXTURE_ENGINES = [EngineId.Ollama, EngineId.ClaudeCode, EngineId.Codex, EngineId.Grok] as const;
+const FIXTURE_ENGINES = [
+  EngineId.Ollama,
+  EngineId.ClaudeCode,
+  EngineId.Codex,
+  EngineId.OpenCode,
+  EngineId.Grok,
+  EngineId.Cursor,
+  EngineId.OpenRouter,
+  EngineId.LocalServer,
+] as const;
+/** The fixture engines the studio's own loop drives: the local model, OpenRouter's API and a local server. */
+const DIRECT_FIXTURES: ReadonlySet<string> = new Set([EngineId.Ollama, EngineId.OpenRouter, EngineId.LocalServer]);
 const READY_STATUS: EngineStatus = { code: EngineStatusCode.Ready, detail: "AG-933 fixture; no account or network" };
+/** No local server is connected in a fixture session, so the picker's lists stay as they were. */
+const NO_LOCAL_SERVER: EngineStatus = {
+  code: EngineStatusCode.NotInstalled,
+  detail: "AG-933 fixture; no local server is connected",
+};
+/** The server a ready local server stand-in reaches: TabbyAPI's default address, with a key kept. */
+const FIXTURE_SERVER: LocalServerInfo = {
+  url: "http://127.0.0.1:5000/v1",
+  kind: LocalServerKind.TabbyApi,
+  hasKey: true,
+};
+/** Cursor's CLI is not on a fixture session's computer, so the picker's lists stay as they were. */
+const NO_CURSOR: EngineStatus = { code: EngineStatusCode.NotInstalled, detail: "AG-933 fixture; no Cursor CLI" };
+/** The status each fixture starts with when the session names none: ready, but for the local server and Cursor. */
+const DEFAULT_STATUS: Partial<Record<string, EngineStatus>> = {
+  [EngineId.LocalServer]: NO_LOCAL_SERVER,
+  [EngineId.Cursor]: NO_CURSOR,
+};
+/**
+ * How each subscription's plan limits answer, read again on every read so a reviewer can change it
+ * while the window is open: a JSON file named by `STUDIO_FIXTURE_USAGE_FILE`, for example
+ * `{"claude-code":"slow","codex":"failed"}`. `slow` answers after `SLOW_USAGE_MS`, `failed` throws,
+ * `none` shares no limits, `signed_out` also makes the subscription signed out, `ready` makes a
+ * stand-in that starts not installed (Cursor's) ready; anything else, or no file, answers the
+ * fixed limits at once.
+ */
+const FixtureUsage = { Slow: "slow", Failed: "failed", None: "none", SignedOut: "signed_out", Ready: "ready" } as const;
+const SLOW_USAGE_MS = 8000;
+const SIGNED_OUT_STATUS: EngineStatus = { code: EngineStatusCode.NeedsLogin, detail: "AG-933 fixture; signed out" };
+
+/** How `id`'s plan limits answer now (`STUDIO_FIXTURE_USAGE_FILE`). */
+function fixtureUsageMode(id: string): string | null {
+  const file = process.env.STUDIO_FIXTURE_USAGE_FILE;
+  if (!file) return null;
+  try {
+    const modes: unknown = JSON.parse(readFileSync(file, "utf8"));
+    const mode = modes && typeof modes === "object" ? (modes as Record<string, unknown>)[id] : null;
+    return typeof mode === "string" ? mode : null;
+  } catch {
+    return null;
+  }
+}
+
+/** A subscription stand-in's plan limits, as `STUDIO_FIXTURE_USAGE_FILE` says they answer. */
+async function readFixtureUsage(id: EngineId) {
+  const mode = fixtureUsageMode(id);
+  if (mode === FixtureUsage.Failed) throw new Error("fixture: the plan's limits could not be read");
+  if (mode === FixtureUsage.None) return null;
+  if (mode === FixtureUsage.Slow) await sleep(SLOW_USAGE_MS);
+  return fixtureUsage(id);
+}
+
 /** How long naming a game takes, so home's Naming step can be seen. */
 const NAMING_DELAY_MS = 2500;
+/** How long making a background takes, so the panel's progress can be seen. */
+const BACKDROP_DELAY_MS = 1500;
+/** A description holding this gets a shader the GPU refuses first, so the repair can be seen. */
+const BROKEN_BACKDROP_MARKER = "fixture:broken";
 /** How long a scripted plan takes to come back, so its progress can be seen. */
 const PLAN_DELAY_MS = 1200;
 /** Pauses between streamed pieces: a Studio reply, a slow one, and a game chat's. */
@@ -42,6 +114,7 @@ const LONG_REPLY_SECTIONS = 12;
 const MESSAGE = {
   plainReply: "Fixture response. No new build was started.",
   gameName: "Tiny Island Fishing",
+  backdropTitle: "Fixture Waves",
   studioReply:
     "Fixture Studio reply: game chats build games. This conversation explains Studio, its runs, and the instruction changes in Activity.",
   studioFollowUp: "Fixture follow-up: the earlier conversation and recorded Studio activity are still in context.",
@@ -62,14 +135,21 @@ const COMMAND_MARKER = "fixture:command";
 /** Where a coordinator's prompt puts the words it answers. */
 const LATEST_MESSAGE = "LATEST USER MESSAGE:\n";
 
-/** First launch: an empty library, Claude Code waiting for a sign-in and Codex not installed. */
+/**
+ * First launch: an empty library, Claude Code waiting for a sign-in, Codex, OpenCode, Grok Build and
+ * Cursor not installed, OpenRouter with no key, and no local server.
+ */
 export const FIRST_LAUNCH_STATUS: Record<string, EngineStatus> = {
   [EngineId.ClaudeCode]: {
     code: EngineStatusCode.NeedsLogin,
     detail: "AG-933 fixture; sign-in is refused in fixture sessions",
   },
   [EngineId.Codex]: { code: EngineStatusCode.NotInstalled, detail: "AG-933 fixture; no Codex app" },
+  [EngineId.OpenCode]: { code: EngineStatusCode.NotInstalled, detail: "AG-933 fixture; no OpenCode CLI" },
   [EngineId.Grok]: { code: EngineStatusCode.NotInstalled, detail: "AG-933 fixture; no Grok Build CLI" },
+  [EngineId.Cursor]: NO_CURSOR,
+  [EngineId.OpenRouter]: { code: EngineStatusCode.NeedsLogin, detail: "AG-933 fixture; no OpenRouter key" },
+  [EngineId.LocalServer]: NO_LOCAL_SERVER,
 };
 
 export function fixtureEngines(directChat = false, statuses: Record<string, EngineStatus> = {}): Engine[] {
@@ -84,15 +164,24 @@ function fixtureEngine(
   statuses: Record<string, EngineStatus>,
   pendingSessions: Set<string>,
 ): Engine {
-  const direct = id === EngineId.Ollama;
+  const direct = DIRECT_FIXTURES.has(id);
+  // Ollama completes one turn at a time; OpenRouter and a local server hold Genex sessions, as the real ones do.
+  const local = id === EngineId.Ollama;
   return {
     id,
     label: `${id} [fixture]`,
     kind: direct ? EngineKind.Direct : EngineKind.Delegated,
-    supportsSessions: !(directChat && direct),
+    supportsSessions: !(directChat && local),
     // Claude Code reads the person's messages mid-turn; Codex is interrupted and resumed instead.
     ...(id === EngineId.ClaudeCode ? { steersMidTurn: true } : {}),
-    status: async () => statuses[id] ?? READY_STATUS,
+    status: async () => fixtureStatus(id, statuses),
+    // A local server stand-in names its server only while the session has it ready.
+    ...(id === EngineId.LocalServer
+      ? {
+          server: async () =>
+            (statuses[id] ?? NO_LOCAL_SERVER).code === EngineStatusCode.Ready ? FIXTURE_SERVER : null,
+        }
+      : {}),
     models: async () => [
       {
         id: FIXTURE_MODEL,
@@ -108,12 +197,24 @@ function fixtureEngine(
       },
     ],
     defaultModel: async () => FIXTURE_MODEL,
-    // Deterministic plan limits so the composer's usage panel has something honest to show.
-    ...(direct ? {} : { readUsage: async () => fixtureUsage(id) }),
+    // Deterministic plan limits so the composer's usage panel has something honest to show; only a
+    // subscription has a plan.
+    ...(isSubscriptionFixture(id) ? { readUsage: () => readFixtureUsage(id) } : {}),
     complete: (request: CompleteRequest) => completeFixture(id, request),
     delegate: (request: DelegateRequest) => delegateFixture(id, request, pendingSessions),
   };
 }
+
+/** A stand-in's status: as `STUDIO_FIXTURE_USAGE_FILE` sets it, else as the session names it, else its default. */
+function fixtureStatus(id: EngineId, statuses: Record<string, EngineStatus>): EngineStatus {
+  const mode = fixtureUsageMode(id);
+  if (mode === FixtureUsage.SignedOut) return SIGNED_OUT_STATUS;
+  if (mode === FixtureUsage.Ready) return READY_STATUS;
+  return statuses[id] ?? DEFAULT_STATUS[id] ?? READY_STATUS;
+}
+
+/** A subscription's stand-in: the only fixtures with plan limits. */
+const isSubscriptionFixture = (id: EngineId): boolean => id === EngineId.ClaudeCode || id === EngineId.Codex;
 
 function fixtureUsage(id: EngineId) {
   const inDays = (days: number) => new Date(Date.now() + days * DAY_MS).toISOString();
@@ -134,7 +235,7 @@ function fixtureUsage(id: EngineId) {
         resetsAt: new Date(Date.now() + 3.9 * HOUR_MS).toISOString(),
       },
       { id: "seven_day", label: "Weekly · all models", percent: 52, resetsAt: inDays(5) },
-      { id: "model:fable", label: "Weekly · Fable", percent: 100, resetsAt: inDays(5) },
+      { id: `${MODEL_LIMIT_PREFIX}fable`, label: "Weekly · Fable", percent: 100, resetsAt: inDays(5) },
     ],
   };
 }
@@ -157,6 +258,10 @@ async function completeFixture(id: EngineId, request: CompleteRequest) {
     return reply(id, MESSAGE.gameName);
   }
   const latestUser = request.messages.findLast((message) => message.role === "user")?.content ?? "";
+  if (request.systemPrompt === BACKDROP_SYSTEM_PROMPT) {
+    await sleep(BACKDROP_DELAY_MS, undefined, { signal: request.signal }).catch(() => {});
+    return reply(id, backdropReply(latestUser));
+  }
   if (latestUser.includes(PENDING_MARKER)) await pending(request.signal, id);
   if (request.systemPrompt?.startsWith("You are the Harness assistant")) return studioReply(id, request, latestUser);
   const transcript = JSON.stringify(request.messages);
@@ -168,6 +273,26 @@ async function completeFixture(id: EngineId, request: CompleteRequest) {
     return reply(id, MESSAGE.streamedReply);
   }
   return reply(id, MESSAGE.plainReply);
+}
+
+/**
+ * A background's waves. The first answer to a `fixture:broken` description returns a float as a
+ * colour; a repair gets the working one.
+ */
+function backdropReply(request: string): string {
+  const broken = request.includes(BROKEN_BACKDROP_MARKER) && !request.includes(REPAIR_OPENING);
+  const result = broken ? "wave" : "vec4f(color, 1.0)";
+  return `Title: ${MESSAGE.backdropTitle}
+\`\`\`wgsl
+@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+  let p = bd_centered(uv);
+  let wave = 0.5 + 0.5 * sin(p.x * 6.0 * backdrop.scale + backdrop.time + sin(p.y * 4.0 + backdrop.time * 0.7) * 2.0);
+  let band = smoothstep(0.02, 0.0, abs(fract(p.y * 5.0 * backdrop.scale + wave * 0.6) - 0.5) - 0.2);
+  var color = bd_glow(backdrop.page.rgb, backdrop.accent.rgb, wave * 0.18);
+  color = bd_glow(color, backdrop.ink.rgb, band * 0.7);
+  return ${result};
+}
+\`\`\``;
 }
 
 /** The Studio thread's assistant: a first reply, a follow-up, or nothing for `fixture:failure`. */

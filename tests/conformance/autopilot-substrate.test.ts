@@ -190,7 +190,7 @@ describe("autopilot substrate over the real rig", () => {
     rigs.push(rig);
     const api = apiOf(rig);
 
-    const project = ((await api["game.scaffold"]!({ name: "wtgame" })) as { name: string }).name;
+    const project = ((await api["game.scaffold"]!({ name: "wtgame", kind: "web" })) as { name: string }).name;
 
     // — worktree RPC: two detached, playable forks of the same game —
     const wt1 = (await api["snapshot.worktree"]!({ project, name: "facet-a", runId: "run1" })) as {
@@ -311,7 +311,7 @@ describe("v2 contract upgrade", () => {
     const rig = await startRig();
     rigs.push(rig);
     const api = rig.core.api() as Record<string, (p: never) => Promise<unknown>>;
-    await api["game.scaffold"]!({ name: "oldgame", title: "Old" } as never);
+    await api["game.scaffold"]!({ name: "oldgame", title: "Old", kind: "web" } as never);
     const dir = path.join(rig.core.layout.gamesRoot, "oldgame");
     // A fresh scaffold already carries v2: nothing to do.
     // A fresh scaffold already carries v2 and the material library: nothing to do.
@@ -319,10 +319,10 @@ describe("v2 contract upgrade", () => {
       upgraded: false,
       materialsAdded: false,
     });
-    // A v1 contract (no inspect()) is upgraded, the old file kept beside it.
+    // A v1 contract (no inspect()) the studio shipped is upgraded, the old file kept beside it.
     await writeFile(
       path.join(dir, "src", "studio.js"),
-      "export function installStudio(config) { window.__studio = { version: 1, state: () => ({}) }; }\n",
+      await readFile(path.join(import.meta.dirname, "..", "fixtures", "shipped", "studio-generation-1.js.txt"), "utf8"),
     );
     const before = (await api["game.validate"]!({ project: "oldgame" } as never)) as { warnings: string[] };
     assert.ok(

@@ -13,13 +13,11 @@ import { codeLanguage, highlightCode } from "../ui/syntax-highlight.ts";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip.tsx";
 import { type Notify, notifyProblem } from "../state/toasts.ts";
 import { fileManagerWords, problemWords } from "../words.ts";
-import type { BesideTarget } from "../open-beside.ts";
+import { type BesideTarget, besideName } from "../open-beside.ts";
 import { hostPlatform } from "../platform.ts";
 import { Pending } from "../ui/Pending.tsx";
-
-export function besideName(target: BesideTarget): string {
-  return target.kind === "image" ? target.name : (target.path.split("/").filter(Boolean).pop() ?? target.path);
-}
+import { t } from "../../shared/i18n.ts";
+import { SkeletonLines } from "../ui/Skeleton.tsx";
 
 /** Where reading the file stands. */
 const LoadState = {
@@ -53,7 +51,7 @@ export function FileViewer({
       return;
     }
     if (!threadId) {
-      setLoaded({ state: LoadState.Failed, problem: "This chat has no game folder yet." });
+      setLoaded({ state: LoadState.Failed, problem: t("This chat has no game folder yet.") });
       return;
     }
     let current = true;
@@ -89,7 +87,7 @@ export function FileViewer({
           </span>
           {target.kind === "file" && file?.where === "build" && (
             <span className="truncate text-[13px] leading-[18px] text-ink-3">
-              In the build · not in your game folder yet
+              {t("In the build · not in your game folder yet")}
             </span>
           )}
         </div>
@@ -101,7 +99,7 @@ export function FileViewer({
             <Icon name="folder" size={16} />
           </ViewerAction>
         )}
-        <ViewerAction label="Close file" onClick={onClose}>
+        <ViewerAction label={t("Close file")} onClick={onClose}>
           <Icon name="close" size={15} />
         </ViewerAction>
       </div>
@@ -111,7 +109,9 @@ export function FileViewer({
           <FileBody loaded={loaded} name={besideName(target)} code={code} />
         </ChatFilesScope.Provider>
         {file?.truncated && (
-          <p className="m-0 px-11 pb-7 text-chat-sub text-ink-3">The rest of this file is too long to show here.</p>
+          <p className="m-0 px-11 pb-7 text-chat-sub text-ink-3">
+            {t("The rest of this file is too long to show here.")}
+          </p>
         )}
       </div>
     </section>
@@ -120,7 +120,13 @@ export function FileViewer({
 
 /** The file as the viewer shows it: opening, its problem, a document, highlighted code, an image, or a refusal. */
 function FileBody({ loaded, name, code }: { loaded: Loaded; name: string; code: string }): JSX.Element {
-  if (loaded.state === LoadState.Loading) return <Pending label={`Opening ${name}`} className="px-11 py-7 text-chat" />;
+  if (loaded.state === LoadState.Loading)
+    return (
+      <Pending label={t("Opening {name}", { name })} className="flex flex-col gap-7 px-11 py-7">
+        <SkeletonLines widths={["100%", "96%", "62%"]} />
+        <SkeletonLines widths={["100%", "88%", "92%", "40%"]} />
+      </Pending>
+    );
   if (loaded.state === LoadState.Failed)
     return (
       <p role="alert" className="m-0 px-11 py-7 text-chat text-ink-2">
@@ -146,7 +152,7 @@ function FileBody({ loaded, name, code }: { loaded: Loaded; name: string; code: 
         <img src={file.src} alt={file.name} className="max-h-full max-w-full object-contain" />
       </div>
     );
-  return <p className="m-0 px-11 py-7 text-chat text-ink-2">This file can’t be shown here.</p>;
+  return <p className="m-0 px-11 py-7 text-chat text-ink-2">{t("This file can’t be shown here.")}</p>;
 }
 
 function ViewerAction({

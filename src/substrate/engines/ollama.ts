@@ -1,6 +1,6 @@
 /**
  * Local-model engine (Ollama is v1's primary workhorse,
- * because an unlimited overnight loop at zero marginal cost is the whole point of local).
+ * because an unlimited unattended loop at zero marginal cost is the whole point of local).
  *
  * Two pieces:
  *  - {@link OllamaClient}: the management API (detect, list, pull with progress, capabilities).
@@ -9,9 +9,7 @@
  *  - {@link OllamaEngine}: the studio's *own* turn loop talking to it through pi-ai's
  *    OpenAI-compatible provider, so the same code path serves any future provider.
  */
-import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
-import type { Message, Usage } from "../types.ts";
 import {
   type CompleteRequest,
   type CompleteResponse,
@@ -20,9 +18,19 @@ import {
   type EngineModel,
   ModelContextSource,
   type EngineStatus,
-  type ToolDefinition,
   classifyHttpFailure,
 } from "./types.ts";
+import {
+  drainPiStream,
+  fromPiAssistant,
+  isCutConnection,
+  longHaulFetch,
+  needsVision,
+  type PiAssistant,
+  piContext,
+  type PiStreamFn,
+  streamHttpStatus,
+} from "./pi-completions.ts";
 import { supersededBy } from "../hardware.ts";
 import { childEnv } from "../child-env.ts";
 import { HOUR_MS, SECOND_MS } from "../../shared/duration.ts";
@@ -31,7 +39,12 @@ import { EngineKind, EngineStatusCode } from "../../shared/engine-descriptor.ts"
 import { EngineFailureKind } from "../../shared/engine-requests.ts";
 import { ReasoningEffort } from "../../shared/model-preferences.ts";
 import { EngineId } from "../../shared/providers.ts";
+import { t } from "../../shared/i18n.ts";
 import { CompletionStop, STOPPED_BY_USER } from "./common.ts";
+
+/** The conversion helpers live with the pi-ai transport every API engine shares; kept here for importers. */
+export { fromPiAssistant };
+export { toPiMessages } from "./pi-completions.ts";
 
 /** The port Ollama serves on when its host names none. */
 const DEFAULT_OLLAMA_PORT = "11434";
@@ -45,25 +58,46 @@ const DEFAULT_CONTEXT_TOKENS = 8192;
 const MAX_REPLY_TOKENS = 32_768;
 /** The status Ollama answers for a model it does not have. */
 const HTTP_NOT_FOUND = 404;
+/**
+ * How many times one completion is sent while the model keeps writing a tool call Ollama cannot
+ * parse. The model's output is sampled, so another try often comes back well formed; a model that
+ * fails three times in a row is not going to manage it on this prompt.
+ */
+const TOOL_CALL_ATTEMPTS = 3;
+/** Ollama's words (a 500) for a model that wrote prose where its template expected a tool call. */
+const TOOL_CALL_PARSE_FAILURE = /error parsing tool call/i;
 /** How long `ensureRunning` waits for a started server, and how often it asks. */
 const SIDECAR_START_TIMEOUT_MS = 15 * SECOND_MS;
 const SIDECAR_POLL_MS = 400;
 
-/** What this engine says to the user. */
+/**
+ * What this engine says: statuses, remedies, model notes and Settings' refusals in the person's
+ * language (functions, since main sets its language after it starts), and the errors a chat's run
+ * reads in English, since the harness and the model read them too.
+ */
 const MESSAGE = {
-  StartRemedy: "Install or start Ollama, then try again.",
-  PullRemedy: "Pull a recommended model from the Models tab.",
+  StartRemedy: () => t("Install or start Ollama, then try again."),
+  PullRemedy: () => t("Pull a recommended model from the Models tab."),
+  NoServer: (host: string) => t("no Ollama at {host}", { host }),
+  NoModels: (version: string) => t("Ollama {version} is running but has no models installed", { version }),
+  Ready: (version: string, count: number) =>
+    t("Ollama {version}, {count, plural, other {# model(s)}} installed", { version, count }),
+  Superseded: (model: string) => t("superseded by {model}", { model }),
   NoModel: "no local model is installed",
   NoVision: "vision input is not supported by this model's reported capabilities",
   NoTools: "tool calling is not supported by this model's reported capabilities",
-  EstimatedContext: "Runtime context is unknown; 8K is an estimated planning budget. Load the model to measure it.",
+  EstimatedContext: () =>
+    t("Runtime context is unknown; 8K is an estimated planning budget. Load the model to measure it."),
   NotAnswering: (host: string) =>
     `Ollama is not running at ${host} (it no longer answers). Start Ollama and try again.`,
   NotRunningForDownload: (host: string) =>
-    `Ollama is not running at ${host}. Install or start Ollama, then download again.`,
+    t("Ollama is not running at {host}. Install or start Ollama, then download again.", { host }),
   ModelMissing: (model: string) =>
     `the model ${model} is not installed in Ollama — pull it from the Models tab or pick another`,
-  NotInstalled: (model: string) => `${model || "This model"} is not installed in Ollama.`,
+  NotInstalled: (model: string) =>
+    model ? t("{model} is not installed in Ollama.", { model }) : t("This model is not installed in Ollama."),
+  MalformedToolCall: (model: string) =>
+    `${model || "the local model"} wrote plain text where a tool call belonged, ${TOOL_CALL_ATTEMPTS} times in a row, so Ollama could not read it as a tool call. Ollama itself is running fine. Send the message again, or pick a model with stronger tool calling in the Models tab.`,
 } as const;
 
 /** A reply may use a quarter of its context, never more than the cap. */
@@ -203,174 +237,6 @@ function positiveContext(value: unknown): number | undefined {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : undefined;
 }
 
-// ── message conversion (substrate ⇄ pi-ai) ─────────────────────────────────────────────────
-interface PiTextContent {
-  type: "text";
-  text: string;
-}
-interface PiToolCall {
-  type: "toolCall";
-  id: string;
-  name: string;
-  arguments: Record<string, unknown>;
-}
-
-export function toPiMessages(messages: Message[]): { systemPrompt?: string; piMessages: unknown[] } {
-  const piMessages: unknown[] = [];
-  let systemPrompt: string | undefined;
-  for (const message of messages) {
-    if (message.role === "system") {
-      systemPrompt = systemPrompt ? `${systemPrompt}\n\n${message.content}` : message.content;
-      continue;
-    }
-    piMessages.push(piMessage(message));
-  }
-  return systemPrompt !== undefined ? { systemPrompt, piMessages } : { piMessages };
-}
-
-/** A non-system message as pi-ai spells it. */
-function piMessage(message: Message): unknown {
-  if (message.role === "user") return piUserMessage(message);
-  if (message.role === "assistant") return piAssistantMessage(message);
-  // role === "tool"
-  return piToolResult(message);
-}
-
-/** A user message: plain text, or text plus its stills as image parts. */
-function piUserMessage(message: Message): unknown {
-  const images = message.images ?? [];
-  if (images.length === 0) return { role: "user", content: message.content, timestamp: Date.now() };
-  const content: Array<{ type: "text"; text: string } | { type: "image"; data: string; mimeType: string }> = [];
-  if (message.content) content.push({ type: "text", text: message.content });
-  for (const image of images) {
-    if (!image.data) continue;
-    content.push({ type: "image", data: image.data, mimeType: image.mimeType || "image/jpeg" });
-  }
-  return { role: "user", content, timestamp: Date.now() };
-}
-
-/** An assistant message: its text, then its tool calls. */
-function piAssistantMessage(message: Message): unknown {
-  const content: (PiTextContent | PiToolCall)[] = [];
-  if (message.content) content.push({ type: "text", text: message.content });
-  for (const call of message.tool_calls ?? []) {
-    content.push({
-      type: "toolCall",
-      id: call.id,
-      name: call.name,
-      arguments: (call.arguments ?? {}) as Record<string, unknown>,
-    });
-  }
-  return {
-    role: "assistant",
-    content,
-    api: "openai-completions",
-    provider: EngineId.Ollama,
-    model: "",
-    usage: emptyPiUsage(),
-    stopReason: CompletionStop.Stop,
-    timestamp: Date.now(),
-  };
-}
-
-/** A tool's answer. */
-function piToolResult(message: Message): unknown {
-  return {
-    role: "toolResult",
-    toolCallId: message.tool_call_id ?? "",
-    toolName: message.name ?? "tool",
-    content: [{ type: "text", text: message.content }],
-    isError: message.is_error === true,
-    timestamp: Date.now(),
-  };
-}
-
-function emptyPiUsage() {
-  return {
-    input: 0,
-    output: 0,
-    cacheRead: 0,
-    cacheWrite: 0,
-    totalTokens: 0,
-    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-  };
-}
-
-/** A pi-ai assistant message, the fields this engine reads. */
-interface PiAssistant {
-  content: Array<{ type: string; text?: string; id?: string; name?: string; arguments?: unknown }>;
-  usage?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number };
-  stopReason?: string;
-  model?: string;
-}
-
-export function fromPiAssistant(assistant: PiAssistant): { message: Message; usage: Usage } {
-  let text = "";
-  let reasoning = "";
-  const toolCalls: NonNullable<Message["tool_calls"]> = [];
-  for (const part of assistant.content ?? []) {
-    if (part.type === "text") text += part.text ?? "";
-    else if (part.type === "thinking") reasoning += part.text ?? "";
-    else if (part.type === "toolCall") {
-      // A call the model left unnamed still needs an id no other round repeats: its result is bound by it.
-      toolCalls.push({
-        id: part.id || `ollama-${randomUUID()}`,
-        name: part.name ?? "",
-        arguments: part.arguments ?? {},
-      });
-    }
-  }
-  const message: Message = { role: "assistant", content: text };
-  if (toolCalls.length) message.tool_calls = toolCalls;
-  if (reasoning) message.reasoning = reasoning;
-  return { message, usage: piUsage(assistant) };
-}
-
-/** A reply's token counts; local inference is free — the reason unattended runs are viable. */
-function piUsage(assistant: PiAssistant): Usage {
-  const usage = assistant.usage;
-  return {
-    input_tokens: usage?.input ?? 0,
-    output_tokens: usage?.output ?? 0,
-    cache_read_tokens: usage?.cacheRead ?? 0,
-    cache_write_tokens: usage?.cacheWrite ?? 0,
-    cost_usd: 0,
-    ...(assistant.model ? { model: assistant.model } : {}),
-    engine: EngineId.Ollama,
-  };
-}
-
-/**
- * Node's fetch (undici) kills any response that stays *silent* for 300 seconds
- * (`bodyTimeout`), surfacing the opaque `TypeError: terminated`. Ollama's tool-call parser
- * buffers a whole call server-side before emitting it, so while a model writes one big
- * write_file call — a 27B model authoring a full game is ~5 minutes of arguments at
- * ~10 tok/s — the wire carries nothing and the timeout fires mid-turn. Long silent phases
- * (prompt eval on a huge context) hit the same wall. Local generations are legitimately
- * unbounded and the Stop button, not a transport default, is the clock. pi-ai lets us
- * supply the fetch it hands its OpenAI client, so completions run through one whose
- * dispatcher never times out.
- *
- * The dispatcher class is taken from Node's own lazily-created global (the well-known
- * `undici.globalDispatcher.1` symbol) rather than an npm `undici` — a separately installed
- * copy can disagree with the built-in fetch about the handler protocol.
- */
-let longHaulDispatcher: object | null = null;
-async function ensureLongHaulDispatcher(): Promise<object | null> {
-  if (longHaulDispatcher) return longHaulDispatcher;
-  const key = Symbol.for("undici.globalDispatcher.1");
-  const globals = globalThis as unknown as Record<symbol, { constructor: new (opts: object) => object } | undefined>;
-  if (!globals[key]) {
-    // Node initialises the global dispatcher on first fetch; force that cheaply (data: URL,
-    // no network) so we can borrow its constructor.
-    await fetch("data:,").catch(() => {});
-  }
-  const current = globals[key];
-  if (!current) return null;
-  longHaulDispatcher = new current.constructor({ headersTimeout: 0, bodyTimeout: 0 });
-  return longHaulDispatcher;
-}
-
 /**
  * Ceiling on a single completion request. The long-haul dispatcher above only lifts undici's
  * transport timeouts — the OpenAI client underneath pi-ai still applies its own 10-minute
@@ -398,15 +264,22 @@ function translateStreamFailure(
   // An HTTP failure that arrives through the stream ("429: <body>") is the same failure as one
   // that arrives before it — without this, a throttled server reads as "other" and every
   // rate-limit policy above (backoff, direct-only fallback) is unreachable for this engine.
-  const http = /^(\d{3}):\s/.exec(message.trim());
-  if (http) return httpFailure(engineId, Number(http[1]), message, attempt.model);
-  const cut = /^(terminated|fetch failed|Connection error\.?|Request timed out\.?)$/i.test(message.trim());
-  if (!cut) return new EngineError(EngineFailureKind.Other, engineId, message);
+  const status = streamHttpStatus(message);
+  if (status !== null) return httpFailure(engineId, status, message, attempt.model);
+  if (!isCutConnection(message)) return new EngineError(EngineFailureKind.Other, engineId, message);
   const detail = cause?.message ?? cause?.code;
   return cutConnection(
     engineId,
     `the connection to Ollama was cut mid-generation${detail ? ` (${detail})` : ""} — the partial turn was lost; check that Ollama is still running and send the message again`,
   );
+}
+
+/** The pi-ai provider and model a completion runs on, and what the model reports it can do. */
+interface OllamaProvider {
+  models: never;
+  model: never;
+  thinking: boolean;
+  tools: boolean;
 }
 
 /** What a failed completion had asked for. */
@@ -424,25 +297,22 @@ function cutConnection(engineId: string, message: string): EngineError {
   return failure;
 }
 
-/** An HTTP failure; a 404 is Ollama saying it does not have the model (P04-F8). */
+/** Failures that are the model's malformed tool call: the completion is sent again. */
+const MALFORMED_TOOL_CALLS = new WeakSet<EngineError>();
+
+/**
+ * An HTTP failure; a 404 is Ollama saying it does not have the model, and a tool call it could
+ * not parse is the model's output, not the server failing, whatever status it came back with.
+ */
 function httpFailure(engineId: string, status: number, body: string, model: string): EngineError {
   if (status === HTTP_NOT_FOUND && model)
     return new EngineError(EngineFailureKind.Unavailable, engineId, MESSAGE.ModelMissing(model));
+  if (TOOL_CALL_PARSE_FAILURE.test(body)) {
+    const failure = new EngineError(EngineFailureKind.Other, engineId, MESSAGE.MalformedToolCall(model));
+    MALFORMED_TOOL_CALLS.add(failure);
+    return failure;
+  }
   return classifyHttpFailure(engineId, status, body);
-}
-
-function throwAborted(engineId: string): never {
-  throw new EngineError(EngineFailureKind.Aborted, engineId, STOPPED_BY_USER);
-}
-
-/** Unblock a silent stream (thinking, huge tool-call buffer) the moment Stop fires. */
-function whenAborted(signal: AbortSignal | undefined, engineId: string): Promise<never> {
-  return new Promise((_, reject) => {
-    if (!signal) return;
-    const fail = (): void => reject(new EngineError(EngineFailureKind.Aborted, engineId, STOPPED_BY_USER));
-    if (signal.aborted) fail();
-    else signal.addEventListener("abort", fail, { once: true });
-  });
 }
 
 // ── the engine ──────────────────────────────────────────────────────────────────────────────
@@ -479,19 +349,19 @@ export class OllamaEngine implements Engine {
     if (!version) {
       return {
         code: EngineStatusCode.NotRunning,
-        detail: `no Ollama at ${this.host}`,
-        remedy: MESSAGE.StartRemedy,
+        detail: MESSAGE.NoServer(this.host),
+        remedy: MESSAGE.StartRemedy(),
       };
     }
     const tags = await this.client.tags().catch(() => []);
     if (tags.length === 0) {
       return {
         code: EngineStatusCode.NotInstalled,
-        detail: `Ollama ${version} is running but has no models installed`,
-        remedy: MESSAGE.PullRemedy,
+        detail: MESSAGE.NoModels(version),
+        remedy: MESSAGE.PullRemedy(),
       };
     }
-    return { code: EngineStatusCode.Ready, detail: `Ollama ${version}, ${tags.length} model(s) installed` };
+    return { code: EngineStatusCode.Ready, detail: MESSAGE.Ready(version, tags.length) };
   }
 
   async models(): Promise<EngineModel[]> {
@@ -522,8 +392,8 @@ export class OllamaEngine implements Engine {
         supportsThinking: capabilities.includes("thinking"),
         sizeBytes: tag.size,
         installed: true,
-        ...(contextSource === ModelContextSource.Unknown ? { note: MESSAGE.EstimatedContext } : {}),
-        ...(replacement ? { stale: true, note: `superseded by ${replacement}` } : {}),
+        ...(contextSource === ModelContextSource.Unknown ? { note: MESSAGE.EstimatedContext() } : {}),
+        ...(replacement ? { stale: true, note: MESSAGE.Superseded(replacement) } : {}),
       });
     }
     return out;
@@ -549,7 +419,7 @@ export class OllamaEngine implements Engine {
   }
 
   /** Lazily build pi-ai's provider around this host. */
-  async #ensureProvider(modelId: string): Promise<{ models: never; model: never; thinking: boolean; tools: boolean }> {
+  async #ensureProvider(modelId: string): Promise<OllamaProvider> {
     const { createModels, createProvider } = await import("@earendil-works/pi-ai");
     const { openAICompletionsApi } = await import("@earendil-works/pi-ai/api/openai-completions.lazy");
 
@@ -617,14 +487,32 @@ export class OllamaEngine implements Engine {
     if (!modelId) {
       throw new EngineError(EngineFailureKind.Unavailable, this.id, MESSAGE.NoModel);
     }
-    const { models, model, thinking, tools } = await this.#ensureProvider(modelId);
+    const provider = await this.#ensureProvider(modelId);
+    const { model, tools } = provider;
     if (request.tools?.length && !tools) {
       throw new EngineError(EngineFailureKind.Unavailable, this.id, MESSAGE.NoTools);
     }
     this.#checkVision(request, model);
     const context = piContext(request);
     const attempt: StreamAttempt = { model: modelId };
+    for (let tries = 1; ; tries++) {
+      try {
+        return await this.#completeOnce(request, provider, context, attempt);
+      } catch (err) {
+        const malformed = err instanceof EngineError && MALFORMED_TOOL_CALLS.has(err);
+        if (!malformed || tries >= TOOL_CALL_ATTEMPTS || request.signal?.aborted) throw err;
+      }
+    }
+  }
 
+  /** One completion request, its failure as an engine error the run policy can act on. */
+  async #completeOnce(
+    request: CompleteRequest,
+    { models, model, thinking }: OllamaProvider,
+    context: ReturnType<typeof piContext>,
+    attempt: StreamAttempt,
+  ): Promise<CompleteResponse> {
+    const modelId = attempt.model;
     try {
       const stream = (models as unknown as { stream: PiStreamFn }).stream(model, context, {
         fetch: longHaulFetch(request.signal),
@@ -634,8 +522,8 @@ export class OllamaEngine implements Engine {
         ...(request.maxTokens ? { maxTokens: request.maxTokens } : {}),
         ...(thinking && request.effort ? { reasoningEffort: normalizeEffort(request.effort) } : {}),
       });
-      await this.#drain(stream, request);
-      const assistant = (await stream.result()) as PiAssistant & { errorMessage?: string };
+      await drainPiStream(stream, request, this.id);
+      const assistant = (await stream.result()) as PiAssistant;
       if (assistant.stopReason === CompletionStop.Aborted) {
         throw new EngineError(EngineFailureKind.Aborted, this.id, STOPPED_BY_USER);
       }
@@ -657,7 +545,7 @@ export class OllamaEngine implements Engine {
 
   /**
    * A cut connection with the server no longer answering at all is Ollama not running — nothing
-   * a partial turn lost, and a failure another engine can take over (P04-F8).
+   * a partial turn lost, and a failure another engine can take over.
    */
   async #unlessServerGone(failure: EngineError): Promise<EngineError> {
     if (!CUT_CONNECTIONS.has(failure)) return failure;
@@ -667,29 +555,8 @@ export class OllamaEngine implements Engine {
 
   /** Refuse unsupported images before any inference request. */
   #checkVision(request: CompleteRequest, model: { input: string[] }): void {
-    const needsVision = request.messages.some((message) => Boolean(message.images?.length));
-    if (needsVision && !model.input.includes("image")) {
+    if (needsVision(request) && !model.input.includes("image")) {
       throw new EngineError(EngineFailureKind.Unavailable, this.id, MESSAGE.NoVision);
-    }
-  }
-
-  /** Read the stream to its end, passing text on as it comes; Stop unblocks even a silent stream. */
-  async #drain(stream: PiStream, request: CompleteRequest): Promise<void> {
-    const iterator = stream[Symbol.asyncIterator]();
-    let aborted = false;
-    try {
-      for (;;) {
-        if (request.signal?.aborted) throwAborted(this.id);
-        const step = iterator.next();
-        const event = request.signal ? await Promise.race([step, whenAborted(request.signal, this.id)]) : await step;
-        if (event.done) break;
-        if (event.value.type === "text_delta" && event.value.delta) request.onDelta?.(event.value.delta);
-      }
-    } catch (err) {
-      aborted = true;
-      throw err;
-    } finally {
-      if (aborted) await iterator.return?.().catch(() => {});
     }
   }
 
@@ -702,42 +569,6 @@ export class OllamaEngine implements Engine {
     if (error.status) return httpFailure(this.id, error.status, error.message, attempt.model);
     return translateStreamFailure(this.id, error.message, error.cause, attempt);
   }
-}
-
-/** pi-ai's streaming call, as this engine uses it. */
-type PiStream = AsyncIterable<{ type: string; delta?: string }> & { result: () => Promise<unknown> };
-type PiStreamFn = (m: unknown, c: unknown, o?: unknown) => PiStream;
-
-/** The request as pi-ai's context: one system prompt, the messages, and the tools. */
-function piContext(request: CompleteRequest): Record<string, unknown> {
-  const { systemPrompt, piMessages } = toPiMessages(request.messages);
-  return {
-    ...(request.systemPrompt || systemPrompt
-      ? { systemPrompt: [request.systemPrompt, systemPrompt].filter(Boolean).join("\n\n") }
-      : {}),
-    messages: piMessages,
-    ...(request.tools?.length ? { tools: request.tools.map(toPiTool) } : {}),
-  };
-}
-
-/** The fetch pi-ai hands its OpenAI client: the long-haul dispatcher, and the user's Stop joined in. */
-function longHaulFetch(stop: AbortSignal | undefined): typeof fetch {
-  return async (input, init) => {
-    const dispatcher = await ensureLongHaulDispatcher();
-    // The client routes its request timeout through the signal it hands this fetch, so the
-    // user's Stop has to join that signal, not replace it — replacing would mask the
-    // timeout and a dead connection would hang the loop instead of erroring.
-    const signals = [init?.signal, stop].filter((s): s is AbortSignal => Boolean(s));
-    return fetch(input, {
-      ...init,
-      ...(signals.length ? { signal: signals.length === 1 ? signals[0] : AbortSignal.any(signals) } : {}),
-      ...(dispatcher ? { dispatcher } : {}),
-    } as RequestInit);
-  };
-}
-
-function toPiTool(tool: ToolDefinition): unknown {
-  return { name: tool.name, description: tool.description, parameters: tool.parameters };
 }
 
 /** Ollama's endpoint understands low/medium/high; clamp the wider scale into that range. */

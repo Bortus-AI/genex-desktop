@@ -1,0 +1,1116 @@
+/**
+ * OpenCode: a third delegated harness, driven through `opencode run --format json`.
+ *
+ * OpenCode runs its own agent loop on whichever providers the person signed it in to (its free
+ * OpenCode Zen models, an Anthropic or OpenAI account, OpenRouter, and many more) and keeps those
+ * sign-ins in its own store, which the studio never reads. Unlike Claude Code and Codex it has no
+ * OS sandbox of its own, so the studio starts every session inside its `ProcessSandbox`: the
+ * workspace (or, read-only, a scratch folder) is all it can write, the studio's secrets and every
+ * other CLI's sign-in stay unreadable, and only its provider's host is reachable. OpenCode's own
+ * permission rules (`openCodeConfig`) keep the model from even trying the rest.
+ *
+ * The prompt goes in on stdin; each stdout line is one event (`opencode-events.ts`); a session is
+ * resumed by its id (`--session`). Studio tools arrive through the same bridge Codex uses.
+ */
+import { execFile } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
+import { randomBytes } from "node:crypto";
+import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { createInterface } from "node:readline";
+import { setTimeout as sleep } from "node:timers/promises";
+import { promisify } from "node:util";
+import { CATALOG_DEADLINE_MS, ModelCatalog } from "./model-catalog.ts";
+import { cliVersion, resolveCodingCli } from "./external-cli.ts";
+import { runCommand } from "./claude-cli.ts";
+import { lockUnowned, ownershipBriefing, releaseLocks, releaseStaleLocks, type LockRecord } from "./ownership-locks.ts";
+import { StudioBridge, answerBridgeCall, bridgeTools } from "./studio-bridge.ts";
+import { writeDelegateStills } from "./codex.ts";
+import { JUDGE_RULES, mcpToolsNote, offLimitsNote, planModeNote, readOnlyNote } from "./codex-prompts.ts";
+import {
+  OPENCODE_AGENT,
+  builtInHosts,
+  OpenCodeAccess,
+  OpenCodeDialect,
+  openCodeConfig,
+  openCodeConfigV2,
+  openCodeRelease,
+  parseOpenCodeApiModels,
+  parseOpenCodeModels,
+  type OpenCodeModel,
+} from "./opencode-cli.ts";
+import { parseOpenCodeLine, translateOpenCodeEvent, type Translated } from "./opencode-events.ts";
+import {
+  type CompleteRequest,
+  type CompleteResponse,
+  DelegateEventType,
+  type DelegateRequest,
+  type DelegateResult,
+  type Engine,
+  EngineError,
+  type EngineModel,
+  type EngineStatus,
+  classifyHttpFailure,
+} from "./types.ts";
+import { abortControllerFor, CompletionStop, interruption, partialDelegateResult, STOPPED_BY_USER } from "./common.ts";
+import type { PartialDelegateState } from "./common.ts";
+import { ProcessSandbox, type SandboxOptions, shellQuote } from "../spawn.ts";
+import { childEnv } from "../child-env.ts";
+import { credentialHomes, openCodeDataHome } from "../credential-homes.ts";
+import { spawnCommand } from "../command-launch.ts";
+import { stopChild } from "../process-tree.ts";
+import type { Usage } from "../types.ts";
+import { CodingCliState } from "../../shared/coding-cli.ts";
+import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
+import { type EngineAccount, EngineKind, EngineStatusCode, LoginSource } from "../../shared/engine-descriptor.ts";
+import { EngineFailureKind, StopReason } from "../../shared/engine-requests.ts";
+import { ModelCatalogSource } from "../../shared/model-catalog.ts";
+import { engineMode, PermissionMode } from "../../shared/permissions.ts";
+import { EngineId } from "../../shared/providers.ts";
+import { t } from "../../shared/i18n.ts";
+import { stripTerminalCodes } from "../../shared/terminal.ts";
+
+/** How long `opencode models --verbose` may take: it may refresh its catalog from models.dev first. */
+const MODELS_TIMEOUT_MS = 30 * SECOND_MS;
+/** How long 2.x's private listing server may take to say where it answers. */
+const SERVER_READY_TIMEOUT_MS = 20 * SECOND_MS;
+/** How often 2.x's listing is read while it settles, and for how long at most. */
+const LISTING_POLL_MS = 500;
+const LISTING_SETTLE_MS = 15 * SECOND_MS;
+/** How long one read of 2.x's listing may take. */
+const LISTING_READ_TIMEOUT_MS = 5 * SECOND_MS;
+/** The user name 2.x's server takes with the password it was started with. */
+const SERVER_USER = "opencode";
+/** How long a git probe for a worktree's metadata may take. */
+const GIT_PROBE_TIMEOUT_MS = 5 * SECOND_MS;
+/** How long a judge's one-shot answer may take before it is a timeout. */
+const COMPLETE_TIMEOUT_MS = 15 * MINUTE_MS;
+/** How long a stopped session gets to exit politely before it is killed. */
+const KILL_GRACE_MS = 3 * SECOND_MS;
+/** How much of stderr is kept to explain an exit the event stream never explained. */
+const STDERR_TAIL_CHARS = 4_000;
+/**
+ * The provider statuses that refuse the request itself (a model a ChatGPT plan does not run, a
+ * model gone): no wait or retry helps, another model might.
+ */
+const MODEL_REFUSED_STATUSES: ReadonlySet<number> = new Set([400, 404]);
+/** The status the sandbox's proxy answers a host off its allow-list with. */
+const PROXY_REFUSED_STATUS = 403;
+/** Where OpenCode refreshes its model catalogs; opened beside the provider's own hosts. */
+const CATALOG_HOSTS = ["models.dev", "models.opencode.ai"] as const;
+/**
+ * Where 2.x's run command reaches the server it starts for itself. On Windows the sandbox sends
+ * loopback through its proxy too, which refuses a host it was not given (a bare 403).
+ */
+const OWN_SERVER_HOSTS = ["127.0.0.1", "localhost"] as const;
+
+/**
+ * What this engine says: statuses and remedies for Settings in the person's language (functions,
+ * since main sets its language after it starts), and errors in English, since the harness and the
+ * chat's model read them too.
+ */
+const MESSAGE = {
+  NotInstalled: "OpenCode isn't installed on this Mac.",
+  NotInstalledStatus: () => t("OpenCode isn't installed on this Mac."),
+  InstallRemedy: () => t("Install OpenCode from Settings › Model Providers."),
+  NoModels: () => t("OpenCode has no model it can run yet."),
+  SignInRemedy: () => t("Sign in to a provider with OpenCode from Settings › Model Providers."),
+  Ready: (version: string | undefined, count: number) =>
+    t("OpenCode {version}, {count, plural, other {# model(s)}}", { version: version ?? "", count }).trim(),
+  Untested: (ready: string) => t("{status} · newer than Genex has tested", { status: ready }),
+  UnknownVersion: "Genex can't tell which OpenCode version this is. Check it again in Settings › Model Providers.",
+  ServerSilent: "OpenCode's model server did not say where it answers",
+  ListingFailed: (status: number) => `OpenCode's model server answered ${status}`,
+  NoTools: "OpenCode's one-shot answers take no studio tools",
+  NoCompact: "OpenCode compacts its own sessions",
+  Stopped: (code: number | null) => `OpenCode exited with ${code}`,
+  ModelRefused: (model: string, words: string) =>
+    `The provider refused ${model} (${words}). Pick another model, then send again.`,
+  HostUnknown: (provider: string) =>
+    `Genex doesn't know where ${provider} answers, so its sandbox kept OpenCode from reaching it. Pick a model from another provider.`,
+  FreeModelFailed: (model: string | null, words: string) =>
+    `OpenCode's free model${model ? ` ${model}` : ""} failed (${words}). OpenCode runs its free models itself and they are sometimes down: try again later, or pick another model.`,
+  NoAnswer: "OpenCode gave no answer",
+  JudgeTimedOut: (minutes: number) => `the judge did not answer within ${minutes} min`,
+} as const;
+
+/** What a listing said beyond its rows. */
+interface ListingFacts {
+  /** The hosts each model's provider answers on, for the sandbox's network. */
+  hosts: ReadonlyMap<string, string[]>;
+  /** Whether it named a model some provider's sign-in runs, not only OpenCode's free ones. */
+  signedIn: boolean;
+  /** OpenCode's own free models in it, which run with no sign-in. */
+  anonymous: ReadonlySet<string>;
+}
+const NO_LISTING: ListingFacts = { hosts: new Map(), signedIn: false, anonymous: new Set() };
+
+/** One `opencode run`, as the engine starts it; injectable in tests. */
+export interface OpenCodeInvocation {
+  argv: string[];
+  /** Where the session runs: the workspace, or a read-only session's scratch folder. */
+  cwd: string;
+  prompt: string;
+  env: Record<string, string>;
+  signal: AbortSignal;
+  /** The sandbox the real CLI is started in. */
+  sandbox: SandboxOptions;
+  /** The provider hosts the session may reach. */
+  domains: string[];
+}
+export type OpenCodeExec = (invocation: OpenCodeInvocation) => AsyncIterable<Record<string, unknown>>;
+
+export interface OpenCodeEngineOptions {
+  /**
+   * Where read-only sessions run and their temporary files go: never under the engine homes, which
+   * every sandbox denies. The system temporary folder when not given.
+   */
+  scratchRoot?: string;
+  /** What no OpenCode session may read: the studio's secrets, the engines' homes. */
+  protectedPaths?: string[];
+  toolPath?: () => Promise<string>;
+  onModelsChanged?: () => void;
+  /** Test seam: run a session without the CLI. */
+  execFn?: OpenCodeExec;
+  /** Test seam: the model listing, instead of asking the CLI. */
+  listModels?: () => Promise<string>;
+  /** Test seam: where the CLI is and whether it works. */
+  resolveCli?: () => Promise<{ ready: boolean; path?: string; version?: string; detail: string }>;
+  /** Where locks are recovered from after a crash (as Codex's). */
+  lockRecovery?: string;
+  /**
+   * Hand a session the studio's live tools as a local MCP server too (`studio-mcp-shim.ts`), so
+   * pictures reach the model inline; the file bridge stays as the fallback. On unless set false.
+   */
+  mcpTools?: boolean;
+}
+
+/** What a session has done so far. */
+interface OpenCodeRun {
+  usage: Usage;
+  turns: number;
+  summary: string;
+  sessionId: string | undefined;
+  failure: { message: string; status: number | null } | null;
+  deadlineHit: boolean;
+}
+
+export class OpenCodeEngine implements Engine {
+  readonly id = EngineId.OpenCode;
+  readonly label = "OpenCode";
+  readonly kind = EngineKind.Delegated;
+  readonly supportsSessions = true;
+  readonly #scratchRoot: string;
+  readonly #protectedPaths: string[];
+  readonly #toolPath: (() => Promise<string>) | undefined;
+  readonly #catalog: ModelCatalog;
+  readonly #execFn: OpenCodeExec | undefined;
+  readonly #listModels: (() => Promise<string>) | undefined;
+  readonly #resolveCli: () => Promise<{ ready: boolean; path?: string; version?: string; detail: string }>;
+  readonly #lockRecovery: string | undefined;
+  readonly #mcpTools: boolean;
+  /** What each listing said beyond its rows, by the rows the catalog published: a dropped listing never counts. */
+  readonly #listings = new WeakMap<EngineModel[], ListingFacts>();
+
+  constructor(options: OpenCodeEngineOptions) {
+    this.#scratchRoot = options.scratchRoot ?? path.join(os.tmpdir(), `studio-${EngineId.OpenCode}`);
+    this.#protectedPaths = options.protectedPaths ?? [];
+    this.#toolPath = options.toolPath;
+    this.#catalog = new ModelCatalog(options.onModelsChanged);
+    this.#execFn = options.execFn;
+    this.#listModels = options.listModels;
+    this.#resolveCli = options.resolveCli ?? defaultResolveCli;
+    this.#lockRecovery = options.lockRecovery;
+    this.#mcpTools = options.mcpTools !== false;
+  }
+
+  async status(): Promise<EngineStatus> {
+    const cli = await this.#resolveCli();
+    if (!cli.ready && !cli.path)
+      return {
+        code: EngineStatusCode.NotInstalled,
+        detail: MESSAGE.NotInstalledStatus(),
+        remedy: MESSAGE.InstallRemedy(),
+      };
+    if (!cli.ready) return { code: EngineStatusCode.Error, detail: cli.detail };
+    await this.refreshModels().catch(() => {});
+    const count = this.#catalog.models().length;
+    if (!count)
+      return { code: EngineStatusCode.NeedsLogin, detail: MESSAGE.NoModels(), remedy: MESSAGE.SignInRemedy() };
+    const ready = MESSAGE.Ready(cliVersion(cli.version), count);
+    const release = openCodeRelease(cli.version);
+    const untested = "tested" in release && !release.tested;
+    return { code: EngineStatusCode.Ready, detail: untested ? MESSAGE.Untested(ready) : ready };
+  }
+
+  /**
+   * Whose sign-in OpenCode runs on: its own (`system`) once it lists a provider's model, and no
+   * one's while it lists only its free models, which still run. Genex never reads the sign-ins.
+   */
+  async account(): Promise<EngineAccount> {
+    const cli = await this.#resolveCli();
+    if (cli.ready) await this.refreshModels().catch(() => {});
+    return {
+      source: this.#shown().signedIn ? LoginSource.System : LoginSource.None,
+      afterSignOut: "signed-out",
+      cli: {
+        state: cliState(cli),
+        ...(cli.path ? { path: cli.path } : {}),
+        ...(cli.version ? { version: cli.version } : {}),
+      },
+    };
+  }
+
+  catalogSnapshot = () => this.#catalog.snapshot();
+
+  async models(): Promise<EngineModel[]> {
+    void this.refreshModels().catch(() => {});
+    return this.#catalog.models();
+  }
+
+  /** The models OpenCode can run with its sign-ins, as it lists them; a new sign-in shows on the next refresh. */
+  async refreshModels(force = false): Promise<void> {
+    const cli = await this.#resolveCli();
+    if (!cli.ready) return;
+    await this.#catalog.refresh(`${cli.path ?? ""}\0${cli.version ?? ""}`, () => this.#readModels(cli), force);
+  }
+
+  async #readModels(cli: {
+    path?: string;
+    version?: string;
+  }): Promise<{ models: EngineModel[]; source: typeof ModelCatalogSource.Provider }> {
+    const dialect = dialectOf(cli.version);
+    const stdout = this.#listModels ? await this.#listModels() : await this.#listing(cli.path, dialect);
+    // A signed-in provider's models first: the picker starts with the first few it is given.
+    const parsed = dialect === OpenCodeDialect.V2 ? parseOpenCodeApiModels(stdout) : parseOpenCodeModels(stdout);
+    const listed = [...parsed.filter((model) => !model.anonymous), ...parsed.filter((model) => model.anonymous)];
+    const models = listed.map((model: OpenCodeModel) => model.row);
+    this.#listings.set(models, {
+      hosts: new Map(listed.map((model) => [model.row.id, model.hosts])),
+      signedIn: listed.some((model) => !model.anonymous),
+      anonymous: new Set(listed.filter((model) => model.anonymous).map((model) => model.row.id)),
+    });
+    return { models, source: ModelCatalogSource.Provider };
+  }
+
+  /** What the listing the picker shows said beyond its rows; nothing before the first one. */
+  #shown(): ListingFacts {
+    return this.#listings.get(this.#catalog.models()) ?? NO_LISTING;
+  }
+
+  /** What the CLI lists: 1.18's `models --verbose`, or 2.x's `GET /api/model` from a server of the listing's own. */
+  async #listing(binary: string | undefined, dialect: OpenCodeDialect): Promise<string> {
+    if (!binary) return "";
+    if (dialect === OpenCodeDialect.V1) return listOpenCodeModels(binary);
+    await mkdir(this.#scratchRoot, { recursive: true });
+    return listOpenCodeModelsV2(binary, this.#scratchRoot);
+  }
+
+  /** OpenCode keeps its own default model; with none picked, `--model` is left out and it uses that. */
+  async defaultModel(): Promise<string | null> {
+    return null;
+  }
+
+  async delegate(request: DelegateRequest): Promise<DelegateResult> {
+    if (request.compact) throw new EngineError(EngineFailureKind.Unavailable, this.id, MESSAGE.NoCompact);
+    const startedAt = Date.now();
+    const cwd = await realpath(path.resolve(request.cwd));
+    const run = newRun(this.id, request.resume);
+    const controller = abortControllerFor(request.signal);
+    await releaseStaleLocks(cwd, this.#lockRecovery).catch(() => {});
+    const locks = request.ownership
+      ? await lockUnowned(cwd, request.ownership, this.#lockRecovery).catch(() => null)
+      : null;
+    const access = sessionAccess(request);
+    const scratch = access === OpenCodeAccess.Build ? null : await this.#scratch("run-");
+    const runDir = scratch ?? cwd;
+    const bridge = await this.#openBridge(request, runDir).catch(async (err) => {
+      await this.#cleanUp(cwd, locks, scratch, null);
+      throw err;
+    });
+    const stills = await writeDelegateStills(request.images ?? []);
+    const deadline = request.timeoutMs
+      ? setTimeout(() => {
+          run.deadlineHit = true;
+          controller.abort();
+        }, request.timeoutMs)
+      : null;
+    const partial = (): PartialDelegateState => partialState(run, startedAt, request.model, bridge, request);
+    try {
+      const invocation = await this.#invocation(request, {
+        access,
+        cwd,
+        runDir,
+        bridge: Boolean(bridge),
+        mcpCommand: bridge?.mcpCommand() ?? null,
+        prompt: this.#brief(request, { access, cwd, scratch, locks, bridge }),
+        files: stills.paths,
+        signal: controller.signal,
+      });
+      await this.#readEvents(request, run, invocation);
+    } catch (err) {
+      return this.#endingAfterThrow(err, run, request, partial);
+    } finally {
+      if (deadline) clearTimeout(deadline);
+      if (stills.dir) await rm(stills.dir, { recursive: true, force: true }).catch(() => {});
+      await this.#cleanUp(cwd, locks, scratch, bridge);
+    }
+    if (request.signal?.aborted || run.deadlineHit)
+      return metered(partialDelegateResult(this.id, interruption(request.signal?.aborted), partial()));
+    if (run.failure) return this.#failedEnding(run.failure, partial, request.model);
+    return completed(this.id, run, startedAt, request.model, recordedCalls(bridge, request));
+  }
+
+  /** A one-shot answer (a judge's verdict): no tools, in an empty folder of its own. */
+  async complete(request: CompleteRequest): Promise<CompleteResponse> {
+    if (request.tools?.length) throw new EngineError(EngineFailureKind.Unavailable, this.id, MESSAGE.NoTools);
+    const controller = abortControllerFor(request.signal);
+    const ceiling = request.timeoutMs ?? COMPLETE_TIMEOUT_MS;
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, ceiling);
+    // A stop or the ceiling wins over whatever error it caused: neither must read as a failure.
+    const stopped = (): EngineError | null => {
+      if (timedOut)
+        return new EngineError(
+          EngineFailureKind.Timeout,
+          this.id,
+          MESSAGE.JudgeTimedOut(Math.round(ceiling / MINUTE_MS)),
+        );
+      return request.signal?.aborted ? new EngineError(EngineFailureKind.Aborted, this.id, STOPPED_BY_USER) : null;
+    };
+    let run: OpenCodeRun;
+    try {
+      run = await this.#answer(request, controller.signal);
+    } catch (err) {
+      throw stopped() ?? err;
+    } finally {
+      clearTimeout(timer);
+    }
+    const stop = stopped();
+    if (stop) throw stop;
+    if (run.failure) throw failureError(this.id, run.failure);
+    if (!run.summary) throw new EngineError(EngineFailureKind.Other, this.id, MESSAGE.NoAnswer);
+    return {
+      message: { role: "assistant", content: run.summary },
+      usage: run.usage,
+      stopReason: CompletionStop.Stop,
+      model: request.model ?? "",
+      engine: this.id,
+    };
+  }
+
+  /** One answer session in a scratch folder, its pictures attached as files; both removed after. */
+  async #answer(request: CompleteRequest, signal: AbortSignal): Promise<OpenCodeRun> {
+    const scratch = await this.#scratch("answer-");
+    const images = request.messages.flatMap((message) => message.images ?? []);
+    const stills = await writeDelegateStills(images.map((image) => ({ ...image, label: image.label ?? "" })));
+    const run = newRun(this.id, undefined);
+    try {
+      const asked = {
+        cwd: scratch,
+        prompt: "",
+        ...(request.model ? { model: request.model } : {}),
+        ...(request.effort ? { effort: request.effort } : {}),
+      };
+      const invocation = await this.#invocation(asked, {
+        access: OpenCodeAccess.Answer,
+        cwd: scratch,
+        runDir: scratch,
+        bridge: false,
+        mcpCommand: null,
+        prompt: answerPrompt(request),
+        files: stills.paths,
+        signal,
+      });
+      await this.#readEvents({}, run, invocation);
+      return run;
+    } finally {
+      if (stills.dir) await rm(stills.dir, { recursive: true, force: true }).catch(() => {});
+      await rm(scratch, { recursive: true, force: true }).catch(() => {});
+    }
+  }
+
+  /** A new folder of its own under the engine's scratch root. */
+  async #scratch(prefix: string): Promise<string> {
+    await mkdir(this.#scratchRoot, { recursive: true });
+    return mkdtemp(path.join(this.#scratchRoot, prefix));
+  }
+
+  async #openBridge(request: DelegateRequest, runDir: string): Promise<StudioBridge | null> {
+    const tools = bridgeTools(request);
+    if (!tools.length) return null;
+    return StudioBridge.open({
+      cwd: runDir,
+      tools,
+      onCall: async (name, args) => answerBridgeCall(name, args, request),
+      // Only the live tools go over MCP: interview tools stay the bridge's, recorded for the harness.
+      mcp: this.#mcpTools && Boolean(request.liveTools?.length),
+    });
+  }
+
+  async #cleanUp(
+    cwd: string,
+    locks: LockRecord | null,
+    scratch: string | null,
+    bridge: StudioBridge | null,
+  ): Promise<void> {
+    await bridge?.close().catch(() => {});
+    await releaseLocks(cwd, locks, this.#lockRecovery).catch(() => {});
+    if (scratch) await rm(scratch, { recursive: true, force: true }).catch(() => {});
+  }
+
+  /** The brief, plus what OpenCode can only be told: its tools, its seam, its folder, what is off limits. */
+  #brief(
+    request: DelegateRequest,
+    ctx: {
+      access: OpenCodeAccess;
+      cwd: string;
+      scratch: string | null;
+      locks: LockRecord | null;
+      bridge: StudioBridge | null;
+    },
+  ): string {
+    const hasSeam = request.ownership && (request.ownership.owns.length || ctx.locks?.files.length);
+    const plan = chatMode(request) === PermissionMode.Plan && ctx.scratch;
+    return [
+      request.prompt,
+      ctx.bridge?.instructions() ?? "",
+      ctx.bridge?.mcpCommand() ? mcpToolsNote((request.liveTools ?? []).map((tool) => tool.name)) : "",
+      hasSeam && request.ownership ? ownershipBriefing(request.ownership) : "",
+      plan
+        ? planModeNote(ctx.cwd, ctx.scratch ?? "")
+        : readOnlyNote(
+            // A reviewer's cwd is its own empty home: the build it tests is the folder it reads.
+            request.reviewer?.reads ?? ctx.cwd,
+            ctx.scratch,
+            request.director ? path.resolve(request.director.root) : null,
+          ),
+      offLimitsNote([...this.#protectedPaths, ...credentialHomes(), ...(request.denyReads ?? [])]),
+    ]
+      .filter((part) => part.trim())
+      .join("\n\n");
+  }
+
+  /** The command, environment and sandbox of one session. */
+  async #invocation(
+    request: Pick<DelegateRequest, "model" | "effort" | "resume" | "denyReads" | "cwd" | "prompt">,
+    ctx: {
+      access: OpenCodeAccess;
+      cwd: string;
+      runDir: string;
+      bridge: boolean;
+      mcpCommand: string[] | null;
+      prompt: string;
+      files: string[];
+      signal: AbortSignal;
+    },
+  ): Promise<OpenCodeInvocation> {
+    const model = request.model;
+    const variant = model && request.effort ? this.#variant(model, request.effort) : null;
+    const dialect = dialectOf((await this.#resolveCli()).version);
+    const argv = sessionArgv(dialect, { model, variant, resume: request.resume, files: ctx.files });
+    const home = path.join(this.#scratchRoot, "home");
+    await mkdir(home, { recursive: true });
+    const env = sessionEnv(dialect, { ...ctx, home });
+    const sandbox = await this.#sandboxOptions(ctx, request.denyReads ?? []);
+    return {
+      argv,
+      cwd: ctx.runDir,
+      prompt: ctx.prompt,
+      env,
+      signal: ctx.signal,
+      sandbox,
+      domains: [...this.#domains(model), ...(dialect === OpenCodeDialect.V2 ? OWN_SERVER_HOSTS : [])],
+    };
+  }
+
+  /** The reasoning variant a model offers for an effort, or none when it offers no such dial. */
+  #variant(model: string, effort: string): string | null {
+    const row = this.#catalog.models().find((candidate) => candidate.id === model);
+    return row?.efforts?.includes(effort) ? effort : null;
+  }
+
+  /**
+   * The hosts a session may reach: its model's provider, or every listed provider when OpenCode
+   * picks. A model the listing has not named yet (a session started before the list was read, or
+   * after it failed) still reaches its provider's built-in hosts.
+   */
+  #domains(model: string | undefined): string[] {
+    const listed = this.#shown().hosts;
+    const hosts = model ? (listed.get(model) ?? builtInHosts(model)) : [...listed.values()].flat();
+    return [...new Set([...hosts, ...CATALOG_HOSTS])];
+  }
+
+  async #sandboxOptions(
+    ctx: { access: OpenCodeAccess; cwd: string; runDir: string },
+    denyReads: string[],
+  ): Promise<SandboxOptions> {
+    return openCodeSandbox({
+      runDir: ctx.runDir,
+      gameDir: ctx.cwd,
+      gitDirs: ctx.access === OpenCodeAccess.Build ? await gitMetadata(ctx.cwd) : [],
+      scratchDir: path.join(this.#scratchRoot, "tmp"),
+      secretPaths: [...this.#protectedPaths, ...denyReads],
+      ...(this.#toolPath ? { toolPath: this.#toolPath } : {}),
+    });
+  }
+
+  /** Read the session's events to the end: the chat's live rows, its tokens and its summary. */
+  async #readEvents(
+    request: Pick<DelegateRequest, "onEvent">,
+    run: OpenCodeRun,
+    invocation: OpenCodeInvocation,
+  ): Promise<void> {
+    const events = (this.#execFn ?? runOpenCode)(invocation);
+    for await (const event of events) applyTranslated(request, run, translateOpenCodeEvent(event));
+  }
+
+  /** A throw is a stop, a deadline, or a failure the run policy acts on. */
+  #endingAfterThrow(
+    err: unknown,
+    run: OpenCodeRun,
+    request: DelegateRequest,
+    partial: () => PartialDelegateState,
+  ): DelegateResult {
+    if (request.signal?.aborted || run.deadlineHit)
+      return metered(partialDelegateResult(this.id, interruption(request.signal?.aborted), partial()));
+    if (err instanceof EngineError && err.kind !== EngineFailureKind.Other) throw err;
+    const message = err instanceof Error ? err.message : String(err);
+    return metered(partialDelegateResult(this.id, { stopReason: StopReason.Error, errorText: message }, partial()));
+  }
+
+  /** A failure OpenCode reported: one with a status the run policy knows is thrown, the rest is an outcome. */
+  #failedEnding(
+    failure: { message: string; status: number | null },
+    partial: () => PartialDelegateState,
+    model: string | undefined,
+  ): DelegateResult {
+    const blocked = this.#blockedHostText(failure, model);
+    const error = failureError(this.id, failure);
+    if (!blocked && error.kind !== EngineFailureKind.Other) throw this.#namedFreeModel(error, failure, model);
+    const free = this.#ranFreeModel(model) ? MESSAGE.FreeModelFailed(this.#label(model), failure.message) : null;
+    const errorText = blocked ?? this.#refusedModelText(failure, model) ?? free ?? failure.message;
+    return metered(partialDelegateResult(this.id, { stopReason: StopReason.Error, errorText }, partial()));
+  }
+
+  /** A model's name as the picker shows it, or null with no pick. */
+  #label(model: string | undefined): string | null {
+    if (!model) return null;
+    return this.#catalog.models().find((row) => row.id === model)?.label ?? model;
+  }
+
+  /** Did the run use one of OpenCode's free models: the one picked, or OpenCode's own default with no sign-in? */
+  #ranFreeModel(model: string | undefined): boolean {
+    const { anonymous, signedIn } = this.#shown();
+    if (model) return anonymous.has(model);
+    return !signedIn && anonymous.size > 0;
+  }
+
+  /** A failure on a free model, said as one, of the same kind so the run waits or stops as before. */
+  #namedFreeModel(error: EngineError, failure: { message: string }, model: string | undefined): EngineError {
+    if (!this.#ranFreeModel(model)) return error;
+    const message = MESSAGE.FreeModelFailed(this.#label(model), failure.message);
+    return new EngineError(error.kind, this.id, message, error.retryAfterMs);
+  }
+
+  /**
+   * A 403 for a picked model whose provider has no host Genex knows: the sandbox's proxy refused
+   * it, since no other host was open to the session. Null for anything else.
+   */
+  #blockedHostText(failure: { status: number | null }, model: string | undefined): string | null {
+    if (!model || failure.status !== PROXY_REFUSED_STATUS) return null;
+    const hosts = this.#shown().hosts.get(model);
+    if (!hosts || hosts.length > 0) return null;
+    return MESSAGE.HostUnknown(model.slice(0, model.indexOf("/")));
+  }
+
+  /** A picked model the provider refused, by its name and with the provider's words; null for anything else. */
+  #refusedModelText(failure: { message: string; status: number | null }, model: string | undefined): string | null {
+    if (!model || failure.status === null || !MODEL_REFUSED_STATUSES.has(failure.status)) return null;
+    return MESSAGE.ModelRefused(this.#label(model) ?? model, failure.message);
+  }
+}
+
+/** The sandbox a session runs in: the folder it works in, its own state folders, and nothing it must not read. */
+export function openCodeSandbox(input: {
+  runDir: string;
+  gameDir: string;
+  gitDirs: string[];
+  scratchDir: string;
+  secretPaths: string[];
+  toolPath?: () => Promise<string>;
+  env?: Record<string, string | undefined>;
+  home?: string;
+}): SandboxOptions {
+  const env = input.env ?? process.env;
+  const home = input.home ?? os.homedir();
+  const folders = openCodeFolders(env, home);
+  const state = path.join(folders.XDG_STATE_HOME, "opencode");
+  const cache = path.join(folders.XDG_CACHE_HOME, "opencode");
+  return {
+    writableRoots: [input.runDir, ...input.gitDirs, state, cache],
+    scratchDir: input.scratchDir,
+    secretPaths: input.secretPaths,
+    ownHome: [openCodeDataHome(env, home)],
+    // A game's own OpenCode config and plugins are never the session's to plant.
+    denyWrite: [path.join(input.gameDir, "opencode.json"), path.join(input.gameDir, ".opencode")],
+    ...(input.toolPath ? { toolPath: input.toolPath } : {}),
+  };
+}
+
+/**
+ * The person's own folders OpenCode keeps its sign-ins and sessions (data), logs (state) and model
+ * catalog (cache) in, as XDG variables. Every session is pointed at them: on Windows it runs as the
+ * sandbox's own user, whose home holds none of them, so a signed-in provider's model was unavailable.
+ */
+function openCodeFolders(
+  env: Record<string, string | undefined>,
+  home: string,
+): { XDG_DATA_HOME: string; XDG_STATE_HOME: string; XDG_CACHE_HOME: string } {
+  return {
+    XDG_DATA_HOME: xdg(env.XDG_DATA_HOME, home, ".local/share"),
+    XDG_STATE_HOME: xdg(env.XDG_STATE_HOME, home, ".local/state"),
+    XDG_CACHE_HOME: xdg(env.XDG_CACHE_HOME, home, ".cache"),
+  };
+}
+
+/**
+ * The folders every session writes (sign-ins and sessions, logs, model catalog). A Windows sandbox
+ * changes its grants only while no sandboxed command runs, and the harness keeps one running, so
+ * the studio's own sandbox grants these at its start.
+ */
+export function openCodeSessionFolders(
+  env: Record<string, string | undefined> = process.env,
+  home: string = os.homedir(),
+): string[] {
+  const folders = openCodeFolders(env, home);
+  return [folders.XDG_DATA_HOME, folders.XDG_STATE_HOME, folders.XDG_CACHE_HOME].map((dir) =>
+    path.join(dir, "opencode"),
+  );
+}
+
+/** An XDG folder: the variable when it is absolute, else its default under the home folder. */
+function xdg(value: string | undefined, home: string, fallback: string): string {
+  return value && path.isAbsolute(value) ? value : path.join(home, fallback);
+}
+
+/** The command line a ready CLI speaks; one Genex cannot place is refused, never guessed. */
+function dialectOf(version: string | undefined): OpenCodeDialect {
+  const release = openCodeRelease(version);
+  if ("dialect" in release) return release.dialect;
+  throw new EngineError(EngineFailureKind.Unavailable, EngineId.OpenCode, MESSAGE.UnknownVersion);
+}
+
+/**
+ * `opencode run`'s arguments. 1.18 leaves a game's plugins out (`--pure`) and takes the effort as
+ * `--variant`; 2.x runs on a private server inside the sandbox (`--standalone`: its shared background
+ * one runs outside it, with another process's settings), as OpenCode's builder agent, and takes the
+ * effort after the model (`provider/model#variant`).
+ */
+function sessionArgv(
+  dialect: OpenCodeDialect,
+  input: { model: string | undefined; variant: string | null; resume: string | undefined; files: string[] },
+): string[] {
+  const { model, variant, resume, files } = input;
+  const session = resume ? ["--session", resume] : [];
+  const attached = files.flatMap((file) => ["--file", file]);
+  if (dialect === OpenCodeDialect.V2) {
+    const picked = model ? ["--model", variant ? `${model}#${variant}` : model] : [];
+    return ["run", "--format", "json", "--standalone", "--agent", OPENCODE_AGENT, ...picked, ...session, ...attached];
+  }
+  return [
+    "run",
+    "--format",
+    "json",
+    // Plugins a game folder ships (`.opencode/`) never run inside a studio session.
+    "--pure",
+    ...(model ? ["--model", model] : []),
+    ...session,
+    ...(variant ? ["--variant", variant] : []),
+    ...attached,
+  ];
+}
+
+/**
+ * The variables a session starts with, over the sandbox's allow-listed environment. 2.x reads its
+ * folder from `PWD` before its working directory, and a game's own OpenCode config (its plugins,
+ * agents and rules) never loads, as 1.18's `--pure` kept its plugins out. 2.x also looks for
+ * Claude's settings in the home folder's `.claude` and stops when the sandbox refuses it, so it is
+ * given an empty home of its own (`OPENCODE_TEST_HOME` moves only that). Its own folders are named
+ * outright (`openCodeFolders`), so its sign-ins are found whoever the sandbox runs it as.
+ */
+function sessionEnv(
+  dialect: OpenCodeDialect,
+  ctx: { access: OpenCodeAccess; bridge: boolean; mcpCommand: string[] | null; runDir: string; home: string },
+): Record<string, string> {
+  const v2 = dialect === OpenCodeDialect.V2;
+  const config = v2
+    ? openCodeConfigV2(ctx.access, ctx.bridge, ctx.mcpCommand)
+    : openCodeConfig(ctx.access, ctx.bridge, ctx.mcpCommand);
+  const env: Record<string, string> = {
+    OPENCODE_CONFIG_CONTENT: config,
+    OPENCODE_DISABLE_AUTOUPDATE: "1",
+    ...(v2 ? { OPENCODE_DISABLE_PROJECT_CONFIG: "1", PWD: ctx.runDir, OPENCODE_TEST_HOME: ctx.home } : {}),
+    ...openCodeFolders(process.env, os.homedir()),
+  };
+  // The person's own config folder, when they moved it; the sandbox's own environment drops it.
+  const configHome = process.env.XDG_CONFIG_HOME;
+  if (configHome && path.isAbsolute(configHome)) env.XDG_CONFIG_HOME = configHome;
+  return env;
+}
+
+/** What a session's tools may do: a build edits; a read-only session, a lead while its build runs and Plan only look. */
+function sessionAccess(request: DelegateRequest): OpenCodeAccess {
+  if (request.blind) return OpenCodeAccess.Blind;
+  const readOnly = Boolean(request.readOnly) && !request.coordinator;
+  return readOnly || chatMode(request) === PermissionMode.Plan ? OpenCodeAccess.ReadOnly : OpenCodeAccess.Build;
+}
+
+/** The chat's mode as OpenCode honours it (Auto or Plan), or null for unattended work. */
+function chatMode(request: DelegateRequest): PermissionMode | null {
+  return request.permissions ? engineMode(EngineId.OpenCode, request.permissions.mode) : null;
+}
+
+/** A judge's question as one prompt: the system words, the conversation, and the critic's two rules. */
+function answerPrompt(request: CompleteRequest): string {
+  const conversation = request.messages.map((message) => `${message.role.toUpperCase()}:\n${message.content}`);
+  return [request.systemPrompt ?? "", ...conversation, ...JUDGE_RULES].filter((part) => part.trim()).join("\n\n");
+}
+
+function newRun(engine: string, resume: string | undefined): OpenCodeRun {
+  return { usage: { engine }, turns: 0, summary: "", sessionId: resume, failure: null, deadlineHit: false };
+}
+
+/** The usage counts each step reports, added up over a session. */
+const SUMMED_USAGE = [
+  "input_tokens",
+  "output_tokens",
+  "cache_read_tokens",
+  "cache_write_tokens",
+  "reasoning_tokens",
+  "cost_usd",
+] as const;
+
+/** One translated event: forwarded to the log, and folded into the run. A step's edge is the session's activity. */
+function applyTranslated(request: Pick<DelegateRequest, "onEvent">, run: OpenCodeRun, translated: Translated): void {
+  if (translated.sessionId) run.sessionId = translated.sessionId;
+  const phase = translated.activity;
+  if (phase)
+    request.onEvent?.({
+      type: DelegateEventType.Activity,
+      payload: { phase, engine: EngineId.OpenCode, sessionId: run.sessionId },
+    });
+  for (const event of translated.events)
+    request.onEvent?.(event as Parameters<NonNullable<DelegateRequest["onEvent"]>>[0]);
+  if (translated.text) run.summary = translated.text;
+  if (translated.turns) run.turns += translated.turns;
+  if (translated.failure) run.failure = translated.failure;
+  for (const key of SUMMED_USAGE) {
+    const value = translated.usage?.[key];
+    if (typeof value === "number") run.usage[key] = (run.usage[key] ?? 0) + value;
+  }
+}
+
+/** What a run cut short had done. */
+function partialState(
+  run: OpenCodeRun,
+  startedAt: number,
+  model: string | undefined,
+  bridge: StudioBridge | null,
+  request: DelegateRequest,
+): PartialDelegateState {
+  return {
+    summary: run.summary,
+    usage: run.usage,
+    turns: run.turns,
+    startedAt,
+    sessionId: run.sessionId,
+    model,
+    requestedModel: model,
+    studioToolCalls: recordedCalls(bridge, request),
+  };
+}
+
+/** The interview calls the bridge recorded: the studio's own tools are not calls to run. */
+function recordedCalls(
+  bridge: StudioBridge | null,
+  request: DelegateRequest,
+): NonNullable<DelegateResult["studioToolCalls"]> {
+  const interview = new Set((request.interviewTools ?? []).map((tool) => tool.name));
+  return (bridge?.calls ?? []).filter((call) => interview.has(call.name));
+}
+
+/** A session whose turn completed. OpenCode runs on whatever the person signed it in to: billed as an API. */
+function completed(
+  engine: string,
+  run: OpenCodeRun,
+  startedAt: number,
+  model: string | undefined,
+  studioToolCalls: NonNullable<DelegateResult["studioToolCalls"]>,
+): DelegateResult {
+  return {
+    ok: true,
+    summary: run.summary,
+    usage: run.usage,
+    turns: run.turns,
+    billing: "api",
+    engine,
+    durationMs: Date.now() - startedAt,
+    stopReason: StopReason.Completed,
+    ...(model ? { model, requestedModel: model } : {}),
+    ...(run.sessionId ? { sessionId: run.sessionId } : {}),
+    ...(studioToolCalls.length ? { studioToolCalls } : {}),
+  };
+}
+
+/** A partial result, billed as OpenCode's work is. */
+function metered(result: DelegateResult): DelegateResult {
+  return { ...result, billing: "api" };
+}
+
+/** A reported failure as an engine error: by the HTTP status the provider answered, never by its words. */
+function failureError(engine: string, failure: { message: string; status: number | null }): EngineError {
+  if (failure.status !== null) return classifyHttpFailure(engine, failure.status, failure.message);
+  return new EngineError(EngineFailureKind.Other, engine, failure.message);
+}
+
+/** The CLI's state for its account row: working, installed but unusable, or missing. */
+function cliState(cli: { ready: boolean; path?: string }): EngineAccount["cli"]["state"] {
+  if (cli.ready) return CodingCliState.Ready;
+  return cli.path ? CodingCliState.Incompatible : CodingCliState.Missing;
+}
+
+/** Where the CLI is, whether it works, and its version. */
+async function defaultResolveCli(): Promise<{ ready: boolean; path?: string; version?: string; detail: string }> {
+  const installation = await resolveCodingCli(EngineId.OpenCode);
+  const { state, path: binary, version, detail } = installation.status;
+  return {
+    ready: state === CodingCliState.Ready && Boolean(binary),
+    ...(binary ? { path: binary } : {}),
+    ...(version ? { version } : {}),
+    detail,
+  };
+}
+
+/** `opencode models --verbose`, run on the host: a listing, no session and no prompt. */
+async function listOpenCodeModels(binary: string | undefined): Promise<string> {
+  if (!binary) return "";
+  const env = childEnv(process.env, {
+    base: "contractor",
+    vendor: "opencode",
+    set: { OPENCODE_DISABLE_AUTOUPDATE: "1" },
+  });
+  const result = await runCommand(binary, ["models", "--verbose"], {
+    env,
+    timeoutMs: Math.max(MODELS_TIMEOUT_MS, CATALOG_DEADLINE_MS),
+  });
+  if (result.code !== 0) throw new Error(stripTerminalCodes(result.stderr).trim() || MESSAGE.Stopped(result.code));
+  return result.stdout;
+}
+
+/**
+ * 2.x's `GET /api/model`, from a private server started for the listing alone on the host (as
+ * `opencode api --standalone` does, but read until it settles: its first answer can come before
+ * its catalog loads). Its password is made here; closing its stdin ends it.
+ */
+async function listOpenCodeModelsV2(binary: string, cwd: string): Promise<string> {
+  const password = randomBytes(32).toString("base64url");
+  const env = childEnv(process.env, {
+    base: "contractor",
+    vendor: "opencode",
+    set: { OPENCODE_DISABLE_AUTOUPDATE: "1", OPENCODE_DISABLE_PROJECT_CONFIG: "1", OPENCODE_PASSWORD: password },
+  });
+  // OpenCode has no Windows installer: npm installs it as `opencode.cmd`, which only `spawnCommand` can start.
+  const child = spawnCommand(binary, ["serve", "--stdio", "--port", "0"], {
+    cwd,
+    env,
+    stdio: ["pipe", "pipe", "ignore"],
+  });
+  try {
+    const url = await serverReady(child);
+    const authorization = `Basic ${Buffer.from(`${SERVER_USER}:${password}`).toString("base64")}`;
+    const read = async (): Promise<string> => {
+      const response = await fetch(`${url}/api/model`, {
+        headers: { authorization },
+        signal: AbortSignal.timeout(LISTING_READ_TIMEOUT_MS),
+      });
+      if (!response.ok) throw new Error(MESSAGE.ListingFailed(response.status));
+      return response.text();
+    };
+    return await settledListing(read, {
+      attempts: Math.ceil(LISTING_SETTLE_MS / LISTING_POLL_MS),
+      intervalMs: LISTING_POLL_MS,
+    });
+  } finally {
+    child.stdin?.end();
+    await stopChild(child, { signal: "SIGTERM" }).catch(() => {});
+  }
+}
+
+/** Where 2.x's private server answers, from the first line it prints; refused after a deadline. */
+async function serverReady(child: ChildProcess): Promise<string> {
+  const deadline = AbortSignal.timeout(SERVER_READY_TIMEOUT_MS);
+  const exited = new Promise<never>((_, reject) => {
+    child.once("error", reject);
+    child.once("close", () => reject(new Error(MESSAGE.ServerSilent)));
+  });
+  const first = (async () => {
+    if (!child.stdout) throw new Error(MESSAGE.ServerSilent);
+    for await (const line of createInterface({ input: child.stdout, signal: deadline })) {
+      const url = openCodeServerUrl(line);
+      if (url) return url;
+    }
+    throw new Error(MESSAGE.ServerSilent);
+  })();
+  return Promise.race([first, exited]);
+}
+
+/** The loopback HTTP address a 2.x server's ready line names, or null for anything else. */
+export function openCodeServerUrl(line: string): string | null {
+  let value: unknown;
+  try {
+    value = JSON.parse(line) as unknown;
+  } catch {
+    return null;
+  }
+  const raw = value && typeof value === "object" ? (value as { url?: unknown }).url : undefined;
+  if (typeof raw !== "string") return null;
+  try {
+    const url = new URL(raw);
+    const loopback = LOOPBACK_HOSTS.has(url.hostname) && url.protocol === "http:";
+    return loopback && !url.username && !url.password ? url.origin : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The hosts a local server may answer on. */
+const LOOPBACK_HOSTS: ReadonlySet<string> = new Set(["127.0.0.1", "localhost", "[::1]"]);
+
+/**
+ * A listing read until it settles: two reads in a row that agree on at least one model, or, when
+ * the attempts run out, the last read.
+ */
+export async function settledListing(
+  read: () => Promise<string>,
+  options: { attempts: number; intervalMs: number; wait?: (ms: number) => Promise<unknown> },
+): Promise<string> {
+  const wait = options.wait ?? ((ms: number) => sleep(ms));
+  let last = await read();
+  for (let attempt = 1; attempt < options.attempts; attempt++) {
+    await wait(options.intervalMs);
+    const next = await read();
+    if (next === last && listsModels(next)) return next;
+    last = next;
+  }
+  return last;
+}
+
+/** Whether a 2.x listing names any model. */
+function listsModels(listing: string): boolean {
+  try {
+    const data = (JSON.parse(listing) as { data?: unknown }).data;
+    return Array.isArray(data) && data.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/** A linked worktree's Git metadata outside the workspace, which a build must be able to commit to. */
+async function gitMetadata(cwd: string): Promise<string[]> {
+  const dirs: string[] = [];
+  for (const flag of ["--absolute-git-dir", "--git-common-dir"]) {
+    const answer = await promisify(execFile)("git", ["-C", cwd, "rev-parse", flag], {
+      windowsHide: true,
+      timeout: GIT_PROBE_TIMEOUT_MS,
+    }).catch(() => null);
+    if (answer)
+      dirs.push(
+        await realpath(path.resolve(cwd, answer.stdout.trim())).catch(() => path.resolve(cwd, answer.stdout.trim())),
+      );
+  }
+  return [...new Set(dirs)];
+}
+
+/**
+ * Start `opencode run` inside the studio's sandbox and yield its events. The prompt goes in on
+ * stdin (a brief is thousands of characters, and argv is not the place for it). OpenCode exits 0
+ * even when its turn failed, so the `error` event, not the exit code, says that; a non-zero exit
+ * with nothing said is the CLI failing to start, and stderr explains it.
+ */
+async function* runOpenCode(invocation: OpenCodeInvocation): AsyncGenerator<Record<string, unknown>> {
+  invocation.signal.throwIfAborted();
+  const installation = await resolveCodingCli(EngineId.OpenCode);
+  const binary = installation.status.path;
+  if (!binary) throw new EngineError(EngineFailureKind.Unavailable, EngineId.OpenCode, MESSAGE.NotInstalled);
+  const sandbox = await ProcessSandbox.create(invocation.sandbox);
+  try {
+    yield* openCodeEvents(sandbox, binary, invocation);
+  } finally {
+    await sandbox.dispose().catch(() => {});
+  }
+}
+
+/**
+ * Start `binary` with the invocation's argv in `sandbox` and yield its events. The prompt is the
+ * sandbox's to deliver: on Windows srt-win does not pass stdin on, so a prompt written to the
+ * child never reached the CLI ("You must provide a message").
+ */
+export async function* openCodeEvents(
+  sandbox: Pick<ProcessSandbox, "spawnLongLived">,
+  binary: string,
+  invocation: Omit<OpenCodeInvocation, "sandbox">,
+): AsyncGenerator<Record<string, unknown>> {
+  const command = [binary, ...invocation.argv].map(shellQuote).join(" ");
+  const { child } = await sandbox.spawnLongLived({
+    command,
+    cwd: invocation.cwd,
+    env: invocation.env,
+    label: `opencode:${path.basename(invocation.cwd)}`,
+    policy: { allowedDomains: invocation.domains },
+    stdin: invocation.prompt,
+  });
+  yield* childEvents(child, invocation);
+}
+
+/** The child's stdout as events, stopping it on abort; a silent non-zero exit throws stderr's words. */
+async function* childEvents(
+  child: ChildProcess,
+  invocation: Pick<OpenCodeInvocation, "signal">,
+): AsyncGenerator<Record<string, unknown>> {
+  let stderr = "";
+  child.stderr?.setEncoding("utf8");
+  child.stderr?.on("data", (chunk: string) => {
+    stderr = `${stderr}${chunk}`.slice(-STDERR_TAIL_CHARS);
+  });
+  const onAbort = (): void => {
+    void stopChild(child, { signal: "SIGTERM" });
+    setTimeout(() => void stopChild(child), KILL_GRACE_MS).unref?.();
+  };
+  if (invocation.signal.aborted) onAbort();
+  else invocation.signal.addEventListener("abort", onAbort, { once: true });
+  const exit = new Promise<number | null>((resolve, reject) => {
+    child.once("error", reject);
+    child.once("close", (code) => resolve(code));
+  });
+  let said = false;
+  try {
+    if (child.stdout) {
+      for await (const line of createInterface({ input: child.stdout })) {
+        const event = parseOpenCodeLine(line);
+        if (!event) continue;
+        said = true;
+        yield event;
+      }
+    }
+  } finally {
+    invocation.signal.removeEventListener("abort", onAbort);
+  }
+  const code = await exit;
+  if (code !== 0 && !said && !invocation.signal.aborted)
+    throw new Error(stripTerminalCodes(stderr).trim() || MESSAGE.Stopped(code));
+}

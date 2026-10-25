@@ -7,11 +7,12 @@ import { mkdir, readdir, readFile, realpath, stat, writeFile } from "node:fs/pro
 import path from "node:path";
 import { allowedFile, ownershipReason, specOf } from "../ownership.ts";
 import { isInside, toPosixRelative } from "../paths.ts";
-import type { ProcessSandbox } from "../spawn.ts";
 import type { ToolCall } from "../types.ts";
 import { MINUTE_MS } from "../../shared/duration.ts";
 import { LOCAL_NOTE, LOCAL_TOOL_DESCRIPTION } from "./local-session-prompts.ts";
 import { StudioTool } from "./studio-tool-prompts.ts";
+import { captureArgs } from "./capture-args.ts";
+import { type CommandSandbox, runSessionCommand } from "./session-commands.ts";
 import type { DelegateRequest, DelegateResult, LiveToolResult, ToolDefinition } from "./types.ts";
 
 /** The local session's own tools, by the name the model calls. */
@@ -80,7 +81,24 @@ const str = { type: "string" };
 
 /** The tools this session grants: reading always, writing unless read-only, then the studio's own. */
 export function localToolDefinitions(request: DelegateRequest, readonly: boolean): ToolDefinition[] {
-  const definitions: ToolDefinition[] = [
+  // A blind judge sees the build only through its live tools: no file of the build is offered.
+  const definitions: ToolDefinition[] = request.blind ? [] : fileReadTools();
+  if (!readonly)
+    definitions.push(
+      tool(LocalTool.EditFile, LOCAL_TOOL_DESCRIPTION.editFile, { path: str, oldText: str, newText: str }, [
+        "path",
+        "oldText",
+        "newText",
+      ]),
+      tool(LocalTool.WriteFile, LOCAL_TOOL_DESCRIPTION.writeFile, { path: str, content: str }, ["path", "content"]),
+      tool(LocalTool.RunCommand, LOCAL_TOOL_DESCRIPTION.runCommand, { command: str }, ["command"]),
+    );
+  return withRequestTools(request, definitions);
+}
+
+/** The tools that read the session's files. */
+function fileReadTools(): ToolDefinition[] {
+  return [
     tool(
       LocalTool.ReadFile,
       LOCAL_TOOL_DESCRIPTION.readFile,
@@ -93,17 +111,17 @@ export function localToolDefinitions(request: DelegateRequest, readonly: boolean
     ),
     tool(LocalTool.ListFiles, LOCAL_TOOL_DESCRIPTION.listFiles, { path: str }),
   ];
-  if (!readonly)
+}
+
+/** The request's own tools after the session's: capture, live studio tools and interview tools, names unique. */
+function withRequestTools(request: DelegateRequest, definitions: ToolDefinition[]): ToolDefinition[] {
+  if (request.onCapture)
     definitions.push(
-      tool(LocalTool.EditFile, LOCAL_TOOL_DESCRIPTION.editFile, { path: str, oldText: str, newText: str }, [
-        "path",
-        "oldText",
-        "newText",
-      ]),
-      tool(LocalTool.WriteFile, LOCAL_TOOL_DESCRIPTION.writeFile, { path: str, content: str }, ["path", "content"]),
-      tool(LocalTool.RunCommand, LOCAL_TOOL_DESCRIPTION.runCommand, { command: str }, ["command"]),
+      tool(LocalTool.Capture, LOCAL_TOOL_DESCRIPTION.capture, {
+        cameras: str,
+        page: { ...str, description: LOCAL_TOOL_DESCRIPTION.capturePage },
+      }),
     );
-  if (request.onCapture) definitions.push(tool(LocalTool.Capture, LOCAL_TOOL_DESCRIPTION.capture, { cameras: str }));
   for (const t of request.liveTools ?? [])
     definitions.push({ name: t.name, description: t.description, parameters: t.inputSchema ?? t.parameters });
   for (const t of request.interviewTools ?? []) definitions.push(t);
@@ -176,7 +194,7 @@ export interface ToolContext {
   cwd: string;
   signal: AbortSignal;
   resolveFile: FileResolver;
-  sandbox: ProcessSandbox | null;
+  sandbox: CommandSandbox | null;
   forbidden: string[];
   deniedWrites: string[];
   /** The sandbox label: `<engine>:<session id>`. */
@@ -291,13 +309,14 @@ async function runCommandTool(args: ToolArgs, context: ToolContext): Promise<Liv
   if (typeof args.command !== "string") throw new Error(MESSAGE.CommandNotString);
   if (!context.sandbox) throw new Error(MESSAGE.ReadOnlyCommand);
   return JSON.stringify(
-    await context.sandbox.run({
+    await runSessionCommand(context.sandbox, {
       command: args.command,
       cwd: context.cwd,
       signal: context.signal,
       timeoutMs: LOCAL_TOOL_LIMITS.commandTimeoutMs,
       maxOutputBytes: LOCAL_TOOL_LIMITS.commandOutputBytes,
-      policy: { denyRead: context.forbidden, denyWrite: context.deniedWrites },
+      denyRead: context.forbidden,
+      denyWrite: context.deniedWrites,
       label: context.label,
     }),
   );
@@ -306,5 +325,5 @@ async function runCommandTool(args: ToolArgs, context: ToolContext): Promise<Liv
 async function captureTool(args: ToolArgs, context: ToolContext): Promise<LiveToolResult> {
   const { onCapture } = context.request;
   if (!onCapture) throw new Error(MESSAGE.NoCapture);
-  return onCapture({ cameras: typeof args.cameras === "string" ? args.cameras : undefined });
+  return onCapture(captureArgs(args));
 }

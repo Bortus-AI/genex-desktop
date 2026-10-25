@@ -1,35 +1,40 @@
 import type { JSX } from "react";
 import { memo, useCallback } from "react";
+import { t } from "../../shared/i18n.ts";
 import { BootstrapGate } from "../panels/BootstrapGate.tsx";
 import { ChatPanel } from "../panels/ChatPanel.tsx";
 import { ChatResizeHandle } from "../panels/ChatResizeHandle.tsx";
 import { TerminalDock } from "../panels/TerminalDock.tsx";
 import { StageView } from "../stage.ts";
 import { useEngines, useLibrary, useThreads, useThreadsView } from "../state/hooks.ts";
-import { activeThread as activeThreadOf, threadMeta } from "../state/threads.ts";
+import { activeThread as activeThreadOf, personFirstLabel, threadMeta } from "../state/threads.ts";
 import { notifyProblem } from "../state/toasts.ts";
 import { LoadFailed } from "../ui/LoadFailed.tsx";
 import { HomeLayer, useCoveredByHome } from "./HomeScreen.tsx";
+import { RemixLayer, useCoveredByRemix } from "./RemixLayer.tsx";
 import type { WorkspaceProps } from "./use-shell.ts";
 import { WorkspaceStage } from "./WorkspaceStage.tsx";
 
 /** The chat column beside the stage (a game's build stage, or Studio's review), with home over both. */
 export const Workspace = memo(function Workspace(props: WorkspaceProps): JSX.Element {
   const { chrome } = props;
-  const { pluginsOpen } = chrome;
+  // Plugins or Play is up in its place.
+  const away = chrome.workspaceCovered;
   const activeThread = useThreads(activeThreadOf);
-  const covered = useCoveredByHome();
+  const underHome = useCoveredByHome();
+  const underRemix = useCoveredByRemix();
+  const covered = underHome || underRemix;
   return (
     <div
       className="studio-workspace absolute inset-0"
-      inert={pluginsOpen}
-      style={{ visibility: pluginsOpen ? "hidden" : "visible", opacity: pluginsOpen ? 0 : 1 }}
+      inert={away}
+      style={{ visibility: away ? "hidden" : "visible", opacity: away ? 0 : 1 }}
     >
       <div className="relative flex min-h-0 min-w-0 flex-col" inert={covered}>
         <BootstrapGate
           failed={({ error, retry, retrying }) => (
             <LoadFailed
-              what="Studio"
+              message={t("Could not load Studio.")}
               error={error ?? undefined}
               onRetry={retry}
               retrying={retrying}
@@ -49,7 +54,8 @@ export const Workspace = memo(function Workspace(props: WorkspaceProps): JSX.Ele
         <ChatResizeHandle />
       </div>
       <WorkspaceStage app={props.app} chrome={chrome} navigation={props.navigation} views={props.views} />
-      <HomeLayer app={props.app} dialogs={props.dialogs} chrome={chrome} handoff={props.handoff} />
+      <HomeLayer app={props.app} dialogs={props.dialogs} chrome={chrome} handoff={props.handoff} under={underRemix} />
+      <RemixLayer sidebarHidden={chrome.sidebarHidden} onToggleSidebar={chrome.toggleSidebar} />
     </div>
   );
 });
@@ -59,6 +65,7 @@ function WorkspaceChat({ app, chrome, navigation, views, chat }: WorkspaceProps)
   const { activeThreadId, activeThread, status: threadStatus } = useThreadsView();
   const engines = useEngines((s) => s.list);
   const activeStatus = (activeThreadId && threadStatus[activeThreadId]) || null;
+  const personFirst = useThreads((s) => personFirstLabel(s, s.activeThreadId));
   const games = useLibrary((s) => s.games);
   const notify = app.notify;
   const saveGameTitle = useCallback(
@@ -83,6 +90,7 @@ function WorkspaceChat({ app, chrome, navigation, views, chat }: WorkspaceProps)
       activeThread={activeThread}
       status={activeStatus?.status ?? ""}
       busySince={activeStatus?.since ?? null}
+      personFirst={personFirst}
       firstAsk={chat.firstAsk}
       onRename={app.renameThread}
       onRenameGame={saveGameTitle}

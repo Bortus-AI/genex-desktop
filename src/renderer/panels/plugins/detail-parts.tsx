@@ -1,14 +1,17 @@
 /** The parts every plugin's page shares: its More menu, settings form, open panel, skills and what it is. */
 import type { JSX } from "react";
 import { useState } from "react";
+import { GENEX_PLUGIN_ID } from "../../../shared/genex.ts";
+import { t } from "../../../shared/i18n.ts";
 import { PluginSourceKind, type PluginInfo, type PluginManifest } from "../../../shared/plugins.ts";
+import { installPluginUpdate } from "../../state/plugins.ts";
 import { Button } from "../../ui/Button.tsx";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../../ui/dropdown-menu.tsx";
 import { Icon } from "../../ui/icons.tsx";
 import { IconButton } from "../../ui/kit.tsx";
-import { PLUGINS_WORDS, SKILLS_WORDS } from "../../words.ts";
+import { PLUGINS_WORDS, SKILLS_WORDS, consentToolWords } from "../../words.ts";
 import { PluginPanelHost } from "../PluginPanelHost.tsx";
-import { capabilityLine, sourceWords } from "./labels.ts";
+import { capabilityLine, foldersLine, localAccessNote, shownName, sourceWords } from "./labels.ts";
 
 const PAGE = PLUGINS_WORDS.page;
 import type { OpenPanel, PluginsPage } from "./page.ts";
@@ -29,36 +32,47 @@ function settingValue(setting: Setting, input: HTMLInputElement): boolean | numb
   return input.value;
 }
 
-/** The More menu beside a plugin's title: watch a local plugin's folder, or remove the plugin. */
-export function MoreActions({ detail, page }: { detail: PluginInfo; page: PluginsPage }): JSX.Element {
+/**
+ * The More menu beside a plugin's title: watch a local plugin's folder, or remove the plugin. Genex
+ * holds the app's account, so it is turned off, never removed (the registry refuses): it has none.
+ */
+export function MoreActions({ detail, page }: { detail: PluginInfo; page: PluginsPage }): JSX.Element | null {
   const { manifest } = detail;
-  const watchWords = detail.watching ? "Stop watching folder" : "Watch folder";
+  const watchWords = detail.watching ? t("Stop watching folder") : t("Watch folder");
+  const watchLabel = detail.watching
+    ? t("Stop watching folder for {name}", { name: manifest.name })
+    : t("Watch folder for {name}", { name: manifest.name });
+  const watchable = detail.enabled && detail.origin?.kind === PluginSourceKind.Local;
+  const removable = manifest.id !== GENEX_PLUGIN_ID;
+  if (!watchable && !removable) return null;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label={`More actions for ${manifest.name}`}>
+        <Button variant="ghost" size="icon" aria-label={t("More actions for {name}", { name: manifest.name })}>
           <Icon name="more" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        {detail.enabled && detail.origin?.kind === PluginSourceKind.Local && (
+        {watchable && (
           <DropdownMenuItem
-            aria-label={`${watchWords} for ${manifest.name}`}
+            aria-label={watchLabel}
             onSelect={() => void page.act(() => window.studio.pluginWatch(manifest.id, !detail.watching))}
           >
             {watchWords}
           </DropdownMenuItem>
         )}
-        <DropdownMenuItem
-          onSelect={() =>
-            void page.act(async () => {
-              page.setSelected(null);
-              await window.studio.pluginRemove(manifest.id);
-            })
-          }
-        >
-          Remove plugin
-        </DropdownMenuItem>
+        {removable && (
+          <DropdownMenuItem
+            onSelect={() =>
+              void page.act(async () => {
+                page.setSelected(null);
+                await window.studio.pluginRemove(manifest.id);
+              })
+            }
+          >
+            {t("Remove plugin")}
+          </DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -120,7 +134,7 @@ export function OpenPanelSection({
   return (
     <Section
       title={selected.document.title}
-      action={<IconButton icon="close" label="Close plugin panel" onClick={() => page.setSelected(null)} />}
+      action={<IconButton icon="close" label={t("Close plugin panel")} onClick={() => page.setSelected(null)} />}
     >
       <PluginPanelHost
         plugin={selectedPlugin}
@@ -145,14 +159,14 @@ export function PluginSkills({
   if (!manifest.skills.length) return null;
   const change = skillChangeWords(detail.lastSkillChange);
   return (
-    <Section title="Skills" count={manifest.skills.length}>
+    <Section title={t("Skills")} count={manifest.skills.length}>
       {change && (
         <p className="mb-3 text-sm text-ink-3" data-skill-change>
-          {SKILLS_WORDS.lastChange}: {change}
+          {t("{lastChange}: {change}", { lastChange: SKILLS_WORDS.lastChange, change })}
         </p>
       )}
       <div className="extension-skills-line">
-        <p>{PAGE.skillsLine(manifest.name)}</p>
+        <p>{PAGE.skillsLine(shownName(detail))}</p>
         <Button variant="ghost" aria-expanded={open} onClick={() => setOpen((shown) => !shown)}>
           {open ? PAGE.showFewer : PAGE.showAll}
           <Icon name="chevron-down" size={14} className={open ? "rotate-180" : ""} />
@@ -178,8 +192,26 @@ export function PluginSkills({
   );
 }
 
-/** What the plugin is: who makes it, which version from where, what it can do, and what the scan saw. */
-export function Information({ detail }: { detail: PluginInfo }): JSX.Element {
+/** A local plugin's tools the person always allowed, and the button that makes them ask again. */
+function AllowedTools({ detail, page }: { detail: PluginInfo; page: PluginsPage | undefined }): JSX.Element | null {
+  const tools = detail.allowedTools ?? [];
+  if (!page || !tools.length) return null;
+  return (
+    <span className="extension-description" data-always-allowed="">
+      {PAGE.alwaysAllowed(tools.map((tool) => consentToolWords(tool)).join(", "))}{" "}
+      <Button
+        variant="ghost"
+        disabled={page.busy}
+        onClick={() => void page.act(() => window.studio.pluginForgetAllowed(detail.manifest.id))}
+      >
+        {PAGE.askEveryTime}
+      </Button>
+    </span>
+  );
+}
+
+/** What the plugin is: who makes it, which version from where, what it can do, where outside your games it writes, and what the scan saw. */
+export function Information({ detail, page }: { detail: PluginInfo; page?: PluginsPage }): JSX.Element {
   const { manifest, scan } = detail;
   const bundled = detail.source === PluginSourceKind.Bundled;
   return (
@@ -191,17 +223,28 @@ export function Information({ detail }: { detail: PluginInfo }): JSX.Element {
         <dd>{bundled ? PAGE.bundled(manifest.version) : PAGE.from(manifest.version, sourceWords(detail))}</dd>
         <dt>{PAGE.can}</dt>
         <dd>{capabilityLine(manifest)}</dd>
+        {manifest.folders?.length ? (
+          <>
+            <dt>{PAGE.folders}</dt>
+            <dd>{foldersLine(manifest)}</dd>
+          </>
+        ) : null}
         {scan && !bundled && (
           <>
             <dt>{PAGE.scan}</dt>
             <dd>
-              Scan: {scan.verdict}
-              {scan.findings.length ? ` · ${scan.findings.length} findings` : ""}
+              {t("Scan: {verdict, select, safe {safe} caution {caution} dangerous {dangerous} other {{verdict}}}", {
+                verdict: scan.verdict,
+              })}
+              {scan.findings.length
+                ? ` · ${t("{count, plural, other {# findings}}", { count: scan.findings.length })}`
+                : ""}
             </dd>
           </>
         )}
       </dl>
-      <p className="mt-6 text-xs text-ink-3">{PAGE.trusted}</p>
+      <p className="mt-6 text-xs text-ink-3">{localAccessNote(detail) ?? PAGE.trusted}</p>
+      <AllowedTools detail={detail} page={page} />
     </Section>
   );
 }
@@ -216,18 +259,21 @@ export function PluginNotes({ detail }: { detail: PluginInfo }): JSX.Element {
         </p>
       )}
       {detail.pendingVersion && (
-        <p className="text-sm text-orange">Update {detail.pendingVersion} waits for active sessions.</p>
+        <p className="text-sm text-orange">
+          {t("Update {version} waits for active sessions.", { version: detail.pendingVersion })}
+        </p>
       )}
     </>
   );
 }
 
-/** Update to the catalog's newer release, when there is one and none is already waiting. */
+/** Update to the plugin's newer version, when there is one and none is already waiting. */
 export function UpdateButton({ detail, page }: { detail: PluginInfo; page: PluginsPage }): JSX.Element | null {
-  if (!detail.availableVersion || detail.pendingVersion) return null;
+  const update = page.updates.get(detail.manifest.id);
+  if (!update) return null;
   return (
-    <Button disabled={page.busy} onClick={() => void page.act(() => window.studio.pluginInstall(detail.manifest.id))}>
-      Update to {detail.availableVersion}
+    <Button disabled={page.busy} onClick={() => void page.act(() => installPluginUpdate(window.studio, update))}>
+      {t("Update to {version}", { version: update.version })}
     </Button>
   );
 }

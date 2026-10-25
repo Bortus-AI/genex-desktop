@@ -13,8 +13,13 @@ import { formatTokens } from "../chat-labels.ts";
 import { TOGGLE_TERMINAL_EVENT } from "./terminal-events.ts";
 import type { ContextUsage } from "../../shared/context.ts";
 import { hostPlatform } from "../platform.ts";
-import { fileManagerWords } from "../words.ts";
+import { fileManagerWords, freeGameWords, freeSpaceWords } from "../words.ts";
+import type { GameStorage } from "../chat/use-game-storage.ts";
+import { freeableBytes } from "../../shared/storage-space.ts";
+import { t } from "../../shared/i18n.ts";
+import { FreeSpaceSheet } from "./FreeSpaceSheet.tsx";
 import { HarnessGuideButton } from "../chat/HarnessGuide.tsx";
+import { SidebarToggle } from "../shell/use-shell-chrome.ts";
 
 interface Props {
   chatTitle: string;
@@ -29,9 +34,14 @@ interface Props {
   onReveal?: () => void;
   onExport?: () => void;
   exporting?: boolean;
+  /** A game chat's space and freeing it (the Free button, once it is worth it). */
+  storage?: GameStorage;
   sidebarHidden: boolean;
   onToggleSidebar: () => void;
 }
+
+/** How much a game's space must reach before the header offers to free it. */
+const OFFER_FREE_BYTES = 1024 ** 3;
 
 /** A 32px icon-only header control with its tooltip. */
 function HeaderButton({
@@ -61,10 +71,11 @@ export function ShowSidebarButton({ onToggle }: { onToggle: () => void }): JSX.E
   return (
     <HeaderButton
       icon="sidebar"
-      label="Show sidebar"
+      data-sidebar-toggle={SidebarToggle.Show}
+      label={t("Show sidebar")}
       tip={
         <span className="flex items-center gap-2">
-          Show sidebar <Shortcut>⌘B</Shortcut>
+          {t("Show sidebar")} <Shortcut>⌘B</Shortcut>
         </span>
       }
       aria-controls="studio-sidebar"
@@ -101,7 +112,7 @@ function ContextMeter({
     <div
       className="no-drag me-1 flex shrink-0 items-center gap-1.5"
       data-context-meter
-      title={`Context: ${used} tokens`}
+      title={t("Context: {used} tokens", { used })}
     >
       <span className="relative h-[3px] w-6 overflow-hidden rounded-full bg-inset shadow-hairline">
         <span
@@ -115,10 +126,10 @@ function ContextMeter({
           type="button"
           onClick={onCompact}
           disabled={compacting}
-          title="Summarise the older part of this chat into the log so it fits the model"
+          title={t("Summarise the older part of this chat into the log so it fits the model")}
           className="h-5 rounded-chip bg-inset px-1.5 font-mono text-micro text-ink-2 shadow-hairline hover:text-control-text-hover disabled:opacity-50"
         >
-          {compacting ? "…" : "compact"}
+          {compacting ? "…" : t("compact")}
         </button>
       )}
     </div>
@@ -166,20 +177,55 @@ function ChatTitle({
           if (event.key === "Escape") onCancel();
         }}
         className="no-drag h-[30px] w-80 min-w-0 shrink rounded-control bg-field px-2 text-sm font-medium text-ink outline-none"
-        aria-label={project ? "Game name" : "Chat name"}
+        aria-label={project ? t("Game name") : t("Chat name")}
       />
     );
   if (isStudio) return <span className="chat-header-title">Harness</span>;
   return (
     <button
       type="button"
-      title={`Rename ${chatTitle}`}
-      aria-label={`Rename ${project ? "game" : "chat"}: ${chatTitle}`}
+      title={t("Rename {name}", { name: chatTitle })}
+      aria-label={
+        project ? t("Rename game: {name}", { name: chatTitle }) : t("Rename chat: {name}", { name: chatTitle })
+      }
       onClick={onEdit}
       className="no-drag chat-header-title"
     >
-      {isDraft ? "New chat" : chatTitle}
+      {isDraft ? t("New chat") : chatTitle}
     </button>
+  );
+}
+
+/**
+ * Free: shown once a game's older builds and Rewind copies reach `OFFER_FREE_BYTES`; its tooltip
+ * says what goes and what stays, and a confirmation asks before anything is deleted.
+ */
+function FreeSpaceButton({ storage, game }: { storage: GameStorage; game: string }): JSX.Element | null {
+  const [confirming, setConfirming] = useState(false);
+  const { space } = storage;
+  if (!space || freeableBytes(space) < OFFER_FREE_BYTES) return null;
+  return (
+    <>
+      {confirming && (
+        <FreeSpaceSheet space={space} game={game} onFree={storage.free} onDone={() => setConfirming(false)} />
+      )}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            data-free-space
+            data-label
+            disabled={storage.freeing}
+            onClick={() => setConfirming(true)}
+            className="no-drag header-control"
+          >
+            <Icon name="drive" />
+            {freeGameWords(space)}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-64">{freeSpaceWords(space, game)}</TooltipContent>
+      </Tooltip>
+    </>
   );
 }
 
@@ -197,16 +243,49 @@ function ChatActions({
 }): JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false);
   return (
-    <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+    <ChatActionsMenu
+      input={input}
+      open={menuOpen}
+      onOpenChange={setMenuOpen}
+      exporting={exporting}
+      onExport={onExport}
+      onRename={onRename}
+    />
+  );
+}
+
+/** The ⋯ menu itself, opened and closed by its owner. */
+function ChatActionsMenu({
+  input,
+  open,
+  onOpenChange,
+  exporting,
+  onExport,
+  onRename,
+}: {
+  input: RefObject<HTMLInputElement | null>;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  exporting?: boolean;
+  onExport?: () => void;
+  onRename: () => void;
+}): JSX.Element {
+  return (
+    <DropdownMenu open={open} onOpenChange={onOpenChange}>
       <Tooltip>
         <TooltipTrigger asChild>
           <DropdownMenuTrigger asChild>
-            <button type="button" aria-expanded={menuOpen} aria-label="Chat actions" className="no-drag header-control">
+            <button
+              type="button"
+              aria-expanded={open}
+              aria-label={t("Chat actions")}
+              className="no-drag header-control"
+            >
               <Icon name="more" />
             </button>
           </DropdownMenuTrigger>
         </TooltipTrigger>
-        <TooltipContent>More actions</TooltipContent>
+        <TooltipContent>{t("More actions")}</TooltipContent>
       </Tooltip>
       <DropdownMenuContent
         align="end"
@@ -220,11 +299,11 @@ function ChatActions({
       >
         <DropdownMenuItem data-chat-action="export" disabled={!onExport || exporting} onSelect={() => onExport?.()}>
           <Icon name="export" />
-          {exporting ? "Exporting…" : "Export game…"}
+          {exporting ? t("Exporting…") : t("Export game…")}
         </DropdownMenuItem>
         <DropdownMenuItem data-chat-action="rename" onSelect={onRename}>
           <Icon name="rename" />
-          Rename
+          {t("Rename")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -244,6 +323,7 @@ export function ChatHeader({
   onReveal,
   onExport,
   exporting,
+  storage,
   sidebarHidden,
   onToggleSidebar,
 }: Props): JSX.Element {
@@ -292,6 +372,7 @@ export function ChatHeader({
       {isStudio && <HarnessGuideButton />}
       <span className="min-w-2 flex-1 self-stretch" />
 
+      {project && storage && <FreeSpaceButton storage={storage} game={chatTitle} />}
       {contextUsage && contextWindow ? (
         <ContextMeter usage={{ ...contextUsage, contextWindow }} compacting={compacting} onCompact={onCompact} />
       ) : null}
@@ -312,11 +393,11 @@ export function ChatHeader({
       )}
       <HeaderButton
         icon="terminal"
-        label="Toggle terminal"
+        label={t("Toggle terminal")}
         data-terminal-toggle=""
         tip={
           <span className="flex items-center gap-2">
-            Terminal <Shortcut>⌘`</Shortcut>
+            {t("Terminal")} <Shortcut>⌘`</Shortcut>
           </span>
         }
         onClick={() => window.dispatchEvent(new Event(TOGGLE_TERMINAL_EVENT))}

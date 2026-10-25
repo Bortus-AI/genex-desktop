@@ -7,11 +7,20 @@ import assert from "node:assert/strict";
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, it } from "node:test";
-import { PackageManager, SandboxProblemCode, SandboxTool, linuxInstallCommands } from "../../src/shared/boot.ts";
 import {
+  PackageManager,
+  SandboxProblemCode,
+  SandboxTool,
+  WindowsSetupNeed,
+  linuxInstallCommands,
+} from "../../src/shared/boot.ts";
+import {
+  SandboxLaunchCode,
+  SandboxLaunchError,
   SandboxUnavailableError,
   missingLinuxTools,
   sandboxProblem,
+  windowsProxyPortsError,
   windowsSetupProblem,
 } from "../../src/substrate/sandbox-unavailable.ts";
 import { ProcessSandbox, type SandboxRuntime } from "../../src/substrate/spawn.ts";
@@ -74,6 +83,31 @@ describe("sandbox problem mapping", () => {
     assert.deepEqual(problem?.installCommands, []);
   });
 
+  it("Windows carries what Set up needs to do, when the check says", () => {
+    const needs = [WindowsSetupNeed.Sandbox, WindowsSetupNeed.LogonService];
+    const problem = sandboxProblem({
+      platform: "win32",
+      supported: true,
+      dependencyErrors: ["Sandbox user is not provisioned", "The Secondary Logon service is disabled"],
+      missingTools: [],
+      windowsNeeds: needs,
+    });
+    assert.equal(problem?.code, SandboxProblemCode.NotProvisioned);
+    assert.deepEqual(problem?.windowsNeeds, needs);
+  });
+
+  it("an install by another release asks for the install again, and a disabled Secondary Logon for the service", () => {
+    const typed = (code: string) => Object.assign(new Error("anything at all"), { code });
+    const reinstall = windowsSetupProblem(typed("reinstall_required"));
+    assert.equal(reinstall?.code, SandboxProblemCode.NotProvisioned);
+    assert.deepEqual(reinstall?.windowsNeeds, [WindowsSetupNeed.Reinstall]);
+    assert.deepEqual(windowsSetupProblem(typed("seclogon_disabled"))?.windowsNeeds, [WindowsSetupNeed.LogonService]);
+    // A first install says nothing, which Set up reads as the sandbox install alone.
+    assert.equal(windowsSetupProblem(typed("not_provisioned"))?.windowsNeeds, undefined);
+    // A loopback mode another program installed is not Genex's to replace: it stays the start's error.
+    assert.equal(windowsSetupProblem(typed("wfp_loopback_mismatch")), null);
+  });
+
   it("Windows initialize errors map by their code, never by their words", () => {
     for (const code of [
       "not_provisioned",
@@ -112,6 +146,31 @@ describe("sandbox problem mapping", () => {
     assert.match(problem?.details.join("\n") ?? "", /Access is denied/);
     const fence = windowsSetupProblem(Object.assign(new Error("fence"), { code: "wfp_fence_inactive" }), [vendor]);
     assert.deepEqual(fence?.details, [vendor], "only a verify code is rewritten");
+  });
+});
+
+describe("Windows proxy ports", () => {
+  it("Windows refusing every proxy port says what to do, by the error's code and call", () => {
+    const refused = (code: string, syscall = "listen") =>
+      Object.assign(new Error(`listen ${code}: permission denied 127.0.0.1:60089`), { code, syscall, port: 60089 });
+    for (const code of ["EACCES", "EADDRINUSE"]) {
+      const error = refused(code);
+      const launch = windowsProxyPortsError(error);
+      assert.ok(launch instanceof SandboxLaunchError, code);
+      assert.equal(launch.code, SandboxLaunchCode.ProxyPortsRefused);
+      assert.equal(launch.cause, error);
+      assert.match(launch.message, /60080-60089/);
+      assert.match(launch.message, /net start winnat/);
+    }
+    for (const error of [
+      refused("EACCES", "connect"),
+      refused("EINVAL"),
+      Object.assign(new Error("listen EACCES"), { code: "acl_grant_failed" }),
+      new Error("listen EACCES: permission denied 127.0.0.1:60080"),
+      "EACCES",
+      null,
+    ])
+      assert.equal(windowsProxyPortsError(error), null, String(error));
   });
 });
 

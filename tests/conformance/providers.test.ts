@@ -16,7 +16,16 @@ import {
 } from "../../src/renderer/subscription-auth.ts";
 import type { ClaudeLoginState } from "../../src/shared/claude-login.ts";
 import * as roles from "../../src/shared/model-roles.ts";
-import { PROVIDERS, SUBSCRIPTION_ENGINES, loginKind, providerInfo } from "../../src/shared/providers.ts";
+import {
+  PROVIDERS,
+  SUBSCRIPTION_ENGINES,
+  isLocalEngine,
+  isBeta,
+  isMetered,
+  loginKind,
+  providerInfo,
+  type RoleSupport,
+} from "../../src/shared/providers.ts";
 import { EngineRegistry } from "../../src/substrate/engines/registry.ts";
 import type { Engine } from "../../src/substrate/engines/types.ts";
 
@@ -51,10 +60,10 @@ describe("provider table", () => {
   it("gives the sign-in card the table's words, and a neutral card to an engine it does not list", () => {
     assert.deepEqual(signInVendor("codex"), {
       name: "Codex",
-      product: "your ChatGPT subscription",
       url: "https://developers.openai.com/codex/cli",
       get: "Install Codex",
-      who: "Codex handles that part",
+      useLine: "Use your ChatGPT subscription to build games.",
+      signInLine: "Connect your ChatGPT subscription to build games. Codex handles sign-in in your browser.",
     });
     assert.equal(signInVendor("claude-code").name, "Claude Code");
     const unknown = signInVendor("gemini-cli");
@@ -68,9 +77,49 @@ describe("provider table", () => {
     assert.equal(loginKind("codex"), "console");
     assert.equal(loginKind("grok"), "device");
     assert.equal(loginKind("ollama"), "none");
+    assert.equal(loginKind("opencode"), "cli", "OpenCode runs its own sign-in in the terminal");
+    assert.equal(loginKind("grok"), "cli", "Grok Build runs its own `grok login` in the terminal");
+    assert.equal(loginKind("openrouter"), "none", "OpenRouter's key is pasted in Settings");
+    assert.equal(loginKind("local-server"), "none", "a local server's address and key are typed in Settings");
     assert.equal(loginKind("gemini-cli"), "none");
     assert.equal(providerInfo("gemini-cli"), undefined);
     assert.equal(providerInfo("constructor"), undefined);
+  });
+
+  it("says who pays for each provider, and never calls an unknown engine local or metered", () => {
+    const table = Object.fromEntries(PROVIDERS.map((provider) => [provider.id, provider.billing]));
+    assert.deepEqual(table, {
+      "claude-code": "subscription",
+      codex: "subscription",
+      bonsai: "local",
+      ollama: "local",
+      opencode: "metered",
+      // Grok Build runs on whatever its own sign-in is (a Grok plan, or an xAI key in its config), so,
+      // like OpenCode, it is never picked on the person's behalf.
+      grok: "metered",
+      openrouter: "metered",
+      // Flipped (a local server): a server the person runs is local, never metered.
+      "local-server": "local",
+      // Flipped (Cursor): third-party models in Cursor, and Cursor's own past the plan's pool, are paid
+      // from the account's credit, so the app never picks it by itself.
+      cursor: "metered",
+    });
+    for (const id of ["openrouter", "opencode", "grok", "cursor"]) assert.equal(isMetered(id), true, id);
+    for (const id of ["bonsai", "ollama", "local-server"]) assert.equal(isLocalEngine(id), true, id);
+    for (const id of ["claude-code", "codex", "gemini-cli", "constructor", null, undefined]) {
+      assert.equal(isMetered(id), false, String(id));
+      assert.equal(isLocalEngine(id), false, String(id));
+    }
+    for (const provider of PROVIDERS)
+      assert.equal(provider.billing === "subscription", provider.subscription, provider.id);
+  });
+
+  it("names the providers that ship in beta: Cursor, until a live test proves it", () => {
+    assert.deepEqual(
+      PROVIDERS.filter((provider) => isBeta(provider.id)).map((provider) => provider.id),
+      ["cursor"],
+    );
+    for (const id of ["gemini-cli", "constructor", null, undefined]) assert.equal(isBeta(id), false, String(id));
   });
 
   it("is served on each engine descriptor; an unlisted engine carries none", async () => {
@@ -90,7 +139,12 @@ describe("provider table", () => {
       ] as const) {
         const where = `${name} ${provider.id}`;
         assert.equal(table.isDelegated(provider.id), provider.roles === "presets", where);
-        assert.equal(table.hasSessionRoles(provider.id), provider.roles !== "single", where);
+        assert.equal(
+          table.hasSessionRoles(provider.id),
+          provider.roles === "presets" || provider.roles === "sessions",
+          where,
+        );
+        assert.equal(table.takesRoles(provider.id), takesRolesBy(provider.roles), where);
         if (provider.roles === "presets") assert.equal(table.engineLabel(provider.id), provider.label, where);
       }
     }
@@ -99,6 +153,11 @@ describe("provider table", () => {
     assert.deepEqual([...seedRoles.DELEGATED_ENGINES], presets);
   });
 });
+
+/** Does a provider row's role support take roles? No row runs one model today; one that did would not. */
+function takesRolesBy(support: RoleSupport): boolean {
+  return support !== "single";
+}
 
 describe("sign-in polling", () => {
   const login = (phase: ClaudeLoginState["phase"]): ClaudeLoginState => ({ revision: 1, phase, hasBrowserUrl: false });

@@ -1,9 +1,13 @@
 import { mergeChatEvents } from "../shared/chat-history.ts";
 import { CustomEvent, customEvent, customRecord, DELEGATED_PREFIX } from "../shared/custom-events.ts";
 import { type ConversationRecord, type EventEnvelope, EventKind } from "../shared/event-log.ts";
-import { RunState, runExecutions } from "../shared/run-state.ts";
+import { intlLocale, t } from "../shared/i18n.ts";
+import { messageQueueState, type QueueView } from "../shared/message-queue.ts";
+import { graphKeyOf, turnOfGraphKey } from "../shared/run-graph-events.ts";
+import { type RunExecution, RunState, runExecutions, workStart } from "../shared/run-state.ts";
 import { summaryCounts, summaryOutcome } from "../shared/run-summary.ts";
 import {
+  answeringTurn,
   type BaseNode,
   buildRunGraph,
   type FacetNode,
@@ -12,12 +16,19 @@ import {
   hasMergedBuild,
   headVerdict,
   IterationStatus,
+  queuedAsk,
   type RunGraph,
   type RunNode,
+  RUN_ID_EVENTS,
+  runIdOf,
+  turnKeyOf,
+  WORKER_EVENTS,
 } from "./run-graph.ts";
+import { DayGroup, dayGroup, dayOf } from "./notifications.ts";
 import {
+  BUILD_HISTORY_WORDS,
   keptSoFarWords,
-  nightWords,
+  loopRunWords,
   outcomeTitle,
   PROGRESS_WORDS,
   partsBuildingWords,
@@ -52,9 +63,17 @@ const SINGLE_SESSION_MODE = "single";
 const isDelegatedRecord = (e: EventEnvelope): boolean =>
   e.data.type === EventKind.Custom && e.data.event_type.startsWith(DELEGATED_PREFIX);
 
-/** Whether an event belongs to the run on show: every event does when none is chosen or it names no run. */
-const inSelectedRun = (runId: unknown, selectedRunId: string | null | undefined): boolean =>
-  !selectedRunId || !runId || runId === selectedRunId;
+/**
+ * Whether an event belongs to the graph on show (a run, or a chat turn's key): every event does
+ * when none is chosen or it names neither a run nor a turn.
+ */
+function inSelectedRun(
+  payload: Record<string, unknown> | undefined,
+  selectedRunId: string | null | undefined,
+): boolean {
+  const key = payload ? graphKeyOf(payload) : null;
+  return !selectedRunId || !key || key === selectedRunId;
+}
 
 /** Follow the selected conversation, including first-round starts in older worker logs. */
 export function projectBuildGraph(
@@ -68,18 +87,38 @@ export function projectBuildGraph(
   if (!threadId) return null;
   const parent = events.filter((e) => {
     if (e.thread_id !== threadId) return false;
-    return inSelectedRun(customRecord(e.data)?.payload.runId, selectedRunId);
+    return inSelectedRun(customRecord(e.data)?.payload, selectedRunId);
   });
   const fold = options.fold ?? buildRunGraph;
-  const initial = fold(parent);
+  const initial = fold(parent, selectedRunId ?? undefined);
   if (!initial) return null;
+  // A chat turn's workers are pool sessions: they have no worker threads named after a run.
+  const runId = runIdOf(initial);
   const starts =
-    options.includeWorkers === false
+    options.includeWorkers === false || !runId
       ? []
-      : initial.facets.flatMap((facet) => firstRoundStart(events, parent, threads, initial.runId, facet));
-  const graph = starts.length ? (fold(mergeChatEvents(parent, starts)) ?? initial) : initial;
-  if (!graph.runDir && runsRoot) graph.runDir = `${runsRoot}/${graph.runId}`;
+      : initial.facets.flatMap((facet) => firstRoundStart(events, parent, threads, runId, facet));
+  const graph = starts.length ? (fold(mergeChatEvents(parent, starts), initial.runId) ?? initial) : initial;
+  if (!graph.runDir && runsRoot && runId) graph.runDir = `${runsRoot}/${runId}`;
   return graph;
+}
+
+/**
+ * The graph of the run the stage's Live answers to (its builds on offer, a build found broken, a
+ * run building): the graph shown when it is a run's, else the newest run's. A chat turn's graph
+ * has no build of its own; null when the chat has no run.
+ */
+export function stageRunGraph(
+  events: EventEnvelope[],
+  threadId: string | null,
+  runsRoot: string | null,
+  shown: RunGraph | null,
+  history: readonly HistoryEntry[],
+): RunGraph | null {
+  if (!shown || runIdOf(shown)) return shown;
+  const newestRun = history.filter((entry) => entry.chat !== true).at(-1)?.runId;
+  if (!newestRun) return null;
+  return projectBuildGraph(events, threadId, [], runsRoot, newestRun, { includeWorkers: false });
 }
 
 /** Single-session director workers have an explicit lifecycle, not a round loop. */
@@ -129,49 +168,237 @@ function firstRoundStart(
 const RUN_OPEN_EVENTS = new Set<string>([CustomEvent.RunStarted, CustomEvent.RunRegistered]);
 const ROUND_EVENTS = new Set<string>([CustomEvent.FacetIteration, CustomEvent.RunIteration]);
 
-/** The conversation's builds, oldest first: when each started, how many rounds it ran, and where it stands (run-state.ts). */
-export function buildHistory(
-  events: EventEnvelope[],
-  threadId: string | null,
-): Array<{ runId: string; rounds: number; state: string; startedAt: string | null }> {
-  const own = events.filter((e) => e.thread_id === threadId);
-  const runs = new Map<string, { rounds: number; startedAt: string | null }>();
-  for (const e of own) {
-    if (e.data.type !== EventKind.Custom) continue;
-    const id = customRecord(e.data)?.payload.runId;
-    if (!id) continue;
-    const run = runs.get(id);
-    if (RUN_OPEN_EVENTS.has(e.data.event_type))
-      runs.set(id, { rounds: run?.rounds ?? 0, startedAt: run?.startedAt ?? e.created_at });
-    else if (run && ROUND_EVENTS.has(e.data.event_type)) run.rounds++;
-  }
-  const executions = runExecutions(own);
-  return [...runs].map(([runId, run]) => ({
-    runId,
-    rounds: run.rounds,
-    state: executions.get(runId)?.state ?? RunState.Running,
-    startedAt: run.startedAt,
-  }));
+/**
+ * A build in the conversation's history: a run (a Loop), or a chat turn that started workers
+ * (`chat`, keyed by `turnGraphKey`). `runId` is the graph's key either way.
+ */
+export interface HistoryEntry {
+  runId: string;
+  rounds: number;
+  state: string;
+  startedAt: string | null;
+  /** What the person asked for it: the Loop's goal, or the words of the message the turn answers; "" when unknown. */
+  ask: string;
+  /** While it works, when its clock began (ms): the time it has worked so far, counted back from now. */
+  since: number | null;
+  chat?: true;
 }
 
-/** A build in the history picker: when it started, and its state unless it simply finished. */
-export function historyLabel(run: { startedAt: string | null; state: string }, index: number): string {
-  const date = run.startedAt ? new Date(run.startedAt) : null;
-  const when =
-    date && !Number.isNaN(date.getTime())
-      ? `${date.toLocaleDateString([], { day: "numeric", month: "short" })}, ${date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
-      : `Build ${index + 1}`;
-  return run.state === RunState.Finished ? when : `${when} · ${run.state}`;
+/** A chat turn's workers while the history is read: those that started, and those that ended. */
+interface TurnDraft {
+  startedAt: string;
+  started: Set<string>;
+  ended: Set<string>;
+  /** What its first worker's start says the person asked. */
+  ask: string;
+}
+
+/** A run while the history is read: its rounds, when it opened, and the goal it was given. */
+interface RunDraft {
+  rounds: number;
+  startedAt: string | null;
+  ask: string;
+}
+
+/** Note one worker record of a chat turn; true when it is the turn's first, which opens it in the history. */
+function readTurnRecord(
+  turns: Map<string, TurnDraft>,
+  key: string,
+  e: EventEnvelope,
+  payload: Record<string, unknown>,
+): boolean {
+  const workerId = typeof payload.workerId === "string" ? payload.workerId : "";
+  if (!workerId) return false;
+  const known = turns.get(key);
+  const turn = known ?? { startedAt: e.created_at, started: new Set<string>(), ended: new Set<string>(), ask: "" };
+  if (!known) turns.set(key, turn);
+  const ended = e.data.type === EventKind.Custom && e.data.event_type === CustomEvent.WorkerFinished;
+  (ended ? turn.ended : turn.started).add(workerId);
+  if (!ended && !turn.ask && typeof payload.ask === "string") turn.ask = payload.ask.trim();
+  return !known;
 }
 
 /**
- * The last thing anybody actually said about the build the night stands on.
+ * Note one record of a run; true when it makes the run the newest build: it opens the run, or names
+ * a run already open the way `lastGraphKey` reads it (a resume registers it again).
+ */
+function readRunRecord(
+  runs: Map<string, RunDraft>,
+  id: string,
+  record: { eventType: string; at: string; payload: Record<string, unknown> },
+): boolean {
+  const { eventType, at, payload } = record;
+  const run = runs.get(id);
+  if (RUN_OPEN_EVENTS.has(eventType)) {
+    const goal = typeof payload.goal === "string" ? payload.goal.trim() : "";
+    runs.set(id, { rounds: run?.rounds ?? 0, startedAt: run?.startedAt ?? at, ask: run?.ask || goal });
+    return true;
+  }
+  if (run && ROUND_EVENTS.has(eventType)) run.rounds++;
+  return run !== undefined && RUN_ID_EVENTS.has(eventType);
+}
+
+/** Make a build the newest of the history, wherever it stood. */
+function moveLast(order: string[], key: string): void {
+  const index = order.indexOf(key);
+  if (index !== -1) order.splice(index, 1);
+  order.push(key);
+}
+
+/** A chat turn works while one of its workers has started and not ended, or the lead still answers its message. */
+function turnState(turn: TurnDraft, key: string, queue: QueueView): string {
+  const working = [...turn.started].some((id) => !turn.ended.has(id));
+  const message = turnOfGraphKey(key);
+  const answering = message !== null && answeringTurn(queue, message);
+  return working || answering ? RunState.Running : RunState.Finished;
+}
+
+/** The history while the log is read: the builds, newest last, and what each holds. */
+interface HistoryDraft {
+  order: string[];
+  runs: Map<string, RunDraft>;
+  turns: Map<string, TurnDraft>;
+}
+
+/** Read one record into the history: a chat turn's worker record, or a run's. */
+function readHistoryRecord(draft: HistoryDraft, e: EventEnvelope): void {
+  if (e.data.type !== EventKind.Custom) return;
+  const payload = customRecord(e.data)?.payload ?? {};
+  const turnKey = WORKER_EVENTS.has(e.data.event_type) ? turnKeyOf(payload) : null;
+  if (turnKey) {
+    if (readTurnRecord(draft.turns, turnKey, e, payload)) draft.order.push(turnKey);
+    return;
+  }
+  const id = typeof payload.runId === "string" ? payload.runId : "";
+  const record = { eventType: e.data.event_type, at: e.created_at, payload };
+  if (id && readRunRecord(draft.runs, id, record)) moveLast(draft.order, id);
+}
+
+/**
+ * The conversation's builds, oldest first: each run (when it started, how many rounds it ran,
+ * where it stands, run-state.ts) and each chat turn that started workers (running while one of
+ * them works). They stand in the order `lastGraphKey` reads newest by: a run at the last record
+ * that names it as the shown run, a chat turn at its first worker record, so the last entry is
+ * always the graph Builds shows by default.
+ */
+export function buildHistory(events: EventEnvelope[], threadId: string | null): HistoryEntry[] {
+  const own = events.filter((e) => e.thread_id === threadId);
+  const draft: HistoryDraft = { order: [], runs: new Map(), turns: new Map() };
+  for (const e of own) readHistoryRecord(draft, e);
+  const executions = runExecutions(own);
+  const queue = messageQueueState(own);
+  return draft.order.map((key): HistoryEntry => {
+    const turn = draft.turns.get(key);
+    if (turn) return turnEntry(own, queue, key, turn);
+    return runEntry(key, draft.runs.get(key) ?? { rounds: 0, startedAt: null, ask: "" }, executions.get(key));
+  });
+}
+
+/** A chat turn in the history: running while a worker or the lead's answer is, named by the message it answers. */
+function turnEntry(events: EventEnvelope[], queue: QueueView, key: string, turn: TurnDraft): HistoryEntry {
+  const state = turnState(turn, key, queue);
+  const message = turnOfGraphKey(key);
+  const since = Date.parse(turn.startedAt);
+  return {
+    runId: key,
+    rounds: 0,
+    state,
+    startedAt: turn.startedAt,
+    ask: turn.ask || (message ? queuedAsk(events, queue, message) : ""),
+    since: state === RunState.Running && Number.isFinite(since) ? since : null,
+    chat: true,
+  };
+}
+
+/** A run in the history. */
+function runEntry(key: string, run: RunDraft, execution: RunExecution | undefined): HistoryEntry {
+  const state = execution?.state ?? RunState.Running;
+  const since = state === RunState.Running ? runClockStart(run, execution) : null;
+  return { runId: key, rounds: run.rounds, state, startedAt: run.startedAt, ask: run.ask, since };
+}
+
+/** Where a working run's clock starts: the time it has worked counted back from now, not the time it spent paused; else when it opened. */
+function runClockStart(run: RunDraft, execution: RunExecution | undefined): number | null {
+  const worked = execution ? workStart(execution.worked) : null;
+  if (worked !== null) return worked;
+  const opened = run.startedAt ? Date.parse(run.startedAt) : Number.NaN;
+  return Number.isFinite(opened) ? opened : null;
+}
+
+/** The day a build started, as its history label says it: "today", "yesterday", else "5 Sep"; null when unknown. */
+function dayWords(startedAt: string | null, now: Date): string | null {
+  const date = startedAt ? new Date(startedAt) : null;
+  if (!date || Number.isNaN(date.getTime())) return null;
+  const day = dayOf(startedAt ?? "", now);
+  if (day === DayGroup.Today) return BUILD_HISTORY_WORDS.today;
+  if (day === DayGroup.Yesterday) return BUILD_HISTORY_WORDS.yesterday;
+  return date.toLocaleDateString(intlLocale(), { day: "numeric", month: "short" });
+}
+
+/** The picker's times are tabular, and tabular figures widen a plain (or narrow) space: "9:08 PM" keeps a no-break one. */
+const TIME_SPACE = "\u00a0";
+
+/** When a build started, as the Builds picker lists it: "15:02" today, "Yesterday", else "5 Sep"; "" when unknown. */
+export function buildWhen(startedAt: string | null, now: Date = new Date()): string {
+  const date = startedAt ? new Date(startedAt) : null;
+  if (!date || Number.isNaN(date.getTime())) return "";
+  const day = dayOf(startedAt ?? "", now);
+  if (day === DayGroup.Yesterday) return dayGroup(startedAt ?? "", now);
+  const words =
+    day === DayGroup.Today
+      ? date.toLocaleTimeString(intlLocale(), { hour: "numeric", minute: "2-digit" })
+      : date.toLocaleDateString(intlLocale(), { day: "numeric", month: "short" });
+  return words.replace(/\s/gu, TIME_SPACE);
+}
+
+/** What a build in the history is called: "This chat turn" for the newest build, else by its day: "Loop from yesterday". */
+function historyName(entry: HistoryEntry, newest: boolean, now: Date): string {
+  const chat = entry.chat === true;
+  const day = newest ? null : dayWords(entry.startedAt, now);
+  if (!day) return chat ? BUILD_HISTORY_WORDS.thisTurn : BUILD_HISTORY_WORDS.thisLoop;
+  return chat ? BUILD_HISTORY_WORDS.turnFrom(day) : BUILD_HISTORY_WORDS.loopFrom(day);
+}
+
+/** A build's state as its history label says it after its name; a finished build says none. */
+const HISTORY_STATE_WORDS: Readonly<Record<string, string>> = {
+  [RunState.Running]: t("running"),
+  [RunState.Paused]: t("paused"),
+};
+
+/**
+ * A build in the history, in plain words: what it was and when, then its state unless it simply
+ * finished ("Loop from yesterday · paused"). `newest`: it is the latest build in the history.
+ */
+export function historyLabel(
+  entry: HistoryEntry,
+  { newest, now = new Date() }: { newest: boolean; now?: Date },
+): string {
+  const name = historyName(entry, newest, now);
+  if (entry.state === RunState.Finished) return name;
+  return `${name} · ${HISTORY_STATE_WORDS[entry.state] ?? entry.state}`;
+}
+
+/**
+ * Whether a build is the latest in the history: only it is "this" one; an earlier build of either
+ * kind is named by its day, as a Loop before a newer chat turn is.
+ */
+export const isNewestBuild = (history: readonly HistoryEntry[], entry: HistoryEntry): boolean =>
+  history.at(-1) === entry;
+
+/** What a reply about a node of this graph names: its run and whether it is live; null for a chat turn's graph. */
+export function replyTarget(graph: RunGraph): { runId: string; active: boolean } | null {
+  const runId = runIdOf(graph);
+  return runId ? { runId, active: graph.active } : null;
+}
+
+/**
+ * The last thing anybody actually said about the build the run stands on.
  *
  * The Builds drawer used to open with a sentence about the run as a whole — "Inspect the final
  * result and recorded checks", "The starting point passed its checks" — beside a build the lead
  * had judged four times since. Every one of those looks now writes a sentence of its own
  * (`loop/verdict.ts`), and this is the newest of them; `buildProgress` is the fallback for a
- * night that has not been looked at yet, or one recorded before the records existed.
+ * run that has not been looked at yet, or one recorded before the records existed.
  */
 export function buildVerdictLine(graph: RunGraph): string | null {
   return verdictSentence(headVerdict(graph)) || null;
@@ -182,16 +409,16 @@ type Progress = { nodeId: string; title: string; health: string; failedBase: boo
 /**
  * What the Builds tab says is happening right now, in one title and one sentence.
  *
- * Two kinds of night reach this. A programmed run builds a shared base and then rounds inside
- * each part, so its phase is the base and then the rounds. A lead's night (`run.director`) has
+ * Two kinds of run reach this. A programmed run builds a shared base and then rounds inside
+ * each part, so its phase is the base and then the rounds. A lead's run (`run.director`) has
  * no shared base unless it built a starting point of its own, and its builders are whole
  * sessions rather than rounds — so its phase is read off the builders themselves. Before this,
- * a lead's night said "Building the shared base · Checks pending" from dusk to dawn, because the
+ * a lead's run said "Building the shared base · Checks pending" from dusk to dawn, because the
  * one event that ends that phase is emitted by a stage the lead does not have.
  */
 export function buildProgress(graph: RunGraph): Progress {
   const progress = classicProgress(graph);
-  // A live night with the recorded summary keeps the graph's own words for what is happening
+  // A live run with the recorded summary keeps the graph's own words for what is happening
   // ("2 parts building", "Building the starting point") and carries the outcome card's counts
   // on the same line, so the header and the card can never disagree on the numbers.
   if (graph.active && graph.summary)
@@ -236,7 +463,7 @@ function classicProgress(graph: RunGraph): Progress {
   return loopProgress(graph, marks);
 }
 
-/** A night that is over: the recorded outcome when there is one, else the morning's own words. */
+/** A run that is over: the recorded outcome when there is one, else the morning's own words. */
 function endedProgress(graph: RunGraph, { run, final, failedBase }: Landmarks): Progress {
   if (graph.summary)
     return {
@@ -245,23 +472,24 @@ function endedProgress(graph: RunGraph, { run, final, failedBase }: Landmarks): 
       health: summaryCounts(graph.summary),
       failedBase,
     };
-  const night = nightWords({
+  const loopRun = loopRunWords({
     rounds: graph.facets.reduce((total, facet) => total + facet.iterations, 0),
     landed: final ? final.landed : null,
     stoppedBecause: final ? final.stoppedBecause : null,
-    // The same two facts the morning card reads: a paused night is not finished, and only a
-    // night that merged something may be told it has a build to play.
+    // The same two facts the morning card reads: a paused run is not finished, and only a
+    // run that merged something may be told it has a build to play.
     paused: run?.paused ?? false,
     hasBuild: hasMergedBuild(final ?? null),
     landing: final ? (final.landing?.line ?? null) : null,
+    profile: final?.profile ?? null,
   });
-  return { nodeId: GraphNodeKind.Final, title: night.headline, health: night.because, failedBase };
+  return { nodeId: GraphNodeKind.Final, title: loopRun.headline, health: loopRun.because, failedBase };
 }
 
 /** The run's starting point while it is still being built. */
 const startingPointOpen = (base: BaseNode | undefined): base is BaseNode => base !== undefined && !base.done;
 
-/** A lead's night: its own starting point first, then its builders. */
+/** A lead's run: its own starting point first, then its builders. */
 function directorProgress(graph: RunGraph, { base, failedBase }: Landmarks): Progress {
   if (startingPointOpen(base) && !base.absent)
     return {
@@ -318,7 +546,7 @@ function loopProgress(graph: RunGraph, { base, failedBase }: Landmarks): Progres
     nodeId: activeRound?.id ?? building[0]?.id ?? GraphNodeKind.Base,
     title: building.length ? partsBuildingWords(building.length) : PROGRESS_WORDS.preparingBuilds,
     // What went wrong with the starting point is the harness's own diagnostic; it belongs in the
-    // starting point's Details, not in the one line that says how the night is going.
+    // starting point's Details, not in the one line that says how the run is going.
     health: startingPointHealth(base, failedBase),
     failedBase,
   };

@@ -194,6 +194,47 @@ test("a chat checkpoint saved before readings were kept per role is rebuilt, and
   }
 });
 
+test("a chat checkpoint saved before running jobs were kept is rebuilt, and an older job's start stays in reach", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "studio-chat-context-"));
+  try {
+    const store = await EventStore.open(root);
+    const thread = await store.createThread();
+    const jobId = "0f3c9a52-7d41-4c1e-9b8e-2a6f1d0c4b17";
+    await store.appendEvents(thread, [
+      {
+        type: EventKind.Custom,
+        event_type: CustomEvent.JobStarted,
+        payload: { jobId, project: "game", title: "Server", command: "serve", startedAt: new Date(0).toISOString() },
+      },
+    ]);
+    await store.appendEvents(
+      thread,
+      Array.from({ length: CHAT_PAGE_SIZE + 40 }, (_, i) => ({
+        type: EventKind.Messages,
+        messages: [{ role: "assistant" as const, content: `Step ${i}` }],
+      })),
+    );
+    const all = await store.listEvents(thread, {});
+    // What the app saved before (format 6): no running job among the facts.
+    await fs.writeFile(
+      path.join(store.threadDir(thread), "chat-context.json"),
+      JSON.stringify({ version: 6, head: all.at(-1)?.id, rewinds: 0, events: [] }),
+    );
+    const page = await store.chatPage(thread);
+    assert.ok(
+      !page.events.some((e) => customPayload(e.data, CustomEvent.JobStarted)),
+      "the start is older than the loaded page",
+    );
+    assert.deepEqual(
+      page.context.flatMap((e) => customPayload(e.data, CustomEvent.JobStarted)?.jobId ?? []),
+      [jobId],
+      "the running job's start is in the chat's facts, so its line keeps Stop",
+    );
+  } finally {
+    await removeTree(root);
+  }
+});
+
 test("a reading with no role and a planner's are the main session's: the newer replaces the older in the facts", () => {
   const planner = reading(1, SessionActivityRole.Planner, 40_000);
   const unnamed = reading(2, undefined, 45_000);
@@ -315,6 +356,40 @@ test("parallel plugin calls match their own outcomes and delivered assets stay v
   assert.equal(new Set(entries.map((e) => e.id)).size, entries.length);
 });
 
+test("a call making an asset carries the ids its job may go by; a call that makes nothing carries none", () => {
+  const making = { kind: "character", tool: "meshy", prompt: "Knight" };
+  const entries = toEntries([
+    custom(1, "plugin_tool_started", { callId: "a", pluginId: "genex", tool: "asset", making }),
+    custom(2, "plugin_tool", {
+      callId: "a",
+      pluginId: "genex",
+      tool: "asset",
+      making,
+      ok: true,
+      jobId: "j",
+      generationId: "g",
+    }),
+    custom(3, "plugin_tool_started", { callId: "b", pluginId: "genex", tool: "cover" }),
+    custom(4, "connector_tool_started", {
+      callId: "c",
+      connectorId: "paint",
+      tool: "paint",
+      exposedName: "paint",
+      making,
+    }),
+    custom(5, "connector_tool_started", { connectorId: "paint", tool: "paint", exposedName: "paint", making }),
+  ]);
+  const rows = entries.flatMap((e) => (e.kind === "tools" ? e.rows : []));
+  assert.deepEqual(rows.find((row) => row.key === "a")!.making, { ids: ["a", "j", "g"] }, "the call's, then its job's");
+  assert.equal(rows.find((row) => row.key === "b")!.making, undefined);
+  assert.deepEqual(rows.find((row) => row.key === "c")!.making, { ids: ["c"] });
+  assert.equal(
+    rows.filter((row) => row.making).length,
+    2,
+    "a connector record from before calls had ids has no job to find",
+  );
+});
+
 test("build-workspace deliveries wait for their run result; game-folder deliveries show where they land", () => {
   const file = (name: string) => [
     { file: `assets/genex/0d99db96-677f-436b-abcf-5da04d1e06cf/${name}`, kind: "audio", bytes: 4 },
@@ -390,7 +465,7 @@ test("a run's earlier result card is superseded by its later close, so only the 
   assert.deepEqual(
     results.map((card) => card.superseded),
     [true, undefined],
-    "the reopened night's pause is not the finished night's card",
+    "the reopened run's pause is not the finished run's card",
   );
 });
 
@@ -687,7 +762,11 @@ test("another delegation's end does not end the reply in progress", () => {
   assert.equal(chatActivity([replying, leadDone], true, "Building").phase, "responding");
   // The reply's own end still hands the line back to the work in progress.
   const replyDone = activity(3, { role: "planner", phase: "completed", delegationId: "chat" });
-  assert.deepEqual(chatActivity([replying, replyDone], true, "Building"), { phase: "working", label: "Building" });
+  assert.deepEqual(chatActivity([replying, replyDone], true, "Building"), {
+    phase: "working",
+    label: "Building",
+    named: true,
+  });
 });
 
 test("the live tail keeps the loaded array when nothing new arrived for this thread", () => {
@@ -774,12 +853,13 @@ test("routine narration folds by what its record says, not by the words written 
     ["line:PART"],
     "a judge that could not be reached is trouble",
   );
+  // A connector call is a step of the work, failed or not, never a narration line.
   assert.deepEqual(
     lines([
       custom(7, "connector_tool", { connectorId: "figma", tool: "get", ok: false, error: "denied" }),
       custom(8, "connector_tool", { connectorId: "figma", tool: "get", ok: true }),
     ]),
-    ["line:TOOL", "activity:1"],
+    ["tools", "tools"],
   );
   assert.deepEqual(lines([custom(9, "blender_asset", { ...run, name: "boat", ok: false, error: "crash" })]), [
     "line:BLENDER",
@@ -977,7 +1057,7 @@ test("steered input keeps its state across history pages, and settles with the t
   );
 });
 
-test("a message handed to a night's lead reads where it was sent, its answer is a chat bubble, and it settles when that run closes", async () => {
+test("a message handed to a run's lead reads where it was sent, its answer is a chat bubble, and it settles when that run closes", async () => {
   const { deliveryOrder } = await import("../../src/renderer/chat/delivery-order.ts");
   const { conversationEntries } = await import("../../src/renderer/chat/conversation-entries.ts");
   const { messageQueueState } = await import("../../src/shared/message-queue.ts");
@@ -1043,4 +1123,52 @@ test("a finished compaction stays in the chat as its own row, never folded into 
   assert.equal(compactedWords(42), "Compacted 42 messages");
   assert.equal(compactedWords(1), "Compacted 1 message");
   assert.equal(compactedWords(undefined), "Compacted the conversation");
+});
+
+test("a message a build's lead heard in its wrap-up reads where the lead heard it, and stays there once the chat answers it", async () => {
+  const { deliveryOrder, toldToLead } = await import("../../src/renderer/chat/delivery-order.ts");
+  const { messageQueueState } = await import("../../src/shared/message-queue.ts");
+  const user = (id: number, content: string) => event(id, { type: "messages", messages: [{ role: "user", content }] });
+  const lead = (id: number, text: string) => custom(id, "director_note", { runId: "run_1", text });
+  const told = [
+    lead(1, "Wrapping up: merging the boss fight."),
+    user(2, "also add rain"),
+    custom(3, "coordinator_message_queued", { messageId: "rain", action: { text: "also add rain" } }),
+    custom(4, "run_steering", {
+      runId: "run_1",
+      text: "also add rain",
+      sourceMessageId: "rain",
+      how: "lead",
+      kept: true,
+    }),
+    lead(5, "Noted: rain comes right after this build closes."),
+  ];
+  assert.deepEqual([...toldToLead(told, messageQueueState(told).messages)], ["rain"]);
+  assert.deepEqual(
+    deliveryOrder(told).map((e) => Number(e.id)),
+    [1, 3, 2, 4, 5],
+    "where the lead heard it, not below the work",
+  );
+  // The build closes and the chat answers it: the bubble stays where the lead heard it.
+  const answered = [
+    ...told,
+    custom(6, "run_finished", { runId: "run_1" }),
+    custom(7, "coordinator_message_processing", { messageId: "rain" }),
+    custom(8, "coordinator_message_handled", { messageId: "rain" }),
+  ];
+  assert.deepEqual(
+    deliveryOrder(answered).map((e) => Number(e.id)),
+    [1, 3, 2, 4, 5, 6, 7, 8],
+  );
+  // A message the lead took as usual is its delivery's, not a told one.
+  const delivered = [
+    user(1, "more lava"),
+    custom(2, "coordinator_message_queued", { messageId: "lava", action: { text: "more lava" } }),
+    custom(3, "coordinator_message_delivered", { messageId: "lava", into: "run_1", how: "lead" }),
+    custom(4, "run_steering", { runId: "run_1", text: "more lava", sourceMessageId: "lava", how: "lead" }),
+  ];
+  assert.deepEqual([...toldToLead(delivered, messageQueueState(delivered).messages)], []);
+  // Delivered to the lead, never heard, and given back as its run ended: it waits below like any other.
+  const givenBack = [...delivered, custom(5, "coordinator_message_requeued", { messageId: "lava" })];
+  assert.deepEqual([...toldToLead(givenBack, messageQueueState(givenBack).messages)], []);
 });

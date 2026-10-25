@@ -23,7 +23,7 @@ import {
 import { GENEX_GAME_PACKAGES } from "../../src/shared/genex.ts";
 import { inspectPackage, pluginSkillDigests, validateManifest } from "../../src/substrate/plugins/manifest.ts";
 import { PluginConsentDeclined, PluginRegistry } from "../../src/substrate/plugins/registry.ts";
-import { copyOfExample, pluginFixture } from "../helpers/plugins.ts";
+import { copyOfExample, installLocalOn, pluginFixture } from "../helpers/plugins.ts";
 
 const source = path.resolve("src/plugins/example");
 const KIB = 1024;
@@ -168,14 +168,6 @@ const HOSTILE: Array<[string, (dir: string, m: RawManifest) => Promise<void> | v
     /confirmation/,
   ],
   [
-    "a Genex package host tool without confirmation",
-    (_d, m) => {
-      genex(m);
-      m.tools.push(hostTool(PluginHostTool.GenexPackage));
-    },
-    /confirmation/,
-  ],
-  [
     "an unknown host",
     (_d, m) => {
       genex(m);
@@ -200,12 +192,21 @@ test("a Genex host tool on API 2 is refused", () => {
   assert.throws(() => validateManifest(raw), /host/);
 });
 
+test("every bundled plugin's manifest is valid, so a profile installs and updates it", async () => {
+  for (const name of await readdir("src/plugins")) {
+    const raw = JSON.parse(await readFile(path.join("src/plugins", name, "plugin.json"), "utf8"));
+    assert.doesNotThrow(() => validateManifest(raw), name);
+  }
+});
+
 test("a valid file skill and the bundled Genex host tools keep their canonical form", async () => {
   await withPackage(
     (_d, m) => {
       genex(m);
       m.tools.push(hostTool(PluginHostTool.GenexCli));
       m.tools.push({ ...hostTool(PluginHostTool.GenexCliPaid, "Spends Genex credits."), name: "cli-paid" });
+      // Genex's own pinned packages go in without a card: they spend nothing.
+      m.tools.push({ ...hostTool(PluginHostTool.GenexPackage), name: "package" });
       skill(m).extra = "dropped";
     },
     async (dir) => {
@@ -223,6 +224,7 @@ test("a valid file skill and the bundled Genex host tools keep their canonical f
           ["shout", undefined, "The example plugin wants to shout your text back."],
           ["cli", PluginHostTool.GenexCli, undefined],
           ["cli-paid", PluginHostTool.GenexCliPaid, "Spends Genex credits."],
+          ["package", PluginHostTool.GenexPackage, undefined],
         ],
       );
       assert.deepEqual(m.skills[0], exampleManifest.skills[0], "an inline skill stays {name,text}");
@@ -270,7 +272,7 @@ test("an installed API 1 plugin with those skills is still enabled after a resta
       onApi1(m);
       m.skills = structuredClone(LEGACY_SKILLS);
     });
-    await f.registry.installLocal(dir, PluginSourceKind.Local);
+    await installLocalOn(f.registry, dir);
     f.registry.cancel();
     const restarted = new PluginRegistry(f.registry.root, f.seeds, f.registry.bootstrap, async () => ({}));
     await restarted.init();
@@ -346,7 +348,7 @@ test("the synthetic skill tool exists only for a plugin with file skills and nam
 test("the Genex game packages are exact pins", () => {
   assert.deepEqual(Object.keys(GENEX_GAME_PACKAGES).sort(), ["@genex-ai/embed-sdk", "@genex-ai/multiplayer"]);
   for (const version of Object.values(GENEX_GAME_PACKAGES)) assert.match(version, /^\d+\.\d+\.\d+$/);
-  assert.match(GENEX_GAME_PACKAGES["@genex-ai/multiplayer"], /^0\.16\.\d+$/, "the multiplayer card asks for ^0.16.0");
+  assert.match(GENEX_GAME_PACKAGES["@genex-ai/multiplayer"], /^0\.17\.\d+$/, "the multiplayer card asks for ^0.17.0");
 });
 
 // ── The registry serves file skills ─────────────────────────────────────────────────────────────
@@ -383,7 +385,7 @@ async function skillRegistry(edit?: (dir: string, m: RawManifest) => Promise<voi
     await edit(dir, m);
     await writeFile(path.join(dir, "plugin.json"), JSON.stringify(m));
   }
-  await f.registry.installLocal(dir, PluginSourceKind.Local);
+  await installLocalOn(f.registry, dir);
   const game = path.join(f.root, "game");
   await mkdir(game);
   return { ...f, source: dir, binding: { project: "game", directory: game } };
@@ -575,7 +577,7 @@ test("a host tool from a local folder never reaches the host hook, whatever its 
   try {
     const calls: unknown[] = [];
     f.registry.hostTool = async (...args) => calls.push(args);
-    await f.registry.installLocal(await genexHostPackage(f.root), PluginSourceKind.Local);
+    await installLocalOn(f.registry, await genexHostPackage(f.root));
     assert.ok(
       f.registry.tools().every((t) => !Object.hasOwn(t, "host")),
       "the agent never sees host",
@@ -612,6 +614,24 @@ test("a bundled host tool runs through the host hook after consent, and fails cl
 
     f.registry.hostTool = undefined;
     await assert.rejects(f.registry.tool("genex__cli", { args: "doctor" }, f.binding), /unavailable/i);
+  } finally {
+    await f.close();
+  }
+});
+
+test("a bundled host tool whose plugin is turned off while its call waits its turn never runs its host program", async () => {
+  const f = await pluginFixture();
+  try {
+    const calls: unknown[] = [];
+    f.registry.hostTool = async (...args) => calls.push(args);
+    await f.registry.installLocal(await genexHostPackage(f.root), PluginSourceKind.Bundled);
+    // The call's wait for its locks (`beforeRun`), during which the person turns the plugin off.
+    const turnedOff = () => f.registry.setEnabled("genex", false);
+    await assert.rejects(
+      f.registry.tool("genex__cli", { args: "doctor" }, f.binding, undefined, undefined, undefined, turnedOff),
+      /Plugin genex is unavailable/,
+    );
+    assert.deepEqual(calls, [], "the host program never ran");
   } finally {
     await f.close();
   }

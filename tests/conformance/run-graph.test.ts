@@ -9,6 +9,7 @@ import { newBuildOffer } from "../../src/renderer/stage.ts";
 import type { EventEnvelope } from "../../src/substrate/types.ts";
 import {
   buildRunGraph,
+  buildsView,
   hasMergedBuild,
   nextStep,
   passedFraction,
@@ -18,6 +19,7 @@ import {
   type Rect,
 } from "../../src/renderer/run-graph.ts";
 import { checkCounts } from "../../src/renderer/words.ts";
+import { answeredRecords } from "../../src/shared/run-graph-events.ts";
 
 let counter = 0;
 function event(eventType: string, payload: Record<string, unknown>): EventEnvelope {
@@ -169,6 +171,53 @@ describe("buildRunGraph", () => {
     assert.equal(buildProgress(graph).title, "Building the starting point");
     const finished = buildRunGraph([...events, event("autopilot_base", { ok: true, empty: true })])!;
     assert.equal(buildProgress(finished).title, "The starting point is ready");
+  });
+
+  it("keeps the pictures the person sent with the message the run answers, for the start node", () => {
+    /** A queue record of the chat's, which names no run. */
+    const queue = (eventType: string, payload: Record<string, unknown>): EventEnvelope => {
+      const record = event(eventType, {});
+      return { ...record, thread_id: "chat", data: { type: "custom", event_type: eventType, payload } };
+    };
+    const pictures = { text: "Recreate this area", attachmentsArtifact: "message_attachments_m1", imageCount: 2 };
+    const asked = buildRunGraph([
+      queue("coordinator_message_queued", { messageId: "m0", action: { text: "hi" } }),
+      queue("coordinator_message_processing", { messageId: "m0" }),
+      queue("coordinator_message_queued", { messageId: "m1", action: pictures }),
+      queue("coordinator_message_processing", { messageId: "m1" }),
+      event("run_registered", { goal: "Recreate this area" }),
+      event("run_started", { goal: "Recreate this area" }),
+      // A later message steered into the run never becomes what it was asked with.
+      queue("coordinator_message_queued", { messageId: "m2", action: { ...pictures, attachmentsArtifact: "x" } }),
+      queue("coordinator_message_processing", { messageId: "m2" }),
+      event("run_started", { goal: "Recreate this area", resumed: true }),
+    ]);
+    const askedOf = (graph: ReturnType<typeof buildRunGraph>) => {
+      const run = graph?.nodes.find((node) => node.kind === "run");
+      return run?.kind === "run" ? run.asked : undefined;
+    };
+    assert.deepEqual(askedOf(asked), { threadId: "chat", messageId: "m1", count: 2 });
+    const plain = buildRunGraph([
+      queue("coordinator_message_queued", { messageId: "m3", action: { text: "Make a game" } }),
+      queue("coordinator_message_processing", { messageId: "m3" }),
+      event("run_registered", { goal: "Make a game" }),
+    ]);
+    assert.equal(askedOf(plain), null, "a message without pictures leaves the start to its words");
+    // The run's summary hands the graph its own records only, and the message it answers.
+    const log = [
+      queue("coordinator_message_queued", { messageId: "m0", action: { text: "hi" } }),
+      queue("coordinator_message_processing", { messageId: "m0" }),
+      queue("coordinator_message_queued", { messageId: "m1", action: pictures }),
+      queue("coordinator_message_queued", { messageId: "m9", action: { text: "queued behind" } }),
+      queue("coordinator_message_processing", { messageId: "m1" }),
+      event("run_registered", { goal: "Recreate this area" }),
+      queue("coordinator_message_processing", { messageId: "m9" }),
+    ];
+    assert.deepEqual(
+      answeredRecords(log, "run_x").map((record) => record.id),
+      [log[2]!.id, log[4]!.id],
+    );
+    assert.deepEqual(answeredRecords(log, "run_other"), [], "a run with no record of its own answers nothing");
   });
 
   it("returns null for a thread with no run", () => {
@@ -405,7 +454,7 @@ describe("the plan's checks and the judge's own notes", () => {
     assert.equal(passedFraction(round.scoreboard), (3 / 9) * 100);
   });
 
-  it("reads a night from before the split exactly as it always did", () => {
+  it("reads a run from before the split exactly as it always did", () => {
     counter = 0;
     const graph = buildRunGraph([
       event("run_started", { project: "village", goal: "g" }),
@@ -436,7 +485,9 @@ import {
   runStillPath,
   thumbShot,
 } from "../../src/renderer/run-graph.ts";
-import { layoutSteps, partRows, STEPS } from "../../src/renderer/run-steps.ts";
+import { layoutSteps, partRows, STEPS, Tone } from "../../src/renderer/run-steps.ts";
+import { assetsStatus, isMaking, stoppedShort } from "../../src/renderer/panels/inspector/asset-jobs.ts";
+import { MakingPhase } from "../../src/shared/asset-making.ts";
 
 describe("notes and plain words", () => {
   it("pins a user note to the round it named and records the first later verdict of that part", () => {
@@ -559,7 +610,7 @@ describe("notes and plain words", () => {
 });
 
 describe("the next step is one fact", () => {
-  it("names the round underway with its part, in the words the judges' sheet uses, and nothing once the night is over", () => {
+  it("names the round underway with its part, in the words the judges' sheet uses, and nothing once the run is over", () => {
     const graph = buildRunGraph(midRun())!;
     const underway = iterations(graph).filter((node) => node.status === "building");
     assert.equal(underway.length, 1, "the asked-but-unanswered move is the one round underway");
@@ -809,6 +860,72 @@ describe("the plugins' asset jobs in the run graph", () => {
     assert.equal(node.jobs[0]!.iteration, 2);
   });
 
+  it("drops a Genex request refused before a generation started, and fails a generation that did", () => {
+    counter = 0;
+    // Genex answers a refused request as a job that failed with no generation, not as an error.
+    const refused = (callId: string, error: string) =>
+      finished(callId, {
+        jobId: `job-${callId}`,
+        result: JSON.stringify({ id: `job-${callId}`, operation: "character", status: "failed", files: [], error }),
+      });
+    const graph = buildRunGraph([
+      event("run_started", { goal: "a farm", project: "farm" }),
+      started("call-1"),
+      refused("call-1", "✗ Error: Cannot quote this generation (HTTP 400). No generation was sent."),
+      started("call-2"),
+      refused("call-2", '{"kind":"character","status":"selection_required","selector":"Casual Walk"}'),
+      started("call-3"),
+      finished("call-3", {
+        jobId: "job-3",
+        generationId: "gen-3",
+        result: JSON.stringify({ id: "job-3", generationId: "gen-3", status: "failed", error: "The rig failed." }),
+      }),
+    ])!;
+    const node = graph.nodes.find((n) => n.kind === "assets");
+    assert.ok(node && node.kind === "assets");
+    assert.deepEqual(
+      node.jobs.map((job) => [job.callId, job.state, job.error]),
+      [["call-3", "failed", "The rig failed."]],
+      "only the generation that started and failed is listed, in Genex's words",
+    );
+  });
+
+  it("reads a job the log leaves on its way as the game's inventory does, so a stale one stops making", () => {
+    counter = 0;
+    const graph = buildRunGraph([
+      event("run_started", { goal: "a farm", project: "farm" }),
+      started("call-1"),
+      finished("call-1", { jobId: "job-1", generationId: "gen-1", result: '{"id":"job-1","status":"accepted"}' }),
+    ])!;
+    // The inventory lists a Genex job by its generation, and has read its record two hours on.
+    const inventory = (phase: MakingPhase) => ({
+      project: "farm",
+      assets: [],
+      jobs: [{ source: "genex", jobId: "gen-1", phase }],
+      truncated: false,
+      skipped: [],
+    });
+    const jobOf = (phase: MakingPhase) => {
+      const node = buildsView(graph, null, inventory(phase)).nodes.find((n) => n.kind === "assets");
+      assert.ok(node && node.kind === "assets");
+      return node.jobs;
+    };
+    const stale = jobOf(MakingPhase.Unsure);
+    assert.deepEqual(
+      [isMaking(stale[0]!), stoppedShort(stale[0]!), assetsStatus(stale)],
+      [false, MakingPhase.Unsure, { text: "1 not confirmed", tone: Tone.Orange }],
+      "a job Genex still says it is making two hours on is Not confirmed, not Making",
+    );
+    const making = jobOf(MakingPhase.Making);
+    assert.deepEqual(
+      [isMaking(making[0]!), stoppedShort(making[0]!), assetsStatus(making)],
+      [true, null, { text: "Making 1", tone: Tone.Accent }],
+    );
+    const unlisted = buildsView(graph, null, null).nodes.find((n) => n.kind === "assets");
+    assert.ok(unlisted && unlisted.kind === "assets");
+    assert.equal(isMaking(unlisted.jobs[0]!), true, "with no inventory read, the log's word stands");
+  });
+
   it("joins a call that names no job to the delivery of the same files", () => {
     counter = 0;
     const graph = buildRunGraph([
@@ -865,6 +982,7 @@ describe("the plugins' asset jobs in the run graph", () => {
       {
         pluginName: "Local Blender",
         name: "tank-inspect",
+        facetId: null,
         files: ["assets/blender/b-1/model.glb", "assets/blender/b-1/render.png"],
         size: [1, 0.579, 0.4685],
         triangles: 144143,
@@ -909,6 +1027,23 @@ describe("the plugins' asset jobs in the run graph", () => {
       at: "2026-09-05T10:05:00.000Z",
     });
     assert.equal(node.jobs[0]!.state, "delivered", "a failed check does not fail the asset");
+  });
+
+  it("reads a call's operation only where the digest writes it, never out of its prompt", () => {
+    counter = 0;
+    const graph = buildRunGraph([
+      event("run_started", { goal: "a farm", project: "farm", reference: { name: "x" } }),
+      started("call-5", {
+        pluginId: "sprite-forge",
+        pluginName: "Sprite Forge",
+        tool: "paint",
+        toolName: "sprite-forge__paint",
+        args: "prompt=a shop sign that reads operation=status",
+      }),
+    ])!;
+    const node = graph.nodes.find((n) => n.kind === "assets");
+    assert.ok(node && node.kind === "assets", "a call whose prompt mentions a lookup is still an asset");
+    assert.equal(node.jobs[0]?.operation, null);
   });
 
   /**
@@ -1121,31 +1256,31 @@ it("replays Optimization once, ignores stale/unknown updates, and keeps its resu
 });
 
 /**
- * A synthetic director night with restarted builders, 21 rounds and twelve merges.
+ * A synthetic director run with restarted builders, 21 rounds and twelve merges.
  * It preserves the historical graph regressions without retaining a private run journal.
  */
-describe("a synthetic lead night, replayed", () => {
+describe("a synthetic lead run, replayed", () => {
   const journal = JSON.parse(
-    readFileSync(new URL("../fixtures/director-night.json", import.meta.url), "utf8"),
+    readFileSync(new URL("../fixtures/director-loop-run.json", import.meta.url), "utf8"),
   ) as EventEnvelope[];
-  const night = () => buildRunGraph(journal)!;
+  const loopRun = () => buildRunGraph(journal)!;
 
-  it("knows it is a lead's night and that it never had a shared base", () => {
-    const graph = night();
+  it("knows it is a lead's run and that it never had a shared base", () => {
+    const graph = loopRun();
     assert.equal(graph.runId, "run_fixture123456");
     const run = graph.nodes.find((node) => node.kind === "run");
     assert.equal(run?.kind === "run" && run.director, true);
     assert.equal(
       journal.some((event) => event.data.type === "custom" && event.data.event_type === "autopilot_base"),
       false,
-      "the night emitted no base event — the bug's whole cause",
+      "the run emitted no base event — the bug's whole cause",
     );
     const base = graph.nodes.find((node) => node.kind === "base");
     assert.equal(base?.kind === "base" && base.absent, true);
     assert.equal(base?.kind === "base" && base.done, true);
-    // And it knows it from the moment the night starts, not from the first builder: between
-    // 16:11 and 16:24 that night the card pulsed "Building the ground every part starts from…"
-    // for a starting point the night was never going to build.
+    // And it knows it from the moment the run starts, not from the first builder: between
+    // 16:11 and 16:24 that run the card pulsed "Building the ground every part starts from…"
+    // for a starting point the run was never going to build.
     const atStart = buildRunGraph(
       journal.slice(
         0,
@@ -1157,7 +1292,7 @@ describe("a synthetic lead night, replayed", () => {
     assert.equal(first?.kind === "base" && first.absent, true);
   });
 
-  it("offers a build only when the night's head moved off the starting commit", () => {
+  it("offers a build only when the run's head moved off the starting commit", () => {
     const finished = journal.at(-1)!;
     const payload = (finished.data as { payload: Record<string, unknown> }).payload;
     assert.equal(hasMergedBuild({ integrationHead: payload.integrationHead as string, baseCommit: null }), true);
@@ -1171,10 +1306,10 @@ describe("a synthetic lead night, replayed", () => {
   });
 
   it("draws a restarted part once: five parts, not ten, with both builders' rounds in a row", () => {
-    // Every one of the five parts was stopped and started again that night (crumple → crumple2,
+    // Every one of the five parts was stopped and started again that run (crumple → crumple2,
     // …). Nothing in the log said the second was the first one continued, so the Builds page
     // drew ten parts, five of them red with nothing kept — and no morning could read that.
-    const asItWas = night();
+    const asItWas = loopRun();
     assert.equal(asItWas.facets.length, 10, "ten independently named attempts");
     const restarted: Record<string, string> = {
       crumple2: "crumple",
@@ -1236,13 +1371,13 @@ describe("a synthetic lead night, replayed", () => {
       const progress = buildProgress(buildRunGraph(upTo(stage))!);
       // The phrases a fall-through to the classic base path would actually produce today — the
       // old "shared base" wording was renamed by the same change, so looking for it proved nothing.
-      // Flipped (owner, 2026-10-02): no time-of-day words in the app's copy.
+      // Flipped: no time-of-day words in the app's copy.
       assert.doesNotMatch(progress.title, /starting point|Planning the parts/i, stage);
       assert.doesNotMatch(progress.health, /Every part starts from it/i, stage);
       assert.match(progress.title, /part/i, stage);
     }
-    // And all night: at no point after the first builder does the base phase come back. Stated as
-    // the positive invariant, because every phase this night can reach is one of these.
+    // And for the whole run: at no point after the first builder does the base phase come back. Stated as
+    // the positive invariant, because every phase this run can reach is one of these.
     const firstWorker = journal.findIndex((e) => e.data.type === "custom" && e.data.event_type === "director_worker");
     for (let at = firstWorker + 1; at < journal.length; at += 1) {
       const progress = buildProgress(buildRunGraph(journal.slice(0, at + 1))!);
@@ -1251,18 +1386,18 @@ describe("a synthetic lead night, replayed", () => {
     }
   });
 
-  it("reports the night in its own words, and says nothing when it never wrote any", () => {
+  it("reports the run in its own words, and says nothing when it never wrote any", () => {
     const finished = journal.at(-1)!;
     assert.equal(finished.data.type === "custom" && finished.data.event_type, "run_finished");
     const payload = (finished.data as { payload: Record<string, unknown> }).payload;
     assert.equal(payload.summary, undefined, "it ran out of time before it wrote one");
-    const final = night().nodes.find((node) => node.kind === "final")!;
+    const final = loopRun().nodes.find((node) => node.kind === "final")!;
     // It used to fall back to the last note the lead had left *itself*, so the morning card read
     // "Base fixed and re-based (69f573d): crowd shader now compiles under r185…".
     assert.equal(final.kind === "final" && final.summary, null);
     const notes = payload.notes as Array<{ text: string }>;
     assert.match(notes.at(-1)!.text, /re-based/, "the note that used to be printed as the report");
-    // A night that does write one is reported in that instead.
+    // A run that does write one is reported in that instead.
     const spoken = buildRunGraph([
       ...journal.slice(0, -1),
       {
@@ -1283,7 +1418,7 @@ describe("a synthetic lead night, replayed", () => {
     const payload = (finished.data as { payload: Record<string, unknown> }).payload;
     assert.equal(payload.victory, false);
     assert.equal(payload.landed, false, "the fixture has not landed");
-    const graph = night();
+    const graph = loopRun();
     const judged = graph.nodes.filter(
       (node) => node.kind === "iteration" && (node.status === "accepted" || node.status === "rolled"),
     ).length;
@@ -1299,7 +1434,7 @@ describe("a synthetic lead night, replayed", () => {
   });
 
   it("keeps the newest merged build, so the stage has something to offer", () => {
-    const graph = night();
+    const graph = loopRun();
     const merges = journal.filter((e) => e.data.type === "custom" && e.data.event_type === "integration_merge");
     assert.equal(merges.length, 12);
     const lastHead = merges
@@ -1307,7 +1442,7 @@ describe("a synthetic lead night, replayed", () => {
       .filter(Boolean)
       .at(-1);
     assert.equal(graph.mergedHead?.head, lastHead);
-    assert.equal(graph.mergedHead?.healthy, null, "nothing in that night said whether the merge ran");
+    assert.equal(graph.mergedHead?.healthy, null, "nothing in that run said whether the merge ran");
     // The lead's health pass now says so on the record (M1.9), and a build that did not run is
     // never offered.
     const withHealth = (ok: boolean) =>
@@ -1329,7 +1464,7 @@ describe("a synthetic lead night, replayed", () => {
   });
 
   it("shows the lead's builders as parts, with the rounds they kept", () => {
-    const graph = night();
+    const graph = loopRun();
     assert.ok(graph.facets.length >= 5, `${graph.facets.length} parts`);
     for (const facet of graph.facets) assert.notEqual(facet.title, facet.facetId, "every builder named itself");
     assert.equal(
@@ -1341,12 +1476,12 @@ describe("a synthetic lead night, replayed", () => {
 });
 
 /**
- * The same night, finished and then reopened by its chat's own session: the same run started again
+ * The same run, finished and then reopened by its chat's own session: the same run started again
  * with a fresh half hour and one new worker. Its first close is no longer its last word.
  */
-describe("a finished lead night its chat's own session reopens", () => {
+describe("a finished lead run its chat's own session reopens", () => {
   const journal = JSON.parse(
-    readFileSync(new URL("../fixtures/director-night.json", import.meta.url), "utf8"),
+    readFileSync(new URL("../fixtures/director-loop-run.json", import.meta.url), "utf8"),
   ) as EventEnvelope[];
   const runId = "run_fixture123456";
   const registered = journal[0]!.data as { payload: Record<string, unknown> };
@@ -1385,7 +1520,7 @@ describe("a finished lead night its chat's own session reopens", () => {
     const before = buildRunGraph([...journal.slice(0, -1), spokenClose])!;
     const closed = before.nodes.find((node) => node.kind === "final")!;
     assert.equal(closed.kind === "final" && closed.summary, "Five parts; the derby drives.", "what the close said");
-    assert.ok(before.mergedHead, "the finished night kept its newest merge");
+    assert.ok(before.mergedHead, "the finished run kept its newest merge");
     const graph = buildRunGraph(reopened())!;
     assert.equal(graph.active, true);
     const final = graph.nodes.find((node) => node.kind === "final")!;
@@ -1393,13 +1528,13 @@ describe("a finished lead night its chat's own session reopens", () => {
     assert.deepEqual(
       [final.done, final.summary, final.landing, final.integrationHead, final.facets],
       [false, null, null, null, []],
-      "the first close is not the reopened night's result",
+      "the first close is not the reopened run's result",
     );
     const run = graph.nodes.find((node) => node.kind === "run")!;
     assert.ok(run.kind === "run");
     assert.deepEqual([run.finishedAt, run.victory, run.stoppedBecause], [null, null, null]);
     assert.equal(run.durationMs, 1_800_000, "the reopen's own half hour");
-    assert.equal(graph.mergedHead, null, "only a merge of the reopened night is new to the stage");
+    assert.equal(graph.mergedHead, null, "only a merge of the reopened run is new to the stage");
     assert.equal(newBuildOffer(graph.mergedHead, null), null);
     assert.ok(
       graph.facets.some((facet) => facet.facetId === "pink"),

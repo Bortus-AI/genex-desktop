@@ -1,6 +1,7 @@
 /** Model roles preserve explicit selections. Unset slots use the selected CLI's default.
  * Legacy model exports remain for user-edited harness imports; catalogs live in the provider adapters.
  */
+import { ReasoningEffort } from "./model-preferences.ts";
 import type { RunRoles } from "./protocol.ts";
 import { EngineId } from "./providers.ts";
 
@@ -27,10 +28,7 @@ export const CLAUDE_CODE_MODELS: readonly EngineModelRow[] = [];
 /** The fallback rows under Codex when the account's own catalogue has never been written. */
 export const CODEX_MODELS: readonly EngineModelRow[] = [];
 
-/** Grok Build's documented coding models. The CLI's `grok models` text has no published schema. */
-export const GROK_MODELS: readonly EngineModelRow[] = [];
-
-/** Every subscription engine the studio can run a night on, and the models each offers. */
+/** Every subscription engine the studio can run a run on, and the models each offers. */
 export const ENGINE_MODELS: Readonly<Record<string, readonly EngineModelRow[]>> = {
   [EngineId.ClaudeCode]: CLAUDE_CODE_MODELS,
   [EngineId.Codex]: CODEX_MODELS,
@@ -44,7 +42,7 @@ export const DELEGATED_ENGINES: readonly string[] = [EngineId.ClaudeCode, Engine
 export const ENGINE_LABELS: Readonly<Record<string, string>> = {
   [EngineId.ClaudeCode]: "Claude Code",
   [EngineId.Codex]: "Codex",
-  [EngineId.Grok]: "Grok Build",
+  [EngineId.Cursor]: "Cursor",
 };
 
 /** The three jobs, in the order the roles page shows them. */
@@ -54,7 +52,7 @@ export const ROLES: readonly RoleRow[] = [
   { key: "judge", label: "Judges", detail: "vision checks, taste, code review, the playtester, the panel" },
 ];
 
-/** The jobs the composer may send to the other subscription. Never the orchestrator. */
+/** The jobs the composer may send to another engine. Never the orchestrator. */
 const CROSSABLE: ReadonlySet<RoleKey> = new Set(["builder", "judge"]);
 
 const own = (record: object, key: string) => Object.hasOwn(record, key);
@@ -69,9 +67,38 @@ export function isDelegated(engine: string | null | undefined): boolean {
   return engine === EngineId.ClaudeCode || engine === EngineId.Codex || engine === EngineId.Grok;
 }
 
-/** Session engines: the delegated ones and Bonsai, which can cross roles too. */
+/** Session engines that are not delegated presets: they hold a session and can cross roles too. */
+const SESSION_ENGINES: readonly string[] = [
+  EngineId.Bonsai,
+  EngineId.OpenCode,
+  EngineId.OpenRouter,
+  EngineId.LocalServer,
+  EngineId.Grok,
+  EngineId.Cursor,
+];
+
+/** Session engines: the delegated ones, and the others that hold a session (`SESSION_ENGINES`). */
 export function hasSessionRoles(engine: string | null | undefined): boolean {
-  return isDelegated(engine) || engine === EngineId.Bonsai;
+  return isDelegated(engine) || SESSION_ENGINES.includes(engine as string);
+}
+
+/** The completion-only local engines whose jobs run on their own models in the classic loop. */
+const COMPLETION_ROLE_ENGINES: ReadonlySet<string> = new Set([EngineId.Ollama]);
+
+/** Can this engine take a job of a game run: a session engine, or a completion-only local one. */
+export function takesRoles(engine: string | null | undefined): boolean {
+  return hasSessionRoles(engine) || (engine != null && COMPLETION_ROLE_ENGINES.has(engine));
+}
+
+/**
+ * May a run on `engine` send this job to `other`? Never the orchestrator, never to its own engine,
+ * and both must take roles. Workers go only to a session engine, since the director hires every
+ * worker as a session; reviewers ask `engine.complete`, so any engine that takes roles serves.
+ */
+export function crossesTo(engine: string | null | undefined, key: string, other: string | null | undefined): boolean {
+  if (!CROSSABLE.has(key as RoleKey) || !other || other === engine) return false;
+  if (!takesRoles(engine) || !takesRoles(other)) return false;
+  return key === "judge" || hasSessionRoles(other);
 }
 
 /** The catalog for a session provider, or `[]` for a completion-only engine. */
@@ -94,7 +121,7 @@ const record = (value: unknown): Record<string, unknown> | null =>
 /**
  * Explicit roles from the composer, cleaned: "default"/empty → undefined (the engine's own
  * default), unknown keys dropped; null when nothing usable was given. `engines` is kept only for
- * a crossed slot on two session engines, and `efforts` only for string values.
+ * a slot the run may send to that engine (`crossesTo`), and `efforts` only for string values.
  */
 export function normalizeRoles(engine: string, roles: unknown): RunRoles | null {
   const given = record(roles);
@@ -113,16 +140,15 @@ export function normalizeRoles(engine: string, roles: unknown): RunRoles | null 
 
 type CrossedEngines = NonNullable<RunRoles["engines"]>;
 
-/** The slots the composer sent to the other session engine. Never the orchestrator. */
+/** The slots the composer sent to another engine the run may send them to. Never the orchestrator. */
 function crossedEngines(engine: string, given: Record<string, unknown>): CrossedEngines {
   const engines: CrossedEngines = {};
-  if (!hasSessionRoles(engine)) return engines;
   const crossed = record(given.engines) ?? {};
   for (const { key } of ROLES) {
-    if (key === "planner" || !CROSSABLE.has(key)) continue;
+    if (key === "planner") continue;
     const raw = crossed[key];
     const other = typeof raw === "string" ? raw.trim() : "";
-    if (other && other !== engine && hasSessionRoles(other)) engines[key] = other;
+    if (crossesTo(engine, key, other)) engines[key] = other;
   }
   return engines;
 }
@@ -146,6 +172,15 @@ function namedModels(given: Record<string, unknown>, engines: CrossedEngines): R
     out[key] = id && id !== "default" ? id : undefined;
   }
   return any ? out : null;
+}
+
+/**
+ * Does a run on `engine` with these roles send a job to or from a completion-only local engine?
+ * Only a harness whose every part serves that may run it (`HarnessCapability.LocalRoles`).
+ */
+export function crossesCompletionEngine(engine: string, roles: unknown): boolean {
+  const crossed = Object.values(normalizeRoles(engine, roles)?.engines ?? {});
+  return crossed.some((other) => !hasSessionRoles(engine) || !hasSessionRoles(other));
 }
 
 /** The efforts the composer named per role, as strings; null when it named none. */
@@ -190,4 +225,24 @@ export function describeRoles(engine: string, model: string | null | undefined, 
   if (planner === builder && builder === judge) return `${planner} plans, builds and judges`;
   if (builder === judge) return `${planner} plans · ${builder} builds & judges`;
   return `${planner} plans · ${builder} builds · ${judge} judges`;
+}
+
+/** Every effort an engine names, from least to most thinking. */
+const EFFORT_ORDER: readonly string[] = Object.values(ReasoningEffort);
+
+/**
+ * The most a worker or a reviewer thinks. Deeper thinking fills a round's context with tokens
+ * nobody reads, paid again on every later call, and outlasts a reviewer's few minutes; the lead
+ * plans at the user's own setting.
+ */
+export const WORKER_EFFORT_CEILING = ReasoningEffort.High;
+
+/**
+ * The effort `role` runs at for the user's `effort`: the lead's as set; a worker's or a reviewer's
+ * at most `WORKER_EFFORT_CEILING`, so a lower setting is every role's. A level no engine names is
+ * left as it is. The seed's copy is loop/effort-cap.ts `effortCap`.
+ */
+export function roleEffortCap(role: RoleKey, effort: string | undefined): string | undefined {
+  if (effort === undefined || role === "planner") return effort;
+  return EFFORT_ORDER.indexOf(effort) > EFFORT_ORDER.indexOf(WORKER_EFFORT_CEILING) ? WORKER_EFFORT_CEILING : effort;
 }

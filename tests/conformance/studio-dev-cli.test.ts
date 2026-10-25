@@ -1,13 +1,46 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { parseStudioDevArgs, parseOperation } from "../../scripts/studio-dev/args.ts";
-import { FIXTURE_NAMES } from "../../src/main/dev/fixtures.ts";
-import { devBuildArgs, main } from "../../scripts/studio-dev.ts";
+import { FIXTURE_NAMES, installOlderPlugins } from "../../src/main/dev/fixtures.ts";
+import { PluginRegistry } from "../../src/substrate/plugins/registry.ts";
+import { devBuildArgs, launchEnv, main } from "../../scripts/studio-dev.ts";
+import { gamesRootWarnings, liveEnvStripped, StudioDevWarning } from "../../scripts/studio-dev/live-env.ts";
+import { fixtureElectronEnv } from "../../scripts/electron-runtime.mjs";
+import { freshMachineEnv } from "../../scripts/studio-dev/fresh-machine.ts";
+import { strippedEnv } from "../../scripts/evals/lanes/common.ts";
+import { makeResources } from "../helpers/resources.ts";
+import { tmpDir } from "../helpers/tmp.ts";
 
 test("fixtures lists the one exported fixture list without a profile or app", async () => {
-  assert.equal(FIXTURE_NAMES.length, 16);
-  for (const added of ["first-launch", "notifications", "build-graph", "sandbox-setup", "update-ready"])
+  // Flipped from 33: items-store joined the list (from 31: data-folder and data-missing, 30: native-games, 29: agents-start-failed, 28: asset-library, 27: genex-terms, 26: roblox-game, 25: building-card, 24: paused-build, 23: plugin-updates, 22: open-projects, 21: stills-game).
+  assert.equal(FIXTURE_NAMES.length, 34);
+  for (const added of [
+    "first-launch",
+    "notifications",
+    "build-graph",
+    "lead-graph",
+    "sandbox-setup",
+    "update-ready",
+    "chat-workers",
+    "finish-check",
+    "stills-game",
+    "open-projects",
+    "plugin-updates",
+    "paused-build",
+    "building-card",
+    "roblox-game",
+    "genex-terms",
+    "asset-library",
+    "agents-start-failed",
+    "native-games",
+    "data-folder",
+    "data-missing",
+    "items-store",
+  ])
     assert.ok((FIXTURE_NAMES as readonly string[]).includes(added), added);
   assert.deepEqual(await main(["fixtures"]), { fixtures: [...FIXTURE_NAMES] });
   // An unknown fixture is refused before any profile is allocated or build started.
@@ -15,6 +48,67 @@ test("fixtures lists the one exported fixture list without a profile or app", as
     main(["start", "--profile", "cli-test-never-created", "--fixture", "nope"]),
     /unknown named fixture; one of app-basics/,
   );
+});
+
+test("the plugin-updates fixture leaves every bundled plugin one version behind this build's, in its own profile", async () => {
+  const resources = await makeResources({ tsc: false });
+  const seeds = path.join(resources, "plugins");
+  const engineHomes = path.join(await tmpDir("plugin-updates-"), "core", "engine-homes");
+  const shippedManifests = () =>
+    fs.readdirSync(seeds).map((name) => fs.readFileSync(path.join(seeds, name, "plugin.json"), "utf8"));
+  const shipped = shippedManifests();
+  const versions = new Map(shipped.map((text) => [JSON.parse(text).id as string, JSON.parse(text).version as string]));
+  assert.deepEqual([...versions.keys()].sort(), ["blender", "genex", "godot", "roblox", "unity", "unreal"]);
+  /** What the app's own registry says of the profile's plugins, as the core starts it. */
+  const installed = async () => {
+    const registry = new PluginRegistry(
+      path.join(engineHomes, "plugins"),
+      seeds,
+      path.join(resources, "plugin-sdk/backend.mjs"),
+      async () => null,
+    );
+    try {
+      await registry.init();
+      return registry.list().map((p) => ({
+        id: p.manifest.id,
+        version: p.manifest.version,
+        availableVersion: p.availableVersion,
+        enabled: p.enabled,
+        error: p.error,
+      }));
+    } finally {
+      registry.cancel();
+    }
+  };
+
+  await installOlderPlugins(engineHomes, resources);
+  // Only the profile's plugin store is left behind, and the build's own seeds are as shipped.
+  assert.deepEqual(fs.readdirSync(path.dirname(engineHomes)), ["engine-homes"]);
+  assert.deepEqual(fs.readdirSync(engineHomes), ["plugins"]);
+  assert.deepEqual(shippedManifests(), shipped);
+  /** The installed copies of each plugin, by folder name. */
+  const copies = () =>
+    [...versions.keys()].map((id) => fs.readdirSync(path.join(engineHomes, "plugins", "packages", id)));
+  const copyVersion = (id: string, copy: string): string =>
+    JSON.parse(fs.readFileSync(path.join(engineHomes, "plugins", "packages", id, copy, "plugin.json"), "utf8")).version;
+  const first = await installed();
+  assert.equal(first.length, versions.size);
+  for (const plugin of first) {
+    const seed = versions.get(plugin.id);
+    assert.equal(plugin.availableVersion, seed, `${plugin.id} is offered this build's version`);
+    assert.notEqual(plugin.version, seed, `${plugin.id} is installed below it`);
+    assert.equal(plugin.enabled, true, plugin.id);
+    assert.equal(plugin.error, undefined, plugin.id);
+    const [copy, ...others] = fs.readdirSync(path.join(engineHomes, "plugins", "packages", plugin.id));
+    assert.deepEqual(others, [], `${plugin.id} has one installed copy`);
+    assert.equal(copyVersion(plugin.id, copy ?? ""), plugin.version, `${plugin.id}'s copy says its record's version`);
+  }
+  // A reused profile keeps the plugins it has: the same copies, still one version behind.
+  const kept = copies();
+  await installOlderPlugins(engineHomes, resources);
+  assert.deepEqual(copies(), kept);
+  assert.deepEqual(fs.readdirSync(engineHomes), ["plugins"]);
+  assert.deepEqual(await installed(), first);
 });
 
 test("lifecycle commands keep their flags; missing profile and unknown commands fail before any work", () => {
@@ -83,6 +177,32 @@ test("snapshot, logs and capture shortcuts build the protocol operations with it
   assert.throws(() => parseStudioDevArgs(["capture", "--profile", "p", "--name", "../private"]));
 });
 
+test("Play's bar layer and game view are surfaces of their own, and the pointer moves only to a point on one", () => {
+  assert.deepEqual(parseStudioDevArgs(["snapshot", "--profile", "p", "--surface", "play-bar"]).operation, {
+    method: "snapshot",
+    params: { surface: "play-bar", limit: 150 },
+  });
+  assert.deepEqual(
+    parseOperation('{"method":"click","params":{"surface":"play-bar","selector":"[data-play-comments]"}}'),
+    {
+      method: "click",
+      params: { surface: "play-bar", selector: "[data-play-comments]" },
+    },
+  );
+  assert.deepEqual(parseOperation('{"method":"move","params":{"surface":"play-game","x":12,"y":2}}'), {
+    method: "move",
+    params: { surface: "play-game", x: 12, y: 2 },
+  });
+  const refused = [
+    '{"method":"snapshot","params":{"surface":"play-game"}}',
+    '{"method":"click","params":{"surface":"game","selector":"button"}}',
+    '{"method":"move","params":{"surface":"play-game","x":-1,"y":2}}',
+    '{"method":"move","params":{"surface":"play-game","x":1,"y":2,"script":"x()"}}',
+    '{"method":"move","params":{"surface":"keychain","x":1,"y":2}}',
+  ];
+  for (const request of refused) assert.throws(() => parseOperation(request), request);
+});
+
 test("the CLI prints the fixture list as JSON and reports errors as JSON with exit 1", () => {
   const run = (...args: string[]) =>
     spawnSync(process.execPath, ["scripts/studio-dev.ts", ...args], { encoding: "utf8" });
@@ -92,6 +212,137 @@ test("the CLI prints the fixture list as JSON and reports errors as JSON with ex
   const bad = run("ui", "--profile", "p");
   assert.equal(bad.status, 1);
   assert.match(JSON.parse(bad.stderr).error, /--json is required/);
+});
+
+test("runs is a shortcut for the read-only runs operation", () => {
+  assert.deepEqual(parseStudioDevArgs(["runs", "--profile", "p"]).operation, { method: "runs", params: {} });
+  assert.throws(() => parseStudioDevArgs(["runs"]), /Usage: studio:dev/);
+});
+
+/** A caller that is itself a coding-agent session, with the account basics every launch keeps. */
+const AGENT_SESSION_PARENT = {
+  HOME: "/Users/operator",
+  PATH: "/usr/bin:/bin",
+  LANG: "en_US.UTF-8",
+  CLAUDE_CONFIG_DIR: "/Users/operator/.claude-work",
+  CODEX_HOME: "/Users/operator/.codex-work",
+  GENEX_API_URL: "https://genex.test",
+  ANTHROPIC_BASE_URL: "http://127.0.0.1:1",
+  ANTHROPIC_API_KEY: "sk-ant-agent-session",
+  ANTHROPIC_AUTH_TOKEN: "agent-token",
+  OPENAI_API_KEY: "sk-agent-session",
+  CODEX_API_KEY: "codex-agent-session",
+  CODEX_ACCESS_TOKEN: "codex-access",
+  CLAUDECODE: "1",
+  CLAUDE_CODE_SESSION_ID: "x",
+  CLAUDE_CODE_ENTRYPOINT: "sdk-ts",
+  CLAUDE_AGENT_SDK_VERSION: "1.0.0",
+  CLAUDE_EFFORT: "max",
+  CLAUDE_PID: "4242",
+  CLAUDE_PREVIEW_CLASSIFIER_FLOOR: "0.5",
+  DISABLE_MICROCOMPACT: "1",
+  API_TIMEOUT_MS: "900000",
+  MCP_CONNECTION_NONBLOCKING: "true",
+  MCP_SERVER_CONNECTION_BATCH_SIZE: "8",
+  AI_AGENT: "claude-code",
+  BAGGAGE: "session=x",
+  USE_STAGING_OAUTH: "1",
+  USE_LOCAL_OAUTH: "1",
+  ELECTRON_RUN_AS_NODE: "1",
+} as const;
+
+test("a live launch does not hand the app the caller's agent-session variables", () => {
+  const live = { providers: "live" };
+  const env = launchEnv(live, AGENT_SESSION_PARENT);
+  for (const name of [
+    "ANTHROPIC_BASE_URL",
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_AUTH_TOKEN",
+    "OPENAI_API_KEY",
+    "CODEX_API_KEY",
+    "CODEX_ACCESS_TOKEN",
+    "CLAUDECODE",
+    "CLAUDE_CODE_SESSION_ID",
+    "CLAUDE_CODE_ENTRYPOINT",
+    "CLAUDE_AGENT_SDK_VERSION",
+    "CLAUDE_EFFORT",
+    "CLAUDE_PID",
+    "CLAUDE_PREVIEW_CLASSIFIER_FLOOR",
+    "DISABLE_MICROCOMPACT",
+    "API_TIMEOUT_MS",
+    "MCP_CONNECTION_NONBLOCKING",
+    "MCP_SERVER_CONNECTION_BATCH_SIZE",
+    "AI_AGENT",
+    "BAGGAGE",
+    "USE_STAGING_OAUTH",
+    "USE_LOCAL_OAUTH",
+    "ELECTRON_RUN_AS_NODE",
+  ])
+    assert.equal(env[name], undefined, `${name} must not reach a live app`);
+  // The operator's explicit account homes, the account basics and the app's own switches stay.
+  for (const name of ["HOME", "PATH", "LANG", "CLAUDE_CONFIG_DIR", "CODEX_HOME", "GENEX_API_URL"] as const)
+    assert.equal(env[name], AGENT_SESSION_PARENT[name], name);
+  // The start JSON names what it dropped, never a value.
+  const stripped = liveEnvStripped(AGENT_SESSION_PARENT);
+  assert.deepEqual(stripped, [...stripped].sort());
+  assert.ok(stripped.includes("ANTHROPIC_BASE_URL") && stripped.includes("CLAUDE_CODE_SESSION_ID"));
+  assert.ok(!stripped.includes("CLAUDE_CONFIG_DIR") && !stripped.includes("HOME"));
+  assert.ok(
+    stripped.every((name) => Object.hasOwn(AGENT_SESSION_PARENT, name)),
+    "names only",
+  );
+  assert.ok(!JSON.stringify(stripped).includes("sk-ant-agent-session"));
+  assert.deepEqual(liveEnvStripped({ HOME: "/Users/operator" }), []);
+  // The caller's own environment is read, never changed.
+  assert.equal(AGENT_SESSION_PARENT.CLAUDECODE, "1");
+});
+
+test("fixture and fresh-machine launches keep their own environments", (t) => {
+  assert.deepEqual(launchEnv({ providers: "fixture" }, AGENT_SESSION_PARENT), fixtureElectronEnv(AGENT_SESSION_PARENT));
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "fresh-env-"));
+  t.after(() => fs.rmSync(home, { recursive: true, force: true }));
+  const roots = { home: path.join(home, "home"), secureStorage: path.join(home, "secure") };
+  assert.deepEqual(
+    launchEnv({ providers: "live", freshMachine: true, ...roots }, AGENT_SESSION_PARENT),
+    freshMachineEnv(AGENT_SESSION_PARENT, roots),
+  );
+});
+
+test("the eval lanes strip the same session variables a live launch does, and the account homes too", () => {
+  for (const name of ["ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY", "ELECTRON_RUN_AS_NODE", "CLAUDE_CODE_SESSION_ID"])
+    assert.equal(strippedEnv(AGENT_SESSION_PARENT)[name], undefined, name);
+  assert.equal(strippedEnv(AGENT_SESSION_PARENT).CLAUDE_CONFIG_DIR, undefined);
+  assert.equal(strippedEnv(AGENT_SESSION_PARENT).GENEX_API_URL, undefined);
+});
+
+test("a live games root under a .claude folder is warned about, through a link too, and nothing is created", (t) => {
+  // The check resolves a link with the native realpath, which on Windows also expands the 8.3
+  // short names `os.tmpdir()` can carry (RUNNER~1); the JS realpath keeps them.
+  const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "games-root-")));
+  t.after(() => fs.rmSync(base, { recursive: true, force: true }));
+  const claudeTree = path.join(base, "repo/.claude/worktrees/wt");
+  fs.mkdirSync(claudeTree, { recursive: true });
+  fs.mkdirSync(path.join(base, "plain"), { recursive: true });
+  fs.symlinkSync(claudeTree, path.join(base, "plain/linked"));
+  const games = (checkout: string) => path.join(checkout, ".studio-dev/profiles/p/games");
+  const rows: Array<[string, string, string | null]> = [
+    ["plain checkout", games(path.join(base, "plain")), null],
+    ["worktree under .claude", games(claudeTree), path.join(base, "repo/.claude")],
+    ["link into a .claude tree", games(path.join(base, "plain/linked")), path.join(base, "repo/.claude")],
+    ["a .claude-like name", games(path.join(base, "plain/.claude-old/x")), null],
+    ["a name ending in .claude", games(path.join(base, "plain/notes.claude")), null],
+    ["a .Claude folder in another case", games(path.join(base, "repo/.Claude/x")), path.join(base, "repo/.Claude")],
+    [
+      "several missing folders below a link into a .claude tree",
+      games(path.join(base, "plain/linked/not/yet/made")),
+      path.join(base, "repo/.claude"),
+    ],
+  ];
+  for (const [name, root, at] of rows) {
+    const warnings = gamesRootWarnings(root);
+    assert.deepEqual(warnings, at ? [{ code: StudioDevWarning.GamesRootUnderClaudeFolder, at }] : [], name);
+    assert.equal(fs.existsSync(root), false, `${name}: the check creates nothing`);
+  }
 });
 
 test("a fixture profile's build counts React commits for its checks; a live profile's does not", () => {

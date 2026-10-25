@@ -1,5 +1,5 @@
-/** Runs: starting, stopping and wrapping up a night, and what the Builds tab reads about one. */
-import { lastNightForProject } from "../../shared/run-review.ts";
+/** Runs: starting, stopping and wrapping up a run, and what the Builds tab reads about one. */
+import { lastLoopRunForProject } from "../../shared/run-review.ts";
 import { graphEventsSince } from "../../shared/run-summary-feed.ts";
 import { RunSummaryCache } from "../run-summary-cache.ts";
 import { UiEvent } from "../../shared/ui-events.ts";
@@ -10,6 +10,7 @@ import type { IpcHandle } from "./registrar.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { EventKind } from "../../shared/event-log.ts";
 import { HOUR_MS, SECOND_MS } from "../../shared/duration.ts";
+import { t } from "../../shared/i18n.ts";
 import { DispatchActionType, type DispatchAction } from "../../shared/protocol.ts";
 import type { StudioInvokePayload } from "../../shared/ipc-channels.ts";
 
@@ -40,9 +41,9 @@ export interface RunsIpcDeps {
     | "saveRunArtifact"
     | "dispatchRun"
     | "threadForGame"
-    | "host"
     | "requestRunFinish"
     | "resumeAutopilot"
+    | "stopRun"
   >;
   runSummaryReader: Pick<RunSummaryReader, "forProject">;
   keepAwake: Pick<KeepAwake, "hold" | "armFallback">;
@@ -69,7 +70,7 @@ export function registerRunsIpc(
   handle("studio:activity", async () => core.activityItems());
   handle("studio:run.review", async (payload) => {
     const events = await runSummaryReader.forProject(payload.project, core.mainThread);
-    return lastNightForProject(
+    return lastLoopRunForProject(
       payload.runId
         ? events.filter(
             (event) =>
@@ -83,7 +84,7 @@ export function registerRunsIpc(
   handle("studio:run.start", async (payload) => {
     const frames = (payload.reference.frames ?? []).filter((frame) => frame?.data).slice(0, MAX_REFERENCE_FRAMES);
     if (payload.reference.kind === "reference" && frames.length < MIN_REFERENCE_FRAMES) {
-      throw new Error('A "beat a real game" run needs at least two screenshots of the reference.');
+      throw new Error(t('A "beat a real game" run needs at least two screenshots of the reference.'));
     }
     const runId = core.newRunId();
     const shots = [...(payload.reference.shots ?? []), ...(await saveReferenceFrames(core, runId, frames))];
@@ -103,7 +104,7 @@ export function registerRunsIpc(
   });
 
   handle("studio:run.stop", async (payload) => {
-    // Asking a night to stop is not the night ending: the harness still settles its workers,
+    // Asking a run to stop is not the run ending: the harness still settles its workers,
     // runs a close health pass, lands what it can and writes the report — minutes of work that
     // used to happen on a Mac already free to sleep. `run.settled` releases the blocker; this
     // timer is only for the harness child that died and will never send it — which is exactly
@@ -111,7 +112,8 @@ export function registerRunsIpc(
     // wait is bounded. Arming is safe either way: it no-ops with no blocker held, and the next
     // run's `run.keepawake` disarms it.
     try {
-      await core.host.dispatch({ type: DispatchActionType.RunStop, runId: payload.runId }, RUN_STOP_TIMEOUT_MS);
+      // Through the core: the user's stop also means the run never resumes on its own afterwards.
+      await core.stopRun(payload.runId, RUN_STOP_TIMEOUT_MS);
     } finally {
       keepAwake.armFallback();
     }

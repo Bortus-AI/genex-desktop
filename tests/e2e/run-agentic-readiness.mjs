@@ -5,7 +5,7 @@ import { spawn, execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
-import { request } from "../../scripts/studio-dev/client.ts";
+import { request, requestWhenReachable } from "../../scripts/studio-dev/client.ts";
 import { sourceIdentity, maintained, hash, writeJson } from "../../scripts/studio-dev/files.mjs";
 const root = fs.realpathSync(fileURLToPath(new URL("../..", import.meta.url)));
 const runId = `accept-${Date.now()}`,
@@ -62,6 +62,9 @@ async function check(name, surface, expected, fn) {
       artifacts: [],
     });
     console.error(`FAIL ${name}: ${e.message}`);
+    // A dialog or menu a failed check leaves open covers the chat for every later check on that
+    // window: close it, so the failure is reported once rather than as theirs too.
+    for (const i of active) await closeLeftLayers(i).catch(() => {});
   }
   report.checks.at(-1).artifacts = report.artifacts.slice(artifactStart).map((a) => a.file);
   save();
@@ -128,6 +131,15 @@ const op = async (i, method, params = {}) => {
     throw e;
   }
 };
+/** Like `op`, for an input whose target may not take pointer input yet (a dialog or menu still opening). */
+const reach = async (i, method, params) => {
+  try {
+    return await requestWhenReachable(i.descriptor, { method, params });
+  } catch (e) {
+    e.message = `${method} ${JSON.stringify(params)}: ${e.message}`;
+    throw e;
+  }
+};
 const snapshot = (i) => op(i, "snapshot", { surface: "desktop" });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /** An earlier build opens from its result card in the chat: scroll the conversation up to it. */
@@ -144,6 +156,25 @@ async function openBuildFromChat(i, runId) {
     }
   }
   throw new Error(`timeout: Open in Builds for ${runId}`);
+}
+/** An app's core event log: its newest 200 entries. */
+const coreLog = async (i) => (await op(i, "logs", { surface: "core", limit: 200 })).entries;
+/** The ids of the turns a core log has started so far. */
+const startedTurns = (entries) => new Set(entries.filter((e) => e.data.type === "turn_started").map((e) => e.turn_id));
+/** Whether every turn a core log started has ended: nothing is being answered. */
+const noTurnOpen = (entries) => {
+  const open = startedTurns(entries);
+  for (const e of entries) if (e.data.type === "turn_ended") open.delete(e.turn_id);
+  return open.size === 0;
+};
+/** The first turn started after the ones in `before` whose engine is at work, or false. */
+function workingTurn(entries, before) {
+  const started = entries.findIndex((e) => e.data.type === "turn_started" && !before.has(e.turn_id));
+  if (started < 0) return false;
+  const working = entries
+    .slice(started)
+    .some((e) => e.data.event_type === "session_activity" && e.data.payload?.phase === "thinking");
+  return working ? entries[started].turn_id : false;
 }
 async function until(fn, label, timeout = 15000) {
   const end = Date.now() + timeout;
@@ -199,6 +230,15 @@ async function closeModelPicker(i) {
     n < 3 && (await snapshot(i)).controls.find((c) => c.label === "Model settings")?.expanded === "true";
     n++
   ) {
+    await op(i, "key", { surface: "desktop", key: "Escape", code: "Escape", modifiers: [] });
+    await sleep(250);
+  }
+}
+/** Is this control the search dialog, or a picker or menu trigger whose layer is still open? */
+const leftOpen = (c) =>
+  c.label === "Close search" || (c.expanded === "true" && ["Model settings", "Chat actions"].includes(c.label));
+async function closeLeftLayers(i) {
+  for (let n = 0; n < 3 && (await snapshot(i)).controls.some(leftOpen); n++) {
     await op(i, "key", { surface: "desktop", key: "Escape", code: "Escape", modifiers: [] });
     await sleep(250);
   }
@@ -279,7 +319,11 @@ try {
       await op(b, "key", { surface: "desktop", key: "1", code: "Digit1", modifiers: ["Meta"] });
       await until(async () => (await snapshot(b)).state.room === "build", "Build keyboard shortcut");
       await op(b, "key", { surface: "desktop", key: "k", code: "KeyK", modifiers: ["Meta"] });
-      await op(b, "type", { selector: 'input[aria-label="Search games"]', text: "no matching project", replace: true });
+      await reach(b, "type", {
+        selector: 'input[aria-label="Search games"]',
+        text: "no matching project",
+        replace: true,
+      });
       await until(async () => (await snapshot(b)).text.includes("No games for"), "no results");
       await op(b, "type", { selector: 'input[aria-label="Search games"]', text: "Fixture", replace: true });
       await until(
@@ -338,14 +382,7 @@ try {
       }, "earlier history graph");
       // The selected run changes before its complete host summary has arrived. Wait for the
       // actual pointer target to become visible; chat text alone can belong to the earlier render.
-      await until(async () => {
-        try {
-          return await op(a, "click", { selector: '[data-graph-node="start"]' });
-        } catch (error) {
-          if (/target-not-visible/.test(error.message)) return false;
-          throw error;
-        }
-      }, "earlier-run start pointer target");
+      await reach(a, "click", { selector: '[data-graph-node="start"]' });
       await until(
         async () => (await snapshot(a)).text.includes("Fixture base: camera views were identical"),
         "base health",
@@ -367,8 +404,7 @@ try {
     "desktop",
     "engine AbortSignal rejection and durable turn end",
     async () => {
-      const coreLog = async () => (await op(a, "logs", { surface: "core", limit: 200 })).entries;
-      const before = new Set((await coreLog()).filter((e) => e.data.type === "turn_started").map((e) => e.turn_id));
+      const before = startedTurns(await coreLog(a));
       await op(a, "type", {
         selector: '[aria-label="Prompt"]',
         text: "fixture:pending cancellation proof",
@@ -378,15 +414,10 @@ try {
       await until(async () => (await snapshot(a)).controls.some((c) => c.label === "Stop"), "pending Stop");
       // This message's own turn, with its engine at work: a Stop before it begins ends it before any
       // engine runs, which is not the abort this check is about. An earlier turn is never taken for it.
-      const pending = await until(async () => {
-        const entries = await coreLog();
-        const started = entries.findIndex((e) => e.data.type === "turn_started" && !before.has(e.turn_id));
-        if (started < 0) return false;
-        const working = entries
-          .slice(started)
-          .some((e) => e.data.event_type === "session_activity" && e.data.payload?.phase === "thinking");
-        return working ? entries[started].turn_id : false;
-      }, "the controlled pending turn's engine to start");
+      const pending = await until(
+        async () => workingTurn(await coreLog(a), before),
+        "the controlled pending turn's engine to start",
+      );
       assert.ok(pending, "the controlled pending turn started");
       await op(a, "click", { selector: '[data-promptbar] button[aria-label="Stop"]' });
       const entries = await until(async () => {
@@ -484,7 +515,7 @@ try {
         .filter(Boolean);
       assert.equal(new Set(strip).size, strip.length, `duplicate stage-strip control label: ${strip.join(", ")}`);
       await op(b, "click", { selector: '[data-chat-header] button[aria-label="Chat actions"]' });
-      await op(b, "click", { selector: '[data-chat-action="export"]' });
+      await reach(b, "click", { selector: '[data-chat-action="export"]' });
       // The toast sentence-cases what the studio throws (renderer words.ts problemWords), so match the reason, not its casing.
       await until(
         async () => (await snapshot(b)).text.toLowerCase().includes("unsupported-in-fixture"),
@@ -536,16 +567,25 @@ try {
     },
   );
   // A third app continues actual pending work while the selected checkout restarts.
+  const sentinelBefore = startedTurns(await coreLog(sentinel));
   await op(sentinel, "type", {
     selector: '[aria-label="Prompt"]',
     text: "fixture:pending sentinel remains active",
     replace: true,
   });
   await op(sentinel, "click", { selector: 'button[aria-label="Send"]' });
-  await sleep(800);
-  const sentinelEvents = (await op(sentinel, "logs", { surface: "core", limit: 200 })).entries,
-    sentinelGame = hash(fs.readFileSync(path.join(sentinel.identity.roots.games, "fixture-game/index.html")));
-  const bHistory = (await op(b, "logs", { surface: "core", limit: 200 })).entries;
+  // What the restart must leave untouched is read once each app stands still: the sentinel's message
+  // has its turn, whose engine now waits for a Stop, and b answers nothing. A fixed pause raced a
+  // slow runner, where the sentinel was still starting that turn when its log was read.
+  const sentinelEvents = await until(async () => {
+    const entries = await coreLog(sentinel);
+    return workingTurn(entries, sentinelBefore) ? entries : false;
+  }, "the sentinel's pending turn at work");
+  const sentinelGame = hash(fs.readFileSync(path.join(sentinel.identity.roots.games, "fixture-game/index.html")));
+  const bHistory = await until(async () => {
+    const entries = await coreLog(b);
+    return noTurnOpen(entries) ? entries : false;
+  }, "b with no turn open");
   await check(
     "evolved profile stale-build rejection and restart noninterference",
     "lifecycle",

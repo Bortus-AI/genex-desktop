@@ -5,7 +5,9 @@
  * counterparts, so a component under test hears pushes exactly as it would from the preload.
  */
 import type { StudioApi } from "../../src/shared/studio-api.ts";
+import { ShaderFailure } from "../../src/shared/backdrop-shader.ts";
 import { CliInstallPhase } from "../../src/shared/cli-install.ts";
+import { GenexAccountStatus } from "../../src/shared/genex-account.ts";
 
 export type StudioMethod = keyof StudioApi;
 export interface StudioCall<M extends StudioMethod = StudioMethod> {
@@ -32,14 +34,18 @@ const METHODS = [
   "pluginSetSetting",
   "pluginReview",
   "pluginAction",
+  "pluginChooseFile",
   "genexPublishReview",
+  "genexPublishPlatforms",
   "genexPublish",
+  "genexPublishApps",
   "pluginsIndex",
   "pluginInstallGithub",
   "pluginLookupGithub",
   "pluginGithubVersions",
   "pluginUpdate",
   "pluginWatch",
+  "pluginForgetAllowed",
   "pluginConsent",
   "permissions",
   "setPermissionMode",
@@ -54,9 +60,12 @@ const METHODS = [
   "mcpCancelAuthorization",
   "mcpDisconnectAccount",
   "mcpTools",
+  "mcpForgetAlwaysAllowed",
   "bootState",
   "retrySandboxSetup",
   "setUpSandbox",
+  "reportSandboxSetup",
+  "quitFromBoot",
   "setWindowControls",
   "readyUpdate",
   "restartToUpdate",
@@ -66,6 +75,7 @@ const METHODS = [
   "bootstrap",
   "performanceMark",
   "send",
+  "mentionRetry",
   "answerPlan",
   "cancelTurn",
   "changeQueuedMessage",
@@ -78,12 +88,21 @@ const METHODS = [
   "renameThread",
   "compactThread",
   "archiveGame",
+  "storageSpace",
+  "freeStorage",
+  "dataFolder",
+  "chooseDataFolder",
+  "moveDataFolder",
+  "undoEngineLink",
+  "stopJob",
+  "openPrivacySettings",
   "engines",
   "providerUsage",
   "hardware",
   "games",
   "createGame",
   "nameGame",
+  "makeBackdrop",
   "pickGameLocation",
   "updateGame",
   "removeGame",
@@ -97,6 +116,7 @@ const METHODS = [
   "settings",
   "setSettings",
   "diagnostics",
+  "sendFeedback",
   "licenses",
   "recheckEngines",
   "subscriptionSignIn",
@@ -104,6 +124,18 @@ const METHODS = [
   "claudeLoginCode",
   "claudeLoginOpenBrowser",
   "claudeLoginCancel",
+  "openCodeSignIn",
+  "grokSignIn",
+  "cursorSignIn",
+  "cursorSignOut",
+  "openRouterKeySave",
+  "openRouterKeyClear",
+  "openRouterSignIn",
+  "openRouterSignInReopen",
+  "openRouterSignInCancel",
+  "localServerConnect",
+  "localServerForget",
+  "localServerFind",
   "terminalList",
   "terminalAccessibility",
   "terminalOpen",
@@ -114,6 +146,7 @@ const METHODS = [
   "terminalAcknowledge",
   "terminalStop",
   "terminalRemove",
+  "terminalOpenLink",
   "onTerminal",
   "onClaudeLogin",
   "codexLoginState",
@@ -127,12 +160,87 @@ const METHODS = [
   "grokLoginOpenBrowser",
   "onGrokLogin",
   "subscriptionForgetStudioLogin",
+  "subscriptionAccounts",
+  "subscriptionUseAccount",
   "openUrl",
+  "playFeed",
+  "playShelves",
+  "playSearch",
+  "playCatalog",
+  "playRemix",
+  "playRemixReady",
+  "playOnline",
+  "playOpen",
+  "playGame",
+  "playInstall",
+  "playInstallCancel",
+  "playInstalls",
+  "playUninstall",
+  "playLaunch",
+  "playSession",
+  "playSessions",
+  "playRevealInstall",
+  "playLike",
+  "playClose",
+  "playTakeGameLink",
+  "playControl",
+  "playBar",
+  "playComments",
+  "playComment",
+  "playUncomment",
+  "playPurchase",
+  "playMe",
+  "playRename",
+  "playAvatar",
+  "playProfile",
+  "playFriends",
+  "playFriend",
+  "playPeople",
+  "playVisibility",
+  "playAvatarStyle",
+  "playAvatarVariant",
+  "playStats",
+  "playCreators",
+  "playCredits",
+  "playHandleCheck",
+  "playSetHandle",
+  "playShare",
+  "playManage",
+  "playCover",
+  "storeItems",
+  "storeMyItems",
+  "storeItemGames",
+  "storeBuy",
+  "storeAnswer",
+  "onStoreSheet",
+  "storeClaim",
+  "storeShelf",
+  "storeCoins",
+  "storeGetCoin",
+  "storeReport",
+  "itemsBrowse",
+  "itemsBrowseDetail",
+  "itemsAddToGame",
+  "itemsRemoveFromGame",
+  "itemsSelling",
+  "itemPutOnSale",
+  "itemTakeOffSale",
+  "itemSetShared",
+  "itemsLocal",
+  "itemsLocalApprove",
+  "itemsLocalWithdraw",
+  "itemsLocalShare",
+  "itemsLocalSettle",
+  "genexAccount",
+  "genexSignIn",
+  "genexCancelSignIn",
+  "genexSignOut",
   "notify",
   "setBadge",
   "rollback",
   "undoChange",
   "loadPreview",
+  "loadWebBuild",
   "buildPreview",
   "agentScreens",
   "readRunStill",
@@ -141,6 +249,13 @@ const METHODS = [
   "presentProjectAssets",
   "projectModelRigs",
   "projectAssets",
+  "assetLibrary",
+  "assetLibraryStates",
+  "assetSave",
+  "assetShare",
+  "assetUnshare",
+  "assetAdd",
+  "assetLibraryFile",
   "readProjectAsset",
   "runFeedback",
   "playSnapshot",
@@ -155,6 +270,7 @@ const METHODS = [
   "liveBehind",
   "previewState",
   "previewLive",
+  "previewCoverStill",
   "buildProblem",
   "installPackages",
   "startRun",
@@ -180,8 +296,11 @@ const METHODS = [
   "resolveChatFiles",
   "openChatFile",
   "messageImages",
+  "pathOfFile",
+  "systemLanguages",
   "rewindPreview",
   "rewindChat",
+  "undoRewind",
   "chooseGamesRoot",
   "pickProject",
   "inspectFolder",
@@ -204,6 +323,7 @@ type ClaudeLogin = Parameters<Parameters<StudioApi["onClaudeLogin"]>[0]>[0];
 type CodexLogin = Parameters<Parameters<StudioApi["onCodexLogin"]>[0]>[0];
 type GrokLogin = Parameters<Parameters<StudioApi["onGrokLogin"]>[0]>[0];
 type RunSummary = Parameters<Parameters<StudioApi["onRunSummary"]>[2]>[0];
+type StoreSheetPush = Parameters<Parameters<StudioApi["onStoreSheet"]>[0]>[0];
 
 export interface FakeStudioApi {
   /** The object to hand to the code under test (or install as `window.studio`). */
@@ -219,13 +339,36 @@ export interface FakeStudioApi {
   emitCodexLogin(state: CodexLogin): void;
   emitGrokLogin(state: GrokLogin): void;
   emitRunSummary(project: string, runId: string, summary: RunSummary): void;
+  /** Push the store's purchase sheet (or null once it closes), as main does in the studio window. */
+  emitStoreSheet(sheet: StoreSheetPush): void;
   /** Subscribed listeners per `on*` call — 0 after a component unmounts proves it unsubscribed. */
-  listeners(method: "onEvent" | "onTerminal" | "onClaudeLogin" | "onCodexLogin" | "onGrokLogin" | "onRunSummary"): number;
+  listeners(
+    method: "onEvent" | "onTerminal" | "onClaudeLogin" | "onCodexLogin" | "onRunSummary" | "onStoreSheet",
+  ): number;
 }
 
 export interface FakeStudioOptions {
   /** Unstubbed calls reject instead of answering a default, to find every call a flow makes. */
   strict?: boolean;
+}
+
+/** The store's reads a game's page and a profile make on mount: a store that sells nothing, a bare shelf. */
+function storeDefaults(): Partial<Record<StudioMethod, () => unknown>> {
+  return {
+    storeItems: () => ({ items: [], myItemsCount: null }),
+    storeMyItems: () => [],
+    storeItemGames: () => ({ total: 0, games: [] }),
+    storeShelf: () => [],
+    // The account's coin for the plate in Play: none, as with coin off.
+    storeCoins: () => null,
+    // Create › Items with nothing in it: no item to show, nothing made yet.
+    itemsBrowse: () => ({ items: [], nextCursor: null }),
+    itemsBrowseDetail: () => ({ refused: "sku_not_found" }),
+    itemsSelling: () => ({ earnedReady: 0, earnedHeld: 0, nextReleaseAt: null, holdDays: 0, items: [] }),
+    // A game with no local drafts in Studio's app data.
+    itemsLocal: () => ({ project: "", approvals: {}, drafts: {}, removed: [], outcomes: {} }),
+    itemsLocalSettle: () => ({ project: "", approvals: {}, drafts: {}, removed: [], outcomes: {} }),
+  };
 }
 
 /** Defaults for the calls a screen makes on mount; everything else resolves `undefined`. */
@@ -269,6 +412,7 @@ function defaults(): Partial<Record<StudioMethod, () => unknown>> {
     pluginSkillText: () => "",
     pluginsList: empty,
     pluginsCatalog: empty,
+    pluginsIndex: () => ({ url: "", studioVersion: "0.1.0", fetchedAt: null, stale: true, entries: [], updates: [] }),
     mcpList: empty,
     mcpTools: empty,
     terminalList: empty,
@@ -290,7 +434,29 @@ function defaults(): Partial<Record<StudioMethod, () => unknown>> {
     previewState: () => null,
     pickProject: () => null,
     pickGameLocation: () => null,
+    pluginChooseFile: () => null,
     nameGame: () => ({ title: "Untitled game" }),
+    playFeed: () => ({ games: [], nextCursor: null }),
+    playComments: () => ({ items: [], nextCursor: null }),
+    playShelves: () => ({
+      counts: { games: null, tools: null, assets: null },
+      categories: ["featured", "tools", "assets"],
+    }),
+    playOnline: () => ({}),
+    playInstalls: () => ({ installed: [], progress: [], host: null }),
+    playSessions: () => [],
+    playSearch: () => [],
+    playCatalog: () => [],
+    playMe: () => null,
+    genexAccount: () => ({ status: GenexAccountStatus.SignedOut }),
+    genexSignIn: () => ({ status: GenexAccountStatus.SigningIn }),
+    genexCancelSignIn: () => ({ status: GenexAccountStatus.SignedOut }),
+    genexSignOut: () => ({ status: GenexAccountStatus.SignedOut }),
+    playPeople: () => ({ people: [], unavailable: false }),
+    playStats: () => null,
+    playCreators: () => null,
+    ...storeDefaults(),
+    makeBackdrop: () => ({ ok: false, failure: ShaderFailure.NoModel }),
   };
 }
 
@@ -307,6 +473,7 @@ export function fakeStudioApi(overrides: Partial<StudioApi> = {}, options: FakeS
     onCodexLogin: new Set<(state: CodexLogin) => void>(),
     onGrokLogin: new Set<(state: GrokLogin) => void>(),
     onRunSummary: new Set<{ project: string; runId: string; listener: (summary: RunSummary) => void }>(),
+    onStoreSheet: new Set<(sheet: StoreSheetPush) => void>(),
   };
   const subscribe = <T>(set: Set<T>, entry: T) => {
     set.add(entry);
@@ -320,6 +487,10 @@ export function fakeStudioApi(overrides: Partial<StudioApi> = {}, options: FakeS
     onGrokLogin: ((listener: (state: GrokLogin) => void) => subscribe(sets.onGrokLogin, listener)) as never,
     onRunSummary: ((project: string, runId: string, listener: (summary: RunSummary) => void) =>
       subscribe(sets.onRunSummary, { project, runId, listener })) as never,
+    onStoreSheet: ((listener: (sheet: StoreSheetPush) => void) => subscribe(sets.onStoreSheet, listener)) as never,
+    // Answered by the preload, not main: synchronous, and no file of a test has a place on disk.
+    pathOfFile: (() => "") as never,
+    systemLanguages: () => [],
   };
   const api = {} as Record<StudioMethod, (...args: unknown[]) => unknown>;
   for (const method of METHODS) {
@@ -355,6 +526,9 @@ export function fakeStudioApi(overrides: Partial<StudioApi> = {}, options: FakeS
     emitRunSummary: (project, runId, summary) => {
       for (const entry of [...sets.onRunSummary])
         if (entry.project === project && entry.runId === runId) entry.listener(summary);
+    },
+    emitStoreSheet: (sheet) => {
+      for (const listener of [...sets.onStoreSheet]) listener(sheet);
     },
     listeners: (method) => sets[method].size,
   };

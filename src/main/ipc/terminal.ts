@@ -1,5 +1,7 @@
 /** The per-game terminal dock: sessions live in the terminal host, the renderer only draws them. */
 import os from "node:os";
+import { tagGenexLink } from "../../plugins/genex/http.ts";
+import { t } from "../../shared/i18n.ts";
 import { runnableCommand, TerminalKind } from "../../shared/terminal.ts";
 import { withEnvPath } from "../../substrate/toolchain.ts";
 import { commandShell, type TerminalShell, terminalShell } from "../terminal-shell.ts";
@@ -7,11 +9,11 @@ import type { StudioCore } from "../studio-core.ts";
 import type { TerminalLaunch, TerminalService } from "../terminal-service.ts";
 import type { IpcHandle } from "./registrar.ts";
 
-/** Why a terminal cannot open. */
+/** Why a terminal cannot open, in the words the person reads in the terminal dock. */
 const MESSAGE = {
-  unsupportedPlatform: "Terminals are supported on macOS, Windows and Linux.",
-  noGame: "Open a game before starting its terminal.",
-  notACommand: "This is not a single command the terminal can run.",
+  unsupportedPlatform: () => t("Terminals are supported on macOS, Windows and Linux."),
+  noGame: () => t("Open a game before starting its terminal."),
+  notACommand: () => t("This is not a single command the terminal can run."),
 } as const;
 
 /** Studio transport/engine configuration that must not become a project shell's environment. */
@@ -19,7 +21,12 @@ const STUDIO_ONLY_ENV = /^(STUDIO_|ELECTRON_|CLAUDE_CONFIG_DIR$|CODEX_HOME$)/;
 
 export interface TerminalIpcDeps {
   core: Pick<StudioCore, "games" | "assertProjectAllowed">;
-  terminals: Pick<TerminalService, "list" | "open" | "attach" | "write" | "resize" | "acknowledge" | "stop" | "remove">;
+  terminals: Pick<
+    TerminalService,
+    "list" | "open" | "attach" | "write" | "resize" | "acknowledge" | "stop" | "remove" | "link"
+  >;
+  /** Open an https page in the person's browser. */
+  openExternal(url: string): Promise<void>;
   /** Whether macOS reports an assistive technology (VoiceOver) as active. */
   accessibilityEnabled(): boolean;
   /** The PATH the user's login shell sets up (the toolchain's). */
@@ -41,9 +48,9 @@ async function gameShell(
   project: unknown,
   shell: TerminalShell | null,
 ): Promise<Omit<TerminalLaunch, "kind">> {
-  if (!shell) throw new Error(MESSAGE.unsupportedPlatform);
+  if (!shell) throw new Error(MESSAGE.unsupportedPlatform());
   const game = (await core.games.list()).find((game) => game.name === project);
-  if (!game) throw new Error(MESSAGE.noGame);
+  if (!game) throw new Error(MESSAGE.noGame());
   await core.assertProjectAllowed(game.dir);
   const env: NodeJS.ProcessEnv = { ...withEnvPath(process.env, await shellPath()), TERM: "xterm-256color" };
   for (const key of Object.keys(env)) if (STUDIO_ONLY_ENV.test(key)) delete env[key];
@@ -62,7 +69,7 @@ export function registerTerminalIpc(handle: IpcHandle, deps: TerminalIpcDeps): v
   // visibly, in the user's own shell, exactly as if they had typed it in the project terminal.
   handle("studio:terminal.run", async (payload) => {
     const command = runnableCommand(payload?.command);
-    if (command === null) throw new Error(MESSAGE.notACommand);
+    if (command === null) throw new Error(MESSAGE.notACommand());
     const shell = commandShell(process.platform, command, { userShell: accountShell() });
     const launch = await gameShell(deps, payload?.project, shell);
     return terminals.open({ ...launch, title: command, kind: TerminalKind.Command, command });
@@ -73,4 +80,10 @@ export function registerTerminalIpc(handle: IpcHandle, deps: TerminalIpcDeps): v
   handle("studio:terminal.ack", (payload) => terminals.acknowledge(payload?.id, payload?.count));
   handle("studio:terminal.stop", (payload) => terminals.stop(payload?.id));
   handle("studio:terminal.remove", (payload) => terminals.remove(payload?.id));
+  // Only the page the session itself printed: the renderer names a session, never an address.
+  // A genex.games page goes tagged `s=desktop`.
+  handle("studio:terminal.open-link", async (payload) => {
+    const url = terminals.link(payload?.id);
+    if (url) await deps.openExternal(tagGenexLink(url));
+  });
 }

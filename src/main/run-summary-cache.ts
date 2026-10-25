@@ -1,4 +1,4 @@
-import { compactGraphEvents } from "../shared/run-graph-events.ts";
+import { answeredRecords, compactGraphEvents } from "../shared/run-graph-events.ts";
 import path from "node:path";
 import { lstat, readdir, realpath } from "node:fs/promises";
 import { compareIds } from "../shared/compare-ids.ts";
@@ -59,6 +59,7 @@ interface CachedSummary {
 export class RunSummaryCache {
   readonly #cache = new Map<string, CachedSummary>();
   readonly #pending = new Map<string, PendingSummary>();
+  readonly #probes = new Map<string, Map<EventEnvelope[], Promise<string>>>();
   readonly #fold: typeof summarizeRun;
   readonly #version: typeof evidenceVersion;
   readonly #supplement: typeof supplementRunEvidence;
@@ -77,7 +78,7 @@ export class RunSummaryCache {
   /** Return a stable summary until either persisted source changes. */
   async read(events: EventEnvelope[], project: string, runId: string, runs: string): Promise<RunSummary> {
     const key = JSON.stringify([project, runId, path.resolve(runs)]);
-    const version = await this.#version(runs, runId);
+    const version = await this.#readVersion(key, events, runs, runId);
     const cached = this.#cache.get(key);
     if (cached && cached.events === events && cached.version === version) {
       this.#cache.delete(key);
@@ -98,16 +99,35 @@ export class RunSummaryCache {
     }
   }
 
+  /** Share concurrent matching scans; a later request always checks the evidence files afresh. */
+  async #readVersion(key: string, events: EventEnvelope[], runs: string, runId: string): Promise<string> {
+    let probes = this.#probes.get(key);
+    const pending = probes?.get(events);
+    if (pending) return pending;
+    probes ??= new Map();
+    this.#probes.set(key, probes);
+    const result = Promise.resolve().then(() => this.#version(runs, runId));
+    probes.set(events, result);
+    try {
+      return await result;
+    } finally {
+      probes.delete(events);
+      if (probes.size === 0) this.#probes.delete(key);
+    }
+  }
+
   async #build(events: EventEnvelope[], project: string, runId: string, runs: string): Promise<RunSummary> {
     const summary = this.#fold(events, project, runId);
     if (RUN_ID.test(runId)) summary.runDirectory = path.join(runs, runId);
-    summary.graphEvents = compactGraphEvents(
-      events.filter((event) => {
+    summary.graphEvents = compactGraphEvents([
+      // The message the run answers, ahead of its own records: its start shows that message's pictures.
+      ...answeredRecords(events, runId),
+      ...events.filter((event) => {
         if (event.data.type !== EventKind.Custom) return false;
         const facts = event.data.payload as { runId?: string; project?: string };
         return facts?.runId === runId && (!facts.project || facts.project === project);
       }),
-    );
+    ]);
     await this.#supplement(summary, runs);
     summary.revision = ++this.#revision;
     return summary;

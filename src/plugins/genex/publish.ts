@@ -3,6 +3,7 @@
  * an attempt runs, when an unknown outcome may be settled or re-checked, and which links are ours.
  */
 import {
+  GENEX_GAME_PACKAGES,
   GenexHostedStatus,
   GenexPublishJobState,
   GenexPublishKind,
@@ -12,7 +13,9 @@ import {
   type GenexPublishState,
 } from "../../shared/genex.ts";
 import { SECOND_MS } from "../../shared/duration.ts";
+import { t } from "../../shared/i18n.ts";
 import { stripAnsi } from "./cli.ts";
+import type { GenexConnection } from "./entry-page.ts";
 import { DEFAULT_DASHBOARD, isGenexLink } from "./http.ts";
 
 /** A draft checked this soon after its upload is still expected to go live on its own. */
@@ -29,31 +32,45 @@ const BACKGROUND_RETRY_MS = 30 * SECOND_MS;
 /** How much of a failed CLI run's message a job keeps. */
 export const PUBLISH_ERROR_TAIL_CHARS = 3000;
 
+/**
+ * A publish's words. Its record (a job's error and check, which the agent reads and a report
+ * carries) stays English; a refusal the Publish dialog shows is a function, translated when said.
+ */
 export const MESSAGE = {
   UnknownAfterRestart: "Upload outcome is unknown after restart. Check the deployment page before retrying.",
   CannotReach: "Genex could not be reached to check this upload. Check again later.",
   DidNotLand: "The upload did not reach Genex: the hosted game is unchanged. You can upload again.",
-  CannotTell: "Genex cannot tell whether this upload went live. Check the game page, then allow a new upload.",
-  StillRunning: "This upload is still running",
-  NotCurrent: "That upload is no longer the current one",
+  CannotTell: "Genex cannot tell whether this upload went live. Publish again to replace it.",
+  StillRunning: () => t("This upload is still running"),
+  NotCurrent: () => t("That upload is no longer the current one"),
   OnlyDraftUpdated: "Only the draft page was updated: the public version is unchanged. Publish again to update it.",
-  AllowedNewUpload: "You checked the deployment page and allowed a new upload.",
-  ConnectFirst: "Connect Genex Tools first",
-  AuthorizationExpired: "Genex authorization expired. Reconnect Genex Tools before uploading.",
+  AllowedNewUpload: "Published again before Studio knew whether this upload reached Genex.",
+  EmptyStarter: "This game is still the empty starter: build something first, then publish.",
+  /** {@link MESSAGE.EmptyStarter} as Publish's refusal. */
+  EmptyStarterRefusal: () => t("This game is still the empty starter: build something first, then publish."),
+  ConnectFirst: "Connect the Genex plugin first",
+  /** {@link MESSAGE.ConnectFirst} as Publish's refusal. */
+  ConnectFirstRefusal: () => t("Connect the Genex plugin first"),
+  AuthorizationExpired: () => t("Genex authorization expired. Reconnect the Genex plugin before uploading."),
   NoHostedProject: "Genex did not create a hosted project for this game",
   NoStagingIdentity: "Upload recorded; staging identity is not yet available",
   RevisionMismatch: "Hosted staging revision does not match this upload yet",
-  NotInGallery: "This game is not in the gallery yet",
-  NothingOnline: "Nothing is online for this game yet",
-  UnrecognizedLink: "Unrecognized Genex page link",
+  NotInGallery: () => t("This game is not in the gallery yet"),
+  NothingOnline: () => t("Nothing is online for this game yet"),
+  UnrecognizedLink: () => t("Unrecognized Genex page link"),
   InvalidProject: "Invalid project",
-  NeedsGit: "Publishing needs git on this Mac. Install git (Xcode command line tools or Homebrew) and try again.",
-  NeedsGitLfs:
-    "Publishing needs git and git-lfs on this Mac (brew install git-lfs). Studio will not let the Genex CLI install software.",
+  NeedsGit: () =>
+    t("Publishing needs git on this Mac. Install git (Xcode command line tools or Homebrew) and try again."),
+  NeedsGitLfs: () =>
+    t(
+      "Publishing needs git and git-lfs on this Mac (brew install git-lfs). Studio will not let the Genex CLI install software.",
+    ),
   DraftFailedTest:
     "The new build did not pass its test on the draft page, so it was not made public. Players still get the previous version.",
-  SignInNotRecorded: (shipped: string, reported: string) =>
-    `Genex does not record this build's sign-in support (shipped ${shipped}, Genex reports ${reported})`,
+  NoApps: "This game has no Mac, Windows or Linux app ready to publish.",
+  /** {@link MESSAGE.NoApps} as Publish's refusal. */
+  NoAppsRefusal: () => t("This game has no Mac, Windows or Linux app ready to publish."),
+  ListingRefused: "Genex did not list the game in the gallery.",
 } as const;
 
 /** Genex's own record of a hosted game, read by slug. `missing`: there is no hosted project. */
@@ -121,39 +138,48 @@ const CLI_ARGS_FOR_PHASE: Partial<Record<GenexPublishPhase, string[]>> = {
 };
 
 /**
- * The CLI arguments that carry out an upload phase. Listing names the game; a game listed before
- * under another name (or none Studio sent) also has its cover redrawn, since Genex paints the name on it.
+ * The CLI arguments that carry out an upload phase. Listing names the game. Its cover is a real
+ * frame of the game with no name in it (`cover.ts`), so a new name never asks for a new picture.
  */
-export function publishArgs(
-  phase: GenexPublishPhase,
-  listing: { title?: string; redrawCover?: boolean } = {},
-): string[] {
+export function publishArgs(phase: GenexPublishPhase, listing: { title?: string } = {}): string[] {
   const args = [...(CLI_ARGS_FOR_PHASE[phase] ?? [])];
   if (phase !== GenexPublishPhase.Listing || !listing.title) return args;
-  return [...args, "--title", listing.title, ...(listing.redrawCover ? ["--regenerate-cover"] : [])];
+  return [...args, "--title", listing.title];
+}
+
+/** The package.json of Studio's publish copy. */
+export interface WorkspaceManifest extends GenexGameManifest {
+  name: string;
+  private: true;
 }
 
 /**
  * The package.json of Studio's publish copy: the game's Genex SDK versions and `genex` settings,
- * which the CLI reads from the folder it runs in and sends with every upload. Null when the game
- * names none, so no package.json is left behind.
+ * plus the SDK Studio ships with a game that brings none (`studioSdk`), which the CLI reads from the
+ * folder it runs in and sends with every upload. Null when there is nothing to name, so no
+ * package.json is left behind.
  */
-export function workspaceManifest(project: string, manifest: GenexGameManifest | undefined): object | null {
-  if (!manifest) return null;
+export function workspaceManifest(
+  project: string,
+  manifest: GenexGameManifest | undefined,
+  studioSdk = false,
+): WorkspaceManifest | null {
+  if (!manifest && !studioSdk) return null;
+  const sdk = studioSdk ? { "@genex-ai/embed-sdk": GENEX_GAME_PACKAGES["@genex-ai/embed-sdk"] } : {};
   return {
     name: project.toLowerCase(),
     private: true,
-    dependencies: manifest.dependencies,
-    ...(manifest.genex ? { genex: manifest.genex } : {}),
+    dependencies: { ...manifest?.dependencies, ...sdk },
+    ...(manifest?.genex ? { genex: manifest.genex } : {}),
   };
 }
 
-/** The sign-in support Genex records for a build, when its answer names one: compared with what shipped. */
-export function signInRecorded(shipped: string | undefined, project: { embedSdkVersion?: unknown } | undefined) {
-  const reported = project?.embedSdkVersion;
-  if (!shipped || reported === undefined) return { ok: true } as const;
-  if (reported === shipped) return { ok: true } as const;
-  return { ok: false, reported: typeof reported === "string" ? reported : "none" } as const;
+/**
+ * What a published copy is connected to: the game's project on Genex and the API Studio publishes
+ * through. The games host names the environment it really serves the page from; this stands in.
+ */
+export function publishedConnection(meta: HostedMeta, api: string): GenexConnection {
+  return { slug: String(meta.slug ?? ""), apiUrl: api, dashboardOrigins: [dashboardFor(meta)] };
 }
 
 /** A running upload with no recorded outcome that no process here owns: a restart interrupted it. */
@@ -174,14 +200,18 @@ export function canForceSettle(job: GenexPublishJob | undefined, live: boolean, 
   return !live && force && job?.state === GenexPublishJobState.Unresolved && !job.uploadedAt;
 }
 
-/** An uploaded draft not yet verified live, whose next check is due (or forced). */
+/** A job whose outcome is still open: running here, or unknown. A finished or settled one is never checked again. */
+export const isOpen = (job: GenexPublishJob): boolean =>
+  job.state === GenexPublishJobState.Running || job.state === GenexPublishJobState.Unresolved;
+
+/** An uploaded draft not yet verified live and still open, whose next check is due (or forced). */
 export function deploymentCheckDue(
   job: GenexPublishJob | undefined,
   live: boolean,
   force: boolean,
   now = Date.now(),
 ): boolean {
-  if (live || !job?.uploadedAt || !checksDraftPage(job)) return false;
+  if (live || !job?.uploadedAt || !checksDraftPage(job) || !isOpen(job)) return false;
   if (job.phase === GenexPublishPhase.Ready) return false;
   return force || !job.nextCheckAt || Date.parse(job.nextCheckAt) <= now;
 }
@@ -270,11 +300,14 @@ export function dashboardFor(meta: HostedMeta | null | undefined): string {
   return isGenexLink(origin) ? String(origin).replace(/\/+$/, "") : DEFAULT_DASHBOARD;
 }
 
-/** Both pages of a hosted game. The CLI prints the same forms; a printed link wins when it is one of ours. */
+/**
+ * Both pages of a hosted game, in the forms genex.games serves and the CLI prints: the public page
+ * at the dashboard root (the old `world/` address only redirects there), the draft under `draft/`.
+ */
 export function publishUrls(meta: HostedMeta | null | undefined): { draftUrl?: string; galleryUrl?: string } {
   if (!hasSlug(meta)) return {};
   const dashboard = dashboardFor(meta);
-  return { draftUrl: `${dashboard}/draft/${meta.slug}`, galleryUrl: `${dashboard}/world/${meta.slug}` };
+  return { draftUrl: `${dashboard}/draft/${meta.slug}`, galleryUrl: `${dashboard}/${meta.slug}` };
 }
 
 /** Copy what the hosted project says about itself into Studio's publish record. */
@@ -283,7 +316,9 @@ export function mergeMeta(state: GenexPublishState, meta: HostedMeta | null | un
   if (typeof meta?.id === "string") state.projectId = meta.id;
   if (meta?.status === GenexHostedStatus.Published || meta?.status === GenexHostedStatus.Draft)
     state.status = meta.status;
-  if (isGenexLink(meta?.playUrl)) state.playUrl = meta.playUrl;
+  // Until the game is public its live address serves nothing; a tester needs the draft page.
+  if (state.status !== GenexHostedStatus.Published) delete state.playUrl;
+  else if (isGenexLink(meta?.playUrl)) state.playUrl = meta.playUrl;
   Object.assign(state, publishUrls(meta));
 }
 
@@ -297,15 +332,36 @@ export function shareLink(out: string): string | undefined {
   return undefined;
 }
 
-/** The staging URL the CLI printed after "Live." or "Published.": ours, or the fixture API's own origin. */
-export function stagingLink(out: string, api: string): string | undefined {
+/**
+ * The staging URL the CLI printed after "Live." or "Published.": ours, the fixture API's own origin,
+ * or a game on a development stand's game host (`standGames`, which the host names).
+ */
+export function stagingLink(out: string, api: string, standGames?: string): string | undefined {
   const apiUrl = new URL(api);
   const isFixtureOrigin = (value: string) => apiUrl.hostname === "127.0.0.1" && new URL(value).origin === apiUrl.origin;
+  const onStand = (value: string) => standGames !== undefined && isStandGameLink(value, standGames);
   return stripAnsi(out)
     .split("\n")
     .filter((line) => /Live\.|Published\./.test(line))
     .flatMap((line) => line.match(/https?:\/\/[^\s)]+/g) ?? [])
-    .find((value) => isGenexLink(value) || isFixtureOrigin(value));
+    .find((value) => isGenexLink(value) || isFixtureOrigin(value) || onStand(value));
+}
+
+/** One DNS label, as a game's (or its draft's) subdomain spells it. */
+const GAME_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+
+/** Whether `value` is a game one label under the stand's game host `games`: its scheme and port, no user. */
+function isStandGameLink(value: string, games: string): boolean {
+  try {
+    const url = new URL(value);
+    const host = new URL(games);
+    const sameServer = url.protocol === host.protocol && url.port === host.port && !url.username && !url.password;
+    const suffix = `.${host.hostname}`;
+    const label = url.hostname.endsWith(suffix) ? url.hostname.slice(0, -suffix.length) : "";
+    return sameServer && GAME_LABEL.test(label);
+  } catch {
+    return false;
+  }
 }
 
 /** Which page a "publish-open" action may open. */

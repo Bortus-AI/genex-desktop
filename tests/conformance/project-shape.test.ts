@@ -1,14 +1,15 @@
 /**
- * A folder the user brings keeps its own shape (skate-prod, 2026-09-06): the studio detects the
+ * A folder the user brings keeps its own shape: the studio detects the
  * entry, build and output, adds only what it needs, builds before serving, and every rule that
  * named src/main.js names the real entry instead.
  */
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { cp, mkdir, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { cp, lstat, mkdir, readFile, readdir, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { after, describe, it } from "node:test";
+import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import {
   GameWorkspaces,
@@ -17,22 +18,22 @@ import {
   TEMPLATE_SHAPE,
   detectProjectShape,
   findGameRoot,
+  hudContractGeneration,
   isBuiltShape,
   nestedRepos,
   readProjectShape,
+  shippedHudGeneration,
+  shippedStudioGeneration,
   studioContractGeneration,
 } from "../../src/substrate/game-workspace.ts";
 import { bootBudget } from "../../src/substrate/preview-ready.ts";
+import { templateLoadsGenexSdk, webGameSignal } from "../../src/substrate/project-shape.ts";
+import { withGenexSdkImport } from "../../src/shared/genex-page.ts";
+import { servedKey } from "../../src/main/core/page-report.ts";
 import { ensureRepo, git } from "../../src/substrate/snapshots.ts";
 import { buildContractorBrief } from "../../src/harness-seed/loop/chat-session.ts";
-import {
-  ENGINE_EXPORT_REFUSAL,
-  kindChip,
-  openOptions,
-  openedWords,
-  suggestedOption,
-} from "../../src/shared/shape-words.ts";
-import { nightRefusal } from "../../src/harness-seed/loop/main.ts";
+import { engineExportRefusal, openOptions, openedWords, suggestedOption } from "../../src/shared/shape-words.ts";
+import { loopRunRefusal } from "../../src/harness-seed/loop/main.ts";
 import { servedAfterBuild } from "../../src/main/game-build.ts";
 import { allowedFile as hookAllowedFile } from "../../src/substrate/ownership.ts";
 import { allowedFile as reviewAllowedFile } from "../../src/harness-seed/loop/review.ts";
@@ -48,6 +49,15 @@ import { tmpDir } from "../helpers/tmp.ts";
 
 const exec = promisify(execFile);
 const repo = path.resolve(import.meta.dirname, "../..");
+
+/** How many builds a game's build command counted in `file` of its own temp folder (its shadow's `tmp/`). */
+async function buildsRan(userData: string, project: string, file: string): Promise<number> {
+  const builds = path.join(userData, "scratch", "builds");
+  const shadow = (await readdir(builds).catch(() => [])).find((name) => name.startsWith(`${project}-`));
+  if (!shadow) return 0;
+  const counted = await readFile(path.join(builds, shadow, "tmp", file), "utf8").catch(() => "");
+  return counted.split("\n").filter(Boolean).length;
+}
 
 async function viteFolder(dir: string, options: { build?: boolean; outDir?: string } = {}): Promise<void> {
   await mkdir(path.join(dir, "src"), { recursive: true });
@@ -241,8 +251,8 @@ describe("a project's own shape", () => {
   });
 
   it("keeps the game whose entry is src/main.js — the studio's own name is not the studio's proof", async () => {
-    // The exact folder the studio adopted as "the studio template", built nothing for, served
-    // raw, and then judged as a black frame (flautout-remix/wreckage, 2026-09-07).
+    // A folder the studio would adopt as "the studio template", build nothing for, serve raw,
+    // and then judge as a black frame.
     const dir = path.join(await tmpDir("studio-shape-"), "wreckage");
     await wreckageFolder(dir);
     assert.deepEqual(await detectProjectShape(dir), {
@@ -274,7 +284,7 @@ describe("a project's own shape", () => {
     await wreckageFolder(dir);
     await writeFile(path.join(dir, "package-lock.json"), "{}\n");
     // studio.json rides inside the folder the user downloaded, and any contractor can rewrite it
-    // mid-night. Running the install is the one thing that opens the network (decision 3), so a
+    // mid-run. Running the install is the one thing that opens the network, so a
     // recorded value that is not a manager's install is not what that exemption may wrap.
     const recorded = (install: unknown): string =>
       JSON.stringify({
@@ -350,12 +360,12 @@ describe("a project's own shape", () => {
     assert.equal(checked.shape.kind, "engine-export");
     assert.ok(checked.problems.includes(NO_CONTRACT_PROBLEM), checked.problems.join("; "));
     // The sheet prints this sentence to the person who opened the folder, so it says what the
-    // night does about it and never asks them to hand-write JavaScript into their own entry —
-    // installing the contract is the base builder's first job, and the night is not refused.
+    // run does about it and never asks them to hand-write JavaScript into their own entry —
+    // installing the contract is the base builder's first job, and the run is not refused.
     assert.match(checked.problems.join("; "), /nothing on your page connects the studio to your game yet/);
     assert.ok(!/installStudio|import \{|`/.test(NO_CONTRACT_PROBLEM), NO_CONTRACT_PROBLEM);
     assert.equal(checked.ok, false);
-    // The same fact as a word, so the harness never has to match the sentence: the night's
+    // The same fact as a word, so the harness never has to match the sentence: the run's
     // first step (loop/director.ts) and a chat build's brief both read this one field.
     assert.equal(checked.contract, "missing");
   });
@@ -485,7 +495,7 @@ describe("a project's own shape", () => {
     assert.match(flagged[0]!, /static\.example\.org/);
     for (const host of ["fonts.googleapis.com", "cdn.jsdelivr.net", "unpkg.com", "example.com/credits"])
       assert.doesNotMatch(flagged[0]!, new RegExp(host.replace(/\./g, "\\.")));
-    assert.equal(nightRefusal({ name: "cdn-game" }, checked.problems), null, "a night can still vendor them");
+    assert.equal(loopRunRefusal({ name: "cdn-game" }, checked.problems), null, "a run can still vendor them");
     // The Open Game sheet says it too.
     const rows = openOptions(await games.inspect(dir));
     assert.ok(
@@ -599,7 +609,7 @@ describe("a project's own shape", () => {
   });
 
   it("sees an empty studio template wrapped around the real game, and leads with the game", async () => {
-    // The shape of the folder that produced the finding (flautout-remix, 2026-09-07), owned by
+    // The shape of the folder that produced the finding, owned by
     // this repository so it holds everywhere: a template the studio itself wrote, with the
     // user's own Genex game one folder down.
     const { games, base } = await workspaces();
@@ -701,11 +711,13 @@ describe("a project's own shape", () => {
     await writeFile(path.join(dir, "dist", "bundle.js"), "Math.random()");
     const ok = await games.validateAt(dir);
     assert.deepEqual(ok.problems, []);
+    assert.deepEqual(ok.missing, [], "a healthy folder misses nothing");
     assert.equal(ok.contract, "loaded", "the page reaches installStudio, so a judge can score it");
     assert.ok(!ok.warnings.some((w) => w.includes("dist/")), "build output is not judged as source");
     await rm(path.join(dir, "src", "main.ts"));
     const missing = await games.validateAt(dir);
     assert.ok(missing.problems.includes("src/main.ts is missing"), missing.problems.join("; "));
+    assert.deepEqual(missing.missing, ["src/main.ts"], "the typed list a run's refusal reads");
   });
 
   it("names the real entry in the ownership rule — both copies of it agree", () => {
@@ -743,7 +755,7 @@ describe("a project's own shape", () => {
     await games.adopt(dir);
 
     // The template's CLAUDE.md ("This project starts empty", "no DOM", "Nothing is downloaded")
-    // was merged into somebody's real game and obeyed (flautout-remix, 2026-09-07).
+    // was merged into somebody's real game and obeyed.
     const claude = await readFile(path.join(dir, "CLAUDE.md"), "utf8");
     assert.ok(!/starts empty/.test(claude), claude.slice(0, 300));
     assert.ok(!/All UI through `__studio\.hud`/.test(claude), "this game's UI is its own");
@@ -840,7 +852,8 @@ describe("a project's own shape", () => {
     const template = buildContractorBrief({ ask: "a pong game", scaffolded: true });
     assert.match(template, /When you build, follow CLAUDE\.md in the workspace root/);
     assert.match(template, /assets come from procedural code, imports, or the currently enabled plugin tools/);
-    assert.doesNotMatch(template, /Genex|blender__/, "disabled plugin tools are not injected by core briefs");
+    // The brief names Genex, the app it runs in (its identity line); never a disabled plugin's tools.
+    assert.doesNotMatch(template, /genex__|blender__/, "disabled plugin tools are not injected by core briefs");
     assert.ok(!/entry is/.test(template), template.slice(0, 400));
     // Both keep the rules that are about the studio, not about the game.
     for (const brief of [own, template]) assert.match(brief, /\.studio\/ \(gitignored\)/);
@@ -1008,10 +1021,10 @@ describe("a project's own shape", () => {
     rigs.push(rig);
     const dir = path.join(await tmpDir("studio-built-"), "skate");
     await viteFolder(dir);
-    // The build counts itself somewhere the studio owns, so "how many builds ran" is a fact and
-    // not an inference; it writes its output the way any bundler does, into dist/.
-    const counter = path.join(rig.userData, "scratch", "builds-ran");
-    const build = `mkdir -p dist && cp index.html dist/index.html && echo x >> ${JSON.stringify(counter)}`;
+    // The build counts itself in its own temp folder (a build writes nothing else outside its
+    // game), so "how many builds ran" is a fact and not an inference; it writes its output the
+    // way any bundler does, into dist/.
+    const build = `mkdir -p dist && cp index.html dist/index.html && echo x >> "$TMPDIR/builds-ran"`;
     const studioJson = (command: string): string =>
       JSON.stringify({
         name: "skate",
@@ -1034,8 +1047,7 @@ describe("a project's own shape", () => {
     const project = await rig.core.adoptProject(dir);
     assert.equal(project.built, true);
     const api = rig.core.api();
-    const ran = async (): Promise<number> =>
-      (await readFile(counter, "utf8").catch(() => "")).split("\n").filter(Boolean).length;
+    const ran = () => buildsRan(rig.userData, project.name, "builds-ran");
 
     await api["preview.load"]!({ project: project.name } as never);
     assert.equal(await ran(), 1, "the build ran once");
@@ -1158,11 +1170,10 @@ describe("a project's own shape", () => {
     rigs.push(rig);
     const dir = path.join(await tmpDir("studio-recovered-"), "skate");
     await viteFolder(dir);
-    const counter = path.join(rig.userData, "scratch", "recovered-builds");
     const gate = path.join(rig.userData, "packages-installed");
     // The build works only once something *outside the tree* is there — packages installed, or
     // node found on the PATH. Neither is a file git can see, which is the whole difficulty.
-    const build = `echo x >> ${JSON.stringify(counter)}; test -f ${JSON.stringify(gate)} && mkdir -p dist && cp index.html dist/index.html`;
+    const build = `echo x >> "$TMPDIR/recovered-builds"; test -f ${JSON.stringify(gate)} && mkdir -p dist && cp index.html dist/index.html`;
     await writeFile(
       path.join(dir, "studio.json"),
       JSON.stringify({
@@ -1180,8 +1191,7 @@ describe("a project's own shape", () => {
     );
     const project = await rig.core.adoptProject(dir);
     const api = rig.core.api();
-    const ran = async (): Promise<number> =>
-      (await readFile(counter, "utf8").catch(() => "")).split("\n").filter(Boolean).length;
+    const ran = () => buildsRan(rig.userData, project.name, "recovered-builds");
 
     await api["preview.load"]!({ project: project.name } as never);
     assert.equal(rig.preview.loads.length, 0, "no build ever worked, so the stage was never given a page");
@@ -1222,7 +1232,7 @@ describe("a project's own shape", () => {
     rig.core.snapshots.register({ name: project.name, dir: parent });
     const base = await rig.core.snapshots.snapshot({
       scope: "game",
-      reason: "before the night",
+      reason: "before the run",
       gameWorkspace: project.name,
     });
     const fork = path.join(await tmpDir("studio-fork-"), "worker");
@@ -1271,12 +1281,9 @@ describe("the Open Game sheet", () => {
     const { games, base } = await workspaces();
     const fresh = path.join(base, "fresh");
     await mkdir(fresh, { recursive: true });
+    // An empty folder starts with no kind: it is promised Genex's bookkeeping and no starter.
     const promised = await games.plannedWrites(fresh);
-    assert.ok(promised.includes("index.html") && promised.includes("src/main.js"), promised.join(", "));
-    assert.ok(
-      promised.includes("studio.json") && promised.includes(".gitignore") && promised.includes(".git"),
-      promised.join(", "),
-    );
+    assert.deepEqual(promised, ["studio.json", ".gitignore", ".git"]);
     const before = await filesIn(fresh);
     await games.adopt(fresh);
     assert.deepEqual(added(before, await filesIn(fresh)), [...promised].sort(), "the sheet's list is what landed");
@@ -1310,6 +1317,156 @@ describe("the Open Game sheet", () => {
     const merged = JSON.parse(await readFile(path.join(noted, "studio.json"), "utf8")) as Record<string, unknown>;
     assert.equal(merged.note, "mine", "what the folder wrote is kept");
     assert.equal(merged.main, "src/main.ts");
+  });
+
+  it("a folder with files of its own and no web page is promised, and given, only Genex's bookkeeping", async () => {
+    const { games, base } = await workspaces();
+    const godotFolder = async (dir: string) => {
+      await mkdir(path.join(dir, "scripts"), { recursive: true });
+      await writeFile(path.join(dir, "project.godot"), '[application]\nconfig/name="Lantern"\n');
+      await writeFile(path.join(dir, "scripts", "player.gd"), "extends CharacterBody3D\n");
+    };
+    const godot = path.join(base, "godot-game");
+    await godotFolder(godot);
+    assert.deepEqual(await games.plannedWrites(godot), ["studio.json", ".gitignore", ".git"]);
+    const inspection = await games.inspect(godot);
+    assert.equal(inspection.ownFiles, true);
+    assert.deepEqual(inspection.starter, ["studio.json", ".gitignore", ".git"]);
+    const [row] = openOptions(inspection);
+    assert.equal(row?.button, "Open this folder");
+    assert.deepEqual(row?.choice, {});
+    const before = await filesIn(godot);
+    await games.adopt(godot);
+    assert.deepEqual(added(before, await filesIn(godot)), [".git", ".gitignore", "studio.json"]);
+    const meta = JSON.parse(await readFile(path.join(godot, "studio.json"), "utf8")) as Record<string, unknown>;
+    assert.equal(meta.contractVersion, undefined, "no web starter's stamp");
+    // Opened again, it still adds nothing and still offers to open the folder as it is.
+    const again = openOptions(await games.inspect(godot));
+    assert.deepEqual(
+      again.map((option) => [option.button, option.writes]),
+      [["Open this folder", []]],
+    );
+
+    // A folder with nothing of its own starts with no kind too: an empty one with only the Mac's
+    // own file and a repository, and one with only the notes and stills gathered before any game.
+    // Neither is promised a starter, and neither is said to hold files of its own.
+    const blank = path.join(base, "blank");
+    await mkdir(path.join(blank, ".git"), { recursive: true });
+    await writeFile(path.join(blank, ".DS_Store"), "");
+    const notes = path.join(base, "notes-only");
+    await mkdir(path.join(notes, "references"), { recursive: true });
+    await writeFile(path.join(notes, "notes.txt"), "a racing game\n");
+    await writeFile(path.join(notes, "README.md"), "# Ideas\n");
+    await writeFile(path.join(notes, "references", "mood.png"), "png");
+    for (const dir of [blank, notes]) {
+      assert.equal((await games.plannedWrites(dir)).includes("index.html"), false, dir);
+      assert.equal((await games.inspect(dir)).ownFiles, false, dir);
+    }
+
+    // Asking for the starter still writes it.
+    const asked = path.join(base, "godot-with-starter");
+    await godotFolder(asked);
+    assert.ok((await games.plannedWrites(asked, { template: true })).includes("index.html"));
+    await games.adopt(asked, { template: true });
+    assert.ok(await stat(path.join(asked, "index.html")), "the starter was written");
+  });
+
+  it("promises the ignore file when only a fact's rules are missing", async () => {
+    const { games, base } = await workspaces();
+    const godot = path.join(base, "godot-ignored");
+    await mkdir(godot, { recursive: true });
+    await writeFile(path.join(godot, "project.godot"), '[application]\nconfig/name="Lantern"\n');
+    const generic = [".studio/", "node_modules", ".git.studio-backup", "dist/", "output/", ".env", ".playwright-cli/"];
+    await writeFile(path.join(godot, ".gitignore"), `${generic.join("\n")}\n`);
+    assert.ok((await games.plannedWrites(godot)).includes(".gitignore"), "the Godot rules are a promise");
+    await games.adopt(godot);
+    const lines = (await readFile(path.join(godot, ".gitignore"), "utf8")).split("\n").filter(Boolean);
+    assert.equal(lines.at(-1), "/.godot/");
+    assert.ok(!(await games.plannedWrites(godot)).includes(".gitignore"), "nothing left to add");
+  });
+
+  it("never promises an ignore file that is a link, and adoption leaves the link and what it names alone", async () => {
+    const { games, base } = await workspaces();
+    const godot = path.join(base, "godot-linked-ignore");
+    await mkdir(godot, { recursive: true });
+    await writeFile(path.join(godot, "project.godot"), '[application]\nconfig/name="Lantern"\n');
+    const outside = path.join(base, "outside-rules");
+    const text = "# someone else's rules\n";
+    await writeFile(outside, text);
+    await symlink(outside, path.join(godot, ".gitignore"));
+    assert.ok(!(await games.plannedWrites(godot)).includes(".gitignore"), "a linked ignore file is no promise");
+    await games.adopt(godot);
+    assert.equal(await readFile(outside, "utf8"), text, "the file the link names is byte-identical");
+    assert.ok((await lstat(path.join(godot, ".gitignore"))).isSymbolicLink(), "the link is still a link");
+  });
+
+  it("a folder of its own whose studio.json can't be parsed is refused before any write, even with consent to version it", async () => {
+    const { games, base } = await workspaces();
+    const godot = path.join(base, "broken-meta");
+    await mkdir(path.join(godot, "addons", "dialogue", ".git"), { recursive: true });
+    await writeFile(path.join(godot, "project.godot"), "[application]\n");
+    await writeFile(path.join(godot, "addons", "dialogue", "plugin.cfg"), "[plugin]\n");
+    await writeFile(path.join(godot, "studio.json"), "{");
+    const before = await filesIn(godot);
+    await assert.rejects(games.adopt(godot, { versionNested: true }));
+    assert.deepEqual(await filesIn(godot), before, "no .gitignore, no .git, no studio.json rewritten");
+    assert.equal(await readFile(path.join(godot, "studio.json"), "utf8"), "{");
+  });
+
+  it("a game knows whether its folder is a web game", async () => {
+    const { games, base } = await workspaces();
+    await games.scaffold("starter-game");
+    const vite = path.join(base, "vite-game");
+    await viteFolder(vite);
+    const viteGame = await games.adopt(vite);
+    const godot = path.join(base, "godot-game");
+    await mkdir(godot, { recursive: true });
+    await writeFile(path.join(godot, "project.godot"), "[application]\n");
+    const godotGame = await games.adopt(godot);
+    const web = new Map((await games.list()).map((game) => [game.name, game.web]));
+    assert.deepEqual([web.get("starter-game"), web.get(viteGame.name), web.get(godotGame.name)], [true, true, false]);
+  });
+
+  it("a folder is a web game by its page or by the web starter's numeric stamp, and a broken studio.json is not one", async () => {
+    const { games, base } = await workspaces();
+    const rows: Array<[string, Record<string, string>, boolean]> = [
+      ["a page only", { "index.html": "<canvas></canvas>\n" }, true],
+      ["the starter's stamp with no page", { "src/main.js": "go();\n", "studio.json": '{"contractVersion":1}' }, true],
+      ["the stamp as text", { "src/main.js": "go();\n", "studio.json": '{"contractVersion":"1"}' }, false],
+      ["a studio.json that is not JSON", { "src/main.js": "go();\n", "studio.json": "{" }, false],
+      ["nothing at all", {}, false],
+    ];
+    for (const [label, files, web] of rows) {
+      const dir = path.join(base, label.replaceAll(" ", "-").replaceAll("'", ""));
+      await mkdir(dir, { recursive: true });
+      for (const [rel, text] of Object.entries(files)) {
+        await mkdir(path.dirname(path.join(dir, rel)), { recursive: true });
+        await writeFile(path.join(dir, rel), text);
+      }
+      assert.equal(await webGameSignal(dir), web, label);
+      // Files of its own and no web page: a web game (by its page or its stamp) is not one.
+      const ownFiles = !web && Object.keys(files).length > 0;
+      assert.equal((await games.inspect(dir)).ownFiles, ownFiles, label);
+    }
+  });
+
+  it("the sheet's row for a web starter's folder with no page says the starter's files are added, as its writes do", async () => {
+    const { games, base } = await workspaces();
+    const dir = path.join(base, "stamped");
+    await mkdir(path.join(dir, "src"), { recursive: true });
+    await writeFile(path.join(dir, "src", "main.js"), "go();\n");
+    await writeFile(path.join(dir, "studio.json"), '{"contractVersion":1}');
+    const inspection = await games.inspect(dir);
+    assert.equal(inspection.ownFiles, false, "a web game by its stamp");
+    const row = openOptions(inspection).find((option) => option.id === ".");
+    assert.ok(row, "a row for the folder");
+    assert.ok(row.writes.includes("index.html"), "the starter's page is written");
+    assert.doesNotMatch(
+      `${row.headline} ${row.detail}`,
+      /no starter|empty/,
+      "never said to stay empty or get no starter",
+    );
+    assert.match(row.detail, /starter/);
   });
 
   it("writes a .gitignore before it makes the repo, so the first commit is the game and not its packages, output or secrets", async () => {
@@ -1390,7 +1547,8 @@ describe("the Open Game sheet", () => {
       "nothing was written around it",
     );
 
-    // Keeping the parent is the other answer, and it adds the studio's files without a game.
+    // Keeping the parent is the other answer: a folder of its own with no web page at its root,
+    // so it gets only Genex's bookkeeping, and no game or contract module beside the real one.
     const keptBefore = (await filesIn(parent)).filter((file) => !file.startsWith("wreckage"));
     await games.adopt(parent, { template: false });
     const keptAfter = (await filesIn(parent)).filter((file) => !file.startsWith("wreckage"));
@@ -1400,7 +1558,7 @@ describe("the Open Game sheet", () => {
       null,
       "no second game beside the real one",
     );
-    assert.match(await readFile(path.join(parent, "src", "studio.js"), "utf8"), /installStudio/);
+    assert.deepEqual(added(keptBefore, keptAfter), [".git", ".gitignore", "studio.json"]);
     // A path is never walked: only a folder the inspection listed can be opened.
     await assert.rejects(games.adopt(parent, { subdir: "../elsewhere" }), /not a path/);
     await assert.rejects(games.adopt(parent, { subdir: "nowhere" }), /there is no "nowhere" folder/);
@@ -1454,7 +1612,7 @@ describe("the Open Game sheet", () => {
     const inspection = await games.inspect(parent);
     // "This project starts empty", "Empty project" and a contract page headed "No build step, no
     // package manager, no network" are all false about a folder wrapped around somebody's real
-    // game — and the contractor obeys them, which is what lost flautout-remix a night.
+    // game — and the contractor obeys them, losing the run.
     for (const page of ["CLAUDE.md", "NOTES.md", "docs/CONTRACT.md", "index.html", "src/main.js"]) {
       assert.ok(!inspection.starter.includes(page), `${page} is promised: ${inspection.starter.join(", ")}`);
     }
@@ -1469,11 +1627,7 @@ describe("the Open Game sheet", () => {
     const written = added(before, await filesIn(parent));
     assert.deepEqual(written, [...row.writes].sort(), "the sheet's list is what landed");
     assert.equal(await games.nestedConsent(parent), true);
-    assert.match(
-      await readFile(path.join(parent, "src", "studio.js"), "utf8"),
-      /installStudio/,
-      "the contract module is still added",
-    );
+    assert.deepEqual(written, [".git", ".gitignore", "studio.json"], "only Genex's bookkeeping, no contract module");
   });
 
   it("offers the nested game first, the folder second, and a compiled export only to play", async () => {
@@ -1534,7 +1688,7 @@ describe("the Open Game sheet", () => {
       ["Start a game here"],
     );
     assert.deepEqual(alone[0]!.choice, {});
-    assert.ok(alone[0]!.writes.includes("index.html"));
+    assert.deepEqual(alone[0]!.writes, ["studio.json", ".gitignore", ".git"], "an empty folder gets no starter");
 
     const godot = path.join(base, "godot");
     await mkdir(godot, { recursive: true });
@@ -1544,10 +1698,10 @@ describe("the Open Game sheet", () => {
     const exported = openOptions(await games.inspect(godot));
     assert.equal(exported[0]!.engineExport, true, "the sheet says a compiled export cannot be built on");
     assert.equal(exported[0]!.button, "Open this game", "it still opens, to play and to photograph");
-    assert.match(ENGINE_EXPORT_REFUSAL, /play it and take screenshots/);
+    assert.match(engineExportRefusal(), /play it and take screenshots/);
   });
 
-  it("never starts a night on a compiled export, whoever asked for it", async () => {
+  it("never starts a run on a compiled export, whoever asked for it", async () => {
     const rig = await startRig();
     rigs.push(rig);
     const dir = path.join(await tmpDir("studio-export-"), "arcade");
@@ -1562,7 +1716,7 @@ describe("the Open Game sheet", () => {
       type: "run_start",
       threadId: thread,
       run: {
-        runId: "export-night",
+        runId: "export-run",
         project: project.name,
         engine: "codex",
         goal: "make it prettier",
@@ -1628,33 +1782,42 @@ describe("the Open Game sheet", () => {
     assert.ok(!/window\.studio/.test(sheet), "the sheet asks the question; App is what answers it");
     assert.match(
       sheet,
-      /chosen\.engineExport \?\s*\(\s*<div[^>]*data-testid="engine-export-card"[^>]*>\s*\{ENGINE_EXPORT_REFUSAL\}\s*<\/div>/,
-      "the refusal a night would give is shown before the night",
+      /chosen\.engineExport \?\s*\(\s*<div[^>]*data-testid="engine-export-card"[^>]*>\s*\{engineExportRefusal\(\)\}\s*<\/div>/,
+      "the refusal a run would give is shown before the run",
     );
   });
 
-  it("refuses a night on a compiled export, and only on what the folder itself cannot do", async () => {
+  it("refuses a run on a compiled export, and only on what the folder itself cannot do", async () => {
     const { games, base } = await workspaces();
-    const godot = path.join(base, "godot-night");
+    const godot = path.join(base, "godot-run");
     await mkdir(godot, { recursive: true });
     await writeFile(path.join(godot, "index.html"), `<canvas id="canvas"></canvas><script src="index.js"></script>`);
     await writeFile(path.join(godot, "index.js"), `const engine = new Engine(); engine.startGame();\n`);
     await writeFile(path.join(godot, "game.pck"), "binary");
     const project = await games.adopt(godot);
     assert.equal(project.shape.kind, "engine-export");
-    const refusal = nightRefusal(project, (await games.validate(project.name)).problems);
+    const refusal = loopRunRefusal(project, (await games.validate(project.name)).problems);
     assert.match(refusal!, /exported from a game engine/);
     assert.match(refusal!, /play it and take screenshots/);
     assert.match(refusal!, /scenes and scripts/);
-    assert.equal(kindChip(project.shape.kind), "engine export", "the stage header says the same thing");
 
-    // A page that cannot load still refuses, naming what is missing; a missing contract does not
-    // — installing it is the base builder's first job.
+    // A page that cannot load still refuses, naming what is missing (by the typed list
+    // `game.validate` answers); a missing contract does not — installing it is the base builder's
+    // first job.
     const own = await games.adopt(
-      await viteFolder(path.join(base, "night-vite")).then(() => path.join(base, "night-vite")),
+      await viteFolder(path.join(base, "run-vite")).then(() => path.join(base, "run-vite")),
     );
-    assert.equal(nightRefusal(own, [NO_CONTRACT_PROBLEM]), null);
-    assert.match(nightRefusal(own, ["src/main.ts is missing"])!, /is not ready for a run: src\/main\.ts is missing/);
+    // The validator's own answers, handed on as a launch hands them: no contract is never missing.
+    await writeFile(path.join(own.dir, "src", "main.ts"), `const scene = {};\nexport { scene };\n`);
+    const noContract = await games.validateAt(own.dir);
+    assert.ok(noContract.problems.includes(NO_CONTRACT_PROBLEM), noContract.problems.join("; "));
+    assert.equal(loopRunRefusal(own, noContract.problems, noContract.missing), null);
+    await rm(path.join(own.dir, "src", "main.ts"));
+    const broken = await games.validateAt(own.dir);
+    assert.match(
+      loopRunRefusal(own, broken.problems, broken.missing)!,
+      /is not ready for a run: src\/main\.ts is missing/,
+    );
     assert.match(openedWords(own.title, own.shape), /keeps it as it is/);
   });
 });
@@ -1663,7 +1826,7 @@ describe("the Open Game sheet", () => {
  * The contract a run pushes into a game it did not scaffold. The gate used to sniff for two
  * literals every vintage since the one-screen contract already carries, so an already-scaffolded
  * game answered "current" and kept a studio.js that predates M4 — no borrowed eye camera, no
- * hook-fed facade — while the director and autopilot called this at the top of every night
+ * hook-fed facade — while the director and autopilot called this at the top of every run
  * believing it had brought the game up to date.
  */
 describe("the contract upgrade", () => {
@@ -1676,9 +1839,53 @@ describe("the contract upgrade", () => {
     "}",
   ].join("\n");
 
+  const m4Studio = () =>
+    readFile(path.join(repo, "tests", "fixtures", "shipped", "studio-generation-4.js.txt"), "utf8");
+  /** The contract the template shipped before the racing-line assist. */
+  const arcsStudio = () =>
+    readFile(path.join(repo, "tests", "fixtures", "shipped", "studio-generation-5.js.txt"), "utf8");
+  const firstHud = () => readFile(path.join(repo, "tests", "fixtures", "hud-generation-1.js.txt"), "utf8");
+  const templateHud = () => readFile(path.join(repo, "src", "game-template", "src", "hud.js"), "utf8");
+
+  /** The `__studio.hud` a game's copy of studio.js installs, on a bare page with no frames or events. */
+  async function facadeOf(file: string): Promise<Record<string, unknown>> {
+    const globals = globalThis as unknown as Record<string, unknown>;
+    const had = { window: globals.window, document: globals.document };
+    globals.window = { addEventListener: () => {}, requestAnimationFrame: () => 1 };
+    globals.document = { addEventListener: () => {}, querySelector: () => null, body: null };
+    try {
+      const { installStudio } = (await import(pathToFileURL(file).href)) as {
+        installStudio(config: object): { hud: Record<string, unknown> };
+      };
+      return installStudio({}).hud;
+    } finally {
+      for (const [name, value] of Object.entries(had)) {
+        if (value === undefined) delete globals[name];
+        else globals[name] = value;
+      }
+    }
+  }
+
   it("reads the shipped template as newer than every copy that came before it", async () => {
     const shipped = await readFile(path.join(repo, "src", "game-template", "src", "studio.js"), "utf8");
-    assert.equal(studioContractGeneration(shipped), 4, "the shipped contract is the current one");
+    // Flipped: the racing-line assist is generation 6.
+    assert.equal(studioContractGeneration(shipped), 6, "the shipped contract is the current one");
+    // The contract every game scaffolded since M4 holds: its HUD facade has no arc, panel or path.
+    assert.equal(studioContractGeneration(await m4Studio()), 4);
+    // The one before the assist: arcs and panels, and no racing line to steer by.
+    assert.equal(studioContractGeneration(await arcsStudio()), 5);
+    assert.equal(shippedStudioGeneration(await arcsStudio()), 5, "a game scaffolded with it is upgraded");
+    // Only a copy the studio shipped may be replaced: the released one is, an edited one is not,
+    // and the current template is not an older shipped one.
+    assert.equal(shippedStudioGeneration(await m4Studio()), 4);
+    assert.equal(shippedStudioGeneration((await m4Studio()).replace(/\n/g, "\r\n")), 4, "line endings aside");
+    assert.equal(shippedStudioGeneration(`${await m4Studio()}// the main owner's probe\n`), null);
+    assert.equal(shippedStudioGeneration(shipped), null, "the current contract is not an older shipped one");
+    assert.equal(shippedStudioGeneration(null), null);
+    // The HUD beside it: the shipped one is the current generation, never one an upgrade replaces.
+    const hud = await templateHud();
+    assert.equal(hudContractGeneration(hud), 2, "the shipped HUD is the current one");
+    assert.equal(shippedHudGeneration(hud), null, "the current HUD is not an older shipped one");
     assert.equal(studioContractGeneration(null), 0);
     assert.equal(studioContractGeneration("export function installStudio() {}"), 1);
     assert.equal(studioContractGeneration("function inspect() {}\nexport function installStudio() {}"), 2);
@@ -1690,11 +1897,11 @@ describe("the contract upgrade", () => {
     );
   });
 
-  it("replaces a copy that predates M4 and leaves the current one alone", async () => {
+  it("replaces a shipped older copy, keeps an edited one and leaves the current one alone", async () => {
     const rig = await startRig();
     rigs.push(rig);
     const api = rig.core.api() as Record<string, (p: never) => Promise<unknown>>;
-    await api["game.scaffold"]!({ name: "aged", title: "Aged" } as never);
+    await api["game.scaffold"]!({ name: "aged", title: "Aged", kind: "web" } as never);
     const dir = path.join(rig.core.layout.gamesRoot, "aged");
     const studio = path.join(dir, "src", "studio.js");
 
@@ -1704,18 +1911,29 @@ describe("the contract upgrade", () => {
       materialsAdded: false,
     });
 
-    // The game a night really opens: scaffolded before M4, so its studio.js has inspect() and
-    // the hud facade and neither the borrowed eye camera nor the lazy ./hud.js facade.
+    // A copy shaped like a pre-M4 one that no studio shipped is somebody's edit: it stays.
     await writeFile(studio, preM4);
+    assert.deepEqual(await api["game.upgradeContract"]!({ project: "aged" } as never), {
+      upgraded: false,
+      edited: true,
+      generation: 3,
+      materialsAdded: false,
+    });
+    assert.equal(await readFile(studio, "utf8"), preM4);
+    assert.equal(await exists(path.join(dir, "src", "studio.v3.js")), false);
+
+    // The game a run really opens: scaffolded by a released Genex and never touched since.
+    await writeFile(studio, await m4Studio());
     const result = (await api["game.upgradeContract"]!({ project: "aged" } as never)) as {
       upgraded: boolean;
       backup: string;
     };
-    assert.equal(result.upgraded, true, "the pre-M4 copy is replaced");
-    assert.equal(result.backup, "src/studio.v3.js", "its predecessor is kept beside it, named for its vintage");
-    assert.equal(await readFile(path.join(dir, "src", "studio.v3.js"), "utf8"), preM4);
+    assert.equal(result.upgraded, true, "the shipped M4 copy is replaced");
+    assert.equal(result.backup, "src/studio.v4.js", "its predecessor is kept beside it, named for its vintage");
+    assert.equal(await readFile(path.join(dir, "src", "studio.v4.js"), "utf8"), await m4Studio());
     const upgraded = await readFile(studio, "utf8");
-    assert.equal(studioContractGeneration(upgraded), 4);
+    // Flipped: the template is generation 6.
+    assert.equal(studioContractGeneration(upgraded), 6);
     assert.match(upgraded, /returnCamera/, "the eye camera is given back — the bug M4 fixed");
 
     // And the second call is a no-op: the game now holds what the template holds.
@@ -1723,5 +1941,268 @@ describe("the contract upgrade", () => {
       upgraded: false,
       materialsAdded: false,
     });
+
+    // A game scaffolded with the contract before the racing-line assist gets it too.
+    await writeFile(studio, await arcsStudio());
+    const assisted = (await api["game.upgradeContract"]!({ project: "aged" } as never)) as { backup: string };
+    assert.equal(assisted.backup, "src/studio.v5.js");
+    assert.equal(studioContractGeneration(await readFile(studio, "utf8")), 6);
+  });
+
+  /**
+   * The HUD module rides along, but only where nobody touched it: a copy that is byte for byte one
+   * the studio shipped gets the template's (arcs, panels, a bounded summary), the old one kept
+   * beside it; a copy anyone edited, and a game the user brought, keep theirs.
+   */
+  const exists = (file: string) =>
+    stat(file).then(
+      () => true,
+      () => false,
+    );
+
+  it("brings a shipped first HUD up to date and keeps the old one beside it", async () => {
+    const rig = await startRig();
+    rigs.push(rig);
+    const api = rig.core.api() as Record<string, (p: never) => Promise<unknown>>;
+    await api["game.scaffold"]!({ name: "dials", title: "Dials", kind: "web" } as never);
+    const src = path.join(rig.core.layout.gamesRoot, "dials", "src");
+    const hud = path.join(src, "hud.js");
+
+    // A fresh scaffold already holds the template's HUD: nothing moves.
+    await api["game.upgradeContract"]!({ project: "dials" } as never);
+    assert.equal(await readFile(hud, "utf8"), await templateHud());
+    assert.equal(await exists(path.join(src, "hud.v1.js")), false);
+
+    // The game a run really opens: scaffolded with the first HUD, untouched since.
+    await writeFile(hud, await firstHud());
+    assert.deepEqual(
+      await api["game.upgradeContract"]!({ project: "dials" } as never),
+      { upgraded: false, materialsAdded: false, hud: { generation: 2, replaced: true, backup: "src/hud.v1.js" } },
+      "the studio.js contract was already current; the HUD's replacement is reported beside it",
+    );
+    assert.equal(await readFile(hud, "utf8"), await templateHud(), "the HUD is the template's");
+    assert.equal(await readFile(path.join(src, "hud.v1.js"), "utf8"), await firstHud(), "the old one is kept");
+
+    // A first HUD somebody edited is theirs, and the answer says the game keeps an older HUD.
+    const edited = `${await firstHud()}// the main owner's own gauge helper\n`;
+    await writeFile(hud, edited);
+    await rm(path.join(src, "hud.v1.js"));
+    assert.deepEqual(await api["game.upgradeContract"]!({ project: "dials" } as never), {
+      upgraded: false,
+      materialsAdded: false,
+      hud: { generation: 1, replaced: false },
+    });
+    assert.equal(await readFile(hud, "utf8"), edited);
+    assert.equal(await exists(path.join(src, "hud.v1.js")), false);
+  });
+
+  /**
+   * Every game scaffolded since M4 holds a generation-4 studio.js, whose HUD facade forwards only
+   * text, bar, crosshair and flash. Replacing hud.js alone would leave `__studio.hud.arc` undefined
+   * while the brief tells the builder to draw gauges with it.
+   */
+  it("brings a game on the M4 contract and the first HUD up to date together", async () => {
+    const rig = await startRig();
+    rigs.push(rig);
+    const api = rig.core.api() as Record<string, (p: never) => Promise<unknown>>;
+    await api["game.scaffold"]!({ name: "gauges", title: "Gauges", kind: "web" } as never);
+    const src = path.join(rig.core.layout.gamesRoot, "gauges", "src");
+    await writeFile(path.join(src, "studio.js"), await m4Studio());
+    await writeFile(path.join(src, "hud.js"), await firstHud());
+
+    assert.deepEqual(await api["game.upgradeContract"]!({ project: "gauges" } as never), {
+      upgraded: true,
+      backup: "src/studio.v4.js",
+      hud: { generation: 2, replaced: true, backup: "src/hud.v1.js" },
+    });
+    const template = await readFile(path.join(repo, "src", "game-template", "src", "studio.js"), "utf8");
+    assert.equal(await readFile(path.join(src, "studio.js"), "utf8"), template, "the facade is the template's");
+    assert.equal(await readFile(path.join(src, "studio.v4.js"), "utf8"), await m4Studio(), "the M4 one is kept");
+    assert.equal(await readFile(path.join(src, "hud.js"), "utf8"), await templateHud(), "the HUD is the template's");
+
+    // The game's own copy, run: the new calls are there to draw with.
+    const hud = await facadeOf(path.join(src, "studio.js"));
+    for (const name of ["arc", "panel", "path", "image", "font"]) {
+      assert.equal(typeof hud[name], "function", `__studio.hud.${name}`);
+    }
+  });
+
+  /**
+   * The template invites the main owner to extend studio.js ("new probes, new cameras"). A copy
+   * anyone edited is theirs: replacing it drops their exports, and a main.js that imports one
+   * stops linking. It stays byte for byte, its HUD with it, and the answer says so.
+   */
+  it("keeps an edited M4 studio.js and its HUD, and says it was edited", async () => {
+    const rig = await startRig();
+    rigs.push(rig);
+    const api = rig.core.api() as Record<string, (p: never) => Promise<unknown>>;
+    await api["game.scaffold"]!({ name: "tuned", title: "Tuned", kind: "web" } as never);
+    const src = path.join(rig.core.layout.gamesRoot, "tuned", "src");
+    const edited = `${await m4Studio()}\nexport function myGameHelper() {\n  return 1;\n}\n`;
+    await writeFile(path.join(src, "studio.js"), edited);
+    await writeFile(path.join(src, "hud.js"), await firstHud());
+
+    assert.deepEqual(await api["game.upgradeContract"]!({ project: "tuned" } as never), {
+      upgraded: false,
+      edited: true,
+      generation: 4,
+      materialsAdded: false,
+      hud: { generation: 1, replaced: false },
+    });
+    assert.equal(await readFile(path.join(src, "studio.js"), "utf8"), edited, "the edited contract is untouched");
+    assert.equal(await exists(path.join(src, "studio.v4.js")), false, "no backup of a file nobody replaced");
+    // The HUD stays with the facade it was written for: a newer hud.js under an old facade
+    // would draw what the facade cannot forward.
+    assert.equal(await readFile(path.join(src, "hud.js"), "utf8"), await firstHud());
+    assert.equal(await exists(path.join(src, "hud.v1.js")), false);
+  });
+
+  it("recognises a shipped M4 studio.js checked out with CRLF line endings", async () => {
+    const rig = await startRig();
+    rigs.push(rig);
+    const api = rig.core.api() as Record<string, (p: never) => Promise<unknown>>;
+    await api["game.scaffold"]!({ name: "crlf", title: "Crlf", kind: "web" } as never);
+    const src = path.join(rig.core.layout.gamesRoot, "crlf", "src");
+    const crlf = (await m4Studio()).replace(/\n/g, "\r\n");
+    await writeFile(path.join(src, "studio.js"), crlf);
+    const result = (await api["game.upgradeContract"]!({ project: "crlf" } as never)) as Record<string, unknown>;
+    assert.equal(result.upgraded, true, "a shipped copy is replaced whatever its line endings");
+    assert.equal(await readFile(path.join(src, "studio.v4.js"), "utf8"), crlf, "the old copy is kept as it was");
+  });
+
+  it("writes no contract through a link, wherever the link points", async () => {
+    const rig = await startRig();
+    rigs.push(rig);
+    const api = rig.core.api() as Record<string, (p: never) => Promise<unknown>>;
+    const outside = await tmpDir("studio-contract-outside-");
+    const cases: Array<{ name: string; plant(src: string): Promise<void>; untouched: string[] }> = [
+      {
+        name: "studio.js is a link to a shipped copy outside the game",
+        plant: async (src) => {
+          await writeFile(path.join(outside, "linked-studio.js"), await m4Studio());
+          await rm(path.join(src, "studio.js"));
+          await symlink(path.join(outside, "linked-studio.js"), path.join(src, "studio.js"));
+        },
+        untouched: ["linked-studio.js"],
+      },
+      {
+        name: "the backup's name is a link planted outside the game",
+        plant: async (src) => {
+          await writeFile(path.join(outside, "precious.txt"), "precious");
+          await writeFile(path.join(src, "studio.js"), await m4Studio());
+          await symlink(path.join(outside, "precious.txt"), path.join(src, "studio.v4.js"));
+        },
+        untouched: ["precious.txt"],
+      },
+      {
+        name: "src is a link to a folder outside the game",
+        plant: async (src) => {
+          const elsewhere = path.join(outside, "elsewhere-src");
+          await cp(src, elsewhere, { recursive: true });
+          await writeFile(path.join(elsewhere, "studio.js"), await m4Studio());
+          await rm(src, { recursive: true });
+          await symlink(elsewhere, src);
+        },
+        untouched: ["elsewhere-src/studio.js"],
+      },
+    ];
+    for (const [index, hostile] of cases.entries()) {
+      const name = `contract${index}`;
+      await api["game.scaffold"]!({ name, title: name, kind: "web" } as never);
+      await hostile.plant(path.join(rig.core.layout.gamesRoot, name, "src"));
+      const before = await Promise.all(hostile.untouched.map((file) => readFile(path.join(outside, file), "utf8")));
+      await api["game.upgradeContract"]!({ project: name } as never).catch(() => null);
+      const after = await Promise.all(hostile.untouched.map((file) => readFile(path.join(outside, file), "utf8")));
+      assert.deepEqual(after, before, `${hostile.name}: nothing outside the game changed`);
+      assert.equal(await exists(path.join(outside, "elsewhere-src", "studio.v4.js")), false, hostile.name);
+    }
+    assert.equal(await readFile(path.join(outside, "linked-studio.js"), "utf8"), await m4Studio());
+  });
+
+  it("never rewrites the HUD of a game the user brought", async () => {
+    const rig = await startRig();
+    rigs.push(rig);
+    const dir = path.join(await tmpDir("studio-own-hud-"), "skate");
+    await viteFolder(dir);
+    const project = await rig.core.adoptProject(dir);
+    assert.equal(project.built, true);
+    await writeFile(path.join(dir, "src", "hud.js"), await firstHud());
+    await (rig.core.api() as Record<string, (p: never) => Promise<unknown>>)["game.upgradeContract"]!({
+      project: project.name,
+    } as never);
+    assert.equal(await readFile(path.join(dir, "src", "hud.js"), "utf8"), await firstHud());
+    assert.equal(await exists(path.join(dir, "src", "hud.v1.js")), false);
+  });
+
+  it("writes no HUD through a link, wherever the link points", async () => {
+    const rig = await startRig();
+    rigs.push(rig);
+    const api = rig.core.api() as Record<string, (p: never) => Promise<unknown>>;
+    const outside = await tmpDir("studio-hud-outside-");
+    const cases: Array<{ name: string; plant(src: string): Promise<void>; untouched: string[] }> = [
+      {
+        name: "hud.js is a link to a shipped copy outside the game",
+        plant: async (src) => {
+          await writeFile(path.join(outside, "linked-hud.js"), await firstHud());
+          await rm(path.join(src, "hud.js"));
+          await symlink(path.join(outside, "linked-hud.js"), path.join(src, "hud.js"));
+        },
+        untouched: ["linked-hud.js"],
+      },
+      {
+        name: "the backup's name is a link planted outside the game",
+        plant: async (src) => {
+          await writeFile(path.join(outside, "precious.txt"), "precious");
+          await writeFile(path.join(src, "hud.js"), await firstHud());
+          await symlink(path.join(outside, "precious.txt"), path.join(src, "hud.v1.js"));
+        },
+        untouched: ["precious.txt"],
+      },
+      {
+        name: "src is a link to a folder outside the game",
+        plant: async (src) => {
+          const elsewhere = path.join(outside, "elsewhere-src");
+          await cp(src, elsewhere, { recursive: true });
+          await writeFile(path.join(elsewhere, "hud.js"), await firstHud());
+          await rm(src, { recursive: true });
+          await symlink(elsewhere, src);
+        },
+        untouched: ["elsewhere-src/hud.js"],
+      },
+    ];
+    for (const [index, hostile] of cases.entries()) {
+      const name = `linked${index}`;
+      await api["game.scaffold"]!({ name, title: name, kind: "web" } as never);
+      await hostile.plant(path.join(rig.core.layout.gamesRoot, name, "src"));
+      const before = await Promise.all(hostile.untouched.map((file) => readFile(path.join(outside, file), "utf8")));
+      await api["game.upgradeContract"]!({ project: name } as never).catch(() => null);
+      const after = await Promise.all(hostile.untouched.map((file) => readFile(path.join(outside, file), "utf8")));
+      assert.deepEqual(after, before, `${hostile.name}: nothing outside the game changed`);
+      assert.equal(await exists(path.join(outside, "elsewhere-src", "hud.v1.js")), false, hostile.name);
+    }
+    assert.equal(await readFile(path.join(outside, "linked-hud.js"), "utf8"), await firstHud());
+  });
+});
+
+describe("a template game that loads the Genex SDK", () => {
+  it("is still the template, and the preview knows it loads the SDK only once its page maps Studio's copy", async () => {
+    const dir = await realpath(await tmpDir("studio-genex-template-"));
+    const page = await readFile(path.resolve(import.meta.dirname, "../../src/game-template/index.html"), "utf8");
+    await writeFile(path.join(dir, "studio.json"), JSON.stringify({ contractVersion: 1 }));
+    await writeFile(path.join(dir, "index.html"), page);
+    assert.equal(await templateLoadsGenexSdk(dir), false, "the template as it starts");
+    await writeFile(path.join(dir, "index.html"), `<!-- /vendor/genex/connect.js -->\n${page}`);
+    assert.equal(await templateLoadsGenexSdk(dir), false, "a comment naming the module loads nothing");
+    await writeFile(path.join(dir, "index.html"), withGenexSdkImport(page) ?? "");
+    assert.equal(await templateLoadsGenexSdk(dir), true);
+    assert.equal(await detectProjectShape(dir), null, "mapping the SDK keeps it Studio's template");
+    await rm(path.join(dir, "index.html"));
+    assert.equal(await templateLoadsGenexSdk(dir), false, "no page");
+  });
+
+  it("is loaded again by Reload once its page moves it to the loopback origin, not reloaded in place", () => {
+    const page = { entry: "index.html", root: undefined };
+    assert.notEqual(servedKey({ ...page, loopback: false }), servedKey({ ...page, loopback: true }));
+    assert.equal(servedKey({ ...page, loopback: true }), servedKey({ ...page, loopback: true }));
   });
 });

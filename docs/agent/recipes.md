@@ -100,7 +100,8 @@ Durable history the UI or the harness reads later.
    Read the payload with `customEvent(event, name)` / `customPayload(data, name)` (a name or a
    list of names; `null` for any other event, `{}` for a missing payload), `delegatedPayload`
    for the `delegated.<engine>` trace, or `customRecord` for any custom event; never
-   `data.payload as`. Put user-facing words in `src/renderer/words.ts`.
+   `data.payload as`. Put user-facing words in `src/renderer/words.ts`, inside `t()`
+   ([translation](translation.md)).
 5. Live updates reach the renderer through the `studio:event` push channel of the IPC map
    (`STUDIO_PUSH_CHANNELS` in `src/shared/ipc-channels.ts`, delivered by `onEvent`); no new
    channel is needed. A new transient UI event (`area.verb`) is a key of `UiEventMap` in
@@ -122,14 +123,19 @@ Durable history the UI or the harness reads later.
    resume, read-only and ownership options (model on `codex.ts`). Map failures to
    `EngineError` kinds, never to matched message text.
 2. Add a row to `PROVIDERS` in `src/shared/providers.ts`: `id` (= `Engine.id`), the `label` a
-   person says, `subscription`, `login` (`terminal` | `console` | `none`), `roles` (`presets` |
-   `sessions` | `single`) and, for a subscription, the `signIn` copy. `SUBSCRIPTION_ENGINES` in
+   person says, `subscription`, `login` (`terminal` | `console` | `cli` | `none`), `roles` (`presets` |
+   `sessions` | `completion` | `single`), `billing` (`local` | `subscription` | `metered`: a metered
+   engine is never picked automatically) and, for a subscription, the `signIn` copy. A direct engine
+   that holds sessions passes its id to `LocalSessions` (`engine`), as `openrouter.ts` does. `SUBSCRIPTION_ENGINES` in
    main and the renderer, the sign-in card, chat labels and `EngineDescriptor.provider` from
    `describe()` follow from it. Register the engine in `StudioCore.init`
    (`src/main/studio-core.ts`); the preferred order already appends `SUBSCRIPTION_ENGINES`.
 3. Harness roles: for `roles: "presets"`, add model rows and tool syntax in
    `src/harness-seed/loop/model-roles.ts` (`ENGINE_MODELS`, `toolCall`, `toolSyntax`) and the same
-   rows in `src/shared/model-roles.ts` (see [Seed contract](#seed-contract));
+   rows in `src/shared/model-roles.ts` (see [Seed contract](#seed-contract)); a `sessions` engine
+   joins `SESSION_ENGINES` in both, a `completion` engine `COMPLETION_ROLE_ENGINES` (which jobs each
+   may take: `takesRoles`, `crossesTo`), and one that reaches studio tools through the bridge joins
+   `BRIDGE_ENGINES`;
    `tests/conformance/providers.test.ts` fails when either copy disagrees with the table. Run
    `node scripts/gen-harness-types.ts` if the descriptor shape changed.
 4. Fixtures: add a scripted variant in `fixtureEngines()` in `src/main/dev/fixture-engines.ts` so
@@ -150,13 +156,19 @@ No core change. See [the plugin guide](../PLUGIN_GUIDE.md) and [plugin contract]
    `npm run plugin:pack -- <prebuilt-dir> <artifact.json>`.
 4. For a first-party plugin under `src/plugins/`, extend `tests/conformance/plugins.test.ts`
    or `plugin-devkit.test.ts`. Manifest validation lives in `src/substrate/plugins/manifest.ts`.
+5. Any change to a bundled plugin (manifest, skills, backend, shipped files) bumps its `version`:
+   profiles run the installed package and are only offered a newer one.
 
 ## Panel or stage action
 
 1. Plugin stage button: declare `toolbar[]` with a matching `actions[]` in the manifest; the
    host renders it through `src/renderer/panels/PluginToolbar.tsx`. No core change.
+   An engine's button (one per engine plugin) names the engine's `facts` and an `icon`, says its
+   status as a dot, and opens a panel built to [Engine panels](../../design/genex/README.md#engine-panels)
+   (`src/plugins/unreal/panel.html` and `src/plugins/unity/panel.html` are the models).
 2. Built-in stage view: extend `StageView` and `VIEWS` in `src/renderer/stage.ts`, the
-   `ViewSwitcher` in `src/renderer/panels/PreviewPanel.tsx` (`data-stage-action`), and the
+   tabs in `src/renderer/panels/stage/stage-tabs.ts` (`stageTabs`, `data-stage-action`; drawn by
+   `StageStrip`'s `ViewSwitcher`), and the
    stage switching in `src/renderer/shell/use-stage-views.ts` and `shell/WorkspaceStage.tsx`.
    Full-stage views must hide the native game view through the preview bounds call.
 3. Panel control: add a stable `data-*` attribute or aria-label and keep existing ones;
@@ -174,7 +186,8 @@ not.
 1. Format: one row in `ASSET_FORMATS` in `src/shared/game-assets.ts` — kind, preview mode,
    MIME, and whether it is a raster thumbnail or a model texture. The inventory, the preview's
    MIME map, main's contained readers (`isImageFile`) and the audio checks (`isAudioFile`) all
-   read that row.
+   read that row. Where a project keeps a format (an engine's asset folder) is the
+   `CORE_WORKSPACE` table in `src/shared/project-workspace.ts`.
 2. Preview: `assetPreviewMode` in `src/shared/asset-preview.ts` only if the mode needs new logic.
 3. 3D formats: a loader branch in `src/renderer/asset-model-viewer.js`; copy any decoder in
    `scripts/build.mjs`.

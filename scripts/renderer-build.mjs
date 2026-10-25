@@ -2,18 +2,20 @@ import path from "node:path";
 const DEVELOPMENT_ENTRY_MAX_BYTES = 6_000_000;
 const RELEASE_ENTRY_MAX_BYTES = 3_000_000;
 const DEVELOPMENT_REACT = /react.*\/cjs\/.*\.development\.js$/;
+/** The renderer's entry and the studio it loads right after the language: what a window reads before it shows. */
+const EAGER_ENTRIES = ["src/renderer/main.tsx", "src/renderer/studio-entry.tsx"];
 
 /**
  * React build definitions shared by the application and its bundle conformance tests.
  * `npm run build`, `npm start` and packages ship React's production build; `release` (package,
  * make, publish) also minifies. `--watch` and owned `--dev-build` builds keep the development
  * build, whose StrictMode replays and warnings the UI acceptance drivers rely on; those sessions
- * are short, and the UI clears React's timing measures every minute there (`renderer/main.tsx`).
+ * are short, and the UI clears React's timing measures every minute there (`renderer/studio-entry.tsx`).
  *
  * The development build records a User Timing measure, carrying a diff of the props, for every
- * component render inside a `<Profiler>`, and nothing clears them. An hour into an Autopilot run
- * (2026-09-23) that filled the UI renderer's memory and the window went blank. Building them
- * cost 70% of a live session's main thread while a run streamed (2026-10-03), so only
+ * component render inside a `<Profiler>`, and nothing clears them: an hour into a run they fill
+ * the UI renderer's memory and the window goes blank. Building them costs 70% of a live session's
+ * main thread while a run streams, so only
  * `commitCounts` builds (an owned fixture profile, whose checks read the commit counts)
  * wrap the app in Profilers (`renderer/performance.tsx`).
  *
@@ -43,7 +45,9 @@ export function rendererBundleReport(metafile, { release = false, development = 
   const developmentReact = inputs.filter((file) => DEVELOPMENT_REACT.test(file));
   if (!development && developmentReact.length)
     throw new Error(`Development React in a production renderer: ${developmentReact.join(", ")}`);
-  const entry = Object.entries(metafile.outputs).find(([, output]) => output.entryPoint === "src/renderer/main.tsx");
+  // The entry loads the window's language, then the studio as a chunk of its own: both are read
+  // before anything shows, so both count; the language catalogs and later chunks do not.
+  const entries = Object.entries(metafile.outputs).filter(([, output]) => EAGER_ENTRIES.includes(output.entryPoint));
   const reachable = new Set();
   const visit = (file) => {
     if (reachable.has(file)) return;
@@ -55,7 +59,7 @@ export function rendererBundleReport(metafile, { release = false, development = 
       visit(metafile.outputs[imported.path] ? imported.path : path.join(path.dirname(file), imported.path));
     }
   };
-  if (entry) visit(entry[0]);
+  for (const [file] of entries) visit(file);
   const eager = [...reachable].flatMap((file) => Object.keys(metafile.outputs[file].inputs));
   if (eager.some((file) => file.includes("node_modules/three/")))
     throw new Error("three.js must remain outside the eager renderer graph");

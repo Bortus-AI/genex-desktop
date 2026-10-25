@@ -5,15 +5,17 @@
 import type { JSX } from "react";
 import { useState } from "react";
 import { BackdropControls, resetBackdrop } from "../home-backdrop/BackdropControls.tsx";
+import { useGenerationModel } from "../home-backdrop/generation-model.ts";
 import { BackdropPreview } from "../home-backdrop/HomeBackdrop.tsx";
-import { BackdropEffect } from "../home-backdrop/settings.ts";
+import { BackdropSource } from "../home-backdrop/settings.ts";
 import { useBackdrop, useBackdropPreview } from "../home-backdrop/store.ts";
 import type { Rect, Size } from "../home-backdrop/view.ts";
 import { Button } from "../ui/Button.tsx";
+import { t } from "../../shared/i18n.ts";
 
 const MESSAGE = {
-  heading: "Home background",
-  reset: "Reset",
+  heading: t("Home background"),
+  reset: t("Reset"),
 } as const;
 
 /** Home's share of the window when it is not on screen to measure: the window less the sidebar. */
@@ -33,7 +35,8 @@ function homeFrame(): { window: Size; home: Rect } {
 
 export function HomeBackdropSection(): JSX.Element {
   const settings = useBackdrop();
-  const off = settings.effect === BackdropEffect.Off;
+  const model = useGenerationModel();
+  const off = settings.source === BackdropSource.Off;
   // The preview is home in small: its shape, and its part of the window's drawing.
   const [{ window: frame, home }] = useState(homeFrame);
   useBackdropPreview(!off);
@@ -42,7 +45,11 @@ export function HomeBackdropSection(): JSX.Element {
       <div className="appearance-theme-heading">
         <h3>{MESSAGE.heading}</h3>
         {!off && (
-          <Button variant="ghost" className="ms-auto" onClick={resetBackdrop}>
+          <Button
+            variant="ghost"
+            className="ms-auto bg-foreground/[0.07] hover:bg-foreground/[0.12]"
+            onClick={resetBackdrop}
+          >
             {MESSAGE.reset}
           </Button>
         )}
@@ -53,7 +60,7 @@ export function HomeBackdropSection(): JSX.Element {
           <span className="backdrop-preview-composer" />
         </div>
       )}
-      <BackdropControls settings={settings} />
+      <BackdropControls settings={settings} model={model} />
     </section>
   );
 }

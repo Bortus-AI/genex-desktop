@@ -143,6 +143,9 @@ describe("the sign-in gate", () => {
     assert.equal(local?.engine.id, "ollama");
     assert.equal(local?.model.id, "coder");
     assert.equal(localToolModel([engine("ollama", "direct", "ready", [model("chat", false)])]), null);
+    // OpenRouter is direct too, but billed per token: a signed-out subscription never sends a
+    // turn there on its own.
+    assert.equal(localToolModel([engine("openrouter", "direct", "ready", [model("or", true)])]), null);
   });
 
   it("offers the local finish only after the harness asked for a sign-in", () => {
@@ -171,6 +174,15 @@ describe("whether the chat itself is working", () => {
     assert.equal(chatWorkState(base).chatWorking, false);
     for (const field of ["busy", "sending", "answering", "planWorking", "revisingPlan", "stopping"] as const)
       assert.equal(chatWorkState({ ...base, [field]: true }).chatWorking, true, field);
+  });
+
+  it("keeps a running build's card on show while a message to it is on its way", () => {
+    for (const field of ["busy", "sending"] as const) {
+      const state = chatWorkState({ ...base, [field]: true, working: true, activeRunId: "run_a" });
+      assert.equal(state.chatWorking, false, field);
+      assert.equal(state.answering, true, `${field}: Rewind still waits for it`);
+    }
+    assert.equal(chatWorkState({ ...base, stopping: true, activeRunId: "run_a" }).chatWorking, true, "a stop");
   });
 
   it("works on the harness's turn, but not a running build, a learning pass or a settled run's status", () => {

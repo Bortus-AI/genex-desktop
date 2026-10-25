@@ -1,12 +1,4 @@
-import { EngineId } from "./providers.ts";
-
-/** The external coding CLIs Studio can install and launch, in provider-table order. */
-export const CODING_PROVIDERS = [EngineId.ClaudeCode, EngineId.Codex, EngineId.Grok] as const;
-export type CodingProvider = (typeof CODING_PROVIDERS)[number];
-
-export function isCodingProvider(value: unknown): value is CodingProvider {
-  return typeof value === "string" && (CODING_PROVIDERS as readonly string[]).includes(value);
-}
+export type CodingProvider = "codex" | "claude-code" | "opencode" | "grok" | "cursor";
 export interface CodingCliStatus {
   provider: CodingProvider;
   state: "ready" | "missing" | "invalid_path" | "missing_runtime" | "incompatible";

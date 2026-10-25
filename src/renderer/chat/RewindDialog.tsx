@@ -1,23 +1,26 @@
 import { type JSX, type RefObject, useEffect, useId, useRef, useState } from "react";
 import type { RewindFiles, RewindResult } from "../../shared/chat-rewind.ts";
+import { t } from "../../shared/i18n.ts";
 import { Button } from "../ui/Button.tsx";
 import { DialogSurface } from "../ui/dialog.tsx";
 import { Switch } from "../ui/switch.tsx";
 import { problemWords } from "../words.ts";
 import { REWIND_WORDS, restoresByDefault, rewindBusyLabel, rewindFilesWords } from "./rewind-words.ts";
 
-/** What the dialog says about the game files: checking, refused, or what they will do. */
+/** What the dialog says about the game files: checking, refused, or what they will do, and what an engine project keeps. */
 function RewindFilesBody({
   files,
   refused,
   restore,
   busy,
+  engineNote,
   onRestore,
 }: {
   files: RewindFiles | null;
   refused: string;
   restore: boolean;
   busy: boolean;
+  engineNote: string | null;
   onRestore: (restore: boolean) => void;
 }): JSX.Element {
   const switchId = useId();
@@ -53,6 +56,11 @@ function RewindFilesBody({
         )
       )}
       {words.nested && <p className="text-ink-3">{words.nested}</p>}
+      {engineNote && (
+        <p data-rewind-engine-note className="text-ink-3">
+          {engineNote}
+        </p>
+      )}
     </div>
   );
 }
@@ -69,6 +77,7 @@ export function RewindDialog({
   threadId,
   eventId,
   messageId,
+  engineNote = null,
   returnFocus,
   onRewound,
   onDismiss,
@@ -76,6 +85,8 @@ export function RewindDialog({
   threadId: string;
   eventId: string;
   messageId: string;
+  /** What Rewind can't undo in the game's engine project (`engine-game.ts` `engineRewindNote`); none for a web game. */
+  engineNote?: string | null;
   /** Focus on close (the composer after a rewind); the opener when it holds nothing. */
   returnFocus?: RefObject<HTMLElement | null>;
   onRewound: (result: RewindResult) => void;
@@ -125,13 +136,22 @@ export function RewindDialog({
       dismissible={!busy}
       initialFocus={cancel}
       returnFocus={returnFocus}
-      title="Rewind to before this message?"
-      description="This message and everything after it leave the chat. The message goes back in the composer so you can change it."
+      title={t("Rewind to before this message?")}
+      description={t(
+        "This message and everything after it leave the chat. The message goes back in the composer so you can change it.",
+      )}
       onDismiss={() => {
         if (!busy) onDismiss();
       }}
     >
-      <RewindFilesBody files={files} refused={refused} restore={restore} busy={busy} onRestore={setRestore} />
+      <RewindFilesBody
+        files={files}
+        refused={refused}
+        restore={restore}
+        busy={busy}
+        engineNote={engineNote}
+        onRestore={setRestore}
+      />
       {error && (
         <p role="alert" className="text-xs text-red">
           {error}
@@ -139,7 +159,7 @@ export function RewindDialog({
       )}
       <div className="flex justify-end gap-2">
         <Button ref={cancel} variant="ghost" disabled={busy} onClick={onDismiss}>
-          Cancel
+          {t("Cancel")}
         </Button>
         <Button
           data-rewind-confirm

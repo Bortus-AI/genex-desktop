@@ -1,13 +1,14 @@
 /**
  * What the chat's own session reads and records to reopen its finished build (reopen-run.ts): the
- * tool, its rules in the after-night note, the coordinator's rules when its continue_build reopens
+ * tool, its rules in the after-run note, the coordinator's rules when its continue_build reopens
  * the build instead, and what the chat is told. A module of its own: the
- * existing parts that read these (after-night-prompts.ts, delegated-turn.ts) import new names only
+ * existing parts that read these (after-loop-run-prompts.ts, delegated-turn.ts) import new names only
  * from here, and this imports only names every older seed exported
  * (tests/fixtures/seed-exports-pre-reopen.json).
  */
 import { MAX_RUN_HOURS } from "./config.ts";
 import { askUser } from "./interview-question.ts";
+import { UNTIL_DONE_WORDS } from "./until-done-prompts.ts";
 import { toolCall } from "./model-roles.ts";
 import { endClock } from "./wall-clock.ts";
 import type { RunSpec, StudioToolSpec } from "../types/host-api.d.ts";
@@ -50,9 +51,9 @@ export const MESSAGE = {
   /** Why, when Stop came after the reply and before the build was under way again. */
   stoppedFirst: "Stop came before it started again. It stays finished.",
   reopening: (end: string) =>
-    `The build goes on until your request is checked, by about ${end} at the latest — keep the app open and the Mac awake.`,
+    `The build goes on until your request is checked, by about ${end} at the latest — keep the app open and the computer awake.`,
   reopeningUntilSatisfied: (ceiling: string) =>
-    `The build goes on until its critics are satisfied, and stops by about ${ceiling} whatever happens — keep the app open and the Mac awake.`,
+    `The build goes on until what you asked for is checked working, and stops by about ${ceiling} whatever happens — keep the app open and the computer awake.`,
   /** Said once for a finished build that no Loop can go on from here (chat-dispatch.ts); the message is answered as with Loop off. */
   loopUnused:
     "Loop can't continue this build here, so this message is answered as with Loop off — the build stays as it finished.",
@@ -61,7 +62,7 @@ export const MESSAGE = {
 /** How long the reopened build may run, as the session reads it. */
 function budgetWords(hours: number | null): string {
   if (typeof hours === "number" && hours > 0) return `up to ${hours} h`;
-  return `until its judges are satisfied, ${MAX_RUN_HOURS} h at most`;
+  return `${UNTIL_DONE_WORDS}, ${MAX_RUN_HOURS} h at most`;
 }
 
 /** An explicit start over, and the question when it is unclear: only beside a bridged launch. */
@@ -77,9 +78,9 @@ function startOverRules(engine: string | undefined, reopen: string, grant: Reope
 }
 
 /**
- * The after-night note's rules for a finished build with Loop on, its tools spelled the way `engine`
- * calls them. Loop allows the build to go on; it never orders it (golden-boot-glory: "work of any
- * size — a fix…" once sent a seventy-second fix to a three-hour build). A question is answered, a
+ * The after-run note's rules for a finished build with Loop on, its tools spelled the way `engine`
+ * calls them. Loop allows the build to go on; it never orders it ("work of any size — a fix…"
+ * would send a seventy-second fix to a three-hour build). A question is answered, a
  * contained change is the session's own edit, more work reopens the same build, and only an explicit
  * start over launches a new one.
  */

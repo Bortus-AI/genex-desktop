@@ -9,6 +9,10 @@ import {
   unmeasured,
 } from "../checks.ts";
 import { runPlaytest } from "../playtester.ts";
+// By namespace: a workspace may keep a copy of a module this one reaches for that predates it.
+import * as escalation from "../vision-escalation.ts";
+import * as handsOn from "../hands-on-judge.ts";
+import { PlayReaches, questFromSetup } from "../quest.ts";
 import type { CheckResult } from "../checks.ts";
 import type { AnyRecord, HarnessCtx } from "../../types/harness.d.ts";
 import type { Run } from "../../types/harness.d.ts";
@@ -17,6 +21,7 @@ import { FacetRole, NO_LOCK } from "./state.ts";
 import { MAX_WOBBLES } from "./policy.ts";
 import { HostMethod } from "../host-methods.ts";
 import { EngineFailure } from "../outage.ts";
+import { isProviderLoss } from "../provider-loss.ts";
 import { MINUTE_MS } from "../time.ts";
 import { CheckKind, CheckWeight, type Check } from "../spec.ts";
 
@@ -34,6 +39,8 @@ const INTEGRATION_PLAY_MIN_MS = MINUTE_MS;
 const PLAY_MIN_MS = 5 * MINUTE_MS;
 /** The share of a facet's budget a play session may need before it is worth starting. */
 const PLAY_BUDGET_SHARE = 0.1;
+/** The goal a judge that plays the integration is sent to reach: the run's own requested state. */
+const INTEGRATION_QUEST = "requested-state";
 
 /** Per-camera diff of the challenger's frames against the incumbent's; null where unsupported. */
 export async function diffAgainstIncumbent(
@@ -217,10 +224,38 @@ async function sameCrop(
   }
 }
 
+/**
+ * The board's screenshot answers, the uncertain ones put to a judge that plays on this pass's own
+ * window (vision-escalation.ts) — through a namespace import, so a workspace whose copy of that
+ * module is missing scores exactly as before.
+ */
+async function escalated(scoring: Scoring, asks: VisionAsk[], answers: CheckResult[]): Promise<CheckResult[]> {
+  if (typeof escalation.escalateVision !== "function") return answers;
+  const { ctx, run, handle, worktree, projectDir, deadline, iteration, facetId, label } = scoring;
+  try {
+    return await escalation.escalateVision(ctx, {
+      run: run as Run,
+      root: worktree ?? projectDir,
+      handle,
+      deadline,
+      labelPrefix: label,
+      iteration,
+      facetId,
+      asks,
+      answers,
+    });
+  } catch (err: any) {
+    // A stop, or a lost provider the round waits for: neither is the picture judge's answer.
+    if (err?.kind === EngineFailure.Aborted || ctx.cancelled || isProviderLoss(err?.kind)) throw err;
+    return answers;
+  }
+}
+
 /** Ask the board's picture questions, settle each answer against the accepted one, and count wobbles and hedges. */
 async function settleVisionAnswers(scoring: Scoring, asks: AnyRecord[]): Promise<void> {
   const { ctx, run, wobbles, stucks, results } = scoring;
-  const answers = await askVisionBoard(ctx, { run: run as Run, asks: asks as VisionAsk[] });
+  const asked = await askVisionBoard(ctx, { run: run as Run, asks: asks as VisionAsk[] });
+  const answers = await escalated(scoring, asks as VisionAsk[], asked);
   for (const [i, { check, previous }] of asks.entries()) {
     const fresh = answers[i];
     // Hysteresis (WP2b): a low-confidence flip against the accepted answer is a wobble, not a
@@ -242,8 +277,8 @@ async function settleVisionAnswers(scoring: Scoring, asks: AnyRecord[]): Promise
 function playWorthIt(scoring: Scoring, playChecks: Check[]): boolean {
   // "All measured mechanical checks pass" — an unmeasured check neither opens nor closes the gate.
   // "Mechanical" means the scene/pixel/metric/probe/demo checks the planner wrote: a
-  // judge-grown vision check that never settles must not keep the playtester waiting all
-  // night (talk-hud-legible went unmeasured through ten villagers iterations).
+  // judge-grown vision check that never settles must not keep the playtester waiting for the whole
+  // run (talk-hud-legible went unmeasured through ten villagers iterations).
   const measured = scoring.results.filter((r) => isMeasured(r) && MECHANICAL_KINDS.includes(r.kind));
   const mechanicalAllPass = measured.length > 0 && measured.every((r) => r.pass === true);
   const identityPlay = playChecks.some((c) => c.weight === CheckWeight.Identity);
@@ -259,6 +294,45 @@ function timeToPlay({ role, deadline, budgetMs }: Scoring): boolean {
   const timeLeft = deadline - Date.now();
   if (role === FacetRole.Integration) return timeLeft > INTEGRATION_PLAY_MIN_MS;
   return timeLeft > Math.min(PLAY_MIN_MS, (budgetMs ?? Infinity) * PLAY_BUDGET_SHARE);
+}
+
+/** Is the integration's play put to a judge that plays: its window is leased, and the run has them on. */
+function judgesIntegration(scoring: Scoring): boolean {
+  const available = typeof handsOn.runHandsOnJudge === "function" && typeof handsOn.handsOnJudgesOn === "function";
+  return (
+    scoring.role === FacetRole.Integration &&
+    Boolean(scoring.handle) &&
+    available &&
+    handsOn.handsOnJudgesOn(scoring.run)
+  );
+}
+
+/**
+ * The integration's play checks, put to a judge that plays when one of them is tied to the run's
+ * requested state (`reaches: "setup"`) and the run's setup names that state as one the studio can
+ * check: the judge plays from the game's first screen to reach it, and only the tied check's yes
+ * counts once the studio saw it — every other answer is the model's word. Null when that does not
+ * apply, and the playtester plays as before.
+ */
+async function integrationJudge(scoring: Scoring, playChecks: Check[]): Promise<CheckResult[] | null> {
+  if (!judgesIntegration(scoring)) return null;
+  const { ctx, run, handle, worktree, projectDir, deadline, iteration, label } = scoring;
+  const tied = playChecks.find((check) => check.reaches === PlayReaches.Setup);
+  const quest = tied ? questFromSetup(run.setup, INTEGRATION_QUEST, tied.id) : null;
+  if (!quest) return null;
+  const judged = await handsOn.runHandsOnJudge(ctx, {
+    run: run as Run,
+    root: worktree ?? projectDir,
+    handle,
+    questions: playChecks,
+    quest,
+    deadline,
+    labelPrefix: label,
+    iteration,
+    facetId: FacetRole.Integration,
+  });
+  if (typeof handsOn.recordHandsOn === "function") await handsOn.recordHandsOn(ctx, run as Run, judged, playChecks);
+  return judged.results;
 }
 
 /** The play checks' results: played when worth it and there is time, otherwise unmeasured — not played is not failed. */
@@ -277,6 +351,8 @@ async function playResults(scoring: Scoring, playChecks: Check[]): Promise<Check
     const release = await withPreview();
     let played: AnyRecord | null;
     try {
+      const judged = await integrationJudge(scoring, playChecks);
+      if (judged) return judged;
       played = await runPlaytest(ctx, {
         run,
         spec,
@@ -292,7 +368,8 @@ async function playResults(scoring: Scoring, playChecks: Check[]): Promise<Check
     }
     return played?.results ?? [];
   } catch (err: any) {
-    if (err?.kind === EngineFailure.Aborted || ctx.cancelled) throw err;
+    // A stop, or a lost provider the round waits for (facet/provider.ts): neither is "unmeasured".
+    if (err?.kind === EngineFailure.Aborted || ctx.cancelled || isProviderLoss(err?.kind)) throw err;
     return playChecks.map((check) => unmeasured(check, `playtester unavailable: ${err?.message ?? err}`));
   }
 }

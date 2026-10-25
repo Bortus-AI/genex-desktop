@@ -1,430 +1,426 @@
 /**
- * The `grok` CLI's headless contract, as Grok Build documents it: one prompt from `--prompt-file`
- * (headless does not read the prompt from stdin), newline-delimited `streaming-json` events, and
- * device-code sign-in. Nothing here stores a token.
+ * What the studio reads from the `grok` CLI (Grok Build) outside a session, and how it starts one.
+ *
+ * Grok Build keeps its own sign-in (`grok login`, a Grok account in the browser) in its home,
+ * which the studio never reads. Whether it is signed in, and the models it can run, the studio
+ * asks the CLI itself: `grok agent stdio` speaks the Agent Client Protocol (JSON-RPC on stdin and
+ * stdout), and its `_x.ai/auth/info` and `_x.ai/models/list` methods answer in typed fields
+ * without opening a session or calling a model (`probeGrok`). Sessions run through its headless
+ * mode instead (`grok.ts`): one `grok --prompt-file … --output-format streaming-json` per turn,
+ * resumed by its session id.
+ * Recorded answers: `tests/fixtures/transcripts/grok-probe-*.jsonl` (Grok Build 1.0.70).
  */
+import path from "node:path";
+import { createInterface } from "node:readline";
+import { picturesNote } from "./grok-prompts.ts";
+import { CatalogError } from "./model-catalog.ts";
+import { ModelContextSource, type EngineModel } from "./types.ts";
 import { spawnCommand } from "../command-launch.ts";
 import { stopChild } from "../process-tree.ts";
-import { childEnv } from "../child-env.ts";
-import { ChatActivityPhase } from "../../shared/chat-activity.ts";
-import { DelegateEventType, type DelegateEvent } from "./types.ts";
-import type { Usage } from "../types.ts";
+import type { SandboxOptions } from "../spawn.ts";
 import { SECOND_MS } from "../../shared/duration.ts";
+import { ModelCatalogProblemCode } from "../../shared/model-catalog.ts";
 import { ReasoningEffort } from "../../shared/model-preferences.ts";
+import { t } from "../../shared/i18n.ts";
 
-/** How long a stopped `grok` gets between SIGTERM and SIGKILL. */
-const KILL_GRACE_MS = 5 * SECOND_MS;
-/** The end of stderr kept when a run fails. */
-const STDERR_TAIL_CHARS = 4_000;
+/** How long the probe may take: its model list may come from xAI first. */
+export const PROBE_TIMEOUT_MS = 20 * SECOND_MS;
+/** A reply may use this many tokens: the CLI's catalog gives no output limit. */
+const DEFAULT_REPLY_TOKENS = 32_768;
+/** A model whose context the catalog does not give: the CLI's own default for a model it does not know. */
+const DEFAULT_CONTEXT_TOKENS = 200_000;
+/** The ACP version the probe speaks. */
+const ACP_PROTOCOL_VERSION = 1;
+/** The oldest Grok Build xAI's API serves: an older CLI is refused with 426 Upgrade Required. */
+export const GROK_MIN_VERSION = "1.0.13";
+/** The HTTP status xAI refuses an outdated CLI with. */
+export const GROK_OUTDATED_STATUS = 426;
 
-/** Documented coding models. `grok models` has no published schema, so the picker starts from these. */
-export const GrokModelId = {
-  /** The id the settings reference uses as the session default. */
-  Build: "grok-build",
-  /** Grok 4.7, the model the Grok 4.7 page names as Grok Build's coding model. */
-  Grok47: "grok-4.7",
+/** The probe's JSON-RPC requests, by id: `initialize` first, then the two questions. */
+const ProbeRequest = {
+  Initialize: 1,
+  AuthInfo: 2,
+  Models: 3,
 } as const;
 
-/** Grok 4.7's published context window. `grok-build` has no separate published window. */
-export const GROK_47_CONTEXT = 500_000;
+/** Grok Build's ACP methods the probe calls. Its wire spelling: never rename a value. */
+export const GrokMethod = {
+  Initialize: "initialize",
+  AuthInfo: "_x.ai/auth/info",
+  ModelsList: "_x.ai/models/list",
+} as const;
 
 /**
- * Efforts Grok 4.7's model page advertises. The CLI also accepts `none`, `minimal` and `max`,
- * but a model only accepts the levels its own menu lists, so those are not sent.
+ * How Grok Build is signed in (`_x.ai/auth/info` `methodId`): its own sign-in (`grok login`,
+ * kept in its home) or an xAI API key from its config. Its wire spelling: never rename a value.
  */
-export const GROK_EFFORTS = [
-  ReasoningEffort.Low,
-  ReasoningEffort.Medium,
-  ReasoningEffort.High,
-  ReasoningEffort.Xhigh,
-] as const;
+export const GrokAuthMethod = {
+  CachedToken: "cached_token",
+  ApiKey: "xai.api_key",
+} as const;
 
-/** Grok 4.7's published default effort. */
-export const GROK_DEFAULT_EFFORT = ReasoningEffort.High;
+/** The hosts a Grok session reaches: xAI's API, Grok's session service, and its sign-in's refresh. */
+export const GROK_HOSTS = ["api.x.ai", "cli-chat-proxy.grok.com", "auth.x.ai", "accounts.x.ai", "grok.com"] as const;
 
-/** Where a Grok login keeps its session. Presence only: the file is never opened. */
-export const GROK_AUTH_FILE = "auth.json";
-/** Marks a home the in-app sign-in owns, so signing out does not fall through to `~/.grok`. */
-export const GROK_STUDIO_MARKER = "studio-login.json";
-/** The documented API-key variable. A session token in `auth.json` wins over it. */
-export const GROK_API_KEY = "XAI_API_KEY";
-
-/** Sandbox profiles the sandbox page names. `workspace` is the unattended build. */
-export const GrokSandbox = {
-  Off: "off",
-  Workspace: "workspace",
+/** What a session's tools may do: a build edits; a read-only session, a lead while its build runs and Plan only look. */
+export const GrokAccess = {
+  /** A build: edits and commands in its workspace. */
+  Build: "build",
+  /** A read-only session (a judge, a lead while its build runs, Plan): reads, and runs only the studio bridge. */
   ReadOnly: "read-only",
+  /** A judge that plays: reads no file at all, and reaches the build only through the studio's tools. */
+  Blind: "blind",
+  /** A one-shot answer (`complete`): no tool at all. */
+  Answer: "answer",
 } as const;
-export type GrokSandbox = (typeof GrokSandbox)[keyof typeof GrokSandbox];
+export type GrokAccess = (typeof GrokAccess)[keyof typeof GrokAccess];
 
-/** Flags Studio always passes. Discovery requires each of these to appear in `grok --help`. */
-export const GROK_REQUIRED_FLAGS = [
-  "--output-format",
-  "--prompt-file",
-  "--always-approve",
-  "--sandbox",
-  "--resume",
-] as const;
-
+/** The studio bridge's command, as Grok's `Bash(…)` permission rule matches it. */
+const BRIDGE_RULE = "Bash(node .studio/bridge/tool.mjs *)";
 /**
- * Passed only when `grok --help` lists it. Grok 1.0.70 does not, and an unknown flag
- * makes the process exit before it can run. `GROK_DISABLE_AUTOUPDATER` is set either way.
+ * Tools no studio session runs: a question nobody is there to answer, Grok's own plan mode (the
+ * studio's Plan is a read-only session) and goal (no turn sets one, so marking it done only fails),
+ * background schedulers and workflows that outlive the turn, and feedback to xAI.
  */
-export const GROK_AUTO_UPDATE_FLAG = "--no-auto-update";
-
-/** `argv` without {@link GROK_AUTO_UPDATE_FLAG} when this CLI's help did not list it. */
-export function grokArgv(argv: readonly string[], acceptedFlags?: readonly string[]): string[] {
-  const listed = acceptedFlags === undefined || acceptedFlags.includes(GROK_AUTO_UPDATE_FLAG);
-  if (listed) return [...argv];
-  return argv.filter((arg) => arg !== GROK_AUTO_UPDATE_FLAG);
-}
-
-/** Headless output. `streaming-json` is the documented xAI-native event stream. */
-export const GROK_STREAM_FORMAT = "streaming-json";
-
-/** Built-in tools a judge must not use. Names are the ones the headless guide prints. */
-export const GROK_JUDGE_TOOLS = [
-  "read_file",
-  "grep",
-  "list_dir",
-  "run_terminal_cmd",
-  "web_search",
-  "web_fetch",
-  "search_replace",
-  "write",
+const NEVER_TOOLS = [
+  "ask_user_question",
+  "enter_plan_mode",
+  "exit_plan_mode",
+  "update_goal",
+  "scheduler_create",
+  "scheduler_delete",
+  "scheduler_list",
+  "monitor",
+  "workflow",
+  "send_feedback",
 ] as const;
+/** The tools that change files; a read-only session goes without them. */
+const EDIT_TOOLS = ["search_replace", "write", "image_edit"] as const;
+/** What a one-shot answer goes without besides: commands, helpers and making pictures or video. */
+const ANSWER_TOOLS = [
+  "run_terminal_command",
+  "spawn_subagent",
+  "image_gen",
+  "image_to_video",
+  "reference_to_video",
+] as const;
+/** A blind judge's only tool: the shell, which runs nothing but the studio bridge. */
+const BLIND_TOOLS = "run_terminal_command";
 
-/** `streaming-json` event names the headless guide lists. Further names are ignored. */
-export const GrokEvent = {
-  Text: "text",
-  Thought: "thought",
-  ToolCall: "tool_call",
-  ToolCallUpdate: "tool_call_update",
-  Usage: "usage",
-  End: "end",
-  Error: "error",
-  MaxTurns: "max_turns_reached",
+/** The tools each kind of session goes without, beyond those none runs. */
+const REMOVED_TOOLS: Record<GrokAccess, readonly string[]> = {
+  build: [],
+  "read-only": EDIT_TOOLS,
+  blind: EDIT_TOOLS,
+  answer: [...EDIT_TOOLS, ...ANSWER_TOOLS],
+};
+
+/** What the probe says in Settings when it could not be read, in the person's language. */
+const MESSAGE = {
+  Malformed: () => t("Grok Build's model list could not be read."),
+  Silent: "grok agent did not answer",
+  Exited: (code: number | null) => `grok agent exited with ${code}`,
 } as const;
 
-/** Stop reasons the headless guide puts on the final `end` event. */
-export const GrokStop = {
-  EndTurn: "end_turn",
-  MaxTokens: "max_tokens",
-  MaxTurns: "max_turn_requests",
-  Refusal: "refusal",
-  Cancelled: "cancelled",
-} as const;
-
-/** Hosts a device-code sign-in may open. The guide names `auth.x.ai` and `grok.com`. */
-const LOGIN_HOSTS = new Set(["x.ai", "auth.x.ai", "accounts.x.ai", "console.x.ai", "grok.com"]);
-
-const URL_IN_OUTPUT = /https:\/\/[^\s<>"']+/g;
-/** The external-auth example prints `enter code: <code>`. The CLI's own wording is not published. */
-const DEVICE_CODE = /\bcode[:\s]+([A-Za-z0-9-]{4,16})\b/i;
-
-/** What a failed `grok` run is, from phrases the authentication guide and the CLI actually print. */
-const AUTH_PATTERNS = [
-  /authentication failed/i,
-  /not logged in/i,
-  /auth expired/i,
-  /run `?grok login/i,
-  /unauthori[sz]ed/i,
-  /\b401\b/,
-];
-const RATE_LIMIT_PATTERNS = [/rate.?limit/i, /too many requests/i, /\b429\b/];
-const USAGE_LIMIT_PATTERNS = [/usage limit/i, /quota exceeded/i];
-
-export interface GrokTranslated {
-  events: DelegateEvent[];
-  /** A text chunk. The caller concatenates them; the guide's example treats `data` as a delta. */
-  text?: string;
-  sessionId?: string;
-  usage?: Partial<Usage>;
-  failure?: string;
-  stopReason?: string;
-  completed?: boolean;
-  activity?: ChatActivityPhase;
-  turns?: number;
+/** Whose sign-in Grok Build runs on, as it says. */
+export interface GrokAccount {
+  /** `GrokAuthMethod`, or null while it is not signed in. */
+  method: string | null;
+  email: string | null;
+  /** Why xAI blocked the account, in its words, when it did. */
+  blocked: string | null;
 }
 
-/** One `grok` invocation, as an async stream of its own JSON events. Tests stand in for the process. */
-export type GrokExec = (invocation: {
-  argv: string[];
-  cwd: string;
-  env: Record<string, string>;
-  prompt: string;
-  signal: AbortSignal;
-  onStderr?: (chunk: string) => void;
-}) => AsyncIterable<Record<string, unknown>>;
-
-/** The environment a `grok` child starts with. `XAI_API_KEY` is kept only when this login is the key. */
-export function grokEnv(extra: Record<string, string | undefined> = {}, keepApiKey = false): Record<string, string> {
-  return childEnv(
-    { ...process.env, ...extra },
-    {
-      base: "contractor",
-      vendor: "grok",
-      ...(keepApiKey ? { keep: [GROK_API_KEY] } : {}),
-      set: { GROK_DISABLE_AUTOUPDATER: "1" },
-    },
-  );
+/** What one probe found. */
+export interface GrokProbe {
+  account: GrokAccount;
+  models: EngineModel[];
 }
 
-/** An https URL on a host the sign-in guide names, or null. */
-export function allowedGrokLoginUrl(raw: string): string | null {
+type Record_ = Record<string, unknown>;
+
+const record = (value: unknown): Record_ =>
+  value && typeof value === "object" && !Array.isArray(value) ? (value as Record_) : {};
+
+const text = (value: unknown): string | null => (typeof value === "string" && value ? value : null);
+
+/** One line as a JSON-RPC answer (an id and no method), or null for a notification or stray output. */
+function answerOf(line: string): Record_ | null {
+  let message: Record_;
   try {
-    const url = new URL(raw);
-    const host = url.hostname.toLowerCase();
-    const allowed =
-      url.protocol === "https:" && (LOGIN_HOSTS.has(host) || host.endsWith(".x.ai") || host.endsWith(".grok.com"));
-    return allowed ? url.toString() : null;
+    message = record(JSON.parse(line) as unknown);
   } catch {
     return null;
   }
+  return typeof message.id === "number" && message.method === undefined ? message : null;
 }
 
-/** Every allow-listed sign-in URL in one line of login output. */
-export function loginUrlsIn(line: string): string[] {
-  const found: string[] = [];
-  for (const match of line.matchAll(URL_IN_OUTPUT)) {
-    const url = allowedGrokLoginUrl(match[0] ?? "");
-    if (url) found.push(url);
+/** The request a line answers, or null. */
+function answerId(line: string): number | null {
+  const id = answerOf(line)?.id;
+  return typeof id === "number" ? id : null;
+}
+
+/** The probe's answers, by request id. */
+function answers(lines: readonly string[]): Map<number, Record_> {
+  const found = new Map<number, Record_>();
+  for (const line of lines) {
+    const answer = answerOf(line);
+    if (answer) found.set(Number(answer.id), answer);
   }
   return found;
 }
 
-/** The device code a login line printed, or null when this line has none. */
-export function deviceCodeFrom(line: string): string | null {
-  return line.match(DEVICE_CODE)?.[1] ?? null;
+/** The probe's transcript, read: whose sign-in, and the models Grok Build offers. */
+export function parseGrokProbe(lines: readonly string[]): GrokProbe {
+  const answered = answers(lines);
+  const init = record(answered.get(ProbeRequest.Initialize)?.result);
+  const auth = answered.get(ProbeRequest.AuthInfo);
+  const models = answered.get(ProbeRequest.Models);
+  if (!auth?.result || !models?.result) throw new CatalogError(ModelCatalogProblemCode.Provider, MESSAGE.Malformed());
+  const info = record(auth.result);
+  const vision = record(record(init.agentCapabilities).promptCapabilities).image === true;
+  return {
+    account: { method: text(info.methodId), email: text(info.email), blocked: text(info.userBlockedReason) },
+    models: modelRows(record(record(models.result).result), vision),
+  };
 }
 
-/** `--effort` for an advertised level. `max` and `ultra` clamp to `xhigh`; anything else is omitted. */
-export function grokEffortArgs(effort: string | undefined): string[] {
-  if (!effort || effort === "auto") return [];
-  const clamped = effort === ReasoningEffort.Max || effort === ReasoningEffort.Ultra ? ReasoningEffort.Xhigh : effort;
-  const advertised = (GROK_EFFORTS as readonly string[]).includes(clamped);
-  return advertised ? ["--effort", clamped] : [];
+/** `_x.ai/models/list`'s models as rows; its current model is the CLI's default. */
+function modelRows(list: Record_, vision: boolean): EngineModel[] {
+  const current = text(list.currentModelId);
+  const listed = Array.isArray(list.availableModels) ? list.availableModels.map(record) : [];
+  return listed.flatMap((model) => {
+    const id = text(model.modelId);
+    return id ? [modelRow(id, model, { vision, providerDefault: id === current })] : [];
+  });
 }
 
-/** Repeatable `--deny` rules for paths the contractor must not read or write. A `)` would break the rule syntax. */
-export function grokDenyArgs(dirs: readonly string[]): string[] {
-  const args: string[] = [];
-  for (const dir of dirs) {
-    if (!dir || dir.includes(")")) continue;
-    for (const prefix of ["Read", "Edit", "Write"]) args.push("--deny", `${prefix}(${dir}/**)`);
-  }
-  return args;
+/** Effort levels from least to most, for the composer's dial. */
+const EFFORT_ORDER: readonly string[] = [
+  ReasoningEffort.None,
+  ReasoningEffort.Minimal,
+  ReasoningEffort.Low,
+  ReasoningEffort.Medium,
+  ReasoningEffort.High,
+  ReasoningEffort.Xhigh,
+  ReasoningEffort.Max,
+];
+
+function modelRow(id: string, model: Record_, facts: { vision: boolean; providerDefault: boolean }): EngineModel {
+  const meta = record(model._meta);
+  const context = meta.totalContextTokens;
+  const known = typeof context === "number" && Number.isFinite(context) && context > 0;
+  const levels = Array.isArray(meta.reasoningEfforts) ? meta.reasoningEfforts.map(record) : [];
+  const efforts = levels
+    .flatMap((level) => (text(level.id) ? [String(level.id)] : []))
+    .sort((a, b) => effortRank(a) - effortRank(b));
+  const chosen = text(levels.find((level) => level.default === true)?.id) ?? text(meta.reasoningEffort);
+  return {
+    id,
+    label: text(model.name) ?? id,
+    contextWindow: known ? context : DEFAULT_CONTEXT_TOKENS,
+    contextSource: known ? ModelContextSource.Catalog : ModelContextSource.Unknown,
+    maxTokens: DEFAULT_REPLY_TOKENS,
+    supportsTools: true,
+    supportsVision: facts.vision,
+    supportsThinking: true,
+    ...(facts.providerDefault ? { providerDefault: true } : {}),
+    ...(text(model.description) ? { note: String(model.description) } : {}),
+    ...(efforts.length ? { efforts, ...(chosen && efforts.includes(chosen) ? { defaultEffort: chosen } : {}) } : {}),
+  };
 }
 
-/** One JSON line, or null when it is not a JSON object. */
-export function parseGrokLine(raw: string): Record<string, unknown> | null {
-  const line = raw.trim();
-  if (!line.startsWith("{")) return null;
-  try {
-    const parsed = JSON.parse(line) as unknown;
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null;
-  } catch {
-    return null;
-  }
-}
-
-/** `streaming-json` → the studio's log vocabulary. Unknown types are ignored, as the guide asks. */
-export function translateGrokEvent(event: Record<string, unknown>): GrokTranslated {
-  const type = String(event.type ?? "");
-  if (type === GrokEvent.Text) return textEvent(event);
-  if (type === GrokEvent.Thought) return thoughtEvent(event);
-  if (type === GrokEvent.ToolCall) return toolCallEvent(event);
-  if (type === GrokEvent.ToolCallUpdate) return toolUpdateEvent(event);
-  if (type === GrokEvent.End) return endEvent(event);
-  if (type === GrokEvent.Error) return errorEvent(event);
-  if (type === GrokEvent.MaxTurns) return { events: [], stopReason: GrokStop.MaxTurns, failure: "max turns reached" };
-  if (type.startsWith("auto_compact"))
-    return {
-      events: [{ type: DelegateEventType.Context, payload: { compacted: true } }],
-      activity: ChatActivityPhase.Compacting,
-    };
-  return { events: [] };
-}
-
-/** Which failure kind a `grok` message is, or null when it is an ordinary error. */
-export function grokFailureKind(text: string): "auth" | "rate_limit" | "usage_limit" | null {
-  if (AUTH_PATTERNS.some((pattern) => pattern.test(text))) return "auth";
-  if (USAGE_LIMIT_PATTERNS.some((pattern) => pattern.test(text))) return "usage_limit";
-  if (RATE_LIMIT_PATTERNS.some((pattern) => pattern.test(text))) return "rate_limit";
-  return null;
+/** Where an effort stands among the levels; one the studio does not know goes last. */
+function effortRank(effort: string): number {
+  const rank = EFFORT_ORDER.indexOf(effort);
+  return rank < 0 ? EFFORT_ORDER.length : rank;
 }
 
 /**
- * Spawn `grok` and yield its JSON events. The prompt is already in `--prompt-file`: the guide
- * says headless does not read a prompt from stdin.
+ * Ask `grok agent stdio` who is signed in and which models it offers: `initialize`, then
+ * `_x.ai/auth/info` and `_x.ai/models/list`. No session opens and no model is called. Runs on the
+ * host, as the person's own terminal would; its stdin closes and it stops once both answered.
  */
-export function streamGrok(
+export async function probeGrok(
   binary: string,
-  invocation: {
-    argv: string[];
-    cwd: string;
-    env: Record<string, string>;
-    signal: AbortSignal;
-    onStderr?: (chunk: string) => void;
-  },
-): AsyncIterable<Record<string, unknown>> {
-  invocation.signal.throwIfAborted();
-  const child = spawnCommand(binary, invocation.argv, {
-    cwd: invocation.cwd,
-    env: invocation.env,
-    stdio: ["ignore", "pipe", "pipe"],
+  options: { env: Record<string, string>; cwd: string; timeoutMs?: number },
+): Promise<GrokProbe> {
+  const child = spawnCommand(binary, ["agent", "stdio"], {
+    cwd: options.cwd,
+    env: options.env,
+    stdio: ["pipe", "pipe", "ignore"],
   });
-  child.stderr?.setEncoding("utf8");
-  let stderr = "";
-  child.stderr?.on("data", (chunk: string) => {
-    stderr = `${stderr}${chunk}`.slice(-STDERR_TAIL_CHARS);
-    invocation.onStderr?.(chunk);
-  });
-  const onAbort = (): void => {
-    void stopChild(child, { signal: "SIGTERM" });
-    setTimeout(() => void stopChild(child), KILL_GRACE_MS).unref?.();
+  const deadline = AbortSignal.timeout(options.timeoutMs ?? PROBE_TIMEOUT_MS);
+  const send = (id: number, method: string, params: Record_): void => {
+    child.stdin?.write(`${JSON.stringify({ jsonrpc: "2.0", id, method, params })}\n`);
   };
-  if (invocation.signal.aborted) onAbort();
-  else invocation.signal.addEventListener("abort", onAbort, { once: true });
-  return readStdout(child, invocation.signal, onAbort, () => stderr);
-}
-
-async function* readStdout(
-  child: ReturnType<typeof spawnCommand>,
-  signal: AbortSignal,
-  onAbort: () => void,
-  stderr: () => string,
-): AsyncGenerator<Record<string, unknown>> {
-  const exit = new Promise<{ code: number | null }>((resolve, reject) => {
-    child.on("error", reject);
-    child.on("close", (code) => resolve({ code }));
+  const exited = new Promise<never>((_, reject) => {
+    child.once("error", reject);
+    child.once("close", (code) => reject(new Error(MESSAGE.Exited(code))));
   });
-  child.stdout?.setEncoding("utf8");
-  try {
-    yield* jsonEvents(child.stdout as AsyncIterable<string>);
-  } finally {
-    signal.removeEventListener("abort", onAbort);
-  }
-  const { code } = await exit;
-  if (code !== 0 && !signal.aborted) throw new Error(stderr().trim() || `grok exited with ${code}`);
-}
-
-async function* jsonEvents(stdout: AsyncIterable<string>): AsyncGenerator<Record<string, unknown>> {
-  let buffer = "";
-  for await (const chunk of stdout) {
-    const lines = `${buffer}${chunk}`.split("\n");
-    buffer = lines.pop() ?? "";
-    for (const line of lines) {
-      const event = parseGrokLine(line);
-      if (event) yield event;
+  const read = (async () => {
+    if (!child.stdout) throw new Error(MESSAGE.Silent);
+    const lines: string[] = [];
+    const answered = new Set<number>();
+    send(ProbeRequest.Initialize, GrokMethod.Initialize, {
+      protocolVersion: ACP_PROTOCOL_VERSION,
+      clientCapabilities: {},
+    });
+    for await (const line of createInterface({ input: child.stdout, signal: deadline })) {
+      lines.push(line);
+      const id = answerId(line);
+      if (id === null) continue;
+      answered.add(id);
+      // The questions go once Grok answered `initialize`, as ACP asks.
+      if (id === ProbeRequest.Initialize) {
+        send(ProbeRequest.AuthInfo, GrokMethod.AuthInfo, {});
+        send(ProbeRequest.Models, GrokMethod.ModelsList, {});
+      }
+      if (answered.has(ProbeRequest.AuthInfo) && answered.has(ProbeRequest.Models)) return parseGrokProbe(lines);
     }
+    throw new Error(MESSAGE.Silent);
+  })();
+  try {
+    return await Promise.race([read, exited]);
+  } finally {
+    child.stdin?.end();
+    await stopChild(child, { signal: "SIGTERM" }).catch(() => {});
   }
 }
 
-function textEvent(event: Record<string, unknown>): GrokTranslated {
-  const text = String(event.data ?? "");
-  if (!text) return { events: [] };
-  // A token is part of the live reply, not its own chat row. The finished summary is one message.
-  return { events: [], text, activity: ChatActivityPhase.Responding };
+/** Is this `grok --version` line older than xAI serves? An unreadable one is left to the CLI. */
+export function grokTooOld(version: string | undefined): boolean {
+  const found = /(\d+)\.(\d+)\.(\d+)/.exec(version ?? "");
+  if (!found) return false;
+  const minimum = GROK_MIN_VERSION.split(".").map(Number);
+  const parts = found.slice(1).map(Number);
+  for (const [index, part] of parts.entries()) {
+    const floor = minimum[index] ?? 0;
+    if (part !== floor) return part < floor;
+  }
+  return false;
 }
 
-function thoughtEvent(event: Record<string, unknown>): GrokTranslated {
-  if (!String(event.data ?? "").trim()) return { events: [], activity: ChatActivityPhase.Thinking };
-  // Reasoning arrives a few words at a time. A row per piece is a stack of lines, not a thought.
-  return { events: [], activity: ChatActivityPhase.Thinking };
+/** What one `grok` turn is started with. */
+export interface GrokTurn {
+  access: GrokAccess;
+  /** The file holding the turn's prompt as ACP content blocks. */
+  promptFile: string;
+  cwd: string;
+  model?: string | undefined;
+  /** An effort the model lists; none is passed for a model without a dial. */
+  effort?: string | null | undefined;
+  resume?: string | undefined;
+  /** The session reaches the studio's tools through the file bridge. */
+  bridge: boolean;
 }
 
-function toolCallEvent(event: Record<string, unknown>): GrokTranslated {
-  const id = String(event.toolCallId ?? "");
-  const name = String(event.toolName ?? event.title ?? "tool");
+/**
+ * `grok`'s arguments for one turn. Grok's own sandbox stays off: the studio's holds every session.
+ * A build approves every call; so does a read-only session, whose sandbox lets it write only its
+ * own folder (as a Codex reviewer's does), with the file-editing tools gone. A blind judge and a
+ * one-shot answer run in Grok's ask mode, where a headless run refuses every call nobody approved
+ * and ends the turn there: a blind judge has the shell alone, approved for the studio bridge only.
+ * Background work never outlives the turn.
+ */
+export function grokTurnArgv(turn: GrokTurn): string[] {
+  const asks = turn.access === GrokAccess.Blind || turn.access === GrokAccess.Answer;
+  const blind = turn.access === GrokAccess.Blind;
+  const removed = [...NEVER_TOOLS, ...REMOVED_TOOLS[turn.access]];
+  return [
+    "--prompt-file",
+    turn.promptFile,
+    "--output-format",
+    "streaming-json",
+    "--cwd",
+    turn.cwd,
+    "--sandbox",
+    "off",
+    "--no-wait-for-background",
+    ...(asks ? bridgeRule(blind && turn.bridge) : ["--always-approve"]),
+    ...(blind ? ["--tools", BLIND_TOOLS] : []),
+    "--disallowed-tools",
+    removed.join(","),
+    ...(asks ? ["--disable-web-search"] : []),
+    ...(turn.model ? ["--model", turn.model] : []),
+    ...(turn.effort ? ["--reasoning-effort", turn.effort] : []),
+    ...(turn.resume ? ["--resume", turn.resume] : []),
+  ];
+}
+
+/** A blind judge approves the studio bridge alone, when it has one. */
+function bridgeRule(bridge: boolean): string[] {
+  return bridge ? ["--allow", BRIDGE_RULE] : [];
+}
+
+/** `grok`'s arguments for Compact Now: its own `/compact` on the resumed session, and no turn. */
+export function grokCompactArgv(resume: string, cwd: string): string[] {
+  return [
+    "-p",
+    "/compact",
+    "--resume",
+    resume,
+    "--output-format",
+    "streaming-json",
+    "--cwd",
+    cwd,
+    "--sandbox",
+    "off",
+    "--no-wait-for-background",
+  ];
+}
+
+/**
+ * The variables every `grok` run starts with, over the contractor's environment (which never
+ * carries an xAI key: a session runs on the person's own Grok sign-in). Its home is named outright,
+ * so the sign-in is found whoever the sandbox runs it as (on Windows, the sandbox's own user). It
+ * never updates itself, keeps no memory between games, and loads none of the person's Claude or
+ * Cursor MCP servers, hooks or skills; its error log names the HTTP status of a failed call.
+ */
+export function grokEnv(home: string): Record<string, string> {
   return {
-    events: [assistant([{ type: "tool_use", id, name, input: event.rawInput ?? {} }])],
-    activity: ChatActivityPhase.Tool,
-    turns: 1,
+    GROK_HOME: home,
+    GROK_DISABLE_AUTOUPDATER: "1",
+    GROK_MEMORY: "0",
+    GROK_WORKFLOWS: "0",
+    GROK_CLAUDE_MCPS_ENABLED: "0",
+    GROK_CLAUDE_HOOKS_ENABLED: "0",
+    GROK_CLAUDE_SKILLS_ENABLED: "0",
+    GROK_CURSOR_MCPS_ENABLED: "0",
+    GROK_CURSOR_HOOKS_ENABLED: "0",
+    GROK_CURSOR_SKILLS_ENABLED: "0",
+    RUST_LOG: "error",
+    NO_COLOR: "1",
   };
 }
 
-function toolUpdateEvent(event: Record<string, unknown>): GrokTranslated {
-  const status = String(event.status ?? "");
-  const finished = status === "completed" || status === "failed";
-  if (!finished) return { events: [], activity: ChatActivityPhase.Tool };
+/** The sandbox a session runs in: the folder it works in, Grok's own home, and nothing it must not read. */
+export function grokSandbox(input: {
+  runDir: string;
+  gameDir: string;
+  gitDirs: string[];
+  scratchDir: string;
+  secretPaths: string[];
+  home: string;
+  toolPath?: () => Promise<string>;
+}): SandboxOptions {
   return {
-    events: [
-      {
-        type: DelegateEventType.User,
-        payload: {
-          role: "user",
-          parts: [
-            {
-              type: "tool_result",
-              tool_use_id: String(event.toolCallId ?? ""),
-              is_error: status === "failed",
-              content: clipOutput(event.rawOutput),
-            },
-          ],
-        },
-      },
-    ],
-    activity: ChatActivityPhase.Thinking,
+    writableRoots: [input.runDir, ...input.gitDirs],
+    scratchDir: input.scratchDir,
+    secretPaths: input.secretPaths,
+    ownHome: [input.home],
+    // A game's own Grok settings (its MCP servers, permissions and hooks) are never the session's to plant.
+    denyWrite: [path.join(input.gameDir, ".grok")],
+    ...(input.toolPath ? { toolPath: input.toolPath } : {}),
   };
 }
 
-function endEvent(event: Record<string, unknown>): GrokTranslated {
-  const sessionId = typeof event.sessionId === "string" ? event.sessionId : undefined;
-  const stopReason = typeof event.stopReason === "string" ? event.stopReason : GrokStop.EndTurn;
-  const usage = usageFrom(event.usage);
-  const completed = stopReason === GrokStop.EndTurn || stopReason === GrokStop.MaxTokens;
-  return {
-    events: [
-      {
-        type: DelegateEventType.System,
-        payload: { subtype: "init", ...(sessionId ? { session_id: sessionId } : {}) },
-      },
-    ],
-    ...(sessionId ? { sessionId } : {}),
-    ...(usage ? { usage } : {}),
-    stopReason,
-    ...(completed ? { completed: true } : {}),
-    ...(!completed ? { failure: stopReason } : {}),
-    ...(typeof event.num_turns === "number" ? { turns: event.num_turns } : {}),
-  };
-}
-
-function errorEvent(event: Record<string, unknown>): GrokTranslated {
-  const message = String(event.message ?? "Grok Build reported an error");
-  return {
-    events: [{ type: DelegateEventType.Result, payload: { subtype: "error", result: message } }],
-    failure: message,
-    ...(usageFrom(event.usage) ? { usage: usageFrom(event.usage) } : {}),
-  };
-}
-
-function assistant(parts: unknown[]): DelegateEvent {
-  return { type: DelegateEventType.Assistant, payload: { role: "assistant", parts } };
-}
-
-function usageFrom(raw: unknown): Partial<Usage> | undefined {
-  if (!raw || typeof raw !== "object") return undefined;
-  const record = raw as Record<string, unknown>;
-  const usage: Partial<Usage> = {};
-  copyCount(usage, "input_tokens", record.input_tokens);
-  copyCount(usage, "output_tokens", record.output_tokens);
-  copyCount(usage, "cache_read_tokens", record.cache_read_input_tokens);
-  copyCount(usage, "cache_write_tokens", record.cache_creation_input_tokens);
-  copyCount(usage, "reasoning_tokens", record.reasoning_tokens);
-  if (record.cost_is_partial !== true) copyCount(usage, "cost_usd", record.total_cost_usd);
-  return Object.keys(usage).length ? usage : undefined;
-}
-
-function copyCount(
-  usage: Partial<Usage>,
-  key: "input_tokens" | "output_tokens" | "cache_read_tokens" | "cache_write_tokens" | "reasoning_tokens" | "cost_usd",
-  value: unknown,
-): void {
-  if (typeof value === "number" && Number.isFinite(value) && value >= 0) usage[key] = value;
-}
-
-function clipOutput(value: unknown): string {
-  const text = typeof value === "string" ? value : JSON.stringify(value ?? "");
-  return text.length <= 4_000 ? text : `${text.slice(0, 4_000)}…`;
+/**
+ * A turn's prompt as the ACP content blocks `--prompt-file` takes: one text block, the words and
+ * then the picture files Grok Build opens itself (it drops a picture block).
+ */
+export function grokPromptBlocks(words: string, pictures: readonly string[]): string {
+  const text = pictures.length ? `${words}\n\n${picturesNote(pictures)}` : words;
+  return JSON.stringify([{ type: "text", text }]);
 }

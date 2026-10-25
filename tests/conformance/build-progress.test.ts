@@ -1,6 +1,17 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildProgress, buildVerdictLine, projectBuildGraph } from "../../src/renderer/build-progress.ts";
+import {
+  buildHistory,
+  buildProgress,
+  buildVerdictLine,
+  historyLabel,
+  isNewestBuild,
+  projectBuildGraph,
+  replyTarget,
+  stageRunGraph,
+} from "../../src/renderer/build-progress.ts";
+import { lastGraphKey, type RunGraph, runBuilding, runIdOf } from "../../src/renderer/run-graph.ts";
+import { partRows, resultStatus, StepState, statusLine, Tone } from "../../src/renderer/run-steps.ts";
 import {
   appliesUnseen,
   firstBuildShows,
@@ -9,7 +20,11 @@ import {
   newBuildOffer,
   type StageWatch,
 } from "../../src/renderer/stage.ts";
+import { CustomEvent } from "../../src/shared/custom-events.ts";
+import { turnGraphKey } from "../../src/shared/run-graph-events.ts";
+import { RunState, runExecution } from "../../src/shared/run-state.ts";
 import { summaryCounts, type RunSummary } from "../../src/shared/run-summary.ts";
+import { WorkerEnd, WorkerIsolation, WorkerVerdict } from "../../src/shared/workers.ts";
 import type { EventEnvelope, ConversationRecord } from "../../src/substrate/types.ts";
 function event(id: number, type: string, payload: Record<string, unknown> = {}, thread = "parent"): EventEnvelope {
   return {
@@ -53,7 +68,7 @@ test("first native worker activity appears before first-round judgment in old lo
   )!;
   assert.equal(buildProgress(graph).nodeId, "iter:river:1");
   // What the checks saw is the starting point's own detail, not an unattributed sentence bolted
-  // onto the line that says how tonight is going.
+  // onto the line that says how this run is going.
   assert.doesNotMatch(buildProgress(graph).health, /identical cameras/);
   assert.match(buildProgress(graph).health, /empty game/);
   assert.doesNotMatch(buildProgress(graph).health, /scaffold/);
@@ -84,7 +99,7 @@ test("native start and recovered old start cannot overwrite a recorded verdict",
   assert.equal(graph.nodes.find((n) => n.kind === "iteration")?.status, "accepted");
   assert.equal(buildProgress(graph).nodeId, "final");
 });
-test("while the night runs, the header says what the outcome card says: the recorded summary", () => {
+test("while the run is going, the header says what the outcome card says: the recorded summary", () => {
   const graph = projectBuildGraph(
     [
       ...start,
@@ -179,9 +194,9 @@ test("an earlier build retains its rounds after an empty replacement run", () =>
   assert.equal(previous.runDir, "/runs/run_x");
 });
 
-// ── a lead's night (M1.9) ───────────────────────────────────────────────────────────────────
+// ── a lead's run (M1.9) ───────────────────────────────────────────────────────────────────
 // It has no shared-base stage, so the phase has to be read off its builders instead. The first
-// real director night reported "Building the shared base · Checks pending" from dusk to dawn.
+// real director run reported "Building the shared base · Checks pending" from dusk to dawn.
 
 const leadStart = [
   event(1, "run_started", { engine: "claude-code", goal: "a demolition derby" }),
@@ -190,16 +205,16 @@ const leadStart = [
 const worker_ = (id: number, workerId: string, state: string, extra: Record<string, unknown> = {}) =>
   event(id, "director_worker", { workerId, title: `${workerId} work`, mode: "loop", state, ...extra });
 
-test("a lead night with no builders yet says it is getting started, not building a base", () => {
+test("a lead run with no builders yet says it is getting started, not building a base", () => {
   const progress = buildProgress(projectBuildGraph(leadStart, "parent", [], "/runs")!);
   assert.equal(progress.nodeId, "base");
   assert.equal(progress.title, "Getting started");
   assert.doesNotMatch(progress.title, /base/i);
-  // Flipped (owner, 2026-10-02): no time-of-day words in the app's copy.
+  // Flipped: no time-of-day words in the app's copy.
   assert.match(progress.health, /deciding what this build needs/);
 });
 
-test("once a builder starts, the lead night counts parts — never a base", () => {
+test("once a builder starts, the lead run counts parts — never a base", () => {
   const graph = projectBuildGraph(
     [...leadStart, worker_(3, "crumple", "running"), worker_(4, "dirt", "running")],
     "parent",
@@ -214,7 +229,7 @@ test("once a builder starts, the lead night counts parts — never a base", () =
   assert.match(progress.health, /Nothing kept yet/);
 });
 
-test("a lead night counts the rounds its builders kept", () => {
+test("a lead run counts the rounds its builders kept", () => {
   const graph = projectBuildGraph(
     [
       ...leadStart,
@@ -256,7 +271,7 @@ test("a builder that ran to the end reads as done, not stopped", () => {
   assert.equal(cottages.satisfied, null, "the lead ended that one early — nobody said it was done");
 });
 
-test("a lead night between builders says the lead is deciding, not that a base is missing", () => {
+test("a lead run between builders says the lead is deciding, not that a base is missing", () => {
   const graph = projectBuildGraph(
     [...leadStart, worker_(3, "crumple", "stopped", { stoppedBecause: "done" })],
     "parent",
@@ -267,7 +282,7 @@ test("a lead night between builders says the lead is deciding, not that a base i
   assert.match(buildProgress(graph).health, /deciding what comes next/);
 });
 
-test("a lead night that built a starting point still shows one", () => {
+test("a lead run that built a starting point still shows one", () => {
   const graph = projectBuildGraph(
     [...leadStart, event(3, "autopilot_base", { ok: true, commit: "abc", empty: true })],
     "parent",
@@ -279,7 +294,7 @@ test("a lead night that built a starting point still shows one", () => {
   assert.equal(buildProgress(graph).title, "The starting point is ready");
 });
 
-test("a finished night reads off what happened to the build, not off a victory flag", () => {
+test("a finished run reads off what happened to the build, not off a victory flag", () => {
   const of = (payload: Record<string, unknown>) =>
     buildProgress(
       projectBuildGraph(
@@ -295,7 +310,7 @@ test("a finished night reads off what happened to the build, not off a victory f
       )!,
     );
   assert.equal(of({ victory: false, landed: true }).title, "Finished after 1 round · live in your game");
-  // "not made live yet" is only true of a night that merged something: the head has to have moved.
+  // "not made live yet" is only true of a run that merged something: the head has to have moved.
   assert.equal(
     of({
       victory: false,
@@ -306,7 +321,7 @@ test("a finished night reads off what happened to the build, not off a victory f
     }).title,
     "Finished after 1 round · not made live yet",
   );
-  // Flipped (owner, 2026-10-02): no time-of-day words in the app's copy.
+  // Flipped: no time-of-day words in the app's copy.
   assert.equal(
     of({ victory: false, landed: false, stoppedBecause: "land=no" }).title,
     "Finished after 1 round · nothing new",
@@ -315,9 +330,9 @@ test("a finished night reads off what happened to the build, not off a victory f
   assert.equal(of({ victory: false }).title, "Finished after 1 round");
 });
 
-test("a night the engine\u2019s limit paused is never called finished", () => {
-  // The limit ends the night with run_finished immediately followed by autopilot_paused; the
-  // Builds header used to read "Finished after 1 round \u00b7 not made live yet" over a night the
+test("a run the engine\u2019s limit paused is never called finished", () => {
+  // The limit ends the run with run_finished immediately followed by autopilot_paused; the
+  // Builds header used to read "Finished after 1 round \u00b7 not made live yet" over a run the
   // user could have resumed.
   const paused = projectBuildGraph(
     [
@@ -358,7 +373,7 @@ test("a merged build is offered once, and only when something says it runs", () 
 });
 
 /**
- * Reload stayed lit after the person played the night's build from Builds, the morning card or a
+ * Reload stayed lit after the person played the run's build from Builds, the morning card or a
  * review: those call main directly, and the stage only knew what its own Play had shown. Main now
  * says which build Live shows (`live.behind` `shows`), by full hash where a record may abbreviate.
  */
@@ -382,9 +397,9 @@ test("the stage's mount read of Live never undoes an event main sent while it wa
 });
 
 /**
- * Live never changes while the person watches it (the user, 2026-09-28: "if I'm sitting in Live
- * the game must not update on its own; only Reload is highlighted, with a changed tooltip").
- * Reload names what it would bring: what main holds first, then a healthy build of the night,
+ * Live never changes while the person watches it: the game does not update on its own, and only
+ * Reload is highlighted, with a changed tooltip.
+ * Reload names what it would bring: what main holds first, then a healthy build of the run,
  * then the way back from a build found broken.
  */
 test("Reload offers what waits for Live, main's change first", () => {
@@ -422,22 +437,25 @@ test("nothing goes into Live on its own while someone is watching a game in it",
     { ...watching, view: "builds" as const },
     { ...watching, visible: false },
     { ...watching, showEmpty: true },
+    // Live on a view that is not the web preview (the Unreal card of a folder with both).
+    { ...watching, preview: false },
   ]) {
     assert.equal(appliesUnseen(held, stage), true, JSON.stringify(stage));
     assert.equal(appliesUnseen(broken, stage), true, JSON.stringify(stage));
-    // A night's newest build is never swapped in unasked: it waits for Reload, Play or Play latest.
+    // A run's newest build is never swapped in unasked: it waits for Reload, Play or Play latest.
     assert.equal(appliesUnseen(build, stage), false, JSON.stringify(stage));
   }
   assert.equal(appliesUnseen(null, { ...watching, view: "builds" }), false);
 });
 
-test("only the empty scaffold takes the night's first healthy build by itself", () => {
+test("only the empty scaffold takes the run's first healthy build by itself", () => {
   const offer = { head: "aaa", at: "x", healthy: true };
   const empty: StageWatch = { view: "live", visible: true, showEmpty: true };
   assert.equal(firstBuildShows(offer, empty), true);
   assert.equal(firstBuildShows(offer, { ...empty, showEmpty: false }), false, "a game is on the stage");
   assert.equal(firstBuildShows({ ...offer, healthy: null }, empty), false, "nothing has confirmed it runs");
   assert.equal(firstBuildShows(offer, { ...empty, view: "builds" }), false);
+  assert.equal(firstBuildShows(offer, { ...empty, preview: false }), false, "Live shows another view");
   assert.equal(firstBuildShows(null, empty), false);
 });
 
@@ -489,4 +507,315 @@ test("single-session worker completion cannot be overwritten by an inferred firs
   assert.equal(done.facets[0]!.building, false);
   assert.equal(done.facets[0]!.satisfied, true);
   assert.equal(buildProgress(done).title, "Between builds");
+});
+
+// ── a chat turn that started workers ──────────────────────────────────────────────────────
+// A chat message that started workers is a build of its own in the stage's history, keyed by the
+// turn. It has no run folder, no recorded summary and no run's lifecycle, so nothing about it may
+// reach the main process as a run id, and Builds never opens on its own for it.
+
+const TURN = "msg-1";
+/** One record of the chat's log at an exact moment. */
+function at(id: string, iso: string, type: string, payload: Record<string, unknown>): EventEnvelope {
+  return {
+    id,
+    thread_id: "parent",
+    session_id: null,
+    turn_id: null,
+    created_at: iso,
+    data: { type: "custom", event_type: type, payload },
+  };
+}
+// Local times: a history label's day is the machine's own calendar day, whatever its zone.
+const NOW = new Date(2026, 8, 5, 12);
+const YESTERDAY = new Date(2026, 8, 4, 9).toISOString();
+const TODAY = new Date(2026, 8, 5, 10).toISOString();
+const turnWorker = (n: number, workerId: string, title: string, iso = TODAY) =>
+  at(`t${n}`, iso, CustomEvent.WorkerStarted, {
+    turn: TURN,
+    workerId,
+    title,
+    isolation: WorkerIsolation.Copy,
+    task: title,
+    ask: "The car drifts left on straight roads.",
+  });
+const turnEnd = (n: number, workerId: string, extra: Record<string, unknown> = {}, iso = TODAY) =>
+  at(`t${n}`, iso, CustomEvent.WorkerFinished, { turn: TURN, workerId, state: WorkerEnd.Done, ...extra });
+/** A Loop that started and finished yesterday. */
+const yesterdaysLoop = [
+  at("r1", YESTERDAY, CustomEvent.RunStarted, { runId: "run_x", engine: "codex" }),
+  at("r2", YESTERDAY, CustomEvent.AutopilotStarted, { runId: "run_x", director: true, facets: [] }),
+  at("r3", YESTERDAY, CustomEvent.RunFinished, { runId: "run_x" }),
+];
+/** Two workers of one chat turn, both ended; the second's copy was used and added to the game. */
+const twoWorkers = [
+  turnWorker(1, "pool.w1", "Check the physics"),
+  turnWorker(2, "pool.w2", "Center the steering"),
+  turnEnd(3, "pool.w1", { summary: "Checked the physics." }),
+  turnEnd(4, "pool.w2", { delivered: true }),
+  turnEnd(5, "pool.w2", { verdict: WorkerVerdict.Used, merged: true }),
+];
+
+/** The graph Builds shows for the parent chat: the newest, or the one picked from its history. */
+function shownGraph(events: EventEnvelope[], picked: string | null = null): RunGraph {
+  const graph = projectBuildGraph(events, "parent", [], "/runs", picked);
+  assert.ok(graph);
+  return graph;
+}
+
+test("a chat turn that started workers is in the history after the run before it, named plainly", () => {
+  const history = buildHistory([...yesterdaysLoop, ...twoWorkers], "parent");
+  assert.deepEqual(history, [
+    { runId: "run_x", rounds: 0, state: RunState.Finished, startedAt: YESTERDAY, ask: "", since: null },
+    {
+      runId: turnGraphKey(TURN),
+      rounds: 0,
+      state: RunState.Finished,
+      startedAt: TODAY,
+      ask: "The car drifts left on straight roads.",
+      since: null,
+      chat: true,
+    },
+  ]);
+  const [loop, turn] = history;
+  const working = buildHistory([...yesterdaysLoop, ...twoWorkers.slice(0, 3)], "parent")[1];
+  assert.ok(loop && turn && working);
+  assert.equal(working.state, RunState.Running);
+  const labels = [
+    historyLabel(turn, { newest: true, now: NOW }),
+    historyLabel(loop, { newest: false, now: NOW }),
+    historyLabel(turn, { newest: false, now: NOW }),
+    historyLabel(loop, { newest: true, now: NOW }),
+    historyLabel(working, { newest: true, now: NOW }),
+  ];
+  assert.deepEqual(labels, [
+    "This chat turn",
+    "Loop from yesterday",
+    "Chat turn from today",
+    "This Loop",
+    "This chat turn · running",
+  ]);
+  assert.deepEqual(
+    history.map((entry) => historyLabel(entry, { newest: isNewestBuild(history, entry), now: NOW })),
+    ["Loop from yesterday", "This chat turn"],
+    "as the stage names them: only the newest build is this one; an earlier Loop is named by its day",
+  );
+  const longAgo = new Date(2026, 7, 20, 9);
+  const older = historyLabel({ ...loop, startedAt: longAgo.toISOString() }, { newest: false, now: NOW });
+  assert.equal(older, `Loop from ${longAgo.toLocaleDateString([], { day: "numeric", month: "short" })}`);
+  for (const label of [...labels, older]) assert.doesNotMatch(label, /Build|\d+ (rounds?|workers?)/);
+});
+
+test("each build in the history names what was asked for it, and a working one when its clock began", () => {
+  const minutes = (n: number) => new Date(new Date(TODAY).getTime() + n * 60_000).toISOString();
+  const loop = [
+    at("r1", minutes(0), CustomEvent.RunStarted, { runId: "run_x", engine: "codex", goal: "  A night street race  " }),
+    at("r2", minutes(10), CustomEvent.RunFinished, { runId: "run_x", executionStatus: "paused" }),
+    at("r3", minutes(30), CustomEvent.RunRegistered, { runId: "run_x", resumed: true }),
+  ];
+  const [running] = buildHistory(loop, "parent");
+  assert.equal(running?.ask, "A night street race", "a Loop is named by its goal");
+  assert.equal(running?.state, RunState.Running);
+  assert.equal(running?.since, Date.parse(minutes(20)), "its clock counts the 10 minutes it worked, not the pause");
+  const [paused] = buildHistory(loop.slice(0, 2), "parent");
+  assert.equal(paused?.since, null, "a paused build has no clock");
+
+  const queued = at("q0", TODAY, CustomEvent.CoordinatorMessageQueued, { messageId: TURN, action: { text: "Fix it" } });
+  const unnamed = at("t1", TODAY, CustomEvent.WorkerStarted, { turn: TURN, workerId: "pool.w1", title: "Check" });
+  const [turn] = buildHistory([queued, unnamed], "parent");
+  assert.equal(turn?.ask, "Fix it", "a chat turn whose workers name no ask is named by the message it answers");
+  assert.equal(turn?.since, Date.parse(TODAY), "a working chat turn's clock begins with its first worker");
+  const [named] = buildHistory([queued, ...twoWorkers.slice(0, 1)], "parent");
+  assert.equal(named?.ask, "The car drifts left on straight roads.", "its first worker's ask comes first");
+});
+
+test("Builds shows the newest: the chat turn's after a run, and either one when picked", () => {
+  const events = [...yesterdaysLoop, ...twoWorkers];
+  const newest = shownGraph(events);
+  assert.equal(newest.runId, turnGraphKey(TURN));
+  assert.equal(newest.turn, TURN);
+  assert.equal(newest.runDir, null);
+  assert.equal(newest.facets.length, 2);
+  const loop = shownGraph(events, "run_x");
+  assert.equal(loop.runId, "run_x");
+  assert.equal(loop.runDir, "/runs/run_x");
+  assert.equal(loop.facets.length, 0);
+  const later = [...events, at("r9", "2026-09-05T11:00:00Z", CustomEvent.RunStarted, { runId: "run_y" })];
+  assert.equal(projectBuildGraph(later, "parent", [], "/runs")?.runId, "run_y");
+  const picked = shownGraph(later, turnGraphKey(TURN));
+  assert.equal(picked.turn, TURN);
+  assert.equal(picked.runDir, null);
+});
+
+test("the history's newest is the graph Builds shows: a Loop resumed after a chat turn's workers moves last", () => {
+  const paused = [
+    at("r1", YESTERDAY, CustomEvent.RunStarted, { runId: "run_x", engine: "codex" }),
+    at("r2", YESTERDAY, CustomEvent.AutopilotStarted, { runId: "run_x", director: true, facets: [] }),
+    at("r3", YESTERDAY, CustomEvent.RunFinished, { runId: "run_x", executionStatus: "paused" }),
+  ];
+  const resumed = at("r4", TODAY, CustomEvent.RunRegistered, { runId: "run_x", resumed: true });
+  const events = [...paused, ...twoWorkers, resumed];
+  const history = buildHistory(events, "parent");
+  assert.deepEqual(
+    history.map((entry) => entry.runId),
+    [turnGraphKey(TURN), "run_x"],
+  );
+  assert.equal(shownGraph(events).runId, history.at(-1)?.runId, "the default graph is the history's newest");
+  const turn = shownGraph(events, turnGraphKey(TURN));
+  assert.equal(turn.turn, TURN, "the turn opens from its worker line once the Loop is newer");
+  assert.equal(turn.facets.length, 2);
+});
+
+test("the history's newest is the graph Builds shows: a running Loop's round after a chat turn's workers moves it last", () => {
+  const opened = [
+    at("r1", YESTERDAY, CustomEvent.RunStarted, { runId: "run_x", engine: "codex" }),
+    at("r2", YESTERDAY, CustomEvent.AutopilotStarted, { runId: "run_x", director: true, facets: [] }),
+  ];
+  const round = at("r3", TODAY, CustomEvent.FacetIteration, { runId: "run_x", facetId: "sky", iteration: 1 });
+  const events = [...opened, ...twoWorkers, round];
+  const history = buildHistory(events, "parent");
+  assert.equal(lastGraphKey(events), "run_x");
+  assert.equal(history.at(-1)?.runId, lastGraphKey(events), "the history's newest is the newest graph");
+  assert.equal(shownGraph(events).runId, history.at(-1)?.runId, "and Builds shows it");
+});
+
+test("a chat turn whose workers ended is running in the history while the lead answers its message", () => {
+  const processing = at("q1", TODAY, CustomEvent.CoordinatorMessageProcessing, { messageId: TURN });
+  const handled = at("q2", TODAY, CustomEvent.CoordinatorMessageHandled, { messageId: TURN });
+  const queued = at("q0", TODAY, CustomEvent.CoordinatorMessageQueued, { messageId: TURN, action: { text: "Fix it" } });
+  const answering = [queued, processing, ...twoWorkers];
+  assert.equal(buildHistory(answering, "parent")[0]?.state, RunState.Running);
+  assert.equal(buildHistory([...answering, handled], "parent")[0]?.state, RunState.Finished);
+  const line = statusLine(shownGraph(answering), null, partRows(shownGraph(answering)), NOW.getTime());
+  assert.equal(line.strong, "Working");
+});
+
+test("a chat turn's later records never move it ahead of a newer Loop", () => {
+  const newer = at("r9", TODAY, CustomEvent.RunStarted, { runId: "run_y", engine: "codex" });
+  // The turn's last end and the lead's verdict on it arrive after the newer Loop started.
+  const events = [...twoWorkers.slice(0, 2), newer, ...twoWorkers.slice(2)];
+  assert.equal(lastGraphKey(events), "run_y");
+  assert.equal(shownGraph(events).runId, "run_y");
+  assert.deepEqual(
+    buildHistory(events, "parent").map((entry) => entry.runId),
+    [turnGraphKey(TURN), "run_y"],
+  );
+});
+
+test("a chat turn's graph asks the app for nothing a run has", () => {
+  const events = [...yesterdaysLoop, ...twoWorkers];
+  const turn = shownGraph(events);
+  const loop = shownGraph(events, "run_x");
+  assert.equal(runIdOf(turn), null);
+  assert.equal(replyTarget(turn), null);
+  assert.equal(runIdOf(loop), "run_x");
+  assert.deepEqual(replyTarget(loop), { runId: "run_x", active: false });
+});
+
+test("a chat turn's status says how many workers work, and that your game changed only when a record says so", () => {
+  const cases: Array<{ events: EventEnvelope[]; line: [string, string, string]; result: [string, string] }> = [
+    {
+      events: twoWorkers.slice(0, 2),
+      line: ["live", "Working", "2 workers on it"],
+      result: ["Nothing yet", StepState.Waiting],
+    },
+    {
+      events: twoWorkers.slice(0, 3),
+      line: ["live", "Working", "1 worker on it"],
+      result: ["Nothing yet", StepState.Waiting],
+    },
+    {
+      events: twoWorkers,
+      line: [Tone.Green, "Live in your game", "from this chat turn"],
+      result: ["Live in your game", StepState.InBuild],
+    },
+    {
+      // No worker's work was merged, but the lead may have changed the game itself: no claim either way.
+      events: twoWorkers.slice(0, 4),
+      line: [Tone.Muted, "Done", "from this chat turn"],
+      result: ["Done", StepState.Delivered],
+    },
+    {
+      events: [turnWorker(1, "pool.w1", "Check the physics"), turnEnd(2, "pool.w1", { summary: "Checked it." })],
+      line: [Tone.Muted, "Done", "from this chat turn"],
+      result: ["Done", StepState.Delivered],
+    },
+    {
+      // A worker that wrote in place and finished: its work is in your game.
+      events: [turnWorker(1, "pool.w1", "Tune the jump"), turnEnd(2, "pool.w1", { inGame: true })],
+      line: [Tone.Green, "Live in your game", "from this chat turn"],
+      result: ["Live in your game", StepState.InBuild],
+    },
+  ];
+  for (const { events, line, result } of cases) {
+    const graph = shownGraph(events);
+    const status = statusLine(graph, null, partRows(graph, null), NOW.getTime());
+    assert.deepEqual([status.tone, status.strong, status.rest], line);
+    const shown = resultStatus(graph, null);
+    assert.deepEqual([shown.word, shown.state], result);
+  }
+});
+
+test("Builds never opens on its own for a chat turn", () => {
+  assert.equal(runExecution(twoWorkers.slice(0, 2)), null);
+  assert.equal(runExecution([...yesterdaysLoop, ...twoWorkers.slice(0, 2)])?.state, RunState.Finished);
+});
+
+test("the stage reads a run as building only from a run's own graph, never from a chat turn's workers", () => {
+  /** What the stage reads for Live: the graph it shows, and the run its Live answers to. */
+  const stage = (events: EventEnvelope[]) => {
+    const shown = shownGraph(events);
+    const run = stageRunGraph(events, "parent", "/runs", shown, buildHistory(events, "parent"));
+    return { shown, run };
+  };
+  const working = stage([...yesterdaysLoop, ...twoWorkers.slice(0, 2)]);
+  assert.equal(working.shown.active, true, "the chat turn's workers work");
+  assert.equal(runBuilding(working.shown), false, "but no run builds: a stopped game keeps its Play");
+  assert.equal(working.run?.runId, "run_x", "Live answers to the newest run");
+  assert.equal(runBuilding(working.run), false);
+  const loopGoing = [
+    at("r1", YESTERDAY, CustomEvent.RunStarted, { runId: "run_x", engine: "codex" }),
+    at("r2", YESTERDAY, CustomEvent.AutopilotStarted, { runId: "run_x", director: true, facets: [] }),
+    at("r3", TODAY, CustomEvent.IntegrationMerge, { runId: "run_x", facetId: "car", head: "h1", commit: "c1" }),
+    at("r4", TODAY, CustomEvent.IntegrationHealth, { runId: "run_x", head: "h1", ok: false, problems: ["crash"] }),
+    ...twoWorkers.slice(0, 2),
+  ];
+  const both = stage(loopGoing);
+  assert.equal(both.shown.turn, TURN, "the newer chat turn is shown");
+  assert.equal(runBuilding(both.run), true, "while the Loop still builds");
+  assert.equal(both.run?.mergedHead?.healthy, false, "and its build found broken is still its own");
+  const none = stage(twoWorkers);
+  assert.equal(none.run, null, "a chat with no run has none to answer to");
+});
+
+test("an open Loop that kept its work in place is titled as kept in the project, never live, from its graph alone", () => {
+  const graph = projectBuildGraph(
+    [
+      ...start,
+      event(3, "run_finished", { victory: true, landed: true, executionStatus: "completed", profile: "open" }),
+    ],
+    "parent",
+    [],
+    null,
+  )!;
+  const final = graph.nodes.find((node) => node.kind === "final") as { profile?: string } | undefined;
+  assert.equal(final?.profile, "open");
+  const { title } = buildProgress(graph);
+  assert.match(title, /kept in your project/);
+  assert.doesNotMatch(title, /live/i);
+});
+
+test("a later close that names no profile is not read as an earlier close's open Loop", () => {
+  const graph = projectBuildGraph(
+    [
+      ...start,
+      event(3, "run_finished", { victory: false, landed: false, executionStatus: "paused", profile: "open" }),
+      event(4, "run_finished", { victory: true, landed: true, executionStatus: "completed" }),
+    ],
+    "parent",
+    [],
+    null,
+  )!;
+  const final = graph.nodes.find((node) => node.kind === "final") as { profile?: string } | undefined;
+  assert.equal(final?.profile, undefined);
 });

@@ -47,13 +47,16 @@
         "docs/product/models-context.md",
         "docs/product/assets-plugins.md",
         "docs/product/studio-learning.md",
+        "docs/product/projects-engines.md",
         "docs/agent/feature-map.md",
         "docs/agent/architecture.md",
         "docs/agent/design.md",
+        "docs/agent/translation.md",
         "docs/local-models.md",
         "docs/connections-and-context.md",
         "docs/tool-permissions.md",
-        "docs/performance.md"
+        "docs/performance.md",
+        "docs/play.md"
       ],
       "commands": ["typecheck", "test:build-ui"]
     },
@@ -74,7 +77,9 @@
         "docs/product/builds-live.md",
         "docs/product/assets-plugins.md",
         "docs/product/studio-learning.md",
+        "docs/product/projects-engines.md",
         "docs/agent/architecture.md",
+        "docs/play.md",
         "docs/conversation-coordinator.md",
         "docs/plugins.md",
         "docs/PLUGIN_GUIDE.md",
@@ -109,14 +114,17 @@
         "src/substrate/paths.ts",
         "tests/conformance/paths.test.ts",
         "tests/conformance/fsx.test.ts",
-        "src/substrate/windows-sandbox.ts"
+        "src/substrate/windows-sandbox.ts",
+        "src/substrate/git-policy.ts",
+        "scripts/vendor-git-for-mac.ts"
       ],
       "documents": [
         "docs/agent/context.md",
         "docs/agent/architecture.md",
         "docs/product/workspace.md",
         "docs/harness-runtime.md",
-        "docs/windows-sandbox.md"
+        "docs/windows-sandbox.md",
+        "docs/mac-bundled-git.md"
       ],
       "commands": ["check", "test:fast"]
     },
@@ -165,13 +173,22 @@
         "src/shared/preview-contract.ts",
         "tests/conformance/page-serve.test.ts",
         "tests/conformance/page-shim.test.ts",
-        "src/substrate/pixel-stats.ts"
+        "src/substrate/pixel-stats.ts",
+        "src/substrate/computer-*.ts",
+        "src/main/core/computer-*.ts",
+        "src/main/core/browser-preview-target.ts",
+        "src/shared/computer-target.ts",
+        "src/shared/play-protocol.ts",
+        "src/substrate/play-protocol-client.ts",
+        "src/main/core/game-bridge-target.ts"
       ],
       "documents": [
         "docs/agent/context.md",
         "docs/agent/architecture.md",
         "docs/product/builds-live.md",
-        "docs/performance.md"
+        "docs/performance.md",
+        "docs/computer-use.md",
+        "docs/play-protocol.md"
       ],
       "commands": ["check", "test:fast", "test:ui"]
     },
@@ -220,6 +237,7 @@
         "docs/agent/context.md",
         "docs/agent/architecture.md",
         "docs/product/assets-plugins.md",
+        "docs/product/projects-engines.md",
         "docs/plugins.md",
         "docs/PLUGIN_GUIDE.md",
         "docs/connections-and-context.md"
@@ -284,6 +302,7 @@
         "docs/agent/context.md",
         "docs/product/builds-live.md",
         "docs/product/studio-learning.md",
+        "docs/product/projects-engines.md",
         "docs/agent/architecture.md",
         "docs/local-models.md",
         "docs/connections-and-context.md",
@@ -332,6 +351,9 @@
         "tests/conformance/third-party-notices.test.ts",
         "scripts/package-prune.cjs",
         "tests/conformance/package-prune.test.ts",
+        "scripts/package-vc-runtime.cjs",
+        "tests/conformance/package-vc-runtime.test.ts",
+        "tests/helpers/pe-image.ts",
         "scripts/appdmg-image-size/**",
         "tests/conformance/appdmg-image-size.test.ts",
         "scripts/package-signing.cjs",
@@ -422,6 +444,7 @@
         "docs/STUDIO-DEVELOPER-FIELD-GUIDE.md",
         "docs/release-readiness.md",
         "docs/agent/glossary.md",
+        "docs/agent/translation.md",
         "docs/agent/recipes.md",
         "src/AGENTS.md",
         "tests/AGENTS.md",

@@ -3,7 +3,7 @@
  *
  * A call nobody answers keeps the harness awaiting it, and a harness awaiting the host is not
  * wedged, so the watchdog stays quiet while any call is in flight. A generated game whose
- * `state()` never returns, or a page that stops answering, therefore used to freeze a whole night
+ * `state()` never returns, or a page that stops answering, therefore used to freeze a whole run
  * with nothing to notice it. Every call now has a class, and a class with a deadline is answered
  * with `RpcDeadline` once it passes; the watchdog sees the harness's own silence again after that.
  *
@@ -66,20 +66,32 @@ export const RPC_CLASSES = {
   "snapshot.worktree": RpcClass.Work,
   "snapshot.removeWorktree": RpcClass.Work,
   "plugins.tools": RpcClass.Work,
+  "plugins.workerTypes": RpcClass.Work,
+  "jobs.list": RpcClass.Record,
+  "plugins.find": RpcClass.Record,
+  "plugins.suggest": RpcClass.Record,
   "plugins.preflightMultiplayer": RpcClass.Work,
   "capabilities.describe": RpcClass.Record,
   "plugins.invoke": RpcClass.Work,
   "mcp.tools": RpcClass.Work,
   "mcp.invoke": RpcClass.Work,
+  "locks.hold": RpcClass.Record,
+  "locks.release": RpcClass.Record,
+  "checkpoint.take": RpcClass.Work,
+  "hooks.fire": RpcClass.Work,
+  "observers.capture": RpcClass.Work,
   "run.exec": RpcClass.Work,
   "engine.describe": RpcClass.Work,
   "studio.context": RpcClass.Record,
+  "studio.language": RpcClass.Record,
   "context.policy": RpcClass.Record,
   "learning.enabled": RpcClass.Record,
   "engine.complete": RpcClass.Work,
   "engine.abort": RpcClass.Work,
   "engine.interrupt": RpcClass.Work,
   "engine.delegate": RpcClass.Work,
+  "finish.review": RpcClass.Work,
+  "finish.settle": RpcClass.Record,
   "engine.steer": RpcClass.Work,
   "coordinator.tool": RpcClass.Work,
   "engine.delegations": RpcClass.Record,
@@ -90,6 +102,7 @@ export const RPC_CLASSES = {
   "game.contentStamp": RpcClass.Record,
   "game.recents": RpcClass.Record,
   "game.scaffold": RpcClass.Work,
+  "game.start": RpcClass.Work,
   "game.validate": RpcClass.Work,
   "game.attached": RpcClass.Record,
   "game.upgradeContract": RpcClass.Work,
@@ -109,6 +122,12 @@ export const RPC_CLASSES = {
   "preview.crop": RpcClass.Page,
   "preview.diff": RpcClass.Page,
   "preview.input": RpcClass.Page,
+  // Its first call loads the build into the window, and a wait may run five minutes.
+  "preview.computer": RpcClass.PageLoad,
+  // The person may take minutes to answer the consent card; the card's own timeout bounds it.
+  "desktop.computer": RpcClass.Work,
+  // A judge plays for minutes; the host's own dispatch timeout (`judge-play-tool.ts`) bounds it.
+  "judge.play": RpcClass.Work,
   "preview.console": RpcClass.Page,
   "preview.gpuErrors": RpcClass.Page,
   "preview.status": RpcClass.Page,
@@ -118,6 +137,7 @@ export const RPC_CLASSES = {
   "preview.observe": RpcClass.PageLoad,
   "preview.acquire": RpcClass.PageLoad,
   "preview.release": RpcClass.Page,
+  "preview.viewport": RpcClass.Page,
   "preview.statsOf": RpcClass.Page,
   "preview.pair": RpcClass.Page,
   "preview.screens": RpcClass.Page,

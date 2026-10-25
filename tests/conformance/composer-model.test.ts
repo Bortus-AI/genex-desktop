@@ -19,11 +19,14 @@ import {
   composerLoopView,
   lastLoop,
   loopCommissions,
+  modeMenuReach,
   pinChatLoop,
   rememberChatLoop,
   reportCommissions,
   storedChatLoop,
 } from "../../src/renderer/loop-setting.ts";
+import { openingRoles, presetRoles } from "../../src/renderer/role-store.ts";
+import { toChoices } from "../../src/renderer/model-choices.ts";
 import type { KeyValueStorage } from "../../src/renderer/storage.ts";
 import type { EngineDescriptor } from "../../src/shared/engine-descriptor.ts";
 
@@ -71,6 +74,40 @@ const local: EngineDescriptor = {
   defaultModel: null,
   models: [model("qwen"), model("tiny", { supportsTools: false })],
 };
+
+describe("a saved model the plan no longer offers", () => {
+  const notOffered = (engines: EngineDescriptor[], modelKey: string) =>
+    resolveComposerModel({ studio: false, engines, modelKey, effort: null });
+
+  it("opens on a model that runs, so the picker, the panel and the send name the same one", () => {
+    const view = notOffered([claude, codex], "codex::gpt-5.5");
+    assert.equal(view.selected?.split("::")[0], "claude-code", "the first model the person can run");
+    assert.equal(view.selectedEngine?.id, "claude-code");
+    assert.ok(!view.choices.some((choice) => choice.key === "codex::gpt-5.5"), "no row for a model nobody can run");
+  });
+
+  it("keeps the saved pick while its provider's models are still being read", () => {
+    const catalog = (state: string, refreshing = false) =>
+      ({ ...codex, catalog: { state, revision: 1, refreshing } }) as EngineDescriptor;
+    for (const unsure of [catalog("loading"), catalog("unavailable"), catalog("stale"), catalog("ready", true)])
+      assert.equal(
+        notOffered([claude, unsure], "codex::gpt-5.5").selected,
+        "codex::gpt-5.5",
+        `a ${unsure.catalog?.state} list is not proof the model is gone`,
+      );
+    assert.equal(notOffered([claude, catalog("ready")], "codex::gpt-5.5").selected?.split("::")[0], "claude-code");
+    assert.equal(
+      notOffered([], "codex::gpt-5.5").selected,
+      "codex::gpt-5.5",
+      "nothing is known before the engines are",
+    );
+  });
+
+  it("keeps a signed-out provider's pick, where the sign-in is asked for", () => {
+    const out: EngineDescriptor = { ...codex, status: { code: "needs_login", detail: "" } };
+    assert.equal(notOffered([claude, out], "codex::gpt-5.5").selected?.split("::")[0], "codex");
+  });
+});
 
 describe("what a chat opens with", () => {
   it("a game chat keeps its own pick; a fresh one inherits the last pick, then its last turn's engine", () => {
@@ -184,8 +221,8 @@ describe("what the composer derives", () => {
     );
     assert.deepEqual(
       view.roleOthers.map((group) => group.engine),
-      ["codex"],
-      "only another signed-in session engine, never a signed-out one",
+      ["codex", "ollama"],
+      "another ready engine that takes roles, never a signed-out one",
     );
     assert.equal(
       resolveComposerModel({ studio: false, engines: [claude], modelKey: "claude-code::opus", effort: "max" }).effort,
@@ -205,19 +242,26 @@ describe("what the composer derives", () => {
     );
   });
 
-  it("a local model has no roles, and effort only when it exposes efforts", () => {
+  it("a local engine with a tool model splits the work into roles, and has effort only when it exposes efforts", () => {
     const view = resolveComposerModel({
       studio: false,
       engines: [local, signedOut],
       modelKey: "ollama::qwen",
       effort: null,
     });
-    assert.equal(view.rolesApply, false);
+    assert.equal(view.rolesApply, true, "a completion-only engine still gives each job its own model");
+    assert.deepEqual(view.roleOthers, [], "its workers and reviewers stay on it");
     assert.equal(view.effortApplies, false);
+    const toolless = { ...local, models: [model("tiny", { supportsTools: false })] };
+    assert.equal(
+      resolveComposerModel({ studio: false, engines: [toolless], modelKey: "ollama::tiny", effort: null }).rolesApply,
+      false,
+      "an engine with no model that can call tools has nothing to split",
+    );
     assert.equal(
       resolveComposerModel({ studio: false, engines: [local], modelKey: "gone::model", effort: null }).selected,
-      "gone::model",
-      "an explicit pick must not become another provider",
+      "ollama::qwen",
+      "a pick whose provider is gone opens on a model that runs, and the picker names that one",
     );
   });
 
@@ -255,6 +299,40 @@ describe("what the composer derives", () => {
       ),
       null,
     );
+  });
+});
+
+describe("the roles a pick opens with", () => {
+  const lineup: EngineDescriptor = {
+    ...local,
+    models: [
+      model("coder", { supportsVision: false }),
+      model("tiny", { supportsTools: false }),
+      model("vl"),
+      model("qwen"),
+    ],
+  };
+  const choices = toChoices([claude, lineup]);
+
+  it("gives every job the pick, but on a local engine a pick that cannot see images leaves reviewing to one that can", () => {
+    assert.deepEqual(presetRoles("ollama", "qwen", choices), { planner: "qwen", builder: "qwen", judge: "qwen" });
+    assert.deepEqual(
+      presetRoles("ollama", "coder", choices),
+      { planner: "coder", builder: "coder", judge: "vl" },
+      "the first installed model that calls tools and sees images",
+    );
+    assert.deepEqual(
+      presetRoles("ollama", "coder", toChoices([{ ...lineup, models: [model("coder", { supportsVision: false })] }])),
+      { planner: "coder", builder: "coder", judge: "coder" },
+      "with none installed the pick reviews, as before",
+    );
+    assert.deepEqual(presetRoles("claude-code", "opus", choices), { planner: "opus", builder: "opus", judge: "opus" });
+  });
+
+  it("opens a local engine with no saved roles on that preset", () => {
+    const store = storage();
+    assert.equal(openingRoles(store, "ollama", "coder", choices).judge, "vl");
+    assert.equal(openingRoles(store, "ollama", "qwen", choices).judge, "vl", "and keeps what it stamped");
   });
 });
 
@@ -336,6 +414,86 @@ describe("what a send carries", () => {
     assert.equal("hours" in (noCap.autopilot ?? {}), false, "no cap sends no hours");
   });
 
+  it("commissions a local build with a model for each job", () => {
+    const lineup = { ...local, models: [model("qwen"), model("coder", { supportsVision: false }), model("vl")] };
+    const localView = resolveComposerModel({
+      studio: false,
+      engines: [lineup],
+      modelKey: "ollama::qwen",
+      effort: null,
+      roles: { planner: "qwen", builder: "coder", judge: "vl" },
+    });
+    const sent = composerSendOptions({ ...localView, preferences: {} }, "ollama::qwen", {
+      autopilot: true,
+      extras: { autopilot: { hours: 1, frames: [] } },
+    });
+    assert.equal(sent.engine, "ollama");
+    assert.equal(sent.model, "qwen", "the chat itself runs on the main agent");
+    const { planner, builder, judge, engines } = sent.autopilot?.roles ?? {};
+    assert.deepEqual(
+      { planner, builder, judge, engines },
+      {
+        planner: "qwen",
+        builder: "coder",
+        judge: "vl",
+        engines: undefined,
+      },
+    );
+  });
+
+  it("a subscription's reviewers may be local models, its workers may not", () => {
+    const claudeView = resolveComposerModel({
+      studio: false,
+      engines: [claude, local],
+      modelKey: "claude-code::opus",
+      effort: null,
+    });
+    const commission = { autopilot: true, extras: { autopilot: { hours: 1, frames: [] } } };
+    const localReviewers = effectiveRoles(
+      claudeView,
+      { planner: "opus", builder: "sonnet", judge: "qwen", engines: { judge: "ollama" } },
+      null,
+    );
+    const sent = composerSendOptions(
+      { ...claudeView, roles: localReviewers, preferences: {} },
+      "claude-code::opus",
+      commission,
+    );
+    const { builder, judge, engines } = sent.autopilot?.roles ?? {};
+    assert.deepEqual({ builder, judge, engines }, { builder: "sonnet", judge: "qwen", engines: { judge: "ollama" } });
+    const localWorkers = effectiveRoles(
+      claudeView,
+      { planner: "opus", builder: "qwen", engines: { builder: "ollama" } },
+      null,
+    );
+    assert.throws(
+      () =>
+        composerSendOptions({ ...claudeView, roles: localWorkers, preferences: {} }, "claude-code::opus", commission),
+      /unavailable/,
+      "a local worker under a subscription is refused before the build, never sent to the subscription",
+    );
+  });
+
+  it("a local main agent may hand its workers and reviewers to a signed-in subscription", () => {
+    const localView = resolveComposerModel({
+      studio: false,
+      engines: [local, codex],
+      modelKey: "ollama::qwen",
+      effort: null,
+    });
+    const roles = effectiveRoles(
+      localView,
+      { planner: "qwen", builder: "gpt", judge: "gpt", engines: { builder: "codex", judge: "codex" } },
+      null,
+    );
+    const sent = composerSendOptions({ ...localView, roles, preferences: {} }, "ollama::qwen", {
+      autopilot: true,
+      extras: { autopilot: { hours: 1, frames: [] } },
+    });
+    assert.equal(sent.model, "qwen");
+    assert.deepEqual(sent.autopilot?.roles?.engines, { builder: "codex", judge: "codex" });
+  });
+
   it("a pick on another engine than the roles' sends that model, with no roles", () => {
     const sent = composerSendOptions(game, "codex::gpt", {
       autopilot: true,
@@ -415,6 +573,19 @@ describe("what a chat's Loop is", () => {
     assert.deepEqual(storedChatLoop(storage(globals)), { on: true, hours: 1 }, "no chat reads the last pick");
   });
 
+  it("while a build owns the chat, or its coordinator answers, Mode stays shut; with neither it opens and changes", () => {
+    const running = composerLoopView({ own: halfHour, build: { state: "running", loop: infinite } });
+    for (const coordinating of [false, true])
+      assert.deepEqual(
+        modeMenuReach({ view: running, coordinating }),
+        { opens: false, changes: false },
+        `coordinating: ${coordinating}`,
+      );
+    const own = composerLoopView({ own: halfHour, build: null });
+    assert.deepEqual(modeMenuReach({ view: own, coordinating: false }), { opens: true, changes: true });
+    assert.deepEqual(modeMenuReach({ view: own, coordinating: true }), { opens: false, changes: false });
+  });
+
   it("Mode shows the chat's own Loop with no build or after it finished, and a running or paused build's own limit", () => {
     const own = halfHour;
     assert.deepEqual(composerLoopView({ own, build: null }), { shown: own, editable: true });
@@ -479,17 +650,16 @@ describe("what a chat's Loop is", () => {
   });
 });
 
-it("submission rejects an unavailable explicit main model or worker instead of substituting", () => {
+it("submission rejects an unavailable main model or worker it is handed, never sending it as another", () => {
   const view = resolveComposerModel({
     studio: false,
     engines: [claude, codex],
     modelKey: "codex::gpt-6-sol",
     effort: "high",
   });
-  assert.equal(view.selected, "codex::gpt-6-sol");
-  assert.ok(view.choices.some((row) => row.key === view.selected && row.disabled));
+  assert.notEqual(view.selected, "codex::gpt-6-sol", "the composer itself opens on a model that runs");
   assert.throws(
-    () => composerSendOptions({ ...view, preferences: {} }, view.selected, { autopilot: false }),
+    () => composerSendOptions({ ...view, preferences: {} }, "codex::gpt-6-sol", { autopilot: false }),
     /unavailable/i,
   );
   const other = resolveComposerModel({

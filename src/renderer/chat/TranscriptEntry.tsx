@@ -2,29 +2,52 @@
  * One entry of the transcript, drawn by its kind (`chat-entries.ts` decides what the entries are).
  */
 import { type JSX, memo, useCallback, useMemo } from "react";
-import { type Entry, EntryAction, EntryKind } from "../chat-entries.ts";
+import { t } from "../../shared/i18n.ts";
+import { type Entry, EntryAction, EntryKind, type MorningEntry, systemTagWords } from "../chat-entries.ts";
 import { ExportReview } from "./ExportReview.tsx";
 import { type ConversationEntry, WORK_KIND } from "./conversation-entries.ts";
+import { type KeepBuildingTap, keepBuilding, keepsBuildingIn } from "../keep-building.ts";
 import { MorningCard } from "../panels/MorningCard.tsx";
 import { FileText } from "../ui/FileText.tsx";
 import { Icon } from "../ui/icons.tsx";
 import { Markdown } from "../ui/Markdown.tsx";
 import { ResultButton } from "../ui/ResultButton.tsx";
 import { ToolRow } from "../ui/ToolChips.tsx";
-import { compactedWords, consentRequestedWords } from "../words.ts";
+import { compactedWords, consentLineWords } from "../words.ts";
 import { type Notify, notifyProblem } from "../state/toasts.ts";
 import { AssetResults } from "./AssetResults.tsx";
 import { ChatDisclosure } from "./ChatDisclosure.tsx";
 import { CommandRun } from "./CommandRun.tsx";
+import { GenexCoverCard } from "./GenexCoverCard.tsx";
+import { ListingDraftCard } from "./ListingDraftCard.tsx";
 import { ChatQuestion } from "./ChatQuestion.tsx";
+import { EngineLinkLine } from "./EngineLinkLine.tsx";
+import { RewindLine } from "./RewindLine.tsx";
+import { JobLine } from "./JobLine.tsx";
+import { WorkerLine } from "./WorkerLine.tsx";
+import { AppAccessLine } from "./AppAccessLine.tsx";
+import { WentAheadLine } from "./WentAheadLine.tsx";
+import { JudgeLine } from "./JudgeLine.tsx";
 import { PermissionOutcome } from "./PermissionRequest.tsx";
+import { PluginSuggestionCard } from "./PluginSuggestionCard.tsx";
 import { StudioLearningLine } from "./LearningSummary.tsx";
 import { UserMessage } from "./UserMessage.tsx";
+import { MentionResults } from "./MentionResults.tsx";
+import type { MentionOutcome } from "../../shared/prompt-mention.ts";
 import { WorkLog } from "./WorkLog.tsx";
 
 /** A paused run while nothing else runs: its own card offers Resume. */
 const resumable = (runId: string | null | undefined, context: TranscriptContext): runId is string =>
   Boolean(runId) && runId === context.pausedRunId && !context.activeRunId;
+
+/**
+ * Keep building on what a run left, in this chat: only from its newest result card, and only while
+ * nothing of the chat runs or waits paused (a Resume belongs to that run).
+ */
+function keepFor(entry: MorningEntry, context: TranscriptContext): KeepBuildingTap | null {
+  const { threadId } = context;
+  return threadId && keepsBuildingIn(entry, context) ? (notDone) => keepBuilding({ threadId, notDone }) : null;
+}
 
 export interface TranscriptContext {
   /** The run this chat is building right now, if any. */
@@ -41,6 +64,8 @@ export interface TranscriptContext {
   onShowAssets?: () => void;
   onOpenStudio?: () => void;
   onNotice: Notify;
+  /** The person turned on the plugin a card suggested: tell the agent, so the chat goes on. */
+  onPluginTurnedOn: (name: string) => void;
   /** A held build plan's "Approve plan": answer it with "go", keeping the draft. */
   onApprovePlan: () => Promise<void>;
   /** "Make changes": start the reply in the composer. */
@@ -66,13 +91,26 @@ export const TranscriptEntry = memo(function TranscriptEntry({
     [onNotice],
   );
   const deliveries = useMemo(() => (entry.kind === EntryKind.Assets ? [entry.delivery] : []), [entry]);
+  const making = useMemo(
+    () => (context.project ? { project: context.project, onNotice } : undefined),
+    [context.project, onNotice],
+  );
   switch (entry.kind) {
     case WORK_KIND:
-      return <WorkLog items={entry.items} />;
+      return (
+        <WorkLog
+          items={entry.items}
+          deliveries={entry.deliveries}
+          onOpenAssets={context.onShowAssets}
+          making={making}
+        />
+      );
     case EntryKind.Assets:
       return <AssetResults deliveries={deliveries} onOpenAssets={context.onShowAssets} />;
     case EntryKind.User:
       return <UserEntry key={entry.id} entry={entry} context={context} />;
+    case EntryKind.Mentions:
+      return <MentionsEntry entry={entry} context={context} />;
     case EntryKind.Assistant:
       return <AssistantEntry key={entry.id} entry={entry} commands={context.commands} />;
     case EntryKind.Notice:
@@ -88,7 +126,7 @@ export const TranscriptEntry = memo(function TranscriptEntry({
     case EntryKind.Question:
       return (
         <ChatDisclosure label={entry.text}>
-          <p className="px-3 py-2 text-step text-ink-3">Answered in the conversation.</p>
+          <p className="px-3 py-2 text-step text-ink-3">{t("Answered in the conversation.")}</p>
         </ChatDisclosure>
       );
     case EntryKind.Morning:
@@ -101,13 +139,17 @@ export const TranscriptEntry = memo(function TranscriptEntry({
           landingLine={entry.landingLine}
           learned={entry.learned}
           stoppedBecause={entry.stoppedBecause}
+          pausedOn={entry.pausedOn}
           kept={entry.kept}
           undone={entry.undone}
           landed={entry.landed}
-          // A night the plan limit cut off is paused, not finished: the card says so and
+          profile={entry.profile}
+          // A run the plan limit cut off is paused, not finished: the card says so and
           // offers Resume itself, instead of leaving it to a grey line underneath.
           paused={!entry.superseded && resumable(entry.runId, context)}
           handedOff={entry.handedOff}
+          stillToFix={entry.stillToFix ?? null}
+          onKeepBuilding={keepFor(entry, context)}
           project={entry.project ?? context.project}
           commit={entry.commit}
           before={entry.before}
@@ -125,9 +167,23 @@ export const TranscriptEntry = memo(function TranscriptEntry({
     case EntryKind.Compaction:
       return <CompactionEntry messages={entry.messages} summary={entry.summary} />;
     default:
-      return null;
+      return <CardEntry entry={entry} context={context} />;
   }
 });
+
+/** A card the host put in the conversation: the Genex cover, a plugin to turn on, a store item's Listing draft. */
+function CardEntry({ entry, context }: { entry: ConversationEntry; context: TranscriptContext }): JSX.Element | null {
+  switch (entry.kind) {
+    case EntryKind.GenexCover:
+      return <GenexCoverCard entry={entry} project={context.project} />;
+    case EntryKind.PluginSuggestion:
+      return <PluginSuggestionCard entry={entry} onNotice={context.onNotice} onTurnedOn={context.onPluginTurnedOn} />;
+    case EntryKind.ListingDraft:
+      return <ListingDraftCard draft={entry.draft} />;
+    default:
+      return null;
+  }
+}
 
 /** A finished compaction, in the work rows' type: it opens to the summary that replaced the messages. */
 function CompactionEntry({ messages, summary }: { messages: number | null; summary: string | null }): JSX.Element {
@@ -171,12 +227,30 @@ function AssistantEntry({
   );
 }
 
+/** The card of what a message's @ tags gave the agent, with Try again and Remove tag in this chat. */
+function MentionsEntry({
+  entry,
+  context,
+}: {
+  entry: { tags: MentionOutcome[]; messageId?: string };
+  context: TranscriptContext;
+}) {
+  return (
+    <MentionResults
+      tags={entry.tags}
+      threadId={context.threadId}
+      messageId={entry.messageId}
+      onProblem={notifyProblem(context.onNotice)}
+    />
+  );
+}
+
 /** A message the user sent, with the pictures sent with it. */
 function UserEntry({
   entry,
   context,
 }: {
-  entry: { id: string; text: string; about?: string };
+  entry: { id: string; text: string; about?: string; tags?: string[] };
   context: TranscriptContext;
 }) {
   const images = context.images.get(entry.id);
@@ -186,7 +260,15 @@ function UserEntry({
       : {};
   const { onRewind } = context;
   const rewind = onRewind && context.canRewind?.(entry.id) ? { rewindId: entry.id, onRewind } : {};
-  return <UserMessage text={entry.text} {...pictures} {...(entry.about ? { about: entry.about } : {})} {...rewind} />;
+  return (
+    <UserMessage
+      text={entry.text}
+      {...pictures}
+      {...(entry.about ? { about: entry.about } : {})}
+      {...(entry.tags ? { tags: entry.tags } : {})}
+      {...rewind}
+    />
+  );
 }
 
 /** The harness's system tags; UPDATE lines carry no heading. */
@@ -197,9 +279,9 @@ const SystemTag = {
 /** How a turn the user stopped is recorded. */
 const CANCELLED_TEXT = "cancelled";
 
-/** A system tag as a heading: an error in plain words, any other tag in sentence case. */
+/** A system tag as a heading: an error in plain words, any other tag in the reader's words, sentence case. */
 const systemHeading = (tag: string): string =>
-  tag === SystemTag.Error ? "Something went wrong" : tag.charAt(0) + tag.slice(1).toLowerCase();
+  tag === SystemTag.Error ? t("Something went wrong") : systemTagWords(tag);
 
 /** A system line: its tag as a heading (an error in plain words), then its text. */
 function SystemEntry({ entry }: { entry: Extract<Entry, { kind: typeof EntryKind.System }> }) {
@@ -210,28 +292,45 @@ function SystemEntry({ entry }: { entry: Extract<Entry, { kind: typeof EntryKind
   return (
     <div className="flex min-w-0 flex-col gap-1 text-chat-sub leading-relaxed text-ink-2">
       {showsHeading && <span className="text-[12px] font-medium text-ink-3">{systemHeading(tag)}</span>}
-      <span>{stopped ? "Stopped" : <FileText text={entry.text} />}</span>
+      <span className="[overflow-wrap:anywhere]">{stopped ? t("Stopped") : <FileText text={entry.text} />}</span>
     </div>
   );
 }
 
+/** A plugin's or connector's question once answered: one line, as Claude's own are, the request inside. */
 function ConsentOutcome({ entry }: { entry: Extract<Entry, { kind: typeof EntryKind.Action }> }): JSX.Element {
   return (
-    <div className="text-chat text-ink-2">
-      <p>{entry.consentPrompt || consentRequestedWords(entry.consentSource)}</p>
+    <ChatDisclosure
+      data-consent-outcome
+      lead={<Icon name="shield" size={14} className="shrink-0" />}
+      label={consentLineWords(entry.outcome ?? "", entry.consentSource)}
+    >
       {entry.consentExport && <ExportReview review={entry.consentExport} />}
-      <p className="mt-1 text-chat-sub text-ink-3">{entry.outcome}</p>
-      <details className="group/request mt-1">
-        <summary className="chat-disclosure">
-          Request details
-          <Icon name="chevron-right" size={14} className="chat-chevron group-open/request:rotate-90" />
-        </summary>
-        <p className="mt-1 text-chat-sub text-ink-3 [overflow-wrap:anywhere]">
-          <FileText text={entry.text} />
-        </p>
-      </details>
-    </div>
+      <p className="text-chat-sub text-ink-3 [overflow-wrap:anywhere]">
+        <FileText text={entry.text} />
+      </p>
+    </ChatDisclosure>
   );
+}
+
+/**
+ * The action entries that are one quiet line: an engine link, a rewind that put files back, a job,
+ * a worker, a missing permission, an agent that went ahead of the person, a judge's play.
+ */
+function quietLine(
+  entry: Extract<Entry, { kind: typeof EntryKind.Action }>,
+  context: TranscriptContext,
+): JSX.Element | null {
+  if (entry.action === EntryAction.EngineLink)
+    return <EngineLinkLine entry={entry} threadId={context.threadId} onNotice={context.onNotice} />;
+  if (entry.action === EntryAction.Rewound)
+    return <RewindLine entry={entry} threadId={context.threadId} onNotice={context.onNotice} />;
+  if (entry.action === EntryAction.Job) return <JobLine entry={entry} onNotice={context.onNotice} />;
+  if (entry.action === EntryAction.Worker) return <WorkerLine entry={entry} />;
+  if (entry.action === EntryAction.AppAccess) return <AppAccessLine entry={entry} onNotice={context.onNotice} />;
+  if (entry.action === EntryAction.WentAhead) return <WentAheadLine entry={entry} />;
+  if (entry.action === EntryAction.Judge && entry.judge) return <JudgeLine judge={entry.judge} />;
+  return null;
 }
 
 function ActionEntry({
@@ -251,10 +350,10 @@ function ActionEntry({
     const held = entry.pending && entry.runId === activeRunId && (entry.expiresAt ?? 0) > Date.now();
     return held ? (
       <ChatQuestion
-        title="Review the build plan"
+        title={t("Review the build plan")}
         choices={[
-          { id: "approve", label: "Approve plan" },
-          { id: "revise", label: "Make changes" },
+          { id: "approve", label: t("Approve plan") },
+          { id: "revise", label: t("Make changes") },
         ]}
         onConfirm={async (choice) => {
           if (choice === "approve") await context.onApprovePlan();
@@ -264,18 +363,20 @@ function ActionEntry({
         <Markdown text={entry.text} />
       </ChatQuestion>
     ) : (
-      <ChatDisclosure label="Build plan">
+      <ChatDisclosure label={t("Build plan")}>
         <div className="px-3 py-2">
           <Markdown text={entry.text} />
         </div>
       </ChatDisclosure>
     );
   }
+  const line = quietLine(entry, context);
+  if (line) return line;
   if (entry.action === EntryAction.Live) {
     return (
       <div data-build-updated className="flex min-w-0 items-center gap-3 text-chat text-ink-3">
-        <span>Build updated</span>
-        <ResultButton onClick={() => context.onShowLive?.()}>See it</ResultButton>
+        <span>{t("Build updated")}</span>
+        <ResultButton onClick={() => context.onShowLive?.()}>{t("See it")}</ResultButton>
       </div>
     );
   }
@@ -286,11 +387,11 @@ function ActionEntry({
           <FileText text={entry.text} />
         </span>
         {resumable(entry.runId, context) ? (
-          <ResultButton type="button" onClick={resume(entry.runId)}>
+          <ResultButton type="button" data-run-resume={entry.runId} onClick={resume(entry.runId)}>
             <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
               <path d="M8 5v14l11-7z" />
             </svg>
-            Resume
+            {t("Resume")}
           </ResultButton>
         ) : null}
       </div>
@@ -299,17 +400,17 @@ function ActionEntry({
   const snapshotId = entry.snapshotId;
   return (
     <div key={entry.id} className="flex min-w-0 flex-col gap-1 text-chat-sub leading-relaxed text-ink-2">
-      <span className="text-[12px] font-medium text-ink-3">{entry.tag}</span>
-      <span className="min-w-0">
+      <span className="text-[12px] font-medium text-ink-3">{systemTagWords(entry.tag).toUpperCase()}</span>
+      <span className="min-w-0 [overflow-wrap:anywhere]">
         <FileText text={entry.text} />
         {entry.action === EntryAction.Rewind && snapshotId ? (
           <ResultButton
             type="button"
-            title="Roll the studio back to the moment before this change"
+            title={t("Roll the studio back to the moment before this change")}
             onClick={() => void window.studio.rollback(snapshotId).catch(() => {})}
             className="ml-2 align-middle"
           >
-            Rewind
+            {t("Rewind")}
           </ResultButton>
         ) : null}
       </span>

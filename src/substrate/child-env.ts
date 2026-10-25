@@ -35,10 +35,10 @@ export type ChildEnvRequest =
   | {
       base: "contractor";
       /**
-       * The CLI's vendor: the other vendor's variables are dropped wholesale. `none` is a tool that
-       * is neither coding CLI (the Ollama server): both vendors' variables stay behind.
+       * The CLI's vendor: the other vendors' variables are dropped wholesale. `none` is a tool that
+       * is no coding CLI (the Ollama server): every vendor's variables stay behind.
        */
-      vendor: "claude" | "codex" | "grok" | "none";
+      vendor: "claude" | "codex" | "opencode" | "grok" | "cursor" | "none";
       /** Credential variables this child is meant to use — its own sign-in, never a metered key. */
       keep?: readonly string[];
       set?: Record<string, string | undefined>;
@@ -68,6 +68,8 @@ const SANDBOX_ALLOW = new Set([
   "SSL_CERT_DIR",
 ]);
 const SANDBOX_ALLOW_PREFIX = /^LC_/;
+/** Windows PowerShell's module path variable, upper-cased: Windows names are case-insensitive. */
+const PS_MODULE_PATH = "PSMODULEPATH";
 
 /**
  * A variable whose name says it carries a secret, in any case. `_PWD` needs its underscore: `PWD`
@@ -88,7 +90,9 @@ const PASSWORD_URL = /^[a-z][a-z0-9+.-]*:\/\/[^/\s@]*:[^/\s@]+@/i;
 const VENDOR = {
   claude: /^(?:ANTHROPIC|CLAUDE)_/i,
   codex: /^(?:OPENAI|CODEX)_/i,
+  opencode: /^OPENCODE_/i,
   grok: /^(?:XAI|GROK)_/i,
+  cursor: /^(?:CURSOR|AGENT_CLI)_/i,
 } as const;
 
 export function isCredentialVariable(name: string, value?: string): boolean {
@@ -102,10 +106,12 @@ export function isCredentialVariable(name: string, value?: string): boolean {
 
 /** The other vendor's variables a coding CLI's child never sees; a tool of neither vendor sees neither's. */
 const FOREIGN_VENDORS: Record<ContractorRequest["vendor"], readonly RegExp[]> = {
-  claude: [VENDOR.codex, VENDOR.grok],
-  codex: [VENDOR.claude, VENDOR.grok],
-  grok: [VENDOR.claude, VENDOR.codex],
-  none: [VENDOR.claude, VENDOR.codex, VENDOR.grok],
+  claude: [VENDOR.codex, VENDOR.opencode, VENDOR.grok, VENDOR.cursor],
+  codex: [VENDOR.claude, VENDOR.opencode, VENDOR.grok, VENDOR.cursor],
+  opencode: [VENDOR.claude, VENDOR.codex, VENDOR.grok, VENDOR.cursor],
+  grok: [VENDOR.claude, VENDOR.codex, VENDOR.opencode, VENDOR.cursor],
+  cursor: [VENDOR.claude, VENDOR.codex, VENDOR.opencode, VENDOR.grok],
+  none: [VENDOR.claude, VENDOR.codex, VENDOR.opencode, VENDOR.grok, VENDOR.cursor],
 };
 
 type ContractorRequest = Extract<ChildEnvRequest, { base: "contractor" }>;
@@ -144,6 +150,16 @@ export function childEnv(parent: Record<string, string | undefined>, request: Ch
 }
 
 /**
+ * `env` for a Windows PowerShell 5.1 child, without any inherited module path, whatever its case.
+ * 5.1 builds its own when none is set; one inherited from PowerShell 7 (Genex started from a pwsh
+ * terminal) puts 7.x modules first, 5.1 cannot load them, and their cmdlets vanish
+ * (Get-FileHash, ConvertTo-Json, Get-Process). `env` itself is left as it was.
+ */
+export function windowsPowerShellEnv<T extends string | undefined>(env: Record<string, T>): Record<string, T> {
+  return Object.fromEntries(Object.entries(env).filter(([name]) => name.toUpperCase() !== PS_MODULE_PATH));
+}
+
+/**
  * What any Windows program needs from its parent to start and find its folders (Node itself reads
  * SystemRoot, USERPROFILE and TEMP); none of it is a credential. Only asked for on Windows.
  */
@@ -175,10 +191,18 @@ export function windowsBaseEnv(
     const value = envValue(parent, name);
     if (value !== undefined) env[name] = value;
   }
-  if (home) {
-    env.USERPROFILE = home;
-    env.APPDATA = path.win32.join(home, "AppData", "Roaming");
-    env.LOCALAPPDATA = path.win32.join(home, "AppData", "Local");
-  }
-  return env;
+  return home ? { ...env, ...windowsHomeEnv(home, platform) } : env;
+}
+
+/**
+ * The profile folders a child given its own `home` must see inside it on Windows, where
+ * `os.homedir()` reads USERPROFILE rather than HOME. Empty on macOS and Linux.
+ */
+export function windowsHomeEnv(home: string, platform: NodeJS.Platform = process.platform): Record<string, string> {
+  if (platform !== StudioPlatform.Windows) return {};
+  return {
+    USERPROFILE: home,
+    APPDATA: path.win32.join(home, "AppData", "Roaming"),
+    LOCALAPPDATA: path.win32.join(home, "AppData", "Local"),
+  };
 }

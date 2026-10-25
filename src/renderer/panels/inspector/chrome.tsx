@@ -5,6 +5,7 @@
  */
 import type { JSX, ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
+import { t } from "../../../shared/i18n.ts";
 import type { NoteInfo } from "../../run-graph.ts";
 import { Button } from "../../ui/Button.tsx";
 import { Icon, type IconName } from "../../ui/icons.tsx";
@@ -72,7 +73,7 @@ function CardFooter({
       {reply && onReply ? (
         <Button onClick={() => onReply(reply)}>
           <Icon name="chat" size={14} />
-          Follow up in chat
+          {t("Follow up in chat")}
         </Button>
       ) : null}
     </footer>
@@ -88,8 +89,8 @@ function SideNav({ onPrev, onNext }: { onPrev: () => void; onNext: () => void })
     <>
       <button
         type="button"
-        aria-label="Previous (←)"
-        title="Previous (←)"
+        aria-label={t("Previous (←)")}
+        title={t("Previous (←)")}
         className={`${SIDE_BUTTON} left-4`}
         onClick={onPrev}
       >
@@ -97,8 +98,8 @@ function SideNav({ onPrev, onNext }: { onPrev: () => void; onNext: () => void })
       </button>
       <button
         type="button"
-        aria-label="Next (→)"
-        title="Next (→)"
+        aria-label={t("Next (→)")}
+        title={t("Next (→)")}
         className={`${SIDE_BUTTON} right-4`}
         onClick={onNext}
       >
@@ -113,6 +114,12 @@ const CARD_STYLE = {
   boxShadow: "0 0 0 1.5px var(--accent), 0 0 0 6px var(--accent-tint), var(--shadow-overlay)",
   animation: "focus-in .22s var(--ease)",
 };
+
+/**
+ * A card whose own status carries the colour (the finish check's) wears a neutral edge instead of
+ * the accent ring, so a Not yet, Done or Stopped check never reads blue.
+ */
+const NEUTRAL_CARD_STYLE = { ...CARD_STYLE, boxShadow: "0 0 0 1px var(--line), var(--shadow-overlay)" };
 
 /**
  * The card a selected node opens into. It sits over the canvas, centred where the camera
@@ -133,6 +140,7 @@ export function Panel({
   reply,
   onReply,
   actions,
+  neutralEdge = false,
   children,
 }: {
   id: string;
@@ -148,6 +156,8 @@ export function Panel({
   reply?: Reply | null;
   onReply?: ((reply: Reply) => void) | null;
   actions?: ReactNode;
+  /** A neutral edge for the open card instead of the accent ring: only the finish check's card. */
+  neutralEdge?: boolean;
   children?: ReactNode;
 }): JSX.Element {
   const card = useRef<HTMLElement>(null);
@@ -164,7 +174,7 @@ export function Panel({
         data-graph-panel={id}
         aria-label={label}
         className="pointer-events-auto flex max-h-full w-full max-w-[560px] flex-col overflow-hidden rounded-[18px] bg-surface outline-none select-text"
-        style={CARD_STYLE}
+        style={neutralEdge ? NEUTRAL_CARD_STYLE : CARD_STYLE}
         onPointerDown={(event) => event.stopPropagation()}
         onClick={(event) => event.stopPropagation()}
       >
@@ -174,11 +184,11 @@ export function Panel({
             <div className="-mt-1 -mr-1.5 flex shrink-0 gap-0.5">
               {nav ? (
                 <span className="contents @2xl/stage:hidden">
-                  <PanelButton label="Previous (←)" icon="chevron-left" onClick={onPrev} />
-                  <PanelButton label="Next (→)" icon="chevron-right" onClick={onNext} />
+                  <PanelButton label={t("Previous (←)")} icon="chevron-left" onClick={onPrev} />
+                  <PanelButton label={t("Next (→)")} icon="chevron-right" onClick={onNext} />
                 </span>
               ) : null}
-              <PanelButton label="Close (Esc)" icon="close" onClick={onClose} />
+              <PanelButton label={t("Close (Esc)")} icon="close" onClick={onClose} />
             </div>
           </header>
           {media}
@@ -228,14 +238,30 @@ export function Quote({ label, children }: { label: string; children: ReactNode 
   );
 }
 
+/**
+ * The disclosure rows a card holds, by their `data-panel-row` value: the smoke opens rows by it,
+ * whatever language their label is in. Never rename a value.
+ */
+export const PanelRow = {
+  TechnicalDetails: "technical-details",
+  Checks: "checks",
+  ReviewersNotes: "reviewers-notes",
+  CriticsAdvice: "critic-s-advice",
+  StudioLearned: "what-the-studio-learned",
+} as const;
+export type PanelRow = (typeof PanelRow)[keyof typeof PanelRow];
+
 /** A row that opens in place — Checks, Technical details — or, with `onOpen`, opens elsewhere. */
 export function Row({
+  row,
   label,
   right,
   defaultOpen = false,
   onOpen,
   children,
 }: {
+  /** which row this is, for selectors; the label is only what it says */
+  row: PanelRow;
   label: string;
   right?: string | null;
   /** The row opens already open: the card was opened to show what it holds. */
@@ -248,7 +274,7 @@ export function Row({
     <div className="flex flex-col border-t border-line first:border-t-0">
       <button
         type="button"
-        data-panel-row={label.toLowerCase().replace(/[^a-z]+/g, "-")}
+        data-panel-row={row}
         aria-expanded={onOpen ? undefined : open}
         onClick={() => (onOpen ? onOpen() : setOpen((value) => !value))}
         className="flex h-10 cursor-pointer items-center justify-between gap-3 text-left text-chat-sub text-ink hover:text-control-text-hover focus-visible:outline-2 focus-visible:outline-accent"
@@ -296,7 +322,7 @@ export function NoteRow({ note }: { note: NoteInfo }): JSX.Element {
     <div className="flex flex-col gap-1 rounded-[10px] bg-inset px-3 py-2">
       <span className="text-body-sm text-ink [overflow-wrap:anywhere]">{note.text}</span>
       <span className="text-micro text-ink-3">
-        {note.landedIn ? `In round ${note.landedIn}'s brief` : "Sent"} · {formatTime(note.at)}
+        {note.landedIn ? t("In round {round}'s brief", { round: note.landedIn }) : t("Sent")} · {formatTime(note.at)}
       </span>
     </div>
   );
@@ -306,7 +332,7 @@ export function NoteRow({ note }: { note: NoteInfo }): JSX.Element {
 export function NotesSection({ notes }: { notes: NoteInfo[] }): JSX.Element | null {
   if (!notes.length) return null;
   return (
-    <Section label="Your notes">
+    <Section label={t("Your notes")}>
       {notes.map((note) => (
         <NoteRow key={note.id} note={note} />
       ))}

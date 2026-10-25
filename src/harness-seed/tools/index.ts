@@ -123,7 +123,8 @@ async function addHostTools(
   byName: Map<string, RegisteredTool>,
   options: RegistryOptions,
 ): Promise<HostTools> {
-  const plugins = await ctx.call(HostMethod.PluginsTools, {});
+  // The game's facts pick its plugin tools, as for a delegated session of the same game.
+  const plugins = await ctx.call(HostMethod.PluginsTools, { project: options.project ?? null });
   for (const tool of plugins.tools) {
     if (byName.has(tool.name)) throw new Error(`Plugin tool collision: ${tool.name}`);
     byName.set(tool.name, pluginTool(tool));
@@ -264,7 +265,7 @@ type DeclaredParameter = { type?: string; acceptJsonString?: boolean };
 /**
  * What is wrong with `args` against the tool's declared parameters: a required one missing, or one
  * of the wrong type. A tool used to coerce a wrong value silently (`Number(x) || default`) and run
- * on its default (P06-F8). A number or a flag sent as its text still reads as one — local models do.
+ * on its default. A number or a flag sent as its text still reads as one — local models do.
  */
 export function argumentProblems(
   parameters: { properties?: Record<string, DeclaredParameter>; required?: string[] } | undefined,

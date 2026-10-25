@@ -6,12 +6,16 @@ import { sameSnapshot } from "../../state/snapshot-equality.ts";
 import type { JSX } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { BuildProblem } from "../../../shared/build-problem.ts";
+import { t } from "../../../shared/i18n.ts";
 import { Button } from "../../ui/Button.tsx";
-import { TOAST_WORDS } from "../../words.ts";
+import { ConfirmSheet } from "../../ui/Confirm.tsx";
+import { SETUP_SCRIPTS_WORDS, TOAST_WORDS } from "../../words.ts";
 import { type Notify, notifyProblem, ToastTone } from "../../state/toasts.ts";
 
 /** How often the stage asks whether the game's own build is broken. */
 const BUILD_TICK_MS = 2_500;
+
+const SCRIPTS = SETUP_SCRIPTS_WORDS;
 
 /** The game's build problem, polled while a game is open, and installing its packages when that is the fix. */
 export function useBuildProblem(
@@ -55,34 +59,44 @@ export function useBuildProblem(
     };
   }, [project]);
 
-  const installPackages = useCallback(() => {
-    if (!project || installing) return;
-    setInstalling(true);
-    setInstallLines(null);
-    void window.studio
-      .installPackages(project)
-      .then((result) => {
-        if (!result.ok) {
-          setInstallLines(result.lines);
-          onNotice(TOAST_WORDS.packagesFailed, ToastTone.Error);
-          return;
-        }
-        setInstallLines(null);
-        onNotice(TOAST_WORDS.packagesInstalled, ToastTone.Ok);
-        void loadLive(project, () => window.studio.reloadPreview()).catch(() => {});
-      })
-      .catch(notifyProblem(onNotice))
-      .finally(() => setInstalling(false));
-  }, [project, installing, onNotice, loadLive]);
-  return { buildProblem, buildProblemRef, installing, installLines, installPackages };
+  /** Install the packages; `scripts`: the person trusts the game's setup scripts, which run too. */
+  const install = useCallback(
+    (scripts: boolean) => {
+      if (!project || installing) return;
+      setInstalling(true);
+      setInstallLines(null);
+      void window.studio
+        .installPackages(project, { scripts })
+        .then((result) => {
+          if (!result.ok) {
+            setInstallLines(result.lines);
+            onNotice(TOAST_WORDS.packagesFailed, ToastTone.Error);
+            return;
+          }
+          setInstallLines(null);
+          onNotice(TOAST_WORDS.packagesInstalled, ToastTone.Ok);
+          void loadLive(project, () => window.studio.reloadPreview()).catch(() => {});
+        })
+        .catch(notifyProblem(onNotice))
+        .finally(() => setInstalling(false));
+    },
+    [project, installing, onNotice, loadLive],
+  );
+  const installPackages = useCallback(() => install(false), [install]);
+  const runSetupScripts = useCallback(() => install(true), [install]);
+  return { buildProblem, buildProblemRef, installing, installLines, installPackages, runSetupScripts };
 }
 
-/** What the strip says about the build: packages missing, the last working build on show, or an error to fix. */
+/** Whether the strip offers a remix's skipped setup scripts: its packages are there, their scripts are not. */
+const offersScripts = (problem: BuildProblem): boolean => !problem.needsInstall && problem.skippedScripts !== null;
+
+/** What the strip says about the build: packages missing, setup scripts skipped, the last working build on show, or an error to fix. */
 function troubleWords(problem: BuildProblem): string {
-  if (problem.needsInstall) return "Its packages aren’t installed yet.";
+  if (problem.needsInstall) return t("Its packages aren’t installed yet.");
+  if (offersScripts(problem)) return SCRIPTS.trouble;
   return problem.showingLastBuild
-    ? "Showing the last working build. The newest changes aren’t included."
-    : "Fix the build error, then try again.";
+    ? t("Showing the last working build. The newest changes aren’t included.")
+    : t("Fix the build error, then try again.");
 }
 
 /**
@@ -95,40 +109,84 @@ export function BuildTrouble({
   installing,
   installLines,
   onInstall,
+  onRunScripts,
   onReload,
 }: {
   problem: BuildProblem;
   installing: boolean;
   installLines: string[] | null;
   onInstall: () => void;
+  /** Run the setup scripts a remix's install skipped, once the person trusts the game. */
+  onRunScripts: () => void;
   onReload: () => void;
 }): JSX.Element {
+  const [asking, setAsking] = useState(false);
+  const skipped = problem.skippedScripts;
   return (
     <div data-build-problem className="flex shrink-0 flex-col gap-1.5 border-b border-line bg-surface px-3 py-2.5">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-body-sm font-medium text-ink">The game didn’t build</span>
+        <span className="text-body-sm font-medium text-ink">{t("The game didn’t build")}</span>
         <span className="min-w-32 flex-1 text-xs leading-relaxed text-ink-3">{troubleWords(problem)}</span>
         {problem.needsInstall && problem.install ? (
           <Button
-            aria-label="Install packages"
-            title="Download the packages this game needs"
+            aria-label={t("Install packages")}
+            title={t("Download the packages this game needs")}
             disabled={installing}
             onClick={onInstall}
           >
-            {installing ? "Installing…" : "Install packages"}
+            {installing ? t("Installing…") : t("Install packages")}
           </Button>
         ) : (
-          <Button variant="ghost" aria-label="Try the build again" title="Build the game again" onClick={onReload}>
-            Try again
-          </Button>
+          <>
+            {offersScripts(problem) && (
+              <Button
+                data-build-scripts
+                aria-label={SCRIPTS.button}
+                title={SCRIPTS.buttonTitle}
+                disabled={installing}
+                onClick={() => setAsking(true)}
+              >
+                {installing ? SCRIPTS.running : SCRIPTS.button}
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              aria-label={t("Try the build again")}
+              title={t("Build the game again")}
+              onClick={onReload}
+            >
+              {t("Try again")}
+            </Button>
+          </>
         )}
       </div>
+      {asking && skipped && (
+        <ConfirmSheet
+          testId="setup-scripts"
+          title={SCRIPTS.title}
+          body={SCRIPTS.body(skipped.own, skipped.packages)}
+          onDismiss={() => setAsking(false)}
+          choices={[
+            { label: SCRIPTS.notNow, detail: SCRIPTS.notNowDetail, onChoose: () => setAsking(false) },
+            {
+              label: SCRIPTS.run,
+              detail: SCRIPTS.runDetail,
+              onChoose: () => {
+                setAsking(false);
+                onRunScripts();
+              },
+            },
+          ]}
+        />
+      )}
       <details className="text-xs text-ink-3">
-        <summary className="cursor-pointer select-none text-ink-3 hover:text-ink-2">Details</summary>
+        <summary className="cursor-pointer select-none text-ink-3 hover:text-ink-2">{t("Details")}</summary>
         <pre className="m-0 mt-1 overflow-x-auto whitespace-pre-wrap break-words font-mono text-micro leading-relaxed text-ink-2">
           {[
-            ...(installLines ? [`${problem.install ?? "install"} failed`, ...installLines, ""] : []),
-            `${problem.command} (exit ${problem.code ?? "stopped"})`,
+            ...(installLines
+              ? [t("{command} failed", { command: problem.install ?? "install" }), ...installLines, ""]
+              : []),
+            t("{command} (exit {code})", { command: problem.command, code: problem.code ?? t("stopped") }),
             ...problem.lines,
           ].join("\n")}
         </pre>

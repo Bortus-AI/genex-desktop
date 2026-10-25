@@ -12,9 +12,25 @@ import { fixtureEngines } from "../../src/main/dev/fixtures.ts";
 import { OllamaEngine } from "../../src/substrate/engines/ollama.ts";
 import { CodexEngine } from "../../src/substrate/engines/codex.ts";
 import { ClaudeCodeEngine } from "../../src/substrate/engines/claude-code.ts";
+import { GrokEngine } from "../../src/substrate/engines/grok.ts";
+import { OpenCodeEngine } from "../../src/substrate/engines/opencode.ts";
+import { OpenRouterEngine } from "../../src/substrate/engines/openrouter.ts";
+import { LocalServerEngine } from "../../src/substrate/engines/local-server.ts";
+import { CursorEngine } from "../../src/substrate/engines/cursor.ts";
+import { EngineStatusCode } from "../../src/shared/engine-descriptor.ts";
+import { EngineId } from "../../src/shared/providers.ts";
 test("pre-init injection avoids every real engine status/models/auth probe and keeps sandbox enabled", async (t) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "dev-policy-"));
-  for (const proto of [OllamaEngine.prototype, CodexEngine.prototype, ClaudeCodeEngine.prototype])
+  for (const proto of [
+    OllamaEngine.prototype,
+    CodexEngine.prototype,
+    ClaudeCodeEngine.prototype,
+    OpenCodeEngine.prototype,
+    GrokEngine.prototype,
+    OpenRouterEngine.prototype,
+    LocalServerEngine.prototype,
+    CursorEngine.prototype,
+  ])
     for (const key of ["status", "models", "probeAuth"])
       if (typeof (proto as any)[key] === "function")
         t.mock.method(proto as any, key, () => {
@@ -35,16 +51,12 @@ test("pre-init injection avoids every real engine status/models/auth probe and k
   });
   await core.start();
   assert.equal(core.host.state, "ready");
-  assert.equal((await core.engines.describe()).length, 4);
+  // Flipped (OpenCode, OpenRouter, a local server, Grok Build, Cursor): eight scripted engines, never a real one.
+  assert.equal((await core.engines.describe()).length, 8);
   assert.equal(core.sandbox.enabled, true);
   await core.updateSettings({ architect: true });
   let calls = 0;
-  for (const engine of [
-    core.engines.get("ollama"),
-    core.engines.get("codex"),
-    core.engines.get("claude-code"),
-    core.engines.get("grok"),
-  ])
+  for (const engine of core.engines.all())
     if (engine.complete)
       t.mock.method(engine as Required<typeof engine>, "complete", async () => {
         calls++;
@@ -52,6 +64,19 @@ test("pre-init injection avoids every real engine status/models/auth probe and k
       });
   await core.runIdleCheckNow();
   assert.equal(calls, 0);
+});
+test("a fixture's Cursor is not installed unless the usage file makes it ready", async (t) => {
+  const cursorOf = () => fixtureEngines().find((engine) => engine.id === EngineId.Cursor);
+  assert.equal((await cursorOf()?.status())?.code, EngineStatusCode.NotInstalled, "pickers stay as they were");
+  const file = path.join(await tmpDir("fixture-usage-"), "usage.json");
+  await fs.writeFile(file, JSON.stringify({ [EngineId.Cursor]: "ready" }));
+  const before = process.env.STUDIO_FIXTURE_USAGE_FILE;
+  process.env.STUDIO_FIXTURE_USAGE_FILE = file;
+  t.after(() => {
+    if (before === undefined) delete process.env.STUDIO_FIXTURE_USAGE_FILE;
+    else process.env.STUDIO_FIXTURE_USAGE_FILE = before;
+  });
+  assert.equal((await cursorOf()?.status())?.code, EngineStatusCode.Ready);
 });
 test("owned project policy rejects external adoption and symlink escapes before writes", async (t) => {
   const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "dev-project-")));
@@ -168,6 +193,8 @@ test("fixture native guard covers all account, external, picker, export and down
   for (const channel of [
     "studio:plugins.index",
     "studio:plugins.watch",
+    // Forgetting a local plugin's Always allow writes its install record and opens nothing.
+    "studio:plugins.forget-allowed",
     // Listing, editing and removing connectors stay open: they write a file inside the profile and
     // open no dialog. Only the trust step is native.
     "studio:mcp.list",
@@ -177,6 +204,11 @@ test("fixture native guard covers all account, external, picker, export and down
     "studio:mcp.tools",
   ])
     assert.ok(!FIXTURE_BLOCKED_CHANNELS.has(channel), channel);
+  // Bringing back the newer version after a Rewind rewrites only the chat's game folder from its own
+  // checkpoints, as the Rewind does.
+  const { classifyChannel, ChannelClass } = await import("../../src/main/dev/native-policy.ts");
+  assert.equal(classifyChannel("studio:chat.rewind.undo"), ChannelClass.FixtureSafe);
+  assert.doesNotThrow(() => assertNativeActionAllowed(true, "studio:chat.rewind.undo"));
   // …and adoption is not one of them: it opens no network and writes only inside the profile's
   // own games root, which is the one way a dev profile can hold a game that is not the fixture.
   assert.doesNotThrow(() => assertNativeActionAllowed(true, "studio:project.adopt"));

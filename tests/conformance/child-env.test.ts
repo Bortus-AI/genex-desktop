@@ -17,6 +17,7 @@ import { ClaudeCodeEngine } from "../../src/substrate/engines/claude-code.ts";
 import { absoluteRule, claudeProjectDirName } from "../../src/substrate/engines/claude-permissions.ts";
 import { CodexEngine, type CodexExec } from "../../src/substrate/engines/codex.ts";
 import { codexSubscriptionEnv } from "../../src/substrate/engines/codex-cli.ts";
+import { windowsPowerShellEnv } from "../../src/substrate/child-env.ts";
 import { ProcessSandbox } from "../../src/substrate/spawn.ts";
 import { ruleDenies } from "../helpers/claude-rules.ts";
 import { tmpDir } from "../helpers/tmp.ts";
@@ -222,6 +223,9 @@ describe("SEC-2: a contractor keeps its own sign-in and nobody else's", () => {
       CLAUDE_CONFIG_DIR: "/claude/home",
       CODEX_HOME: "/codex/home",
       OPENAI_BASE_URL: "https://proxy.example",
+      OPENCODE_CONFIG: "/opencode/config.json",
+      GROK_HOME: "/grok/home",
+      XAI_API_KEY: "xai-leak",
       SSH_AUTH_SOCK: "/tmp/agent.sock",
       ...FOREIGN,
     };
@@ -248,6 +252,9 @@ describe("SEC-2: a contractor keeps its own sign-in and nobody else's", () => {
         request: { base: "contractor", vendor: "claude", keep: ["CLAUDE_CODE_OAUTH_TOKEN"] },
         keeps: ["PATH", "HOME", "HARMLESS_FLAG", "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CONFIG_DIR"],
         drops: [
+          "OPENCODE_CONFIG",
+          "GROK_HOME",
+          "XAI_API_KEY",
           "ANTHROPIC_API_KEY",
           "ANTHROPIC_AUTH_TOKEN",
           "CODEX_HOME",
@@ -269,6 +276,8 @@ describe("SEC-2: a contractor keeps its own sign-in and nobody else's", () => {
         request: { base: "contractor", vendor: "codex", set: { CODEX_HOME: "/studio/codex" } },
         keeps: ["PATH", "HOME", "HARMLESS_FLAG", "CODEX_HOME", "OPENAI_BASE_URL"],
         drops: [
+          "OPENCODE_CONFIG",
+          "GROK_HOME",
           "OPENAI_API_KEY",
           "CODEX_API_KEY",
           "CODEX_ACCESS_TOKEN",
@@ -279,6 +288,50 @@ describe("SEC-2: a contractor keeps its own sign-in and nobody else's", () => {
           "GITHUB_TOKEN",
           "SSH_AUTH_SOCK",
         ],
+      },
+      {
+        // OpenCode signs in to many providers through its own store; it gets neither subscription
+        // CLI's variables, nor any metered key the shell exports.
+        name: "opencode contractor",
+        request: { base: "contractor", vendor: "opencode", set: { OPENCODE_DISABLE_AUTOUPDATE: "1" } },
+        keeps: ["PATH", "HOME", "HARMLESS_FLAG", "OPENCODE_CONFIG", "OPENCODE_DISABLE_AUTOUPDATE"],
+        drops: [
+          "GROK_HOME",
+          "XAI_API_KEY",
+          "CLAUDE_CODE_OAUTH_TOKEN",
+          "CLAUDE_CONFIG_DIR",
+          "CODEX_HOME",
+          "OPENAI_BASE_URL",
+          "OPENAI_API_KEY",
+          "ANTHROPIC_API_KEY",
+          "GENEX_TOKEN",
+          "GITHUB_TOKEN",
+          "SSH_AUTH_SOCK",
+        ],
+      },
+      {
+        // Grok Build runs on its own sign-in: an xAI key the shell exports never makes it a metered bill.
+        name: "grok contractor",
+        request: { base: "contractor", vendor: "grok", set: { GROK_DISABLE_AUTOUPDATER: "1" } },
+        keeps: ["PATH", "HOME", "HARMLESS_FLAG", "GROK_HOME", "GROK_DISABLE_AUTOUPDATER"],
+        drops: [
+          "XAI_API_KEY",
+          "CLAUDE_CODE_OAUTH_TOKEN",
+          "CLAUDE_CONFIG_DIR",
+          "CODEX_HOME",
+          "OPENAI_BASE_URL",
+          "OPENCODE_CONFIG",
+          "OPENAI_API_KEY",
+          "ANTHROPIC_API_KEY",
+          "GENEX_TOKEN",
+          "SSH_AUTH_SOCK",
+        ],
+      },
+      {
+        name: "a tool of no vendor",
+        request: { base: "contractor", vendor: "none" },
+        keeps: ["PATH", "HOME", "HARMLESS_FLAG"],
+        drops: ["CLAUDE_CONFIG_DIR", "CODEX_HOME", "OPENAI_BASE_URL", "OPENCODE_CONFIG", "GROK_HOME", "SSH_AUTH_SOCK"],
       },
     ];
     for (const row of rows) {
@@ -450,6 +503,38 @@ describe("SEC-3: both CLIs' sign-in homes are off limits to every agent process"
     }
   });
 
+  it("the sandbox OpenCode runs in lets it reach its own sign-in home and no other (hostile table)", async () => {
+    const root = await tmpDir("child-env-own-home-");
+    const opencode = path.join(os.homedir(), ".local", "share", "opencode");
+    const secrets = path.join(root, "secrets");
+    const sandbox = await ProcessSandbox.create({
+      writableRoots: [root],
+      scratchDir: path.join(root, "scratch"),
+      secretPaths: [secrets],
+      enabled: false,
+      // Only an exact credential home is exempted: a studio secret, another CLI's home, a parent of
+      // a home, the home folder and a relative path named here all stay as they were.
+      ownHome: [opencode, secrets, dotCodex, path.dirname(opencode), os.homedir(), "relative/opencode"],
+    });
+    assert.ok(!sandbox.policy.denyRead.includes(opencode), "OpenCode reads its own sign-in");
+    assert.ok(!sandbox.policy.denyWrite.includes(opencode), "and keeps its sessions there");
+    assert.ok(sandbox.policy.allowWrite.includes(opencode));
+    for (const dir of [secrets, dotCodex, dotClaude]) {
+      assert.ok(sandbox.policy.denyRead.includes(dir), `denyRead still holds ${dir}`);
+      assert.ok(sandbox.policy.denyWrite.includes(dir), `denyWrite still holds ${dir}`);
+    }
+    for (const dir of [path.dirname(opencode), os.homedir(), "relative/opencode"])
+      assert.ok(!sandbox.policy.allowWrite.includes(dir), `nothing but the exempted home is opened: ${dir}`);
+
+    const other = await ProcessSandbox.create({
+      writableRoots: [root],
+      scratchDir: path.join(root, "scratch-2"),
+      secretPaths: [],
+      enabled: false,
+    });
+    assert.ok(other.policy.denyRead.includes(opencode), "every other sandbox denies OpenCode's sign-in");
+  });
+
   it("an environment pointing a login home at the whole home folder does not deny the home folder", async () => {
     const root = await tmpDir("child-env-home-");
     const sandbox = await withEnv({ CODEX_HOME: os.homedir(), CLAUDE_CONFIG_DIR: "/" }, () =>
@@ -482,6 +567,8 @@ describe("SEC-3: both CLIs' sign-in homes are off limits to every agent process"
       systemHome,
       queryFn: fn,
       protectedPaths: [path.join(root, "secrets")],
+      // Claude Code's own box; on Windows Genex's holds the same lists (claude-windows-commands.test.ts).
+      platform: "darwin",
     });
     await engine.delegate({ prompt: "build", cwd: root });
     const options = seen[0]! as {
@@ -545,30 +632,75 @@ describe("SEC-3: both CLIs' sign-in homes are off limits to every agent process"
     // Absolute on this platform: `/Users/me` on macOS and Linux, `<drive>:\Users\me` on Windows.
     const at = (...parts: string[]) => path.resolve(path.sep, ...parts);
     const home = at("Users", "me");
-    assert.deepEqual(credentialHomes([], {}, home), [
+    // Flipped (OpenCode, Grok Build): each sign-in store joins the list, so no other agent reads it.
+    // Flipped (Cursor): so do Cursor's settings and chats, and its sign-in file's own folder.
+    const cursorSignIn: Partial<Record<NodeJS.Platform, string>> = {
+      win32: at("Users", "me", "AppData", "Roaming", "Cursor"),
+      linux: at("Users", "me", ".config", "cursor"),
+    };
+    const defaults = [
       at("Users", "me", ".codex"),
       at("Users", "me", ".claude"),
+      at("Users", "me", ".local", "share", "opencode"),
       at("Users", "me", ".grok"),
-    ]);
+      at("Users", "me", ".cursor"),
+      ...[cursorSignIn[process.platform]].filter((dir): dir is string => Boolean(dir)),
+    ];
+    assert.deepEqual(credentialHomes([], {}, home), defaults);
     assert.deepEqual(
       credentialHomes(
         [at("login", "claude"), null, undefined, "relative/path", at("Users", "me", ".codex")],
-        { CODEX_HOME: at("env", "codex"), CLAUDE_CONFIG_DIR: `${at("env", "claude")}${path.sep}` },
+        {
+          CODEX_HOME: at("env", "codex"),
+          CLAUDE_CONFIG_DIR: `${at("env", "claude")}${path.sep}`,
+          XDG_DATA_HOME: at("env", "data"),
+          GROK_HOME: at("env", "grok"),
+        },
         home,
       ),
       [
-        at("Users", "me", ".codex"),
-        at("Users", "me", ".claude"),
-        at("Users", "me", ".grok"),
+        ...defaults,
         at("env", "codex"),
         at("env", "claude"),
+        at("env", "data", "opencode"),
+        at("env", "grok"),
         at("login", "claude"),
       ],
     );
     assert.deepEqual(
-      credentialHomes([at("Users"), at(), home], { CODEX_HOME: home }, home),
-      [at("Users", "me", ".codex"), at("Users", "me", ".claude"), at("Users", "me", ".grok")],
-      "never the home folder, its ancestors or the root",
+      credentialHomes(
+        [at("Users"), at(), home],
+        { CODEX_HOME: home, XDG_DATA_HOME: "relative", GROK_HOME: "relative/grok" },
+        home,
+      ),
+      defaults,
+      "never the home folder, its ancestors, the root or a relative data folder",
     );
+  });
+});
+
+describe("Windows PowerShell builds its own module path", () => {
+  it("never inherits one, whatever its case, and keeps everything else", () => {
+    // PowerShell 7 exports a module path that puts its own 7.x modules first; Windows PowerShell
+    // 5.1 handed it cannot load them and loses Get-FileHash, ConvertTo-Json and Get-Process (R12).
+    const PWSH7 = "C:\\Users\\ada\\Documents\\PowerShell\\Modules;C:\\Program Files\\PowerShell\\7\\Modules";
+    const table: Array<[string, Record<string, string | undefined>]> = [
+      ["as PowerShell spells it", { PSModulePath: PWSH7 }],
+      ["upper case", { PSMODULEPATH: PWSH7 }],
+      ["lower case", { psmodulepath: PWSH7 }],
+      ["twice", { PSModulePath: PWSH7, PSMODULEPATH: PWSH7 }],
+      ["empty", { PSModulePath: "" }],
+    ];
+    for (const [name, inherited] of table) {
+      const parent = { SystemRoot: "C:\\Windows", Path: "C:\\Windows\\System32", ...inherited };
+      const before = { ...parent };
+      assert.deepEqual(
+        windowsPowerShellEnv(parent),
+        { SystemRoot: "C:\\Windows", Path: "C:\\Windows\\System32" },
+        name,
+      );
+      assert.deepEqual(parent, before, `${name}: the parent is left as it was`);
+    }
+    assert.deepEqual(windowsPowerShellEnv({}), {});
   });
 });

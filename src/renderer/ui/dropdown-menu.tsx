@@ -19,10 +19,8 @@ function DropdownMenuPortal({ ...props }: React.ComponentProps<typeof DropdownMe
 }
 
 /**
- * ONE HIGHLIGHT THAT GLIDES, instead of every row toggling its own background
- * (owner, 2026-08-19: "their design, when you switch between the first and
- * second options, they have this animation where it jumps - this applies to all
- * our dropdowns as a component"). It is the same gesture as the header's
+ * ONE HIGHLIGHT THAT GLIDES from row to row, instead of every row toggling its
+ * own background, in every dropdown. It is the same gesture as the header's
  * segmented control and the nav's sliding pill, and it belongs to the PRIMITIVE
  * so no menu has to opt in.
  *
@@ -38,7 +36,7 @@ function DropdownMenuPortal({ ...props }: React.ComponentProps<typeof DropdownMe
  */
 function useGlidingHighlight() {
   // The node we hold is the HIGHLIGHT ITSELF, and the menu is read as its
-  // `parentElement`. Measured 2026-08-19: a ref forwarded to
+  // `parentElement`. Measured: a ref forwarded to
   // `DropdownMenuPrimitive.Content` was still null when this effect ran, so the
   // observer was never installed and the highlight sat at zero height forever
   // while Radix happily set `data-highlighted` on every hover. Our own element,
@@ -101,8 +99,9 @@ function DropdownMenuContent({
           // against this box.
           // bg-popover, NOT bg-background: a menu is a floating surface and
           // owes the page a step of contrast (see the token's note in
-          // globals.css). It used to be the page colour exactly.
-          "relative z-[230] min-w-[10rem] overflow-hidden rounded-xl border border-border bg-popover p-1 shadow-lg",
+          // globals.css). It used to be the page colour exactly. Its edge is
+          // every menu's one edge (`--menu-edge`), which a dark theme brightens.
+          "relative z-[230] min-w-[10rem] overflow-hidden rounded-xl border border-menu-edge bg-popover p-1 shadow-lg",
           className,
         )}
         {...props}
@@ -133,9 +132,8 @@ function DropdownMenuGroup({ ...props }: React.ComponentProps<typeof DropdownMen
 /** One row's look, shared by Item and RadioItem so the two cannot drift. */
 const rowClass = [
   // `relative` puts the row above the gliding highlight; Geist Sans because a
-  // menu is written AT a person (owner, 2026-08-19: "we don't write with a
-  // monospace font, but with our regular one"). Mono stays the voice of the
-  // chrome elsewhere - buttons, chips, tabs - which he did not ask to change.
+  // menu is written AT a person, in the regular font. Mono stays the voice of
+  // the chrome elsewhere - buttons, chips, tabs.
   "relative flex cursor-pointer select-none items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-foreground/85 outline-none",
   // No `focus:bg-*`: the highlight is one gliding element now, so a per-row
   // background would double it and kill the movement it exists for.
@@ -161,13 +159,27 @@ function DropdownMenuRadioGroup({ ...props }: React.ComponentProps<typeof Dropdo
  * column: the caller (the composer's model picker) is a two-line row whose name
  * and sentence share one left edge, and a leading indicator would indent the
  * sentence under nothing. Its box is reserved whether or not the row is the
- * checked one, so choosing cannot reflow the menu.
+ * checked one, so choosing cannot reflow the menu. A row that shows the choice
+ * its own way (the Builds picker's) passes `indicator={false}` and lays out its
+ * children itself.
  */
 function DropdownMenuRadioItem({
   className,
   children,
+  indicator = true,
   ...props
-}: React.ComponentProps<typeof DropdownMenuPrimitive.RadioItem>) {
+}: React.ComponentProps<typeof DropdownMenuPrimitive.RadioItem> & { indicator?: boolean }) {
+  if (!indicator) {
+    return (
+      <DropdownMenuPrimitive.RadioItem
+        data-slot="dropdown-menu-radio-item"
+        className={cn(rowClass, className)}
+        {...props}
+      >
+        {children}
+      </DropdownMenuPrimitive.RadioItem>
+    );
+  }
   return (
     <DropdownMenuPrimitive.RadioItem
       data-slot="dropdown-menu-radio-item"

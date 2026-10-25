@@ -1,6 +1,5 @@
 /**
- * An agent's screen as the Builds graph shows it (computer use, 2026-09-07; moved into the graph
- * 2026-09-28): the window's newest frame with the agent's cursor drawn where its mouse is, what it
+ * An agent's screen as the Builds graph shows it: the window's newest frame with the agent's cursor drawn where its mouse is, what it
  * is doing in plain words, and on a selected node's card the last few frames it sent, to step back
  * through. The cursor is the agent's, not yours: the picture is a window onto someone else's hands.
  */
@@ -8,6 +7,8 @@ import type { JSX, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import type { AgentScreenFrame } from "../../../shared/agent-screen.ts";
 import { SECOND_MS } from "../../../shared/duration.ts";
+import { t } from "../../../shared/i18n.ts";
+import { hostPlatform } from "../../platform.ts";
 import { partFrameOf, trailOf } from "../../state/agent-screens.ts";
 import { useAgentScreens } from "../../state/hooks.ts";
 import { screenAgo, screenDoing, screenDone } from "../../words.ts";
@@ -76,8 +77,8 @@ export function NodeCursor({ frame, box }: { frame: AgentScreenFrame; box: { w: 
  * ("Pressing Space · 3s"). Under a state that must stay said (Being checked), the state leads.
  */
 export function ScreenWords({ frame, state = null }: { frame: AgentScreenFrame; state?: string | null }): JSX.Element {
-  if (state) return <>{`${state} · ${screenDoing(frame.act)}`}</>;
-  return <ScreenAge frame={frame} words={screenDoing(frame.act)} />;
+  if (state) return <>{`${state} · ${screenDoing(frame.act, hostPlatform())}`}</>;
+  return <ScreenAge frame={frame} words={screenDoing(frame.act, hostPlatform())} />;
 }
 
 /** Words and the frame's age, ticking: only this text re-renders each second. */
@@ -95,14 +96,14 @@ function ScreenAge({
 }
 
 /** The newest frame of the agent working on one part of a live run; null while none is. */
-export function usePartFrame(project: string | null, runId: string, facetId: string, live: boolean) {
-  return useAgentScreens((s) => (live ? partFrameOf(s, project, runId, facetId) : undefined)) ?? null;
+export function usePartFrame(project: string | null, runId: string | null, facetId: string, live: boolean) {
+  return useAgentScreens((s) => (live && runId ? partFrameOf(s, project, runId, facetId) : undefined)) ?? null;
 }
 
 /** The same agent's screen and its trail, for a card. */
 export function usePartScreen(
   project: string | null,
-  runId: string,
+  runId: string | null,
   facetId: string,
   live: boolean,
 ): { frame: AgentScreenFrame | null; trail: readonly AgentScreenFrame[] } {
@@ -165,7 +166,7 @@ function TrailStep({
   onShow: () => void;
 }): JSX.Element {
   const src = useFrameSrc(frame);
-  const words = now ? "Now" : screenDone(frame.act);
+  const words = now ? t("Now") : screenDone(frame.act, hostPlatform());
   return (
     <button
       type="button"
@@ -211,7 +212,7 @@ export function LiveScreen({
   const newest = steps.at(-1) ?? frame;
   const shown = held && steps.includes(held) ? held : newest;
   const live = shown === newest;
-  const words = live ? screenDoing(shown.act) : screenDone(shown.act);
+  const words = live ? screenDoing(shown.act, hostPlatform()) : screenDone(shown.act, hostPlatform());
   return (
     <div className="flex flex-col gap-3">
       <ScreenPicture
@@ -230,8 +231,8 @@ export function LiveScreen({
         }
       />
       {steps.length > 1 ? (
-        <Section label="What it did">
-          <div role="group" aria-label="What it did" className="flex gap-2 overflow-x-auto pb-0.5">
+        <Section label={t("What it did")}>
+          <div role="group" aria-label={t("What it did")} className="flex gap-2 overflow-x-auto pb-0.5">
             {steps.map((item) => (
               <TrailStep
                 key={`${item.handle}:${item.at}`}

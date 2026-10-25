@@ -4,39 +4,24 @@
  * generation is under way. Actions run through the shared review → ticket → approval sequence.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { MINUTE_MS, SECOND_MS } from "../../../../shared/duration.ts";
-import { GenexAction, GenexJobStatus, type GenexStatus } from "../../../../shared/genex.ts";
+import { GenexAction, type GenexStatus } from "../../../../shared/genex.ts";
+import { t } from "../../../../shared/i18n.ts";
 import type { PluginInfo } from "../../../../shared/plugins.ts";
 import { UiEvent } from "../../../../shared/ui-events.ts";
 import { type PluginReviewRequest, runPluginAction } from "../../../plugin-actions.ts";
-import { isGenexStatus } from "./genex-view.ts";
-
-/** How often the page re-reads Genex while something is under way, and otherwise. */
-const ACTIVE_POLL_MS = 5 * SECOND_MS;
-const IDLE_POLL_MS = MINUTE_MS;
-
-/** Job states that are still moving on Genex's side. */
-const MOVING_JOBS: ReadonlySet<string> = new Set([
-  GenexJobStatus.Requested,
-  GenexJobStatus.Approved,
-  GenexJobStatus.Submitting,
-  GenexJobStatus.Accepted,
-  GenexJobStatus.Generating,
-  GenexJobStatus.Generated,
-]);
+import { genexPollMs, isGenexStatus, type PageAttention } from "./genex-view.ts";
 
 /** Why an answer is not a status. */
-const MESSAGE = { unreadable: "Genex answered with something Studio can’t read." } as const;
+const MESSAGE = { unreadable: t("Genex answered with something Studio can’t read.") } as const;
 
 /** A cancelled review or approval is the person's choice, not an error to show. */
 const CANCELLED = /Cancelled/;
 
-/** Whether a sign-in or a generation is under way, so the page should look again soon. */
-const underWay = (status: GenexStatus | null): boolean =>
-  Boolean(status?.authorization) || (status?.jobs ?? []).some((job) => MOVING_JOBS.has(job.status));
-
-/** The plugin's status and the one action that may run at a time. */
-export function useGenexStatus(plugin: PluginInfo, project: string | null | undefined) {
+/**
+ * The plugin's status and the one action that may run at a time. While `reading` is false (the
+ * plugin is off) it reads nothing and holds no status, so turning it on starts from a fresh read.
+ */
+export function useGenexStatus(plugin: PluginInfo, project: string | null | undefined, reading = true) {
   const id = plugin.manifest.id;
   const [status, setStatus] = useState<GenexStatus | null>(null);
   // A failed read clears on the next good read; a failed action stays until the next action, so
@@ -81,27 +66,64 @@ export function useGenexStatus(plugin: PluginInfo, project: string | null | unde
   );
 
   useEffect(() => {
+    if (!reading) {
+      latest.current++;
+      setStatus(null);
+      setReadError("");
+      setActionError("");
+      return;
+    }
     void refresh();
     const again = (): void => void refresh();
+    const shown = (): void => {
+      if (!document.hidden) again();
+    };
     window.addEventListener("focus", again);
+    document.addEventListener("visibilitychange", shown);
     const unsubscribe = window.studio.onEvent((event) => {
       const own = event.type === UiEvent.PluginsChanged && event.payload?.id === id;
       if (own || event.type === UiEvent.ConnectionsChanged) again();
     });
     return () => {
       window.removeEventListener("focus", again);
+      document.removeEventListener("visibilitychange", shown);
       unsubscribe();
     };
-  }, [id, refresh]);
+  }, [id, refresh, reading]);
 
-  const moving = underWay(status);
+  const attention = usePageAttention();
+  const pollMs = genexPollMs(status, attention);
   useEffect(() => {
-    const timer = window.setInterval(() => void refresh(), moving ? ACTIVE_POLL_MS : IDLE_POLL_MS);
+    if (!reading || pollMs === null) return;
+    const timer = window.setInterval(() => void refresh(), pollMs);
     return () => window.clearInterval(timer);
-  }, [moving, refresh]);
+  }, [pollMs, refresh, reading]);
 
   const error = actionError || readError;
   return { status, error, running, act, refresh, review, closeReview: () => setReview(null) };
+}
+
+const readAttention = (): PageAttention => ({ hidden: document.hidden, focused: document.hasFocus() });
+
+/** Whether the window can be seen and is in front, kept current as the person moves between apps. */
+function usePageAttention(): PageAttention {
+  const [attention, setAttention] = useState(readAttention);
+  useEffect(() => {
+    const update = (): void =>
+      setAttention((current) => {
+        const next = readAttention();
+        return next.hidden === current.hidden && next.focused === current.focused ? current : next;
+      });
+    window.addEventListener("focus", update);
+    window.addEventListener("blur", update);
+    document.addEventListener("visibilitychange", update);
+    return () => {
+      window.removeEventListener("focus", update);
+      window.removeEventListener("blur", update);
+      document.removeEventListener("visibilitychange", update);
+    };
+  }, []);
+  return attention;
 }
 
 /** What the Genex page's parts share from the live status. */

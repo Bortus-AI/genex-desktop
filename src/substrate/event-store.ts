@@ -89,9 +89,10 @@ const MAX_UNCOMMITTED_TAIL = 64;
 const READ_CONCURRENCY = 32;
 /**
  * The chat-context checkpoint's format; a checkpoint of another version is rebuilt. Raise it
- * whenever the fold keeps different facts (6: context readings kept per session role).
+ * whenever the fold keeps different facts (6: context readings kept per session role; 7:
+ * background work still running; 8: workers still working).
  */
-const CHAT_CONTEXT_VERSION = 6;
+const CHAT_CONTEXT_VERSION = 8;
 /** Events folded into the chat context per read while it is rebuilt. */
 const CHAT_CONTEXT_BATCH = 256;
 /** How much of a refused id an error message quotes. */
@@ -510,7 +511,15 @@ export class EventStore {
     if (head === null) return [];
     const upTo = options.upToInclusive && compareIds(options.upToInclusive, head) < 0 ? options.upToInclusive : head;
     const ids = await this.#idsThrough(threadId, head);
-    const selected = ids.slice(options.after ? countThrough(ids, options.after) : 0, countThrough(ids, upTo));
+    const start = options.after ? countThrough(ids, options.after) : 0;
+    const end = countThrough(ids, upTo);
+    // Bound references before materializing them: rebuilding a checkpoint reads many small pages
+    // of one history, and mapping every remaining id on each page makes that rebuild quadratic.
+    // A fractional limit has always returned the next whole row; zero and NaN mean unbounded.
+    const count = options.limit ? Math.max(0, Math.ceil(options.limit)) : Number.POSITIVE_INFINITY;
+    const selected = options.tail
+      ? ids.slice(Math.max(start, end - count), end)
+      : ids.slice(start, Math.min(end, start + count));
     return this.#readBodies(
       selected.map((id) => ({ threadId, id })),
       { ...(options.limit ? { limit: options.limit } : {}), ...(options.tail ? { tail: true } : {}) },

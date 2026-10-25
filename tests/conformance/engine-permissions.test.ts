@@ -233,7 +233,15 @@ describe("a chat's own Claude session asks the person", () => {
       assert.ok(
         allowed.includes("mcp__studio__checkpoint") && allowed.includes("WebSearch") && allowed.includes("WebFetch"),
       );
-      assert.deepEqual(call.disallowedTools, ["SendMessage", "ListAgents", "AskUserQuestion", "EnterPlanMode"]);
+      // Flipped: no session gets Claude Code's own sub-agents; Genex runs the workers.
+      assert.deepEqual(call.disallowedTools, [
+        "SendMessage",
+        "ListAgents",
+        "Agent",
+        "Task",
+        "AskUserQuestion",
+        "EnterPlanMode",
+      ]);
       // Everything else is the contractor's contract, unchanged.
       assert.deepEqual(call.settingSources, [], "untrusted project settings and hooks stay disabled");
       assert.deepEqual(Object.keys(call.mcpServers as Options), ["studio"]);
@@ -263,7 +271,7 @@ describe("a chat's own Claude session asks the person", () => {
   });
 
   it("a read-only brief stays read-only, whatever else it carries", async () => {
-    // Upstream's read-only sessions (a waking night's lead, the coordinator, a playtester) are never
+    // Upstream's read-only sessions (a waking run's lead, the coordinator, a playtester) are never
     // the person's own: the host hands them no `permissions` (a lead the person talks to gets
     // `leadAsks`, below), and the engine keeps them read-only anyway.
     const { fn, seen } = fakeQuery();
@@ -277,6 +285,18 @@ describe("a chat's own Claude session asks the person", () => {
     assert.ok(!(options.allowedTools as string[]).includes("WebFetch"));
     for (const tool of ["Bash", "Edit", "Write", "WebFetch"])
       assert.ok((options.disallowedTools as string[]).includes(tool), `${tool} stays off`);
+  });
+
+  it("a blind judge plays with its live tools alone: no file, shell, edit or question tool", async () => {
+    const { fn, seen } = fakeQuery();
+    await (await engineFor(fn)).delegate({ prompt: "play it", cwd: "/tmp/blind", readOnly: true, blind: true });
+    const options = seen[0]!;
+    for (const tool of ["Read", "Grep", "Glob", "Bash", "Edit", "Write", "WebFetch", "AskUserQuestion"])
+      assert.ok((options.disallowedTools as string[]).includes(tool), `${tool} is not a blind judge's`);
+    // Its built-ins are an allowlist, not only a block list: a live judge was offered Skill,
+    // Workflow (sub-agents with file tools), ScheduleWakeup and ReportFindings, which Claude Code
+    // added after the block list was written. Tool search stays: it loads the deferred live tools.
+    assert.deepEqual(options.tools, ["ToolSearch"], "no built-in but tool search");
   });
 
   /**
@@ -478,7 +498,7 @@ describe("a chat's own Claude session asks the person", () => {
 
   it("keeps the settings of a Claude home with thousands of projects small enough for any command line", async () => {
     // The SDK passes settings as ONE argument (`--settings <json>`); Windows allows 8,191
-    // characters through a .cmd shim. One rule per project folder once made 13,692 here.
+    // characters through a .cmd shim; one rule per project folder would pass that here.
     const root = await realpath(await tmpDir("claude-home-size-"));
     const home = path.join(root, "dot-claude");
     const games = path.join(root, "games");
@@ -529,6 +549,19 @@ describe("a chat's own Claude session asks the person", () => {
       assert.ok(!ruleDenies(fence, "Read", path.join(home, "projects", name, "x")), `own stays reachable: ${name}`);
     // Top-level entries come first: the prompt history is still fenced.
     assert.ok(ruleDenies(fence, "Read", path.join(home, "history.jsonl")));
+  });
+
+  it("keeps the home rules within their budget when the rules fill it to the last character", async () => {
+    // Equal rules, one length after another: some length divides the budget, so the rules
+    // fill it exactly, and the array's own brackets must still fit.
+    const root = await tmpDir("claude-home-budget-");
+    for (let pad = 1; pad <= 60; pad++) {
+      const home = path.join(root, `home-${pad}`);
+      for (let i = 0; i < 45; i++)
+        await mkdir(path.join(home, `${String(i).padStart(2, "0")}-${"x".repeat(pad)}`), { recursive: true });
+      const fence = await homeFence({ home, warn: () => {} });
+      assert.ok(JSON.stringify(fence).length <= 4_000, `pad ${pad}: ${JSON.stringify(fence).length} characters`);
+    }
   });
 
   it("hands the host Claude Code's question, reason cleaned of terminal codes", async () => {
@@ -840,7 +873,7 @@ describe("a chat's own Claude session asks the person", () => {
  */
 describe("a build's lead asks from the chat's mode, and the host answers", () => {
   const leadRequest = (extra: Record<string, unknown> = {}) => ({
-    prompt: "lead the night",
+    prompt: "lead the run",
     cwd: "/tmp/game-workspace",
     readOnly: true,
     resume: "chat-session",
@@ -861,7 +894,7 @@ describe("a build's lead asks from the chat's mode, and the host answers", () =>
     ...overrides,
   });
 
-  it("keeps its tools, the web and helpers, starts in Manual with no sandbox, and carries the standing grants", async () => {
+  it("keeps its tools and the web, starts in Manual with no sandbox, and carries the standing grants", async () => {
     const sessions: Options[] = [];
     for (const extra of [{}, { leadAsks: leadAsks() }]) {
       const { fn, seen } = fakeQuery();
@@ -878,14 +911,21 @@ describe("a build's lead asks from the chat's mode, and the host answers", () =>
     // With it: Manual, so nothing beyond reads in its folders and the studio's tools goes unasked.
     assert.equal(asking.permissionMode, "default");
     assert.equal(typeof asking.canUseTool, "function");
-    // Flipped (owner, 2026-09-29): a lead started outside Bypass was launched without the flag, so
+    // Flipped: a lead started outside Bypass was launched without the flag, so
     // nothing could switch it there. The picker switches a running lead now, as the chat's own
     // session, and the CLI reaches Bypass mid-turn only for a session launched with the flag.
     assert.equal(asking.allowDangerouslySkipPermissions, true, "the picker can switch it to Bypass");
     assert.equal("sandbox" in asking, false, "every command it runs was asked about first");
-    // Flipped (owner, 2026-09-29): it lost its helpers (Agent, Task) and asked before the web. It
-    // keeps what the chat's own session keeps now: only messaging and its own ways to ask are not its.
-    assert.deepEqual(asking.disallowedTools, ["SendMessage", "ListAgents", "AskUserQuestion", "EnterPlanMode"]);
+    // It keeps what the chat's own session keeps: messaging, Claude Code's own sub-agents (Genex
+    // runs the workers) and its own ways to ask are not its; the web runs unasked.
+    assert.deepEqual(asking.disallowedTools, [
+      "SendMessage",
+      "ListAgents",
+      "Agent",
+      "Task",
+      "AskUserQuestion",
+      "EnterPlanMode",
+    ]);
     const allowed = asking.allowedTools as string[];
     for (const tool of ["Bash", "Edit", "Write"]) assert.equal(allowed.includes(tool), false, `${tool} asks first`);
     for (const tool of ["WebFetch", "WebSearch"])
@@ -924,7 +964,7 @@ describe("a build's lead asks from the chat's mode, and the host answers", () =>
     assert.equal(accepting.permissionMode, "acceptEdits");
     for (const session of [auto, accepting]) {
       assert.equal(typeof session.canUseTool, "function", "what the mode still asks goes to the host");
-      // Flipped (owner, 2026-09-29): "never switched to Bypass". The picker may switch it there now.
+      // Flipped: "never switched to Bypass". The picker may switch it there now.
       assert.equal(session.allowDangerouslySkipPermissions, true, "the picker can switch it to Bypass");
       assert.equal("sandbox" in session, false);
       const matchers = (session.hooks as { PreToolUse: Array<{ matcher?: string }> }).PreToolUse;
@@ -933,7 +973,7 @@ describe("a build's lead asks from the chat's mode, and the host answers", () =>
     const allowed = auto.allowedTools as string[];
     for (const tool of ["Bash", "Edit", "Write"])
       assert.equal(allowed.includes(tool), false, `${tool} is the classifier's`);
-    // Flipped (owner, 2026-09-29): a lead started in Auto had its folder and the host's read grants
+    // Flipped: a lead started in Auto had its folder and the host's read grants
     // fenced from writes by Edit rules. Only the chat's mode and the studio's own fence (secrets,
     // settings) limit it now, as the chat's own session.
     for (const session of [auto, accepting, manual]) {
@@ -1124,5 +1164,34 @@ describe("a build's lead asks from the chat's mode, and the host answers", () =>
     );
     const canUseTool = seen[0]!.canUseTool as CanUseTool;
     assert.deepEqual(await canUseTool("Bash", { command: "ls ~/Downloads" }, ask()), { behavior: "deny", message });
+  });
+});
+
+/**
+ * Genex runs its own workers; Claude Code's own sub-agents (Agent, Task) would be workers it never
+ * sees, outside its ceiling, its cards and its never-touch list. No session is offered them.
+ */
+describe("only Genex's workers", () => {
+  it("no session is offered Claude Code's own sub-agents: the chat's own, a lead, an unattended builder, a read-only session", async () => {
+    const lead = {
+      mode: "default",
+      allow: [],
+      directories: [],
+      protectWrites: [],
+      ask: async (): Promise<PermissionReply> => ({ decision: "allow" }),
+      screen: async (): Promise<WithdrawnAnswer | AskFirst | null> => null,
+    };
+    const shapes: Array<[string, Record<string, unknown>]> = [
+      ["the chat's own session", { permissions: chat() }],
+      ["a lead that asks", { readOnly: true, leadAsks: lead }],
+      ["an unattended builder", {}],
+      ["a read-only session", { readOnly: true }],
+    ];
+    for (const [name, extra] of shapes) {
+      const { fn, seen } = fakeQuery();
+      await (await engineFor(fn)).delegate({ prompt: "add a jump", cwd: "/tmp/game-workspace", ...extra } as never);
+      const banned = seen[0]?.disallowedTools as string[];
+      for (const tool of ["Agent", "Task"]) assert.ok(banned.includes(tool), `${name}: ${tool} is not offered`);
+    }
   });
 });

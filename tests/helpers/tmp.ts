@@ -5,6 +5,7 @@ import { after } from "node:test";
 import { setTimeout as sleep } from "node:timers/promises";
 import { realpathSync } from "node:fs";
 import { SECOND_MS } from "../../src/shared/duration.ts";
+import { isTestTmp, makeTestTmp, sweepTestTmp, testTmpParents } from "../../scripts/test-tmp.mjs";
 
 /**
  * The errors Node's own `rm` tries again (its `maxRetries`): on Windows, a folder another process
@@ -29,13 +30,31 @@ export interface RemoveTreeDeps {
 
 const created: string[] = [];
 const closers: Array<() => Promise<void>> = [];
+/** This file's own run folder, when it runs outside a test run's (`node --test` run directly). */
+let ownRunTmp: string | undefined;
+
+/**
+ * Where a test's temp dirs go: the temp folder of the run this file is part of, else a run folder
+ * of this process's own, made on first use. A file run directly and killed before its cleanup
+ * (an agent's time limit) then leaves one folder the next run removes (`scripts/test-tmp.mjs`),
+ * not its temp dirs loose in the shared temp folder.
+ */
+function tmpParent(): string {
+  const inherited = os.tmpdir();
+  if (isTestTmp(inherited)) return inherited;
+  if (ownRunTmp) return ownRunTmp;
+  sweepTestTmp(testTmpParents(inherited));
+  ownRunTmp = makeTestTmp({ fallback: inherited });
+  created.unshift(ownRunTmp);
+  return ownRunTmp;
+}
 
 /**
  * Temp dir that is removed when the test file finishes. On Windows it is spelled by its long
  * name, as the app's own folders are: `os.tmpdir()` can carry an 8.3 name (`RUNNER~1`).
  */
 export async function tmpDir(prefix = "studio-test-"): Promise<string> {
-  const made = await mkdtemp(path.join(os.tmpdir(), prefix));
+  const made = await mkdtemp(path.join(tmpParent(), prefix));
   const dir = process.platform === "win32" ? realpathSync.native(made) : made;
   created.push(dir);
   return dir;
@@ -58,6 +77,15 @@ export async function removeTree(dir: string, deps: RemoveTreeDeps = {}): Promis
   }
 }
 
+/**
+ * Remove `dirs` one at a time, newest first. A folder made inside another one (a core-lite's temp
+ * folder under a test's own, reached through a link) goes before its parent: removing both at once
+ * raced over the same files, and the macOS release regression failed with EINVAL.
+ */
+export async function removeAll(dirs: readonly string[], deps: RemoveTreeDeps = {}): Promise<void> {
+  for (const dir of [...dirs].reverse()) await removeTree(dir, deps);
+}
+
 /** Is this a removal error another process holding the folder open explains? */
 function heldOpen(error: unknown): boolean {
   return error instanceof Error && "code" in error && HELD_OPEN.has(String(error.code));
@@ -76,6 +104,6 @@ export function closeBeforeCleanup(close: () => Promise<void>): void {
 
 after(async () => {
   for (const close of closers.splice(0)) await close().catch(() => {});
-  await Promise.all(created.map((dir) => removeTree(dir)));
-  created.length = 0;
+  await removeAll(created.splice(0));
+  ownRunTmp = undefined;
 });

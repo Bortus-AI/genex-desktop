@@ -1,6 +1,7 @@
 /**
  * The chat panel's hooks, wired in order: the open thread, its composer, its work, following the
- * newest entry, replies about a build, sending and Rewind. `ChatPanel` draws what this returns.
+ * newest entry, replies about a build, words left for the composer, sending and Rewind.
+ * `ChatPanel` draws what this returns.
  */
 import { useCallback, useRef, useState } from "react";
 import type { PromptBarHandle } from "../ui/PromptBar.tsx";
@@ -13,8 +14,11 @@ import { type ChatWorkView, useChatWork } from "./use-chat-work.ts";
 import { type FollowScroll, useFollowScroll } from "./use-follow-scroll.ts";
 import { type ReplyingAbout, useReplyAbout } from "./use-reply-about.ts";
 import { useCommandResults } from "./use-command-results.ts";
-import { useLaunchHandover } from "./use-launch-handover.ts";
-import { type Send, useReport, useSubmit } from "./use-submit.ts";
+import { useComposeInChat } from "./use-compose-in-chat.ts";
+import { type LaunchHandover, useLaunchHandover } from "./use-launch-handover.ts";
+import { useEngines } from "../state/hooks.ts";
+import { useKeepBuilding } from "./use-keep-building.ts";
+import { type Report, type Send, useReport, useSubmit } from "./use-submit.ts";
 
 /** Whether a reply is being written on screen, as the streaming reply reports it. */
 export interface StreamShowing {
@@ -30,10 +34,14 @@ export interface ChatParts {
   work: ChatWorkView;
   follow: FollowScroll;
   submit: Send;
+  /** Send words the chat wrote itself, unseen in the transcript (a command's result, a plugin turned on). */
+  report: Report;
   focusComposer: () => void;
   reply: ReplyingAbout;
   rewind: ChatRewind;
   stream: StreamShowing;
+  /** A game's first message from home while it cannot go yet, and its one action. */
+  handover: LaunchHandover;
 }
 
 /** The chat panel's state: the parts it draws, its composer handle and the header's export. */
@@ -56,9 +64,22 @@ export function useChatPanel(props: ChatPanelProps) {
   });
   const focusComposer = useCallback((): void => composerRef.current?.focus(), [composerRef]);
   const reply = useReplyAbout(chat.threadId, focusComposer);
-  const submit = useSubmit(props, chat, composer, work, follow, reply);
+  const sendAnswered = useSubmit(props, chat, composer, work, follow, reply);
+  const submit: Send = async (text, extras, preserveDraft) => {
+    await sendAnswered(text, extras, preserveDraft);
+  };
+  useKeepBuilding(chat.threadId, sendAnswered, props.onNotice, composerRef);
+  useComposeInChat(chat.threadId, chat.project, composer.drafts, composerRef, sendAnswered);
   const report = useReport(props, chat, composer);
-  useLaunchHandover(chat.threadId, loading, submit, composerRef);
+  const enginesRead = useEngines((s) => s.list.length > 0);
+  const handover = useLaunchHandover({
+    threadId: chat.threadId,
+    loading,
+    send: sendAnswered,
+    composer: composerRef,
+    ready: { enginesRead, hasModel: composer.model.selected !== null, needsSignIn: composer.gate.needsSignIn },
+    signIn: composer.gate.signIn,
+  });
   useCommandResults(chat.threadId ?? null, !chat.isStudioThread, report, props.onNotice);
   const rewind = useChatRewind({
     threadId: chat.threadId,
@@ -71,6 +92,19 @@ export function useChatPanel(props: ChatPanelProps) {
     jumpToLatest: follow.jumpToLatest,
   });
   const stream = { showing: streaming, onShowing: setStreaming };
-  const parts: ChatParts = { props, chat, composer, work, follow, submit, focusComposer, reply, rewind, stream };
+  const parts: ChatParts = {
+    props,
+    chat,
+    composer,
+    work,
+    follow,
+    submit,
+    report,
+    focusComposer,
+    reply,
+    rewind,
+    stream,
+    handover,
+  };
   return { parts, composerRef, chatExport };
 }

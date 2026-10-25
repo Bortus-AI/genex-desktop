@@ -1,23 +1,52 @@
 import path from "node:path";
-import { watch as watchPath } from "node:fs";
+import { constants, watch as watchPath } from "node:fs";
 import { mkdir, readFile, readdir, cp, rm, stat } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
 import { isPluginId } from "../../shared/plugin-id.ts";
+import type { EngineCatalog, GameEngine } from "../../shared/game-engine.ts";
 import {
+  type FactRef,
+  type GameKind,
+  gameKindOf,
+  pluginFactSource,
+  type ScaffoldRecord,
+  scopePaths,
+  scopeReaches,
+  type SourcedFactRule,
+} from "../../shared/project-facts.ts";
+import type { ToolOffered } from "./tool-allow.ts";
+import { type ObserverRef, observersFor } from "../../shared/observers.ts";
+import {
+  type HookEvent,
+  type HookStep,
+  hookEventsOf,
+  hookPlan,
+  LockScope,
+  messageCheckpointPlan,
+  outlivesHarness,
+  type PluginLock,
+} from "../../shared/plugin-hooks.ts";
+import {
+  engineCatalog,
+  isAgentTool,
   isFileSkill,
   PLUGIN_SKILL_TOOL,
+  pluginReach,
   pluginSkillTool,
+  skillScope,
   PluginAccountState,
   PluginCapability,
   PluginChangeReason,
   PluginHealth,
   PluginService,
   PluginSourceKind,
+  type CallCutOff,
   type PluginBinding,
   type PluginCatalogEntry,
   type PluginChange,
   type PluginConsentBy,
   type PluginInfo,
+  type PluginKindOffer,
   type PluginAppliedSet,
   type PluginFileSkill,
   type PluginHostTool,
@@ -25,13 +54,16 @@ import {
   type PluginManifest,
   type PluginManifestTool,
   type PluginMcpServer,
+  type PluginReach,
   type PluginScan,
+  type PluginSkill,
   type PluginSkillChange,
   pluginSkillChange,
   type PluginSkillPage,
   type PluginSource,
   type PluginTool,
   type PluginToolbarItem,
+  PluginToolAudience,
 } from "../../shared/plugins.ts";
 import { atomicWriteJson } from "../fsx.ts";
 import {
@@ -43,12 +75,20 @@ import {
   validateManifest,
 } from "./manifest.ts";
 import { fileSkillIndexLine } from "./skill-prompts.ts";
+import { readJudgeBrief } from "./judge-manifest.ts";
+import { pluginWorkspaces } from "./workspace-manifest.ts";
+import { pluginFolderPaths, pluginWorkerTypes, workerTypeOffered } from "./worker-manifest.ts";
+import type { WorkerType } from "../../shared/workers.ts";
+import type { PluginWorkspace } from "../../shared/project-workspace.ts";
 import { canonicalSourceRepo } from "./marketplace.ts";
 import { containedReal } from "../paths.ts";
 import { SessionCredentials } from "../session-credentials.ts";
-import { PluginProcess } from "./process.ts";
+import { PluginCallCutOff, type PluginHostEnv, type PluginInvocation, PluginProcess } from "./process.ts";
 import { MAX_ARTIFACT_BYTES, packageCopyFilter, unpackEnvelope } from "./pack.ts";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
+import { currentLocale, t } from "../../shared/i18n.ts";
+import type { Locale } from "../../shared/locale.ts";
+import { ManifestWords } from "./manifest-words.ts";
 
 interface Installed {
   rememberAccount?: boolean;
@@ -61,6 +101,22 @@ interface Installed {
   scan?: PluginScan;
   identity?: PluginIdentity;
   lastSkillChange?: PluginSkillChange;
+  /** A local plugin's agent tools the person allowed to run without asking; gone on new code or turn-off. */
+  allowed?: string[];
+  /** The person turned it off themselves: only they turn it on again (a sign-in leaves it off). */
+  turnedOff?: boolean;
+}
+/** A plugin whose backend talks to another API, as another account (`PluginRegistry.hostAccount`). */
+export interface PluginHostAccount {
+  id: string;
+  /** The API's origin, named to the backend. */
+  api: string;
+  /** That API's own CA file (an absolute PEM path) the backend and its runs trust, when it has one. */
+  ca?: string;
+  /** That API's game host (a bare origin), where its games and drafts play, when it is not genex.games'. */
+  games?: string;
+  /** That account's token, or undefined while it is signed out. */
+  token(): Promise<string | undefined>;
 }
 /**
  * Who a package is, as far as its saved account and data are concerned. The id is only a name: two
@@ -105,8 +161,11 @@ const REPLACEMENT_TTL_MS = 10 * MINUTE_MS;
 const ACCOUNT_POLL_MS = 5 * SECOND_MS;
 /** A burst of saves in a watched folder is one reload. */
 const WATCH_DEBOUNCE_MS = 500;
-/** The host's ceiling for one backend call. */
-const CALL_TIMEOUT_MS = 190_000;
+/** The host's ceiling for one backend call, unless the caller allows longer (`tool`'s `timeoutMs`). */
+export const PLUGIN_CALL_TIMEOUT_MS = 190_000;
+
+/** A plugin tool's call, checked and consented to (`PluginRegistry.prepareTool`): answers as its backend does. */
+export type PreparedToolCall = () => ReturnType<PluginProcess["call"]>;
 /** A tool that runs a native job may wait for its longest job plus this margin. */
 const NATIVE_JOB_MARGIN_MS = 10 * SECOND_MS;
 /**
@@ -138,49 +197,110 @@ const DEFAULT_ACCOUNT_ACTIONS: NonNullable<PluginManifest["account"]> = {
 type AccountActions = NonNullable<PluginManifest["account"]>;
 const accountActionsOf = (manifest: PluginManifest): AccountActions => manifest.account ?? DEFAULT_ACCOUNT_ACTIONS;
 
+/** What a plugin on another account's backend is told: that API, and its CA and game host when it has them. */
+const hostEnvOf = (account: PluginHostAccount): PluginHostEnv => ({
+  api: account.api,
+  ...(account.ca ? { ca: account.ca } : {}),
+  ...(account.games ? { games: account.games } : {}),
+});
+
+/**
+ * What a plugin's lifecycle and calls say. The words that are functions are the person's, in their
+ * language: refusals of what they did in Plugins (install, update, reload, watch, remove) and the
+ * question a local plugin's tool asks them. The plain strings stay English: a tool call's refusal
+ * is the model's to read, a service's is the plugin backend's, and an unknown id is a caller's bug.
+ */
 const MESSAGE = {
+  /** A backend on another account (a development stand) tried to save a sign-in of its own. */
+  HostAccount: "This plugin uses the development stand's account: sign in to the stand from Play's account instead",
   IdentityMismatch: "Plugin identity mismatch",
   OutsideStorage: "Plugin directory is outside Studio storage",
-  PackageMissing: "This plugin's package is missing; remove the plugin and install it again",
+  PackageMissing: () => t("This plugin's package is missing; remove the plugin and install it again"),
   InvalidProject: "Invalid project",
   Unavailable: (id: string) => `Plugin ${id} is unavailable`,
-  InstallFirst: "Install the plugin first",
+  InstallFirst: () => t("Install the plugin first"),
   UnknownPlugin: "Unknown plugin",
-  FolderGone: "The folder this plugin was loaded from is gone; load it again",
-  OriginUnknown: "Studio does not know where this plugin came from; load it again",
-  NeedsMarketplace: "Reinstalling this plugin needs the marketplace, which is unavailable in this session",
-  NotReinstalled: "The plugin was not reinstalled",
+  FolderGone: () => t("The folder this plugin was loaded from is gone; load it again"),
+  OriginUnknown: () => t("Studio does not know where this plugin came from; load it again"),
+  NeedsMarketplace: () => t("Reinstalling this plugin needs the marketplace, which is unavailable in this session"),
+  NotReinstalled: () => t("The plugin was not reinstalled"),
   ConfirmReplacement: (next: PluginManifest, previous: PluginManifest) =>
-    `${next.name} by ${next.publisher} would replace ${previous.name} by ${previous.publisher}, erasing its saved account and data; confirm "Replace and erase data" first`,
-  PermissionExpansion: "Permission expansion requires confirmation",
-  ServersChanged: "MCP servers changed; load the folder again to review",
+    t(
+      '{name} by {publisher} would replace {previousName} by {previousPublisher}, erasing its saved account and data; confirm "Replace and erase data" first',
+      {
+        name: next.name,
+        publisher: next.publisher,
+        previousName: previous.name,
+        previousPublisher: previous.publisher,
+      },
+    ),
+  PermissionExpansion: () => t("Permission expansion requires confirmation"),
+  ServersChanged: () => t("MCP servers changed; load the folder again to review"),
+  StepsChanged: () =>
+    t(
+      "Its steps at Genex's moments changed (hooks, observers, locks, folders or harness tools), so it wasn't reloaded: load it again with Load local plugin… to review them",
+    ),
+  WatchAgentFolder: () =>
+    t(
+      "Watch folder is off for a plugin in a folder agents write in (a game's folder, a worker's copy): load it again with Load local plugin… after each change instead",
+    ),
   NoHostServices: "Host services unavailable during installation",
-  NotInCatalog: "Plugin is not in the curated catalog",
-  InvalidCatalogArtifact: "Invalid catalog artifact",
-  DownloadFailed: (status: number) => `Plugin download failed (${status})`,
-  ArtifactTooLarge: "Plugin artifact exceeds 256 MiB",
-  DigestMismatch: "Plugin artifact digest mismatch",
-  CatalogMismatch: "Catalog manifest mismatch",
-  EnableFirst: "Enable the plugin first",
-  OnlyLocalWatch: "Only plugins loaded from a local folder can be watched",
+  NotInCatalog: () => t("Plugin is not in the curated catalog"),
+  InvalidCatalogArtifact: () => t("Invalid catalog artifact"),
+  DownloadFailed: (status: number) => t("Plugin download failed ({status})", { status }),
+  ArtifactTooLarge: () => t("Plugin artifact exceeds 256 MiB"),
+  DigestMismatch: () => t("Plugin artifact digest mismatch"),
+  CatalogMismatch: () => t("Catalog manifest mismatch"),
+  EnableFirst: () => t("Enable the plugin first"),
+  AccountPlugin: (name: string) =>
+    t("{name} holds your account, so it can't be removed: turn it off instead", { name }),
+  OnlyLocalWatch: () => t("Only plugins loaded from a local folder can be watched"),
   UnlockRequired: "Explicit account unlock required",
   ConnectionRequired: "Explicit account connection required",
   DisconnectRequired: "Explicit disconnect required",
   NativeUnavailable: "Native runtime service unavailable",
   CapabilityDenied: "Plugin service capability denied",
+  SandboxUnavailable: "Sandbox jobs unavailable",
   UnknownTool: "Unknown plugin tool",
   UnknownSkill: (id: string, name: string) => `Plugin ${id} has no skill named ${JSON.stringify(name)}`,
+  UnknownJudge: (id: string, judge: string) => `Plugin ${id} has no judge named ${JSON.stringify(judge)}`,
   UndeclaredSkillFile: "Read a skill's own file or one of the references it lists, exactly as listed",
   InvalidSkillOffset: "offset must be a whole number within the file: the nextOffset of the previous read",
   HostToolBundledOnly: "A host tool runs only for a bundled plugin that ships with Studio",
   HostToolUnavailable: "This host tool is unavailable in this session",
   ConsentUnavailable: "This tool requires user consent, which is unavailable in this session",
+  AskAgain: (plugin: string) =>
+    `${plugin} was loaded again or turned off while you were asked, so the tool didn't run. Call it again to be asked about the plugin as it is now.`,
+  LocalAccess: (plugin: string, question: string) =>
+    t("{plugin} was loaded from a folder on this Mac and runs with your access. {question}", { plugin, question }),
+  LocalTool: (plugin: string, tool: string) =>
+    t("{plugin} was loaded from a folder on this Mac and runs with your access. Let it run {tool}?", { plugin, tool }),
   UnknownAction: "Unknown plugin action",
   UnknownPanel: "Unknown panel",
   InvalidSetting: "Invalid plugin setting",
   BundledId: (id: string, fromLocal: boolean) =>
-    `"${id}" is a plugin that ships with Studio; a package from ${fromLocal ? "a local folder" : "GitHub"} cannot use its id`,
+    fromLocal
+      ? t('"{id}" is a plugin that ships with Studio; a package from a local folder cannot use its id', { id })
+      : t('"{id}" is a plugin that ships with Studio; a package from GitHub cannot use its id', { id }),
 } as const;
+
+/** One call's card, as `#askFirst` asks it. */
+interface ConsentAsk {
+  p: Installed;
+  name: string;
+  declaration: PluginManifestTool;
+  args: Record<string, unknown>;
+  binding: PluginBinding;
+  signal?: AbortSignal;
+}
+/** What a card gave a call: whether the person's own click approved it, and their edit of its field. */
+interface ConsentGiven {
+  confirmed: boolean;
+  input?: string;
+}
+/** A yes as the call takes it: confirmed only by the person's own click, which alone may edit. */
+const givenBy = (by: PluginConsentBy, input: string | undefined): ConsentGiven =>
+  by === "user" ? { confirmed: true, ...(input !== undefined ? { input } : {}) } : { confirmed: false };
 
 /** The capability a host service needs; undefined for a service no capability grants. */
 function capabilityFor(method: string): PluginCapability | undefined {
@@ -191,8 +311,24 @@ function capabilityFor(method: string): PluginCapability | undefined {
     return PluginCapability.ProjectWrite;
   if (method.startsWith("jobs.") || method === PluginService.EventsEmit) return PluginCapability.Jobs;
   if (method === PluginService.ExportStage) return PluginCapability.Export;
+  if (ENGINE_SERVICES.has(method) || isSandboxService(method)) return PluginCapability.GameEngine;
   return undefined;
 }
+/**
+ * The services that link a game to an engine project, snapshot the game before the plugin changes
+ * it, make a game for a project, name the games whose run is going, and hand a setup task to the
+ * game's chat (Do it for me) or say whether that can run here.
+ */
+const ENGINE_SERVICES = new Set<string>([
+  PluginService.GameEngineLink,
+  PluginService.GameEngineRead,
+  PluginService.GameEngineSteps,
+  PluginService.GameSnapshot,
+  PluginService.GameCreate,
+  PluginService.GameEngineRuns,
+  PluginService.GameEngineAssist,
+  PluginService.GameEngineCanAssist,
+]);
 /** The account services the registry answers from the session lease. */
 const CREDENTIAL_SERVICES = new Set<string>([
   PluginService.CredentialsSession,
@@ -201,6 +337,13 @@ const CREDENTIAL_SERVICES = new Set<string>([
   PluginService.CredentialsClear,
 ]);
 const isCredentialService = (method: string) => CREDENTIAL_SERVICES.has(method);
+/** An engine plugin's long jobs in the studio's process sandbox, which the sandbox jobs answer. */
+const SANDBOX_SERVICES = new Set<string>([
+  PluginService.SandboxRun,
+  PluginService.SandboxResult,
+  PluginService.SandboxStop,
+]);
+const isSandboxService = (method: string) => SANDBOX_SERVICES.has(method);
 /** Services the native runtime host answers rather than the plugin services. */
 const isNativeService = (method: string) => method.startsWith("native.") || method.startsWith("runtime.");
 /** An invocation of a user action by one of the given names (never a tool, review or another action). */
@@ -208,27 +351,145 @@ const isActionAmong = (invocation: { method: string; name: string }, names: stri
   invocation.method === "action" && names.includes(invocation.name);
 /** Whether an install record is live: enabled and not removed. */
 const isLive = (p: { enabled: boolean; removed: boolean } | undefined) => Boolean(p?.enabled) && !p?.removed;
+/**
+ * A plugin from a local folder starts off: only the person turns it on; an update keeps its state;
+ * every other source starts on as before.
+ */
+export function startsEnabled(
+  source: PluginSourceKind,
+  previous: Pick<Installed, "enabled" | "removed"> | undefined,
+  replacing: boolean,
+): boolean {
+  if (previous && !previous.removed && !replacing) return previous.enabled;
+  if (source === PluginSourceKind.Local) return false;
+  return true;
+}
+/** Whether an agent calls an agent tool of a plugin loaded from a folder: it runs with the person's access. Genex's own steps never ask. */
+function localAgentCall(p: Installed, declaration: PluginManifestTool, caller: PluginToolAudience): boolean {
+  return p.source === PluginSourceKind.Local && caller !== PluginToolAudience.Harness && isAgentTool(declaration);
+}
+/**
+ * Whether an agent's call of a local plugin's tool asks the person first: each agent tool asks every
+ * call until they answer Always allow for it, and one with its own question always asks.
+ */
+function asksEachCall(p: Installed, declaration: PluginManifestTool, caller: PluginToolAudience): boolean {
+  if (!localAgentCall(p, declaration, caller)) return false;
+  if (declaration.confirmation) return true;
+  // Only a list of names grants anything: a saved record edited into another shape asks.
+  return !(Array.isArray(p.allowed) && p.allowed.includes(declaration.name));
+}
+/** How a consent card is asked beyond its tool: whether it offers Always allow. */
+export interface PluginConsentOptions {
+  offerAlways?: boolean;
+}
 /** What a session is handed, all read from one view of the live plugins. */
 export interface PluginSnapshot {
   tools: PluginTool[];
   guidance: string;
   applied: PluginAppliedSet;
+  /** The tools on offer that make a kind of project in the game's folder (`makes`). */
+  kinds: PluginKindOffer[];
 }
-/** A manifest tool as an agent sees it: named `<id>__<tool>`, without the host program it runs. */
+/** A manifest tool as an agent sees it: named `<id>__<tool>`, without the host program, audience, scope, locks or readiness. */
 function agentTool(id: string, tool: PluginManifestTool): PluginTool {
-  const { host: _host, ...declared } = tool;
+  const {
+    host: _host,
+    audience: _audience,
+    facts: _facts,
+    makes: _makes,
+    needs: _needs,
+    ready: _ready,
+    ...declared
+  } = tool;
   return { ...declared, name: `${id}__${tool.name}` };
 }
-/** Every tool one plugin gives agents: its declared tools, then its skill tool when it has file skills. */
-function agentTools(manifest: PluginManifest): PluginTool[] {
-  const skillTool = pluginSkillTool(manifest);
-  return [...manifest.tools.map((t) => agentTool(manifest.id, t)), ...(skillTool ? [skillTool] : [])];
+/**
+ * The `needs` a plugin declares for one agent name: its tool's (`<plugin>__<tool>`) or its
+ * connector's (`<plugin>-<server>__<tool>`); undefined when the name is none of the plugin's.
+ */
+function declaredNeeds(manifest: PluginManifest, agentName: string): string[] | undefined {
+  const at = agentName.indexOf("__");
+  if (at < 0) return undefined;
+  const [owner, tool] = [agentName.slice(0, at), agentName.slice(at + 2)];
+  if (owner === manifest.id) return manifest.tools.find((t) => t.name === tool)?.needs ?? [];
+  return manifest.mcpServers?.find((server) => owner === `${manifest.id}-${server.id}`)?.needs;
+}
+/** A plugin's locks named by id, in the order named, each with its plugin. */
+function locksNamed(manifest: PluginManifest, ids: readonly string[]): Array<{ plugin: string; lock: PluginLock }> {
+  return ids.flatMap((id) => {
+    const lock = manifest.locks?.find((declared) => declared.id === id);
+    return lock ? [{ plugin: manifest.id, lock }] : [];
+  });
+}
+/** What one plugin hands a session for a game with `facts`, narrowed to `offered` when the session is. */
+interface PluginPart {
+  manifest: PluginManifest;
+  reach: PluginReach;
+}
+/**
+ * Every tool one plugin gives a session: its declared tools that reach the game, but those only the
+ * harness calls (it reaches them by name through `tool`), then its skill tool while a file skill
+ * reaches.
+ */
+function agentTools({ manifest, reach }: PluginPart): PluginTool[] {
+  const skillTool = reach.skillTool ? pluginSkillTool(manifest) : undefined;
+  return [...reach.tools.map((t) => agentTool(manifest.id, t)), ...(skillTool ? [skillTool] : [])];
+}
+/**
+ * Whether a plugin has a part in a session: something of it reaches, or (for a session not narrowed
+ * to offered tools) it declares no agent tool or skill a scope could have left out.
+ */
+function takesPart({ manifest, reach }: PluginPart, offered: boolean): boolean {
+  if (reach.tools.length || reach.skills.length) return true;
+  return !offered && !manifest.skills.length && !manifest.tools.some(isAgentTool);
+}
+/**
+ * Where in the folder a skill applies, when that is not the root: ` (for site/)` after its name,
+ * so a lead with an Unreal project at the root and a web game in `site/` knows which is which.
+ */
+function skillWhere(skill: PluginSkill, game: GameKind): string {
+  const paths = scopePaths(skillScope(skill), game);
+  if (!paths.length || paths.includes(".")) return "";
+  return ` (for ${paths.map((p) => `${p}/`).join(", ")})`;
 }
 /** One plugin's part of the brief: an inline skill whole, a file skill as one index line. */
-function skillGuidance(manifest: PluginManifest): string[] {
-  return manifest.skills.map((s) =>
-    isFileSkill(s) ? fileSkillIndexLine(manifest.id, s) : `[${manifest.id}/${s.name}]\n${s.text}`,
-  );
+function skillGuidance({ manifest, reach }: PluginPart, game: GameKind): string[] {
+  return reach.skills.map((s) => {
+    const where = skillWhere(s, game);
+    return isFileSkill(s) ? fileSkillIndexLine(manifest.id, s, where) : `[${manifest.id}/${s.name}]${where}\n${s.text}`;
+  });
+}
+/** One reaching kind tool as the snapshot offers it (with whether it answers its readiness). */
+function kindOffer(manifest: PluginManifest, t: PluginManifestTool): PluginKindOffer {
+  const tool = `${manifest.id}__${t.name}`;
+  return {
+    plugin: manifest.id,
+    name: manifest.name,
+    tool,
+    makes: [...(t.makes ?? [])],
+    ...(t.ready ? { asksReady: true } : {}),
+  };
+}
+/**
+ * The kinds one plugin's reaching tools make, as the snapshot lists them: one offer per scaffold
+ * whose tool reaches (named by its label) when the plugin declares scaffolds with tools; else one per
+ * reaching tool that declares `makes`. A scaffold without a tool offers nothing.
+ */
+function kindOffers({ manifest, reach }: PluginPart): PluginKindOffer[] {
+  const scaffolds = (manifest.scaffolds ?? []).filter((scaffold) => scaffold.tool !== undefined);
+  if (scaffolds.length === 0) return reach.tools.filter((t) => t.makes).map((t) => kindOffer(manifest, t));
+  return scaffolds.flatMap((scaffold) => {
+    const t = reach.tools.find((reaching) => reaching.name === scaffold.tool);
+    if (!t) return [];
+    return [
+      {
+        ...kindOffer(manifest, t),
+        scaffold: scaffold.id,
+        label: scaffold.label,
+        ...(scaffold.game === false ? { game: false } : {}),
+      },
+    ];
+  });
 }
 /** The file a skill read names: the skill's own, or one of its references spelled exactly as listed. */
 function declaredSkillFile(skill: PluginFileSkill, file: unknown): string {
@@ -272,7 +533,7 @@ async function downloadArtifact(url: string): Promise<Buffer> {
     size += value.length;
     if (size > MAX_ARTIFACT_BYTES) {
       await reader.cancel();
-      throw new Error(MESSAGE.ArtifactTooLarge);
+      throw new Error(MESSAGE.ArtifactTooLarge());
     }
     chunks.push(value);
   }
@@ -300,14 +561,30 @@ function assertUpdateReviewed(
   approved: string[] | undefined,
   reason: PluginChange["reason"] | undefined,
 ) {
-  if (expandsCapabilities(next, current, approved)) throw new Error(MESSAGE.PermissionExpansion);
+  if (expandsCapabilities(next, current, approved)) throw new Error(MESSAGE.PermissionExpansion());
   // An MCP server is native code with an environment of its own: changing what one runs, where
   // it runs or what it is handed is an expansion of the same kind a new capability is, and an
   // update that was never shown to anybody must not quietly acquire it.
-  if (approved === undefined && !sameServers(next, current)) throw new Error(MESSAGE.PermissionExpansion);
+  if (approved === undefined && !sameServers(next, current)) throw new Error(MESSAGE.PermissionExpansion());
   // A hot reload carries the capabilities the user approved, not a review of new servers or hosts.
   if (reason === PluginChangeReason.Reloaded && reviewedLaunch(next) !== reviewedLaunch(current))
-    throw new Error(MESSAGE.ServersChanged);
+    throw new Error(MESSAGE.ServersChanged());
+  // Nor of the steps Genex runs on its own, with no card: a hook, an observer, a lock's person-first
+  // probe, a folder workers may write in, a harness tool or a readiness check.
+  if (reason === PluginChangeReason.Reloaded && harnessSteps(next) !== harnessSteps(current))
+    throw new Error(MESSAGE.StepsChanged());
+}
+
+/** What of a plugin Genex runs or widens on its own, without asking, in one comparable form. */
+function harnessSteps(m: PluginManifest): string {
+  return JSON.stringify({
+    hooks: m.hooks ?? [],
+    observers: m.observers ?? [],
+    locks: m.locks ?? [],
+    folders: m.folders ?? [],
+    harness: m.tools.filter((tool) => !isAgentTool(tool)),
+    ready: m.tools.map((tool) => [tool.name, tool.ready ?? null]),
+  });
 }
 const hasCapability = (p: { manifest: PluginManifest } | undefined, capability: PluginCapability) =>
   Boolean(p?.manifest.capabilities.includes(capability));
@@ -338,6 +615,8 @@ const newerVersion = (next: string | undefined, current: string) =>
 export interface PluginMcpLaunch {
   /** The installed package, the only place a `node` server's script may live. */
   packageDir: string;
+  /** A bundled plugin's seed folder in the app, which keeps the dependencies its copy leaves out. */
+  seed?: string;
   storageRoot(): Promise<string>;
   projectStorage(project: string): Promise<string>;
   settings(): Promise<Record<string, unknown>>;
@@ -367,14 +646,21 @@ export interface PluginMcpHost {
   /** A replaced plugin's servers (`<pluginId>-<server>`) lose every secret stored for them (M5). */
   erase?(pluginId: string, serverIds: string[]): Promise<void> | void;
 }
-/** Why a consent was declined, said about the tool `name`. */
+/** Why a consent was not approved, said about the tool `name`; nobody answering is not a no. */
 const DECLINED_MESSAGE: Record<PluginConsentBy, (name: string) => string> = {
   user: (name) => `User declined ${name}`,
-  timeout: (name) => `No answer: ${name} was declined`,
+  timeout: (name) => `Nobody answered ${name}. The user may be away, so this is not a no: ask again later`,
   stop: (name) => `${name} was declined because the session stopped`,
   turn: (name) => `${name} was declined because the turn ended`,
   restart: (name) => `${name} was declined because the turn ended`,
+  // A mode answers only with a yes; listed so every ending has its words.
+  mode: (name) => `${name} was answered by the chat's mode`,
 };
+/** Rejects with the reason `signal` is aborted with, once it is: a host tool call's cut-off. */
+function cutOffOf(signal: AbortSignal): Promise<never> {
+  return new Promise((_, reject) => signal.addEventListener("abort", () => reject(signal.reason), { once: true }));
+}
+
 /** The user (or the session on their behalf) did not approve a tool that declares `confirmation`. */
 export class PluginConsentDeclined extends Error {
   readonly by: PluginConsentBy;
@@ -384,13 +670,46 @@ export class PluginConsentDeclined extends Error {
     this.by = by;
   }
 }
+
+/** A bundled seed's dependencies stay in the app: its copy in the profile leaves them out. */
+const SEED_DEPENDENCIES = "node_modules";
+
+/** A copy filter for seed `seed`: everything but its top-level dependencies folder. */
+function withoutSeedDependencies(seed: string): (source: string) => boolean {
+  const dependencies = path.join(path.resolve(seed), SEED_DEPENDENCIES);
+  return (source) => path.resolve(source) !== dependencies;
+}
+
+/** The parts of `PluginRegistry.init`, in order, as `onInitStep` names them when each finishes. */
+export const PluginInitStep = {
+  /** The saved install records read and checked. */
+  Records: "records",
+  /** One bundled seed copied into the profile (a first launch, or a lost copy); named with its plugin. */
+  Seed: "seed",
+  /** Updates that waited for a lease applied. */
+  Pending: "pending",
+  /** The records written back. */
+  Saved: "saved",
+  /** Copies no record names removed. */
+  Swept: "swept",
+  /** Packages with no record listed. */
+  Unlisted: "unlisted",
+  /** Saved accounts unlocked again. */
+  Accounts: "accounts",
+} as const;
+export type PluginInitStep = (typeof PluginInitStep)[keyof typeof PluginInitStep];
+
 export class PluginRegistry {
   #installed = new Map<string, Installed>();
   #seedManifests = new Map<string, PluginManifest>();
   #unlisted = new Map<string, Unlisted>();
+  /** Each package's manifest words in Genex's language, from its own `locales/` (`manifest-words.ts`). */
+  #words = new ManifestWords();
   /** Where each bundled seed lives, by plugin id: its picture outlives an installed copy made before it had one. */
   #seedDirectories = new Map<string, string>();
   #processes = new Map<string, PluginProcess>();
+  /** Each host tool call in flight, by the controller `abortCalls` cuts it off with, and whose call it is. */
+  #hostCalls = new Map<AbortController, PluginBinding>();
   #errors = new Map<string, string>();
   /** Bundled records whose package copy is gone at startup; `#installSeeds` copies their seed again. */
   #lostSeedCopies = new Map<string, Installed>();
@@ -455,7 +774,7 @@ export class PluginRegistry {
     const state = { timer: undefined as ReturnType<typeof setTimeout> | undefined, expires };
     this.#accountPolls.set(id, state);
     const tick = async () => {
-      if (this.#accountPolls.get(id) !== state || !this.enabled(id)) return;
+      if (this.#accountPolls.get(id) !== state || !this.#runs(this.#installed.get(id))) return;
       if (Date.now() >= state.expires) {
         this.#accountPolls.delete(id);
         this.#saveAuthorized.delete(id);
@@ -486,10 +805,23 @@ export class PluginRegistry {
   #watchers = new Map<string, { watcher: { close(): void }; timer: ReturnType<typeof setTimeout> | undefined }>();
   /** How `watch` notices edits in a local plugin's folder. */
   watchFolder: WatchFolder = watchWithFs;
+  /** Whether agents write in `directory` (a game's folder, the scratch of workers' copies): never watched. The core sets it. */
+  agentWritable: (directory: string) => Promise<boolean> = async () => false;
   #pendingReason = new Map<string, PluginChange["reason"]>();
   #tail: Promise<unknown> = Promise.resolve();
   readonly root: string;
   readonly seeds: string;
+  /**
+   * The `game-engine` plugins' long jobs in the studio's process sandbox (`sandbox.run`). The host
+   * owns them past the call that started them, and a plugin's end with its backend ends them too.
+   * Absent, those services fail closed.
+   */
+  sandboxJobs:
+    | {
+        call(id: string, method: string, args: unknown, binding: PluginBinding | undefined): Promise<unknown>;
+        stopAll(id?: string): Promise<void>;
+      }
+    | undefined;
   nativeService:
     | ((
         manifest: PluginManifest,
@@ -527,19 +859,44 @@ export class PluginRegistry {
       ) => Record<string, unknown> | Promise<Record<string, unknown>>)
     | undefined;
   seedEnabled: Record<string, boolean> = {};
+  /**
+   * The plugin whose account is the app's own (Genex) and the actions it answers while off: its
+   * sign-in and Publish belong to the person, not to the agent. Turned off, it loses its tools,
+   * servers, skills, hooks and toolbar but keeps its account signed in and serves these actions;
+   * it can't be removed. The host sets it.
+   */
+  appAccount: { id: string; actions: readonly string[] } | undefined;
+  /**
+   * A plugin whose backend talks to another API than its own default, as another account: a
+   * development profile's stand (`main/play/origins.ts`). Its backend is told the API
+   * (`PLUGIN_API_ENV`) and holds that account's token as its session lease; its own saved account
+   * is neither read nor written while it is set. The host sets it once, before any backend starts.
+   */
+  hostAccount: PluginHostAccount | undefined;
   readonly bootstrap: string;
-  readonly service: (id: string, method: string, args: any, binding?: PluginBinding) => Promise<unknown>;
+  /** The host services, told which call each request is made on behalf of (absent for the host's own). */
+  readonly service: (
+    id: string,
+    method: string,
+    args: any,
+    binding?: PluginBinding,
+    invocation?: PluginInvocation,
+  ) => Promise<unknown>;
   /** One source for the `plugins.changed` UI event; the host sets it. A throwing hook never fails a mutation. */
   onChange: ((change: PluginChange) => void) | undefined;
-  /** Asks the user before a tool that declares `confirmation` runs. Absent → such tools fail closed. */
+  /**
+   * Asks the user before a tool that declares `confirmation` runs, or a local plugin's agent tool
+   * (`offerAlways`: the card offers Always allow, answered with `always`). Absent → such tools fail closed.
+   */
   consent:
     | ((
         pluginId: string,
-        tool: PluginTool,
+        tool: PluginManifestTool,
         args: Record<string, unknown>,
         binding: PluginBinding,
         signal?: AbortSignal,
-      ) => Promise<{ approved: boolean; by: PluginConsentBy }>)
+        options?: PluginConsentOptions,
+      ) => Promise<{ approved: boolean; by: PluginConsentBy; always?: boolean; input?: string }>)
     | undefined;
   /** Re-acquires a removed plugin whose origin is github/index/catalog; the marketplace host sets it. */
   reacquire: ((info: PluginInfo) => Promise<void>) | undefined;
@@ -550,6 +907,11 @@ export class PluginRegistry {
    * that has since changed on disk. Bundled seeds stay `not scanned`, as they always were.
    */
   scan: ((directory: string, manifest: PluginManifest) => Promise<PluginScan>) | undefined;
+  /**
+   * Hears each part of `init` as it finishes, and each seed a first launch copies (`plugin`), for the
+   * start's log: on a fresh Windows 11 the plugin setup outlasted the whole start budget.
+   */
+  onInitStep: ((step: PluginInitStep, plugin?: string) => void) | undefined;
   /** Developer sink for backend stderr lines. Never user-facing status: a backend may print provider output. */
   debug: ((id: string, line: string) => void) | undefined;
   /** The user's login PATH for backends to start with; the host sets it. Absent → the app's own. */
@@ -564,7 +926,13 @@ export class PluginRegistry {
     root: string,
     seeds: string,
     bootstrap: string,
-    service: (id: string, method: string, args: any, binding?: PluginBinding) => Promise<unknown>,
+    service: (
+      id: string,
+      method: string,
+      args: any,
+      binding?: PluginBinding,
+      invocation?: PluginInvocation,
+    ) => Promise<unknown>,
   ) {
     this.root = root;
     this.seeds = seeds;
@@ -577,12 +945,23 @@ export class PluginRegistry {
     return next;
   }
   #fire(change: PluginChange) {
+    // Its package may be another copy now, or gone: its words are read again when next shown.
+    this.#words.forget();
     try {
       this.onChange?.(change);
     } catch {}
   }
   #packages() {
     return path.join(this.root, PACKAGES_DIR);
+  }
+  /** Whether `directory` is one of the app's bundled seeds. */
+  #isSeed(directory: string): boolean {
+    return path.dirname(path.resolve(directory)) === path.resolve(this.seeds);
+  }
+  /** A bundled install's seed folder, where its dependencies stay (`PLUGIN_SEED_ENV`); nothing for any other. */
+  #seedOption(p: Installed): { seed?: string } {
+    if (p.source !== PluginSourceKind.Bundled) return {};
+    return { seed: this.#seedDirectories.get(p.manifest.id) ?? path.join(this.seeds, p.manifest.id) };
   }
   #owned(directory: string) {
     return path.resolve(directory).startsWith(path.resolve(this.#packages()) + path.sep);
@@ -620,7 +999,7 @@ export class PluginRegistry {
         if (!this.#owned(record.directory)) throw new Error(MESSAGE.OutsideStorage);
         if (!(await isDirectory(record.directory))) {
           // Older builds refused such a record, then swept the copy it named; a seed can be copied again.
-          if (record.source !== PluginSourceKind.Bundled) throw new Error(MESSAGE.PackageMissing);
+          if (record.source !== PluginSourceKind.Bundled) throw new Error(MESSAGE.PackageMissing());
           this.#lostSeedCopies.set(id, record);
           return;
         }
@@ -643,7 +1022,13 @@ export class PluginRegistry {
       await inspectPackage(directory);
       const installed = path.join(this.#packages(), manifest.id, `${manifest.version}-${randomUUID()}`);
       await mkdir(path.dirname(installed), { recursive: true });
-      await cp(directory, installed, { recursive: true });
+      // A clone where the disk can (APFS): every profile installs every seed, and a copy is written only once edited.
+      await cp(directory, installed, {
+        recursive: true,
+        filter: withoutSeedDependencies(directory),
+        mode: constants.COPYFILE_FICLONE,
+      });
+      this.onInitStep?.(PluginInitStep.Seed, manifest.id);
       const lost = this.#lostSeedCopies.get(manifest.id);
       this.#lostSeedCopies.delete(manifest.id);
       this.#installed.set(manifest.id, {
@@ -658,7 +1043,7 @@ export class PluginRegistry {
       });
     }
     // A lost copy of a plugin Studio no longer ships has nothing to be copied from.
-    for (const [id, p] of this.#lostSeedCopies) this.#refuse(id, p, new Error(MESSAGE.PackageMissing));
+    for (const [id, p] of this.#lostSeedCopies) this.#refuse(id, p, new Error(MESSAGE.PackageMissing()));
     this.#lostSeedCopies.clear();
   }
   /**
@@ -680,23 +1065,30 @@ export class PluginRegistry {
     }
   }
   async init() {
+    const step = (name: PluginInitStep) => this.onInitStep?.(name);
     await mkdir(this.root, { recursive: true, mode: 0o700 });
     for (const [id, p] of Object.entries(await this.#readRecords("installed.json"))) await this.#loadInstalled(id, p);
+    step(PluginInitStep.Records);
     await this.#installSeeds();
     await this.#applyPending();
     await atomicWriteJson(path.join(this.root, "pending.json"), {});
+    step(PluginInitStep.Pending);
     await this.#save();
+    step(PluginInitStep.Saved);
     await this.#sweep();
+    step(PluginInitStep.Swept);
     await this.#discoverUnlisted();
+    step(PluginInitStep.Unlisted);
     // A previous successful user connection grants restoration, not a new browser sign-in.
     // One attempt per launch; a refused OS unlock remains actionable, never retried by polling.
     for (const id of this.#installed.keys()) await this.#restoreSavedAccount(id);
+    step(PluginInitStep.Accounts);
   }
   /** A lifecycle transition can restore previous consent; it never starts browser sign-in. */
   async #restoreSavedAccount(id: string) {
     const p = this.#installed.get(id);
     const hasAccount = Boolean(p?.manifest.account) && hasCapability(p, PluginCapability.Credentials);
-    if (!p?.rememberAccount || !isLive(p) || !hasAccount) return;
+    if (!p?.rememberAccount || !this.#runs(p) || !hasAccount) return;
     try {
       await this.#account(id).unlock();
       if (await this.#account(id).get()) this.#mcpAuthorized.add(id);
@@ -822,6 +1214,7 @@ export class PluginRegistry {
         origin: p.origin,
         scan: p.scan,
         watching: this.#watchers.has(id),
+        ...(p.allowed?.length ? { allowedTools: [...p.allowed] } : {}),
         ...(p.lastSkillChange ? { lastSkillChange: p.lastSkillChange } : {}),
         ...this.#iconUrl(id),
       }),
@@ -841,6 +1234,24 @@ export class PluginRegistry {
       }),
     );
     return [...installed, ...unlisted];
+  }
+  /**
+   * The plugins as {@link list} gives them, each manifest's texts a person reads in `locale` (the
+   * app's language by default) from the plugin's own catalog: what the window shows. Every other
+   * field, of the manifest too, is the one `list` gives; the manifests the registry runs on stay English.
+   */
+  async displayList(locale: Locale = currentLocale()): Promise<PluginInfo[]> {
+    return Promise.all(
+      this.list().map(async (info) => {
+        const found = info.unlisted ? this.#unlisted.get(info.manifest.id) : this.#installed.get(info.manifest.id);
+        return found ? { ...info, manifest: await this.#words.manifest(info.manifest, found.directory, locale) } : info;
+      }),
+    );
+  }
+  /** Plugin `id`'s manifest with its texts a person reads in `locale` (the app's by default); undefined for no plugin. */
+  async displayManifest(id: string, locale: Locale = currentLocale()): Promise<PluginManifest | undefined> {
+    const found = this.#installed.get(id) ?? this.#unlisted.get(id);
+    return found ? this.#words.manifest(found.manifest, found.directory, locale) : undefined;
   }
   /** Publish every enabled plugin's servers once, after the host has set `mcpHost`. */
   async syncMcpServers() {
@@ -868,6 +1279,7 @@ export class PluginRegistry {
     const storageRoot = () => this.service(id, PluginService.StorageRoot, {}) as Promise<string>;
     return {
       packageDir: p.directory,
+      ...this.#seedOption(p),
       storageRoot,
       projectStorage: async (project) => {
         if (!MCP_PROJECT.test(project)) throw new Error(MESSAGE.InvalidProject);
@@ -897,13 +1309,59 @@ export class PluginRegistry {
   async hostCredentialFile(id: string): Promise<string | undefined> {
     return this.#mcpLaunch(id, this.#active(id)).credentialFile();
   }
+  /**
+   * The account token for the host's own calls (Play's people, likes and sign-in tickets): the same
+   * gate as {@link hostCredentialFile}, so nothing until the user unlocked the account, and nothing
+   * for a plugin that is removed or off, unless it is the app's account plugin, whose account stays.
+   */
+  async hostCredential(id: string): Promise<string | undefined> {
+    if (!this.#runs(this.#installed.get(id))) return undefined;
+    return this.#mcpCredential(id);
+  }
   #active(id: string) {
     const p = this.#installed.get(id);
     if (!p || !isLive(p)) throw new Error(MESSAGE.Unavailable(id));
     return p;
   }
+  /** Whether `p` is the app's account plugin, installed: on or off, its account stays. */
+  #keepsAccount(p: Installed | undefined): boolean {
+    return Boolean(p && !p.removed && this.appAccount?.id === p.manifest.id);
+  }
+  /** Whether `p`'s backend may run now: it is on, or it is the app's account plugin. */
+  #runs(p: Installed | undefined): p is Installed {
+    return isLive(p) || this.#keepsAccount(p);
+  }
+  /** A plugin whose backend may run now (`#runs`), or Unavailable. */
+  #running(id: string): Installed {
+    const p = this.#installed.get(id);
+    if (!this.#runs(p)) throw new Error(MESSAGE.Unavailable(id));
+    return p;
+  }
+  /**
+   * Whether the person may run action `name` of plugin `id` now: the plugin is on, or it is the
+   * app's account plugin and the action is one of those it keeps while off.
+   */
+  servesAction(id: string, name: string): boolean {
+    const p = this.#installed.get(id);
+    if (isLive(p)) return true;
+    return this.#keepsAccount(p) && (this.appAccount?.actions ?? []).includes(name);
+  }
+  /** The plugin behind an action the person may run now (`servesAction`), or Unavailable. */
+  #serving(id: string, name: string): Installed {
+    if (!this.servesAction(id, name)) throw new Error(MESSAGE.Unavailable(id));
+    return this.#running(id);
+  }
   enabled(id: string) {
     return isLive(this.#installed.get(id));
+  }
+  /**
+   * The engines the installed plugins declare (`engine` in a `game-engine` plugin's manifest), on or
+   * off: a game an engine plugin linked keeps building in that engine while the plugin is turned
+   * off, and reads as a web game again only once the plugin is removed.
+   */
+  engines(): EngineCatalog {
+    const installed = [...this.#installed.values()].filter((p) => !p.removed);
+    return engineCatalog(installed.map((p) => p.manifest));
   }
   #live(): PluginInfo[] {
     return this.list().filter(isLive);
@@ -911,21 +1369,174 @@ export class PluginRegistry {
   /**
    * The tools, the brief's plugin guidance and the plugins and skills behind them, all from one
    * view of the live plugins: a session that took them apart could be told about a skill whose
-   * tools it was never given, or given tools it was never told about.
+   * tools it was never given, or given tools it was never told about. All are those for a game
+   * `scope` (`gameKindOf`: facts alone, `[]` being no kind yet and served as a web game; facts and
+   * what the folder holds; or an engine of the older vocabulary), by `pluginReach`; a skill that
+   * applies only in part of the folder says where. A session narrowed to some tools (`offered`, a run's sub-agent) gets
+   * those, and the guidance, skills and skill reader of only the plugins they belong to.
    */
-  snapshot(): PluginSnapshot {
-    const live = this.#live().map((p) => p.manifest);
+  snapshot(scope: readonly FactRef[] | GameKind | GameEngine = [], offered?: ToolOffered): PluginSnapshot {
+    const game = gameKindOf(scope);
+    const parts = this.#live()
+      .map((p) => ({ manifest: p.manifest, reach: pluginReach(p.manifest, game, offered) }))
+      .filter((part) => takesPart(part, offered !== undefined));
     return {
-      tools: live.flatMap(agentTools),
-      guidance: live.flatMap(skillGuidance).join("\n\n"),
+      tools: parts.flatMap(agentTools),
+      guidance: parts.flatMap((part) => skillGuidance(part, game)).join("\n\n"),
       applied: {
-        plugins: live.map((m) => m.id),
-        skills: live.flatMap((m) => m.skills.map((s) => `${m.id}/${s.name}`)),
+        plugins: parts.map((part) => part.manifest.id),
+        skills: parts.flatMap(({ manifest, reach }) => reach.skills.map((s) => `${manifest.id}/${s.name}`)),
       },
+      kinds: parts.flatMap(kindOffers),
     };
   }
   tools(): PluginTool[] {
     return this.snapshot().tools;
+  }
+  /**
+   * The scaffold of plugin `pluginId` whose tool is `toolName`, as studio.json records it once that
+   * tool made a project (`ScaffoldRecord`, rules `[]` when it declares none); undefined when no
+   * scaffold names the tool.
+   */
+  scaffoldOf(pluginId: string, toolName: string): ScaffoldRecord | undefined {
+    const manifest = this.list().find((p) => p.manifest.id === pluginId)?.manifest;
+    const scaffold = manifest?.scaffolds?.find((declared) => declared.tool === toolName);
+    if (!manifest || !scaffold) return undefined;
+    return {
+      plugin: manifest.id,
+      id: scaffold.id,
+      label: scaffold.label,
+      facts: structuredClone(scaffold.facts ?? []),
+    };
+  }
+  /**
+   * The project-detection rules of the enabled plugins (`detect`), each with its plugin as the
+   * source. A plugin that is installed but off detects nothing.
+   */
+  detectRules(): SourcedFactRule[] {
+    return this.#live().flatMap((p) =>
+      (p.manifest.detect ?? []).map((rule) => ({ rule, source: pluginFactSource(p.manifest.id) })),
+    );
+  }
+  /**
+   * The enabled plugins' `workspace` and `assets` sections, each with the facts it reaches (its own
+   * `facts`, or the plugin's `detect` facts). A plugin that is installed but off adds none.
+   */
+  workspaceSections(): PluginWorkspace[] {
+    return this.#live().flatMap((p) => pluginWorkspaces(p.manifest));
+  }
+  /**
+   * The kinds of worker a lead on a game `scope` (as for `snapshot`) may start: the enabled
+   * plugins' `workerTypes`, in plugin-id order, each with its tools as agent names, and left out
+   * when none of those tools reaches the game (`pluginReach`, the other plugin being on). The
+   * first declaration of an id wins.
+   */
+  workerTypes(scope: readonly FactRef[] | GameKind | GameEngine = []): WorkerType[] {
+    const offered = this.snapshot(scope).tools.map((tool) => tool.name);
+    const seen = new Set<string>();
+    return this.#byId()
+      .flatMap((p) => pluginWorkerTypes(p.manifest))
+      .filter((type) => {
+        if (seen.has(type.id) || !workerTypeOffered(type, offered)) return false;
+        seen.add(type.id);
+        return true;
+      });
+  }
+  /**
+   * The folders outside the game the enabled plugins' engine programs write to, `~` expanded,
+   * resolved and deduped: the write roots of workers and jobs. Turning a plugin on approves its
+   * folders for its engine programs; its page and its suggestion card name them first.
+   */
+  workerFolders(): string[] {
+    return [...new Set(this.#byId().flatMap((p) => pluginFolderPaths(p.manifest)))];
+  }
+  /**
+   * The handlers a moment runs for a game (`shared/plugin-hooks.ts` `hookPlan`): the enabled
+   * plugins' hooks in list order; `tool.*` only those of the plugin `own` whose tool is called.
+   */
+  hookPlan(on: HookEvent, game: GameKind, own?: string): HookStep[] {
+    return hookPlan(this.#hooked(), on, game, own);
+  }
+  /** The handlers a chat message's checkpoint runs for a game (`shared/plugin-hooks.ts` `messageCheckpointPlan`). */
+  messageCheckpointPlan(game: GameKind): HookStep[] {
+    return messageCheckpointPlan(this.#hooked(), game);
+  }
+  /** The moments some enabled plugin has a handler at for a game: what its descriptor lists. */
+  hookEvents(game: GameKind): HookEvent[] {
+    return hookEventsOf(this.#hooked(), game);
+  }
+  #hooked() {
+    return this.#live().map((p) => ({ id: p.manifest.id, manifest: p.manifest }));
+  }
+  /**
+   * A game's observers (`shared/observers.ts` `observersFor`): those of every installed plugin not
+   * removed, on or off (its Live view still shows), then Genex's own preview of each web game.
+   */
+  observers(game: GameKind): ObserverRef[] {
+    const installed = [...this.#installed.values()].filter((p) => !p.removed);
+    return observersFor(
+      installed.map((p) => ({ id: p.manifest.id, enabled: p.enabled, manifest: p.manifest })),
+      game,
+    );
+  }
+  /** The plugin, tool and locks of an observer by key (`<plugin>/<id>`) whose plugin is on, else null. */
+  observerTool(key: string): { pluginId: string; tool: string; needs: string[] } | null {
+    const [pluginId = "", id, ...rest] = key.split("/");
+    if (rest.length > 0) return null;
+    const p = this.#installed.get(pluginId);
+    if (!p || !isLive(p)) return null;
+    const observer = p.manifest.observers?.find((entry) => entry.id === id);
+    if (!observer) return null;
+    const tool = p.manifest.tools.find((entry) => entry.name === observer.tool);
+    return { pluginId, tool: observer.tool, needs: [...(tool?.needs ?? [])] };
+  }
+  /** An enabled plugin's lock by id, or null. */
+  lockOf(pluginId: string, lockId: string): PluginLock | null {
+    const p = this.#installed.get(pluginId);
+    if (!isLive(p)) return null;
+    return p?.manifest.locks?.find((lock) => lock.id === lockId) ?? null;
+  }
+  /**
+   * The locks a call holds, by the agent name of a tool (`<plugin>__<tool>`) or of a plugin
+   * connector's tool (`<plugin>-<server>__<tool>`) of an enabled plugin; none for any other name.
+   */
+  needsOf(agentName: string): Array<{ plugin: string; lock: PluginLock }> {
+    for (const { manifest } of this.#live()) {
+      const needs = declaredNeeds(manifest, agentName);
+      if (needs) return locksNamed(manifest, needs);
+    }
+    return [];
+  }
+  /**
+   * The longest one call of a plugin tool (by agent name) may run in its backend: the host's
+   * ceiling, the tool's own (`timeoutMs`), or its plugin's longest native job and a margin. The
+   * ceiling for an unknown name.
+   */
+  callCeilingOf(agentName: string): number {
+    const [id = "", tool = ""] = agentName.split("__");
+    const p = this.#installed.get(id);
+    const nativeJobTimeouts = (p?.manifest.nativeJobs ?? []).map((j) => j.timeoutMs + NATIVE_JOB_MARGIN_MS);
+    const declared = p?.manifest.tools.find((t) => t.name === tool)?.timeoutMs ?? 0;
+    return Math.max(PLUGIN_CALL_TIMEOUT_MS, declared, ...nativeJobTimeouts);
+  }
+  /**
+   * The `project` locks of the enabled plugins that one of their agent tools or connectors reaching
+   * a game needs: what a worker writing in place in that game holds for its whole life. Only what
+   * the worker's session can call counts; the harness's own tools are never its.
+   */
+  locksFor(game: GameKind): Array<{ plugin: string; lock: PluginLock }> {
+    return this.#live().flatMap(({ manifest }) => {
+      const needed = new Set(
+        [...manifest.tools.filter(isAgentTool), ...(manifest.mcpServers ?? [])]
+          .filter((part) => scopeReaches(part.facts, game))
+          .flatMap((part) => part.needs ?? []),
+      );
+      return locksNamed(manifest, [...needed]).filter(({ lock }) => lock.per === LockScope.Project);
+    });
+  }
+  /** The enabled plugins in plugin-id order. */
+  #byId(): PluginInfo[] {
+    return this.#live().sort((a, b) => (a.manifest.id < b.manifest.id ? -1 : 1));
   }
   toolbar(): Array<{ plugin: string; item: PluginToolbarItem }> {
     return this.#live().flatMap((p) => (p.manifest.toolbar ?? []).map((item) => ({ plugin: p.manifest.id, item })));
@@ -963,8 +1574,7 @@ export class PluginRegistry {
     // An update or a hot reload says which skills it touched: their text reaches every later brief.
     const skills = previous && !previous.removed ? pluginSkillChange(previous, p) : undefined;
     p.lastSkillChange = skills;
-    this.#processes.get(id)?.stop();
-    this.#processes.delete(id);
+    this.#stopBackend(id);
     if (previous && identityKey(this.#identity(previous)) !== identityKey(this.#identity(p)))
       await this.#erase(id, previous);
     this.#installed.set(id, p);
@@ -1010,35 +1620,63 @@ export class PluginRegistry {
   async setEnabled(id: string, enabled: boolean) {
     return this.#serial(async () => {
       const p = this.#installed.get(id);
-      if (!p || p.removed) throw new Error(MESSAGE.InstallFirst);
+      if (!p || p.removed) throw new Error(MESSAGE.InstallFirst());
       const wasEnabled = p.enabled;
+      // A local plugin loaded off ran none of its code: its backend is proven as the person turns it on.
+      if (enabled && !wasEnabled && p.source === PluginSourceKind.Local) await this.#probe(p.directory, p.manifest);
       p.enabled = enabled;
+      if (enabled) delete p.turnedOff;
+      else p.turnedOff = true;
       const pending = this.#pending.get(id);
       if (pending) pending.enabled = enabled;
-      if (!enabled) {
-        this.#lockAccount(id);
-        this.#unwatch(id);
-        this.#processes.get(id)?.stop();
-        this.#processes.delete(id);
-      }
+      if (!enabled) this.#turnOff(id, p);
       await this.#save();
       if (enabled && !wasEnabled) await this.#restoreSavedAccount(id);
       await this.#mcpSync(id);
       this.#fire({ id, reason: enabled ? PluginChangeReason.Enabled : PluginChangeReason.Disabled });
     });
   }
+  /**
+   * What turning a plugin off stops: its tools' grants, its account, its folder's watch and its
+   * backend. The app's account plugin keeps its account, a sign-in under way and its backend, which
+   * serves the account and a Publish under way: only its tools and servers go (`isLive`).
+   */
+  #turnOff(id: string, p: Installed) {
+    // Turned off, its tools ask again once it is back on.
+    delete p.allowed;
+    if (this.#keepsAccount(p)) return;
+    this.#lockAccount(id);
+    this.#unwatch(id);
+    this.#stopBackend(id);
+  }
+  /** Stops the plugin's backend and ends its sandbox jobs with their process trees. */
+  #stopBackend(id: string) {
+    this.#processes.get(id)?.stop();
+    this.#processes.delete(id);
+    void this.sandboxJobs?.stopAll(id).catch(() => {});
+  }
+  /**
+   * A sign-in to the app's account finished: its plugin turns on, unless the person turned it off
+   * themselves or it failed to load. True when it was turned on now.
+   */
+  async enableForSignIn(id: string): Promise<boolean> {
+    const p = this.#installed.get(id);
+    if (!p || !this.#keepsAccount(p) || p.enabled || p.turnedOff || this.#errors.has(id)) return false;
+    await this.setEnabled(id, true);
+    return true;
+  }
   async remove(id: string) {
     return this.#serial(async () => {
       const p = this.#installed.get(id);
       if (!p) throw new Error(MESSAGE.UnknownPlugin);
+      if (this.#keepsAccount(p)) throw new Error(MESSAGE.AccountPlugin(p.manifest.name));
       p.enabled = false;
       p.removed = true;
       this.#lockAccount(id);
       this.#unwatch(id);
       this.#pending.delete(id);
       this.#pendingReason.delete(id);
-      this.#processes.get(id)?.stop();
-      this.#processes.delete(id);
+      this.#stopBackend(id);
       await this.#save();
       await this.#mcpSync(id);
       const owned = path.join(this.#packages(), id);
@@ -1060,16 +1698,16 @@ export class PluginRegistry {
         p?.scan,
       );
     if (origin?.kind === PluginSourceKind.Local) {
-      if (!origin.directory || !(await isDirectory(origin.directory))) throw new Error(MESSAGE.FolderGone);
+      if (!origin.directory || !(await isDirectory(origin.directory))) throw new Error(MESSAGE.FolderGone());
       // No `scan` argument: the folder is read again, so the verdict is recomputed rather than inherited.
       return this.installLocal(origin.directory, PluginSourceKind.Local, p?.manifest.capabilities, origin);
     }
-    if (!origin) throw new Error(MESSAGE.OriginUnknown);
+    if (!origin) throw new Error(MESSAGE.OriginUnknown());
     const info = this.list().find((x) => x.manifest.id === id);
-    if (!this.reacquire || !info) throw new Error(MESSAGE.NeedsMarketplace);
+    if (!this.reacquire || !info) throw new Error(MESSAGE.NeedsMarketplace());
     await this.reacquire(info);
     const after = this.#installed.get(id);
-    if (!after || after.removed) throw new Error(MESSAGE.NotReinstalled);
+    if (!after || after.removed) throw new Error(MESSAGE.NotReinstalled());
     return after.manifest;
   }
   async installLocal(
@@ -1107,7 +1745,9 @@ export class PluginRegistry {
     // and all, and refusing here would leave a reinstall with no way forward at all.
     const updating = previous && !previous.removed && !replacing ? previous : undefined;
     if (updating) assertUpdateReviewed(manifest, updating.manifest, approvedCapabilities, reason);
-    const destination = await this.#stage(directory, manifest);
+    const enabled = startsEnabled(source, previous, replacing);
+    // A local plugin that starts off runs none of its code: its backend is proven when the person turns it on.
+    const destination = await this.#stage(directory, manifest, source !== PluginSourceKind.Local || enabled);
     // A staged install brings the scan the user was shown; anything else is scanned here, against
     // the copy that is actually being installed. A scan that throws records no verdict, never a wrong one.
     const verdict =
@@ -1120,7 +1760,7 @@ export class PluginRegistry {
       directory: destination,
       manifest,
       source,
-      enabled: previous?.removed || replacing ? true : (previous?.enabled ?? true),
+      enabled,
       removed: false,
       origin: recorded,
       identity,
@@ -1129,39 +1769,51 @@ export class PluginRegistry {
     await this.#commit(p, reason);
     return manifest;
   }
-  /** Copy the package into Studio's storage, check it again there, and prove its backend starts. */
-  async #stage(directory: string, manifest: PluginManifest): Promise<string> {
+  /** Copy the package into Studio's storage, check it again there, and prove its backend starts (`probe`). */
+  async #stage(directory: string, manifest: PluginManifest, probe = true): Promise<string> {
     const destination = path.join(this.#packages(), manifest.id, `${manifest.version}-${randomUUID()}`);
     await mkdir(path.dirname(destination), { recursive: true });
     try {
+      const packaged = packageCopyFilter(directory);
+      // A bundled plugin restored from its seed leaves its dependencies there, as a first launch does.
+      const fromSeed = this.#isSeed(directory) ? withoutSeedDependencies(directory) : () => true;
       await cp(directory, destination, {
         recursive: true,
         errorOnExist: true,
         force: false,
-        filter: packageCopyFilter(directory),
+        filter: (source) => packaged(source) && fromSeed(source),
+        mode: constants.COPYFILE_FICLONE,
       });
       await inspectPackage(destination);
     } catch (e) {
       await rm(destination, { recursive: true, force: true });
       throw e;
     }
+    if (!probe) return destination;
+    try {
+      await this.#probe(destination, manifest, this.#isSeed(directory) ? directory : undefined);
+    } catch (e) {
+      await rm(destination, { recursive: true, force: true });
+      throw e;
+    }
+    return destination;
+  }
+  /** Prove a staged package's backend starts: it loads and answers a ping, with no host services. */
+  async #probe(directory: string, manifest: PluginManifest, seed?: string): Promise<void> {
     const probe = new PluginProcess(
       this.bootstrap,
-      path.join(destination, manifest.backend),
+      path.join(directory, manifest.backend),
       async () => {
         throw new Error(MESSAGE.NoHostServices);
       },
       () => {},
+      seed ? { seed } : {},
     );
     try {
       await probe.call("ping", "", {});
-    } catch (e) {
-      await rm(destination, { recursive: true, force: true });
-      throw e;
     } finally {
       probe.stop();
     }
-    return destination;
   }
   /** Activate now, or, while a session holds a lease on the plugin, wait as its pending update. */
   async #commit(p: Installed, reason: PluginChange["reason"] | undefined) {
@@ -1199,18 +1851,19 @@ export class PluginRegistry {
   }
   async installCatalog(id: string, approvedCapabilities: string[]) {
     const entry = (await this.catalog()).find((p) => p.manifest.id === id);
-    if (!entry) throw new Error(MESSAGE.NotInCatalog);
+    if (!entry) throw new Error(MESSAGE.NotInCatalog());
     if (!entry.url.startsWith("https://") || !SHA256_HEX.test(entry.sha256))
-      throw new Error(MESSAGE.InvalidCatalogArtifact);
+      throw new Error(MESSAGE.InvalidCatalogArtifact());
     const bytes = await downloadArtifact(entry.url);
-    if (createHash("sha256").update(bytes).digest("hex") !== entry.sha256) throw new Error(MESSAGE.DigestMismatch);
+    if (createHash("sha256").update(bytes).digest("hex") !== entry.sha256) throw new Error(MESSAGE.DigestMismatch());
     return this.installEnvelope(
       bytes,
       PluginSourceKind.Catalog,
       approvedCapabilities,
       { kind: PluginSourceKind.Catalog, url: entry.url, sha256: entry.sha256 },
       async (manifest) => {
-        if (canonicalManifest(manifest) !== canonicalManifest(entry.manifest)) throw new Error(MESSAGE.CatalogMismatch);
+        if (canonicalManifest(manifest) !== canonicalManifest(entry.manifest))
+          throw new Error(MESSAGE.CatalogMismatch());
         return undefined;
       },
     );
@@ -1257,10 +1910,12 @@ export class PluginRegistry {
     this.#unwatch(id);
     if (!enabled) return;
     const p = this.#installed.get(id);
-    if (!p || !isLive(p)) throw new Error(MESSAGE.EnableFirst);
+    if (!p || !isLive(p)) throw new Error(MESSAGE.EnableFirst());
     const directory = p.origin?.kind === PluginSourceKind.Local ? p.origin.directory : undefined;
-    if (!directory) throw new Error(MESSAGE.OnlyLocalWatch);
-    if (!(await isDirectory(directory))) throw new Error(MESSAGE.FolderGone);
+    if (!directory) throw new Error(MESSAGE.OnlyLocalWatch());
+    if (!(await isDirectory(directory))) throw new Error(MESSAGE.FolderGone());
+    // An agent's edit there would run as soon as it reloads, with no card: such a folder is loaded again by hand.
+    if (await this.agentWritable(directory)) throw new Error(MESSAGE.WatchAgentFolder());
     const entry: { watcher: { close(): void }; timer: ReturnType<typeof setTimeout> | undefined } = {
       watcher: this.watchFolder(directory, () => {
         if (this.#watchers.get(id) !== entry) return;
@@ -1314,18 +1969,28 @@ export class PluginRegistry {
     if (method === PluginService.CredentialsClear && !isActionAmong(invocation, [actions.disconnect]))
       throw new Error(MESSAGE.DisconnectRequired);
   }
+  /**
+   * The account services of a plugin on another account (`hostAccount`): its token is the lease and
+   * what an unlock reads; nothing is saved, and signing out is that account's own (Play's).
+   */
+  async #hostAccountService(account: PluginHostAccount, method: string): Promise<unknown> {
+    if (method === PluginService.CredentialsWrite) throw new Error(MESSAGE.HostAccount);
+    if (method === PluginService.CredentialsClear) return undefined;
+    return (await account.token().catch(() => undefined)) ?? null;
+  }
   /** The account services, answered from the session lease rather than the plugin services. */
   async #credentialService(id: string, p: Installed, method: string, args: any): Promise<unknown> {
+    if (this.hostAccount?.id === id) return this.#hostAccountService(this.hostAccount, method);
     if (method === PluginService.CredentialsSession) return this.#account(id).get();
     if (method === PluginService.CredentialsRead) {
       await this.#account(id).unlock();
-      this.#active(id);
+      this.#running(id);
       return this.#account(id).get();
     }
     if (method === PluginService.CredentialsClear) return this.#account(id).clear();
     const account = this.#account(id);
     await account.set(args.token);
-    this.#active(id);
+    this.#running(id);
     this.#saveAuthorized.delete(id);
     p.rememberAccount = true;
     await this.#save();
@@ -1348,7 +2013,7 @@ export class PluginRegistry {
   /** Every host service one plugin's backend calls, gated by its declared capabilities. */
   #hostService(id: string, p: Installed): ConstructorParameters<typeof PluginProcess>[2] {
     return async (method, args, binding, invocation) => {
-      this.#active(id);
+      this.#running(id);
       this.#assertAccountAccess(id, p, method, invocation);
       if (isNativeService(method)) return this.#nativeCall(p, method, args, binding, invocation);
       if (method === PluginService.SettingsRead) return this.settings(id);
@@ -1357,11 +2022,18 @@ export class PluginRegistry {
       if (!capability || !hasCapability(p, capability)) throw new Error(MESSAGE.CapabilityDenied);
       if (capability === PluginCapability.Credentials && isCredentialService(method))
         return this.#credentialService(id, p, method, args);
-      return this.service(id, method, args, binding);
+      return this.#answer(id, method, args, binding, invocation);
     };
   }
+  /** A gated host service: an engine plugin's sandbox job, or one the plugin services answer. */
+  #answer(id: string, method: string, args: unknown, binding?: PluginBinding, invocation?: PluginInvocation) {
+    if (!isSandboxService(method)) return this.service(id, method, args, binding, invocation);
+    if (!this.sandboxJobs) throw new Error(MESSAGE.SandboxUnavailable);
+    return this.sandboxJobs.call(id, method, args, binding);
+  }
+  /** The plugin's backend child, started on first use: an agent's tool reaches it only while the plugin is on. */
   #process(id: string) {
-    const p = this.#active(id);
+    const p = this.#running(id);
     let process = this.#processes.get(id);
     if (!process) {
       process = new PluginProcess(
@@ -1372,6 +2044,8 @@ export class PluginRegistry {
           if (this.#processes.get(id) === process) {
             this.#errors.set(id, error);
             this.#processes.delete(id);
+            // A backend that ended takes its jobs with it: nobody is left to read or stop them.
+            void this.sandboxJobs?.stopAll(id).catch(() => {});
             this.#fire({ id, reason: PluginChangeReason.Failed });
           }
         },
@@ -1382,6 +2056,8 @@ export class PluginRegistry {
             } catch {}
           },
           ...(this.toolPath ? { toolPath: this.toolPath } : {}),
+          ...this.#seedOption(p),
+          ...(this.hostAccount?.id === id ? { host: hostEnvOf(this.hostAccount) } : {}),
         },
       );
       this.#processes.set(id, process);
@@ -1389,38 +2065,158 @@ export class PluginRegistry {
     }
     return process;
   }
-  async tool(name: string, args: Record<string, unknown>, binding: PluginBinding, signal?: AbortSignal) {
+  /**
+   * Run one plugin tool by its agent name for `caller`. A tool its plugin keeps for the harness
+   * (`audience: "harness"`) runs only when the harness itself calls it: for any other caller it is
+   * unknown, refused before its arguments, consent or backend. `timeoutMs` lets a backend call run
+   * longer than the host's ceiling (a moment that opens an app), never shorter. `beforeRun` is
+   * awaited once the arguments are checked and the card answered, just before the call: an
+   * agent's turn at the locks its tool needs, so a refused call never waits for them.
+   */
+  async tool(
+    name: string,
+    args: Record<string, unknown>,
+    binding: PluginBinding,
+    signal?: AbortSignal,
+    caller: PluginToolAudience = PluginToolAudience.Agents,
+    timeoutMs = PLUGIN_CALL_TIMEOUT_MS,
+    beforeRun?: () => Promise<void>,
+  ) {
+    const run = await this.prepareTool(name, args, binding, signal, caller, timeoutMs);
+    await beforeRun?.();
+    return run();
+  }
+  /**
+   * Everything `tool` does before the call itself: the tool is known to `caller`, its arguments
+   * are checked and its consent card answered. Answers the call, to run once whatever it waits
+   * for (its locks) is given; a refusal is thrown here, before any wait.
+   */
+  async prepareTool(
+    name: string,
+    args: Record<string, unknown>,
+    binding: PluginBinding,
+    signal?: AbortSignal,
+    caller: PluginToolAudience = PluginToolAudience.Agents,
+    timeoutMs = PLUGIN_CALL_TIMEOUT_MS,
+  ): Promise<PreparedToolCall> {
     const [id, tool, ...extra] = name.split("__");
     const p = this.#active(id);
     // A plugin with file skills has its skill tool answered here, in the host: never by its backend.
     if (!extra.length && tool === PLUGIN_SKILL_TOOL && p.manifest.skills.some(isFileSkill))
-      return this.#readSkill(id, p, args);
+      return async () => this.#readSkill(id, p, args);
     const declaration = p.manifest.tools.find((t) => t.name === tool);
     if (extra.length || !declaration) throw new Error(MESSAGE.UnknownTool);
+    if (!isAgentTool(declaration) && caller !== PluginToolAudience.Harness) throw new Error(MESSAGE.UnknownTool);
     validateArguments(declaration, args);
     const host = declaration.host;
     if (host) this.#assertHostTool(p);
-    if (declaration.confirmation) {
-      const shown = host ? await this.#hostConsentArgs(id, host, args, binding) : args;
-      await this.#consented(id, name, declaration, shown, binding, signal);
-    }
-    if (host) return this.#runHostTool(id, host, args, binding, signal);
+    const asked = { p, name, declaration, args, binding, ...(signal ? { signal } : {}) };
+    const { confirmed, input } = await this.#askFirst(id, asked, caller);
+    // The plugin may have been turned off while the call waited its turn: each call checks again.
+    if (host)
+      return async () => {
+        this.#active(id);
+        return this.#runHostTool(id, host, args, binding, signal);
+      };
     const nativeJobTimeouts = (p.manifest.nativeJobs ?? []).map((j) => j.timeoutMs + NATIVE_JOB_MARGIN_MS);
-    return this.#process(id).call("tool", tool, args, binding, signal, Math.max(CALL_TIMEOUT_MS, ...nativeJobTimeouts));
+    const ceiling = Math.max(PLUGIN_CALL_TIMEOUT_MS, timeoutMs, declaration.timeoutMs ?? 0, ...nativeJobTimeouts);
+    // The person's edit on the card (`confirmationInput`) is the call's value for that parameter.
+    const parameter = declaration.confirmationInput?.parameter;
+    const callArgs = parameter && input !== undefined ? { ...args, [parameter]: input } : args;
+    return async () => {
+      this.#active(id);
+      return this.#process(id).call("tool", tool, callArgs, binding, signal, ceiling, { confirmed });
+    };
   }
-  /** Asks the user before a tool that declares `confirmation`; a no is thrown, and the plugin must still be live after. */
+  /**
+   * The card a call waits on, if any: a local plugin's agent tool asks with Genex's words first, its
+   * own question after them; any other tool asks its declared question. `confirmed` when the person
+   * approved this call's own card, with their edit of its field when it has one.
+   */
+  async #askFirst(id: string, asked: ConsentAsk, caller: PluginToolAudience): Promise<ConsentGiven> {
+    const { p, name, declaration, args, binding, signal } = asked;
+    if (localAgentCall(p, declaration, caller)) {
+      if (!asksEachCall(p, declaration, caller)) return { confirmed: false };
+      return this.#localConsented(id, p, name, declaration, args, binding, signal);
+    }
+    if (!declaration.confirmation) return { confirmed: false };
+    const host = declaration.host;
+    const shown = host ? await this.#hostConsentArgs(id, host, args, binding) : args;
+    return this.#consented(id, name, declaration, shown, binding, signal);
+  }
+  /**
+   * Asks the user before a tool that declares `confirmation`; a no is thrown, and the plugin must
+   * still be live after. Confirmed when the person's own click approved it, with their edit.
+   */
   async #consented(
     id: string,
     name: string,
-    declaration: PluginTool,
+    declaration: PluginManifestTool,
     args: Record<string, unknown>,
     binding: PluginBinding,
     signal?: AbortSignal,
-  ): Promise<void> {
+  ): Promise<ConsentGiven> {
     if (!this.consent) throw new Error(MESSAGE.ConsentUnavailable);
-    const { approved, by } = await this.consent(id, declaration, args, binding, signal);
+    const { approved, by, input } = await this.consent(id, declaration, args, binding, signal);
     if (!approved) throw new PluginConsentDeclined(name, by);
     this.#active(id);
+    return givenBy(by, input);
+  }
+  /**
+   * Asks the person before a local plugin's agent tool runs, offering Always allow; a no is thrown,
+   * and an Always allow lets that tool run without asking until its code changes or it is turned off.
+   * A tool with its own question asks it after Genex's words, every call, with no Always allow.
+   * True when the person's own click approved that question: Genex's words alone confirm nothing.
+   */
+  async #localConsented(
+    id: string,
+    p: Installed,
+    name: string,
+    declaration: PluginManifestTool,
+    args: Record<string, unknown>,
+    binding: PluginBinding,
+    signal?: AbortSignal,
+  ): Promise<ConsentGiven> {
+    if (!this.consent) throw new Error(MESSAGE.ConsentUnavailable);
+    const own = declaration.confirmation;
+    const confirmation = own
+      ? MESSAGE.LocalAccess(p.manifest.name, own)
+      : MESSAGE.LocalTool(p.manifest.name, declaration.name);
+    const asking = { ...declaration, confirmation };
+    const options = own ? {} : { offerAlways: true };
+    const { approved, by, always, input } = await this.consent(id, asking, args, binding, signal, options);
+    if (!approved) throw new PluginConsentDeclined(name, by);
+    // Granted for the code the person was asked about: a plugin loaded again or turned off since then
+    // runs nothing on this yes, and asks again.
+    this.#stillAsked(id, p);
+    if (always && !own) await this.#allow(id, p, declaration.name);
+    this.#stillAsked(id, p);
+    return own ? givenBy(by, input) : { confirmed: false };
+  }
+  /** Throws unless `p` is still the plugin's live record: the one the person was asked about. */
+  #stillAsked(id: string, p: Installed): void {
+    if (this.#active(id) !== p) throw new Error(MESSAGE.AskAgain(p.manifest.name));
+  }
+  /** The person's Always allow for one agent tool of a local plugin: saved and announced. */
+  async #allow(id: string, p: Installed, tool: string): Promise<void> {
+    await this.#serial(async () => {
+      // Only onto the live record asked about: one turned off or removed meanwhile keeps no grant.
+      if (this.#installed.get(id) !== p || !isLive(p) || (p.allowed ?? []).includes(tool)) return;
+      p.allowed = [...(p.allowed ?? []), tool];
+      await this.#save();
+      this.#fire({ id, reason: PluginChangeReason.Settings });
+    });
+  }
+  /** The person's Ask every time: every tool of the plugin asks again before it runs. */
+  async forgetAllowed(id: string): Promise<void> {
+    await this.#serial(async () => {
+      const p = this.#installed.get(id);
+      if (!p) throw new Error(MESSAGE.UnknownPlugin);
+      if (!p.allowed) return;
+      delete p.allowed;
+      await this.#save();
+      this.#fire({ id, reason: PluginChangeReason.Settings });
+    });
   }
   /**
    * A host tool runs a program Studio ships. The manifest reserves `host` for the Genex id, and an
@@ -1442,7 +2238,11 @@ export class PluginRegistry {
     if (!describe) throw new Error(MESSAGE.HostToolUnavailable);
     return describe(id, host, args, binding);
   }
-  #runHostTool(
+  /**
+   * A host tool's call, on its caller's signal and the registry's own: `abortCalls` ends it as cut
+   * off (`PluginCallCutOff`), at once, whatever the host's program does after.
+   */
+  async #runHostTool(
     id: string,
     host: PluginHostTool,
     args: Record<string, unknown>,
@@ -1451,7 +2251,17 @@ export class PluginRegistry {
   ): Promise<unknown> {
     const run = this.hostTool;
     if (!run) throw new Error(MESSAGE.HostToolUnavailable);
-    return run(id, host, args, binding, signal);
+    const controller = new AbortController();
+    this.#hostCalls.set(controller, binding);
+    const callSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
+    try {
+      const running = run(id, host, args, binding, callSignal);
+      // A cut-off call's own end comes later, into nobody's hands.
+      running.catch(() => {});
+      return await Promise.race([running, cutOffOf(controller.signal)]);
+    } finally {
+      this.#hostCalls.delete(controller);
+    }
   }
   /**
    * One page of a file skill, for the `<id>__skill` tool. Only a file the skill lists, spelled as
@@ -1483,9 +2293,20 @@ export class PluginRegistry {
     if (file !== undefined) throw new Error(MESSAGE.UndeclaredSkillFile);
     return skill.text;
   }
+  /**
+   * A judge's brief (`PluginJudge.brief`), read from the plugin's package through a checked handle:
+   * any installed plugin's, as a judge's session is briefed. Refused for a judge it does not declare.
+   */
+  async judgeBrief(id: string, judgeId: string): Promise<string> {
+    const p = this.#installed.get(id);
+    if (!p || p.removed) throw new Error(MESSAGE.UnknownPlugin);
+    const judge = p.manifest.judges?.find((entry) => entry.id === judgeId);
+    if (!judge) throw new Error(MESSAGE.UnknownJudge(id, judgeId));
+    return readJudgeBrief(p.directory, judge.brief);
+  }
   #connecting = new Map<string, Promise<any>>();
   async action(id: string, name: string, args: unknown, binding?: PluginBinding) {
-    const p = this.#active(id);
+    const p = this.#serving(id, name);
     if (name !== accountActionsOf(p.manifest).connect) return this.#action(id, name, args, binding);
     const pending = this.#connecting.get(id);
     if (pending) return pending;
@@ -1531,7 +2352,7 @@ export class PluginRegistry {
       // A successful explicit unlock is the sole read; MCP launches share its memory lease.
       // Some backends delegate the unlock entirely to the host rather than reading themselves.
       await this.#account(id).unlock();
-      this.#active(id);
+      this.#running(id);
       if (await this.#account(id).get()) {
         p.rememberAccount = true;
         await this.#save();
@@ -1541,7 +2362,7 @@ export class PluginRegistry {
     if (name !== account.connect) return;
     // Connect may reuse an existing saved token without writing a new credential.
     if (await this.#account(id).get()) {
-      this.#active(id);
+      this.#running(id);
       p.rememberAccount = true;
       await this.#save();
     }
@@ -1557,10 +2378,13 @@ export class PluginRegistry {
     this.#fire({ id, reason: PluginChangeReason.Account });
   }
   async #action(id: string, name: string, args: unknown, binding?: PluginBinding) {
-    const p = this.#active(id);
+    const p = this.#serving(id, name);
     if (!p.manifest.actions.some((a) => a.name === name)) throw new Error(MESSAGE.UnknownAction);
     const account = accountActionsOf(p.manifest);
     await this.#beforeAccountAction(id, p, name, account);
+    const opensCredentials = name === account.unlock || name === account.connect;
+    // A refusal left by an earlier attempt, such as the restore at startup, is not this action's.
+    if (opensCredentials) this.#accounts.get(id)?.takeRefusal();
     const installsRuntime = p.manifest.nativeRuntimes?.some((r) => r.install?.action === name);
     try {
       const answer = await this.#process(id).call(
@@ -1569,20 +2393,26 @@ export class PluginRegistry {
         args,
         binding,
         undefined,
-        installsRuntime ? RUNTIME_INSTALL_TIMEOUT_MS : CALL_TIMEOUT_MS,
+        installsRuntime ? RUNTIME_INSTALL_TIMEOUT_MS : PLUGIN_CALL_TIMEOUT_MS,
       );
       await this.#afterAccountAction(id, p, name, account, answer, binding);
       const statusAnswer = name === account.status && answer && typeof answer === "object";
       return statusAnswer ? { ...answer, accountConnecting: this.#connecting.has(id) } : answer;
     } catch (error) {
-      if (name === account.unlock || name === account.connect) this.#lockAccount(id);
+      if (opensCredentials) {
+        // A backend wraps whatever the host answered in its own generic error; a locked secret
+        // store's reason (no keyring to start) is the one worth showing.
+        const refusal = this.#accounts.get(id)?.takeRefusal();
+        this.#lockAccount(id);
+        if (refusal) throw refusal;
+      }
       throw error;
     } finally {
       await this.#settleAccountAction(id, name, account);
     }
   }
   async review(id: string, name: string, args: unknown, binding?: PluginBinding) {
-    this.#active(id);
+    this.#serving(id, name);
     return this.#process(id).call("review", name, args, binding);
   }
   /**
@@ -1617,7 +2447,9 @@ export class PluginRegistry {
     const p = this.#active(id),
       panel = p.manifest.panels.find((x) => x.id === panelId);
     if (!panel) throw new Error(MESSAGE.UnknownPanel);
-    return { title: panel.title, html: await readFile(await containedReal(p.directory, panel.file), "utf8") };
+    // The title as the plugin list shows it, so the page knows which panel is open.
+    const say = await this.#words.say(p.directory, currentLocale());
+    return { title: say(panel.title), html: await readFile(await containedReal(p.directory, panel.file), "utf8") };
   }
   /**
    * The declared settings, each the stored value when it still has the declared type, otherwise
@@ -1625,7 +2457,7 @@ export class PluginRegistry {
    * the backend or a `setting:` server variable, and the next save drops it.
    */
   async settings(id: string): Promise<Record<string, unknown>> {
-    const p = this.#active(id);
+    const p = this.#running(id);
     const stored = JSON.parse(
       await readFile(path.join(this.root, "data", id, "settings.json"), "utf8").catch(() => "{}"),
     ) as Record<string, unknown>;
@@ -1647,6 +2479,17 @@ export class PluginRegistry {
     await this.#mcpSync(id);
     this.#fire({ id, reason: PluginChangeReason.Settings });
   }
+  /**
+   * End every plugin call in flight as cut off, for `reason` (the harness that made them ended),
+   * but the host's own (`outlivesHarness`). Only the calls: every backend keeps running, every
+   * account stays unlocked and every plugin's connectors stay published. Quitting is `cancel()`,
+   * which stops all of that too.
+   */
+  abortCalls(reason: CallCutOff) {
+    for (const process of this.#processes.values()) process.cutOff(reason);
+    for (const [controller, binding] of this.#hostCalls)
+      if (!outlivesHarness(binding.hook)) controller.abort(new PluginCallCutOff(reason));
+  }
   cancel(binding?: Partial<PluginBinding>) {
     if (binding) {
       for (const process of this.#processes.values()) process.cancel(binding);
@@ -1655,6 +2498,7 @@ export class PluginRegistry {
     for (const id of [...this.#watchers.keys()]) this.#unwatch(id);
     for (const process of this.#processes.values()) process.stop();
     this.#processes.clear();
+    void this.sandboxJobs?.stopAll().catch(() => {});
     // A stopped plugin has no servers: the last stop point is one of them too.
     for (const id of this.#accounts.keys()) this.#lockAccount(id);
     this.#mcpAuthorized.clear();

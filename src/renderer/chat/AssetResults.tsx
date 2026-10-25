@@ -1,7 +1,9 @@
+import { withoutGenexSources } from "../../shared/genex.ts";
 import type { JSX } from "react";
 import { memo, useMemo, useState } from "react";
 import type { AssetDeliveredPayload, ProjectAsset } from "../../shared/game-assets.ts";
 import { assetPreviewMode } from "../../shared/asset-preview.ts";
+import { t } from "../../shared/i18n.ts";
 import type { ModelRig } from "../../shared/model-rig.ts";
 import { assetTitle, clipTitles } from "../asset-names.ts";
 import { foldAssets, ownerInGame, useModelRigs } from "../model-rigs.ts";
@@ -205,11 +207,14 @@ function AnimationRow({
   );
 }
 
-/** One tile alone keeps a modest width; several share a two-column grid. */
+/**
+ * One tile alone keeps a modest width; several share a two-column grid. Tiles keep a fixed height
+ * (the picture crops to fit) so narrowing the chat does not change how tall they stand.
+ */
 function TileGroup({ tiles, render }: { tiles: ProjectAsset[]; render: (asset: ProjectAsset) => JSX.Element }) {
   const [only] = tiles;
-  if (tiles.length === 1 && only) return <div className="max-w-80">{render(only)}</div>;
-  if (tiles.length > 1) return <div className="grid grid-cols-2 gap-2">{tiles.map(render)}</div>;
+  if (tiles.length === 1 && only) return <div className="h-50 max-w-80">{render(only)}</div>;
+  if (tiles.length > 1) return <div className="grid auto-rows-[8rem] grid-cols-2 gap-2">{tiles.map(render)}</div>;
   return null;
 }
 
@@ -255,7 +260,7 @@ export const AssetResults = memo(function AssetResults({
   const delivered = useDelivered(project, assets, revision);
   if (!delivered) return null;
   const { available, folded, owner } = delivered;
-  const shown = available.filter((asset) => !folded.motions.has(asset.file));
+  const shown = withoutGenexSources(available.filter((asset) => !folded.motions.has(asset.file)));
   const loose = available.filter((asset) => folded.loose.includes(asset.file));
   const clipsOf = (asset: ProjectAsset) =>
     available.filter((clip) => folded.clipsOf.get(asset.file)?.includes(clip.file));
@@ -267,7 +272,7 @@ export const AssetResults = memo(function AssetResults({
   const page = ordered.slice(0, limit);
   const rows = page.filter((asset) => !isVisual(asset));
   const tile = (asset: ProjectAsset) => (
-    <div key={asset.file} className="aspect-[16/10] min-w-0">
+    <div key={asset.file} className="h-full min-w-0">
       <AssetTile
         project={project}
         asset={asset}
@@ -279,7 +284,7 @@ export const AssetResults = memo(function AssetResults({
     </div>
   );
   return (
-    <section data-chat-assets className="w-full max-w-[26rem] min-w-0 space-y-2" aria-label="Generated assets">
+    <section data-chat-assets className="w-full max-w-[26rem] min-w-0 space-y-2" aria-label={t("Generated assets")}>
       <TileGroup tiles={page.filter(isVisual)} render={tile} />
       {(loose.length > 0 || rows.length > 0) && (
         <div className="flex flex-col gap-1.5">
@@ -301,7 +306,7 @@ export const AssetResults = memo(function AssetResults({
         </div>
       )}
       {ordered.length > limit && (
-        <ResultButton onClick={() => setLimit((n) => n + PAGE_SIZE)}>Show more assets</ResultButton>
+        <ResultButton onClick={() => setLimit((n) => n + PAGE_SIZE)}>{t("Show more assets")}</ResultButton>
       )}
       {error && (
         <p role="alert" className="text-chat-sub text-ink-3">

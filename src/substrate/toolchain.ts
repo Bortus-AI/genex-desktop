@@ -4,7 +4,7 @@
  * An app launched from Finder inherits launchd's PATH — `/usr/bin:/bin:/usr/sbin:/sbin` — not
  * the one the user's terminal has. Homebrew, nvm, Volta and Bun all live outside it, so
  * `npm run build` exits 127 (`sh: npm: command not found`), the stage stays black and every
- * judge reports a dead build (skate-prod / flautout-remix, 2026-09-07). The app already knew
+ * judge reports a dead build. The app already knew
  * this for one binary — `engines/claude-cli.ts` hard-codes three Homebrew-ish directories to
  * find `claude` — and nothing did it for node.
  *
@@ -24,6 +24,8 @@ import os from "node:os";
 import path from "node:path";
 import { SECOND_MS } from "../shared/duration.ts";
 import { StudioPlatform } from "../shared/boot.ts";
+import type { SetupScripts } from "../shared/build-problem.ts";
+import { type HostGitProbe, pathWithGitThatRuns, thisComputersGit } from "./git-policy.ts";
 
 /** The tools a game's build may need on PATH. `node` first: everything else rides on it. */
 export const BUILD_TOOLS = ["node", "npm", "pnpm", "yarn", "bun"] as const;
@@ -210,6 +212,8 @@ export interface ToolchainDeps {
   platform?: NodeJS.Platform;
   /** Where PATH, and on Windows APPDATA, LOCALAPPDATA, ProgramFiles and PATHEXT, are read. */
   env?: NodeJS.ProcessEnv;
+  /** macOS: the folder its developer tools are taken from (`xcode-select -p`), or null. */
+  developerDir?: HostGitProbe["developerDir"];
 }
 
 /**
@@ -301,10 +305,10 @@ async function pathSources(deps: ToolchainDeps, platform: NodeJS.Platform, env: 
   const own = deps.envPath === undefined ? envPath(env) : deps.envPath;
   if (isWindows(platform)) {
     const registry = await (deps.registryPath ?? (() => readRegistryPath(env)))().catch(() => null);
-    return { login: null, sources: [own, registry] };
+    return { login: null, own, sources: [own, registry] };
   }
   const login = await (deps.loginPath ?? (() => readLoginPath(undefined, undefined, platform)))().catch(() => null);
-  return { login, sources: [login, own] };
+  return { login, own, sources: [login, own] };
 }
 
 export async function resolveToolchain(deps: ToolchainDeps = {}): Promise<Toolchain> {
@@ -312,12 +316,22 @@ export async function resolveToolchain(deps: ToolchainDeps = {}): Promise<Toolch
   const env = deps.env ?? process.env;
   const home = deps.home ?? os.homedir();
   const isExecutable = deps.executable ?? executable;
-  const { login, sources } = await pathSources(deps, platform, env);
+  const { login, own, sources } = await pathSources(deps, platform, env);
   const present: string[] = [];
   for (const dir of candidateDirs(home, platform, env))
     if (await isExecutable(dir).catch(() => false)) present.push(dir);
   const launchd = isWindows(platform) ? [] : LAUNCHD_PATH;
-  const resolved = mergePathsFor(platform, ...sources, ...present, ...launchd);
+  // A Mac without Apple's developer tools: the login shell's git is the stand-in, so the app's own
+  // PATH's (Genex's own git, put there at boot) goes first; a git that runs stays where it is.
+  const resolved = await pathWithGitThatRuns(
+    {
+      platform,
+      path: mergePathsFor(platform, ...sources, ...present, ...launchd),
+      runnable: (file) => isExecutable(file).catch(() => false),
+      developerDir: deps.developerDir ?? thisComputersGit(env).developerDir,
+    },
+    own ?? "",
+  );
 
   const dirs = resolved.split(pathDelimiter(platform));
   const found: Partial<Record<BuildTool, string>> = {};
@@ -428,10 +442,48 @@ export function packageCommands(files: string[]): PackageCommands {
   return NPM_COMMANDS;
 }
 
+/** npm's install from the game's npm lockfile, every script off. */
+export const GUARDED_CI = "npm ci --ignore-scripts";
+/** npm's install from package.json alone, every script off. */
+export const GUARDED_INSTALL = "npm install --ignore-scripts";
+/** npm's add (`genex__package`) with every script off. */
+export const GUARDED_ADD = `${NPM_COMMANDS.add} --ignore-scripts`;
+
+/**
+ * How npm installs a game the person did not write (a remix), or null with no package.json: from
+ * its npm lockfile when it has one, else from package.json (another manager's lockfile is left
+ * aside: npm resolves the same ranges), and never a script, neither its packages' nor the game's.
+ */
+export function guardedInstallCommand(files: string[]): string | null {
+  if (!files.includes("package.json")) return null;
+  const locked = files.includes("package-lock.json") || files.includes("npm-shrinkwrap.json");
+  return locked ? GUARDED_CI : GUARDED_INSTALL;
+}
+
+/** The scripts npm runs for a package as it installs it: what a guarded install leaves undone. */
+const SETUP_SCRIPTS = ["preinstall", "install", "postinstall", "prepare"] as const;
+/** Where a package sits in npm's lockfile: its name follows the last `node_modules/`. */
+const LOCKED_PATH = /(?:^|\/)node_modules\/((?:@[^/]+\/)?[^/]+)$/;
+
+/**
+ * The setup scripts a guarded install skipped, from the game's package.json and npm's lockfile:
+ * the game's own, and each package with its own (`hasInstallScript`), by name.
+ */
+export function skippedSetupScripts(manifest: unknown, lock: unknown): SetupScripts {
+  const scripts = (manifest as { scripts?: Record<string, unknown> } | null)?.scripts ?? {};
+  const own = SETUP_SCRIPTS.some((name) => typeof scripts[name] === "string");
+  const locked = (lock as { packages?: Record<string, { hasInstallScript?: unknown }> } | null)?.packages ?? {};
+  const packages = Object.entries(locked).flatMap(([at, entry]) => {
+    const name = entry?.hasInstallScript === true ? LOCKED_PATH.exec(at)?.[1] : undefined;
+    return name ? [name] : [];
+  });
+  return { own, packages: [...new Set(packages)].sort() };
+}
+
 /**
  * The only command lines the studio's one network exemption may ever wrap. `studio.json` lives
  * inside the user's game folder — a downloaded game ships one, and a contractor can write one
- * mid-night — so a recorded `install` is honoured only when it is a package manager's own
+ * mid-run — so a recorded `install` is honoured only when it is a package manager's own
  * install, never `npm install && curl … | sh`.
  */
 export const INSTALL_COMMANDS: readonly string[] = [...new Set(LOCKFILES.map((row) => row.commands.install))];

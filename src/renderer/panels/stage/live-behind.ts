@@ -1,14 +1,14 @@
 /**
  * What Live shows and what waits for its Reload. Live never changes itself while the person
- * watches it (`stage.ts` holds the rules): a night's newest healthy build, a change main holds for
+ * watches it (`stage.ts` holds the rules): a run's newest healthy build, a change main holds for
  * Live (`live.behind`) and a build found broken mark Reload, and Reload brings them in — or, for
- * what main holds, the person leaving Live does. The empty scaffold still takes the night's first
+ * what main holds, the person leaving Live does. The empty scaffold still takes the run's first
  * healthy build at once: it has no game to lose.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LiveBehindEvent } from "../../../shared/live-behind.ts";
 import { UiEvent } from "../../../shared/ui-events.ts";
-import type { RunGraph as RunGraphModel } from "../../run-graph.ts";
+import { type RunGraph as RunGraphModel, runBuilding } from "../../run-graph.ts";
 import {
   appliesUnseen,
   firstBuildShows,
@@ -21,6 +21,7 @@ import {
 } from "../../stage.ts";
 import { type Notify, ToastTone } from "../../state/toasts.ts";
 import { problemWords, TOAST_WORDS } from "../../words.ts";
+import { webBuildShown } from "../../web-build-shown.ts";
 
 /** The run's build Live shows, as main says it (`live.behind` `shows`). */
 type ShownBuild = { head: string };
@@ -29,6 +30,7 @@ type ShownBuild = { head: string };
 export interface LiveBehindInput extends StageWatch {
   project: string | null;
   threadId: string | null;
+  /** The run Live answers to (`stageRunGraph`): never a chat turn's graph. */
   graph: RunGraphModel | null;
   selectedRun: string | null;
   /** The person stopped the game: nothing waiting goes in on its own, which would start it again. */
@@ -120,7 +122,9 @@ export function useLiveBehind(input: LiveBehindInput): {
       intoLive(
         () => window.studio.showBuild(project ?? "", head),
         () => {
-          if (asked) onView(StageView.Live);
+          if (!asked || !project) return;
+          webBuildShown(project);
+          onView(StageView.Live);
         },
         (err) => {
           failedHead.current = head;
@@ -130,10 +134,12 @@ export function useLiveBehind(input: LiveBehindInput): {
     [project, intoLive, onView, failed],
   );
 
-  // A build merged tonight that runs, and is not already on the stage.
+  // A build merged this run that runs, and is not already on the stage. The graph is the run's
+  // own (`stageRunGraph`): a chat turn's workers change the game itself and offer no build.
+  const ownBuild = runBuilding(graph) && !selectedRun;
   const offer = useMemo(
-    () => (graph?.active && !selectedRun ? newBuildOffer(graph.mergedHead, shownBuild?.head ?? null) : null),
-    [graph?.active, graph?.mergedHead, selectedRun, shownBuild?.head],
+    () => (ownBuild ? newBuildOffer(graph?.mergedHead ?? null, shownBuild?.head ?? null) : null),
+    [ownBuild, graph?.mergedHead, shownBuild?.head],
   );
   // A build the stage swapped in can still be found broken by a later health pass. It stays until
   // the person reloads — they may be playing it — and the change is explained.
@@ -173,13 +179,21 @@ export function useLiveBehind(input: LiveBehindInput): {
   behindRef.current = behind;
   const reload = useCallback(() => void apply(behindRef.current), [apply]);
 
-  const stage: StageWatch = { view: input.view, visible: input.visible, showEmpty: input.showEmpty };
+  const stage = stageWatchOf(input);
   useUnseenChanges(appliesUnseen(behind, stage) && !input.stopped ? behind : null, apply);
   useFirstBuild(firstBuildShows(offer, stage) ? (offer?.head ?? null) : null, failedHead, showMergedBuild);
 
   const showBuild = useCallback((head: string): Promise<void> => showMergedBuild(head, true), [showMergedBuild]);
   return { shownBuild, behind, showBuild, reload };
 }
+
+/** What of the input says whether someone watches the web game in Live. */
+const stageWatchOf = ({ view, visible, showEmpty, preview }: StageWatch): StageWatch => ({
+  view,
+  visible,
+  showEmpty,
+  preview,
+});
 
 /** Nobody is watching a game in Live: what waits goes in now, so Live is current when they come back. */
 function useUnseenChanges(unseen: LiveBehind | null, apply: (what: LiveBehind) => Promise<void>): void {
@@ -192,7 +206,7 @@ function useUnseenChanges(unseen: LiveBehind | null, apply: (what: LiveBehind) =
   }, [key]);
 }
 
-/** The empty scaffold takes the night's first healthy build at once, unless that very build already failed to load. */
+/** The empty scaffold takes the run's first healthy build at once, unless that very build already failed to load. */
 function useFirstBuild(
   head: string | null,
   failedHead: { current: string | null },

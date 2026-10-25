@@ -14,6 +14,7 @@ const METHODS = [
   "_computerToolsFor",
   "_directorToolsFor",
   "_playtestToolsFor",
+  "_runOfGame",
   "acceptStagedProposal",
   "activeBuilders",
   "activityEvents",
@@ -42,6 +43,8 @@ const METHODS = [
   "emit",
   "exportPublicCopy",
   "forgetPermission",
+  // What freeing space deletes, and deleting it (studio:storage, studio:storage.free).
+  "freeStorage",
   // Create game's location, checked before anything is written (studio:game.location.pick).
   "gameLocation",
   "init",
@@ -52,6 +55,9 @@ const METHODS = [
   "listAllEvents",
   "liveState",
   "loadPreview",
+  "loadWebBuild",
+  // Home's Make your own writes a live background on the model the user picked (backdrop-generation.ts).
+  "makeBackdrop",
   "messageImages",
   // A game started from its first request is named before its folder is made (studio:game.name).
   "nameGame",
@@ -93,6 +99,7 @@ const METHODS = [
   "resolveConsent",
   "resumeAutopilot",
   "retainedAssetFile",
+  "retryMention",
   "rewindChat",
   "rewindPreview",
   "rollbackTo",
@@ -101,6 +108,8 @@ const METHODS = [
   "runPreviewIdentity",
   "saveReferenceFrames",
   "saveRunArtifact",
+  // Whether a game is a remix whose setup scripts the person has not trusted (installs, genex__package).
+  "scriptsGuarded",
   "selfChangeList",
   "sendUserMessage",
   "setGamesRoot",
@@ -108,10 +117,16 @@ const METHODS = [
   "showBuild",
   "snapshot",
   "start",
+  "startEngine",
   "stop",
+  "stopJob",
   "stopLive",
+  "stopRun",
   "stopThread",
+  "storageSpace",
   "threadForGame",
+  "undoEngineLink",
+  "undoRewind",
   "undoSelfChange",
   "updateGame",
   "updateSettings",
@@ -119,19 +134,24 @@ const METHODS = [
   "withApprovedExport",
 ];
 // `planReviews` is TypeScript-`private`, which is erased: it is still reachable at run time.
-const ACCESSORS = ["assetCheckpoints", "pendingUpdateId", "planReviews", "settings"];
+const ACCESSORS = ["assetCheckpoints", "autoResumeAt", "localItems", "pendingUpdateId", "planReviews", "settings"];
 /** Own enumerable fields after `init()` (true `#private` state is not visible and not listed). */
 const FIELDS = [
+  "appLook",
   "budget",
   "builds",
   "candidates",
   "contextPreferences",
+  "engineLinks",
   "engines",
   "games",
+  "hooks",
   "host",
   "improvements",
+  "jobs",
   "journal",
   "layout",
+  "locks",
   "mainThread",
   "mcp",
   "ollamaSidecar",
@@ -139,6 +159,7 @@ const FIELDS = [
   "pluginServices",
   "plugins",
   "sandbox",
+  "screenAccess",
   "snapshotIndex",
   "snapshots",
   "store",

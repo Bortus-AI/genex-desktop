@@ -1,5 +1,6 @@
 import type { JSX } from "react";
 import { useEffect, useState } from "react";
+import { t } from "../../shared/i18n.ts";
 import type { ReferenceFrame } from "../../shared/protocol.ts";
 import { openBeside } from "../open-beside.ts";
 
@@ -59,21 +60,8 @@ function knownImages(threadId: string | undefined, messageId: string | undefined
   return known.get(imagesKey(threadId, messageId)) ?? null;
 }
 
-/**
- * The pictures someone sent with a message, above its words: proof they went with it. A message
- * still on its way shows the pictures the composer had (`frames`) in the same tiles.
- */
-export function MessageImages({
-  threadId,
-  messageId,
-  count = 0,
-  frames,
-}: {
-  threadId?: string;
-  messageId?: string;
-  count?: number;
-  frames?: ReferenceFrame[];
-}): JSX.Element | null {
+/** The pictures sent with a chat message, once loaded (null until then): the chat's and the Builds graph's. */
+export function useMessageImages(threadId: string | undefined, messageId: string | undefined): ReferenceFrame[] | null {
   const [images, setImages] = useState<ReferenceFrame[] | null>(() => knownImages(threadId, messageId));
   useEffect(() => {
     if (!threadId || !messageId) return;
@@ -85,33 +73,52 @@ export function MessageImages({
       current = false;
     };
   }, [threadId, messageId]);
+  return images;
+}
+
+/** A sent picture as an image source. */
+export const imageSrc = (image: ReferenceFrame): string => `data:${image.mimeType};base64,${image.data}`;
+
+/**
+ * The pictures someone sent with a message, above its words: proof they went with it. A message
+ * still on its way shows the pictures the composer had (`frames`) in the same tiles.
+ */
+export function MessageImages({
+  threadId,
+  messageId,
+  count = 0,
+  frames,
+  placed = false,
+}: {
+  threadId?: string;
+  messageId?: string;
+  count?: number;
+  frames?: ReferenceFrame[];
+  /** The caller already sets the row's width and side (a message of pictures alone). */
+  placed?: boolean;
+}): JSX.Element | null {
+  const images = useMessageImages(threadId, messageId);
   const shown = frames ?? images ?? Array.from({ length: Math.min(count, 12) }, () => null);
   if (!shown.length) return null;
   return (
-    <div data-message-images className="ms-auto flex max-w-[88%] flex-wrap justify-end gap-1.5">
+    <div data-message-images className={`flex flex-wrap justify-end gap-1.5 ${placed ? "" : "ms-auto max-w-[88%]"}`}>
       {shown.map((image, index) =>
         image ? (
           <button
             key={index}
             type="button"
-            aria-label={`Open ${image.label || "image"}`}
+            aria-label={image.label ? t("Open {name}", { name: image.label }) : t("Open image")}
             title={image.label}
             onClick={() =>
               openBeside({
                 kind: "image",
-                name: image.label || `Image ${index + 1}`,
-                src: `data:${image.mimeType};base64,${image.data}`,
+                name: image.label || t("Image {number}", { number: index + 1 }),
+                src: imageSrc(image),
               })
             }
             className="h-[84px] w-[120px] cursor-pointer overflow-hidden rounded-[12px] bg-inset shadow-[inset_0_0_0_1px_var(--line)]"
           >
-            <img
-              src={`data:${image.mimeType};base64,${image.data}`}
-              alt=""
-              decoding="async"
-              draggable={false}
-              className="size-full object-cover"
-            />
+            <img src={imageSrc(image)} alt="" decoding="async" draggable={false} className="size-full object-cover" />
           </button>
         ) : (
           <span key={index} aria-hidden className="h-[84px] w-[120px] rounded-[12px] bg-inset" />

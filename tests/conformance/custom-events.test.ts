@@ -125,6 +125,11 @@ async function eventNamesInSource(): Promise<Map<string, string[]>> {
     if (ts.isStringLiteralLike(node)) return [node.text];
     if (ts.isTemplateExpression(node)) return [`${templateHead(node)}*`];
     if (ts.isPropertyAccessExpression(node)) return [...vocabularyValues(vocabularies, node)];
+    // A string constant naming the event, here or imported (the seed's `FINISH_CHECK_EVENT`).
+    if (ts.isIdentifier(node)) {
+      const text = constantText(node);
+      return text === undefined ? [] : [text];
+    }
     if (ts.isParenthesizedExpression(node) || ts.isAsExpression(node)) return literals(node.expression);
     if (ts.isConditionalExpression(node)) return [...literals(node.whenTrue), ...literals(node.whenFalse)];
     return [];
@@ -199,9 +204,9 @@ async function eventNamesInSource(): Promise<Map<string, string[]>> {
     };
     // The harness's shared writers, which the scan cannot follow into (it resolves no imports):
     // `loop/run-events.ts` `appendRun(ctx, threadId, "name", …)` and `loop/compaction-log.ts`
-    // `appendCustom(ctx, threadId, "name", …)`, imported under any name, and the director night's
-    // own `appendRun("name", …)` (`loop/director/night.ts`, reached through the night object,
-    // which `bindNight` calls with the night as its first argument).
+    // `appendCustom(ctx, threadId, "name", …)`, imported under any name, and the director run's
+    // own `appendRun("name", …)` (`loop/director/loop-run.ts`, reached through the run object,
+    // which `bindLoopRun` calls with the run as its first argument).
     const writerIndex = (callee: ts.Expression): number | undefined => {
       const id = ts.isPropertyAccessExpression(callee) ? callee.name : callee;
       if (!ts.isIdentifier(id)) return undefined;

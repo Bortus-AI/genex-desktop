@@ -1,12 +1,15 @@
 /** Conversations: the bootstrap, sending, stopping, the event feed and the thread records. */
 import { type ThreadStatusMap, UiEvent } from "../../shared/ui-events.ts";
+import { MentionRetry, readMentionRefs } from "../../shared/prompt-mention.ts";
 import type { SmokeReadGates } from "../smoke/read-gates.ts";
 import type { StudioCore } from "../studio-core.ts";
 import type { IpcHandle } from "./registrar.ts";
 import { errorMessage } from "../../shared/errors.ts";
+import type { EngineBoot } from "../engine-boot.ts";
 
-/** Why a thread read from the renderer is refused. */
+/** Why a thread read (or a tag's retry) from the renderer is refused. */
 const MESSAGE = {
+  badTag: "Not a tag of this chat",
   fixtureBootstrapUnavailable: "Fixture bootstrap unavailable",
   fixtureThreadUnavailable: "Fixture thread unavailable",
   invalidPage: "Invalid conversation page",
@@ -14,6 +17,8 @@ const MESSAGE = {
 
 export interface ThreadsIpcDeps {
   core: StudioCore;
+  /** The engines a bootstrap shows: the remembered ones while the launch's checks run (`engine-boot.ts`). */
+  engines: Pick<EngineBoot, "bootstrap">;
   /** `~/AI Games`, as a human reads it — the renderer never sees absolute paths. */
   gamesRootLabel(root: string): string;
   /** The harness's last reported status per thread, for a renderer that loads mid-run. */
@@ -26,12 +31,27 @@ export interface ThreadsIpcDeps {
   welcome: boolean;
   /** An unpackaged developer run, where the renderer offers its developer tools. */
   developer: boolean;
+  /** The website Play links to (`play/origins.ts`). */
+  playWeb: string;
+}
+
+/** A sent message's failed @ tag tried again or taken off: the renderer names the tag, main re-checks it as a send does. */
+export function registerMentionRetry(handle: IpcHandle, core: StudioCore): void {
+  handle("studio:mentions.retry", async (payload) => {
+    const [tag] = readMentionRefs([payload?.tag]);
+    const action = payload?.action;
+    const known = action === MentionRetry.Again || action === MentionRetry.Remove;
+    const ids = typeof payload?.threadId === "string" && typeof payload?.messageId === "string";
+    if (!tag || !known || !ids) throw new Error(MESSAGE.badTag);
+    await core.retryMention(payload.threadId, payload.messageId, tag, action);
+  });
 }
 
 export function registerThreadsIpc(
   handle: IpcHandle,
   {
     core,
+    engines: engineList,
     gamesRootLabel,
     threadStatus,
     pushUiEvent,
@@ -39,6 +59,7 @@ export function registerThreadsIpc(
     smokeReads,
     welcome,
     developer,
+    playWeb,
   }: ThreadsIpcDeps,
 ): void {
   handle("studio:bootstrap", async () => {
@@ -49,12 +70,13 @@ export function registerThreadsIpc(
       }
     }
     // The renderer's poll continues from `eventsCursor`, never from the tail's last id. The reads
-    // are independent; the loader waits for the slowest (the engines' CLI checks), not their sum.
+    // are independent; the engines come remembered while their checks run, so the loader no
+    // longer waits seconds for every CLI.
     const [feed, threads, games, engines] = await Promise.all([
       core.store.listAllSince(undefined, 600),
       core.store.listThreads(),
       core.games.list(),
-      core.engines.describe(),
+      engineList.bootstrap(),
     ]);
     return {
       threadId: core.mainThread,
@@ -70,6 +92,7 @@ export function registerThreadsIpc(
       activeDelegations: core.activeBuilders(),
       welcome,
       developer,
+      playWebOrigin: playWeb,
     };
   });
 
@@ -164,5 +187,8 @@ function registerQueueIpc(handle: IpcHandle, core: StudioCore): void {
     core.rewindChat(String(payload?.threadId), String(payload?.eventId), String(payload?.messageId), {
       files: payload?.files === true,
     }),
+  );
+  handle("studio:chat.rewind.undo", async (payload) =>
+    core.undoRewind(String(payload?.threadId), String(payload?.rewindId)),
   );
 }

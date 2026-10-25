@@ -11,26 +11,46 @@ Where it disagrees with this preface, this preface wins.
   and never run `auth`, `tools` or `init`.
 - Skill cards are never copied into the game: no `.claude/skills`, `.agents/skills` or `AGENTS.md`
   is written. The Genex cards Studio carries are this plugin's skills, listed in your brief; read
-  one with `genex__skill {"name":"<skill>"}`.
+  one with `genex__skill {"name":"<skill>"}`. The lane cards the "Use it" section points to are
+  `genex-tool-model`, `genex-tool-character`, `genex-tool-texture`, `genex-tool-audio` and
+  `genex-tool-image`: read the one for a lane before its first call.
 
 ## Commands, as Studio tools
 
 - Generation (`image`, `model`, `model segment|rig|animate`, `texture`, `sfx`, `music`, `voice`,
   `character`, `animations search`) and `wait`: `genex__asset`. Call it with operation `status`
   first; it reports the account, credits and live lanes that `doctor` would. Its description lists
-  the operations; delivered files land in the game, so wire in those local paths.
-- `doctor`, `budget`, `llm models`, `llm status`, `llm cancel` and `shop list`: `genex__cli`.
-  `budget --assets` is not available: Studio's own asset allowance and the user's approval govern
-  asset spending.
-- `llm bench` and `shop add|set|remove|test`: `genex__cli-paid`. The user approves each call,
-  because it spends coin or changes what the game sells.
+  the operations and which provider each lane is; its `options` parameter lists each lane's
+  options. Studio passes `--out-dir` and `--no-wait` itself, and delivered files land in the game,
+  so wire in those local paths. In a Godot game they land in its project (`godot/assets/...`),
+  which the game loads as `res://assets/...`.
+- `doctor`, `budget`, `llm models`, `llm status`, `llm cancel`, `shop list`, `shop add`,
+  `items list` and `items search`: `genex__cli`. `budget --assets` is not available: Studio's own
+  asset allowance and the user's approval govern asset spending. `shop add` asks nobody: it makes
+  a store item's draft, which spends nothing and sells nothing until the person puts it on sale.
+- `llm bench`, `shop set|remove|test` and `items add|remove`: `genex__cli-paid`. The user
+  approves each call, because it spends Nex (Genex's currency, which the cards call coin) or changes
+  what the game sells. A store item's `image`, `model` and `package` name paths inside this game,
+  and `items add` writes `genex-items/<id>/` into it; `shop publish` is not available, because only
+  the person puts an item on sale. Read the `genex-items` skill first. A thing priced in Nex is a store item, listed this
+  way by default; coins, gold or gems are the game's own currency unless the person says they are
+  for real money.
 - `publish` and `promote`: `genex__publish {"operation":"gallery"}`, which also updates the draft;
   use it when the user wants the game published. `preview` alone: `genex__publish
   {"operation":"draft"}`, a test build that leaves the public version as it is. Follow a publish
   with `genex__publish-status` for the job and the links.
+- `cover`, and the frame `preview` picks up from `.genex/scratch/cover.png`: the game's demo named
+  `genex-cover`, checked with `genex__cover {"operation":"shoot"}`. Publish (`genex__publish`)
+  shoots it again and sends it, and `genex__cover-set` sends it now; `genex__cover
+  {"operation":"status"}` is `npx genex cover` with no file. Read `genex__skill
+  {"name":"genex-cover"}` first, and never save a frame in `.genex/scratch`.
 - `npm i @genex-ai/multiplayer`: `genex__package {"package":"@genex-ai/multiplayer"}`, and
   `npm i @genex-ai/embed-sdk`: `genex__package {"package":"@genex-ai/embed-sdk"}`. Studio picks
-  the version and the user approves the install.
+  the version and installs it without asking anyone. In a game made from Studio's template it maps
+  Studio's copy in the import map instead, and Studio calls `initEmbed()` for the game.
+- A card Studio shows for a paid command waits for the person even after your turn ends, and the
+  call runs once they approve. Never record it as declined or blocked while it waits; when you come
+  back, check whether it ran and ask again only if the person declined it.
 - A `genex__cli` call carries the words of the command, its positional argument and its flags by
   name without dashes: `npx genex llm cancel <id>` is
   `genex__cli {"command":"llm cancel","args":"<id>"}`, and `--all` is `"options":{"all":true}`.

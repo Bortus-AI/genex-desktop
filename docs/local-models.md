@@ -12,7 +12,7 @@ Qwen 3.8 Flash Next. Every other model the architecture can run is under More mo
 first, with "Needs a N GB Mac" when it does not fit. One build per model is shown: MLX on Apple
 Silicon, the portable GGUF elsewhere. The fit rule is weights + KV cache (0.5–3 GB) + 1.5 GB
 within 72% of unified memory on Apple Silicon (⅔ elsewhere). Recommendations are estimates; the
-large-Mac models added on 22 September 2026 have not been measured in Studio.
+large-Mac models have not been measured in Studio yet.
 
 An installed model's row offers Delete (a trash button, then Cancel or Delete on the row). A Bonsai
 delete removes the receipt first, stops a server loaded with that model, then deletes its weights
@@ -31,6 +31,8 @@ Every Ollama download goes through the person's own Ollama at its host; Studio n
 nor starts one. A pull that finds nothing answering there fails as `Unavailable` with that host
 named, not as the fetch's bare error, and its row then offers Install Ollama beside Download: the
 platform's page on ollama.com. The person installs and starts Ollama, then downloads again.
+Ollama keeps its models in its own folder; Local Models says to move them in Ollama → Settings →
+Model location.
 
 Settings → Local Models downloads Bonsai weights and the Q8 vision projector directly from pinned
 Prism ML Hugging Face revisions, plus the pinned Prism llama.cpp macOS arm64 release.
@@ -84,11 +86,31 @@ Studio's app-wide assistant uses `complete` without tools; game chats and builds
 existing session/coordinator paths.
 
 The same director, worker, integration, preview and judging code runs for Bonsai sessions.
-Model roles accept Bonsai, Claude Code, Codex and Grok Build as orchestrator/worker/judge providers;
-engine/model pairs remain together. A single-model pick fills all roles; explicit crosses win.
+Model roles accept Bonsai, Claude Code, Codex, OpenCode, OpenRouter and a local server (a model
+server the person runs, [connections](connections-and-context.md#your-own-model-server)) as
+orchestrator/worker/judge providers; engine/model pairs remain together. OpenRouter runs these same local sessions under its
+own engine id (`LocalSessions` `engine` option), with each model's catalog context. A single-model pick fills all roles; explicit crosses win.
 Existing saved subscription roles keep their version and choices. Session-capable local
-models get the Models role flyouts and model-specific effort sliders. Plain completion-only Ollama models keep the classic
-local loop.
+models get the Models role flyouts and model-specific effort sliders.
+
+Ollama holds no sessions (`roles: "completion"` in `shared/providers.ts`), yet a game chat on an
+Ollama model with tools gets the same three roles (`splitsRoles`): each job takes its own
+installed model and the run uses the classic local loop. One rule, `crossesTo` in both copies of
+`model-roles.ts`, decides which jobs leave the main agent's engine. An Ollama main agent may hand
+its workers and reviewers to a session provider; a session main agent may hand its reviewers to
+Ollama, never its workers, because the director hires every worker as a session. Reviewers look
+at screenshots, so an Ollama model without vision is listed but disabled in their menu, and a pick
+that cannot see leaves reviewing to the first installed model that can (or to itself when none
+can). The playtester plays on the reviewers' model when it calls tools and sees, else on the main
+agent's engine with that engine's own model, holding the same `computer` tool as a session engine
+through `preview.computer` on its leased window (an older host keeps its shorthand tools); the
+scout is skipped under an Ollama main agent. A
+build turn on a model that cannot see receives a note instead of the turn's pictures
+(`unseen-pictures-prompts.ts`). A send that crosses a job to or from Ollama needs the
+`local-roles` harness capability, which `main.ts` claims only when `model-roles.ts`,
+`playtester.ts` and `scout.ts` all export `SERVES_LOCAL_ROLES` (`local-roles-served.ts`): an
+agent-edited older copy would put an Ollama model id on a subscription, so main refuses the send
+instead.
 
 `engines/local-session.ts` owns local session history under the engine home, separately for
 workers, directors and coordinators; its tools and path confinement live in
@@ -97,7 +119,15 @@ The system prompt holds only what stays the same across a session's requests; ea
 and time budget rides its own message (`localBudgetNote`), so a resumed session keeps the runtime's
 cached prefix instead of re-reading its whole history. The harness's own tool loop reads its system
 prompt's identity, rules, skills, memory, notes and file list once per turn (`readStanding`), and a
-tool's description travels once, with its schema.
+tool's description travels once, with its schema. The identity names no engine; it says the
+model runs inside Genex, which folder the game is and what it holds (`appIdentity`,
+`loop/project-prompts.ts`); a game with no kind yet adds that `start_web_game` comes first (or
+the kind tool of an engine plugin on offer, from `plugins.tools`' `kinds`, or `plugins_find` for an
+engine), and a folder of its own files of a kind no rule knows that it is
+looked through first. A web game's (`holdsWebGame`: `web-game` at its root, a game with no
+kind yet not included) adds `prompts/identity-web.md` (three.js, the preview window), and its rules
+add `prompts/operating-rules-web.md` (the preview's controls, `window.__studio`, determinism) to
+`prompts/operating-rules.md`, which every turn reads.
 Interrupted tool calls receive an explicit unknown-result marker and are never replayed
 blindly. History is checkpointed atomically between tool actions. Before inference the pinned
 runtime applies its own chat template (including system instructions and tool schemas) and

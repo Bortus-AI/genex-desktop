@@ -1,14 +1,21 @@
 import assert from "node:assert/strict";
 import { after, it } from "node:test";
-import { access, readdir, readFile, writeFile } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { access, readdir, readFile, truncate, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { startRig, waitForLog, customEvents, type Rig } from "../helpers/studio-rig.ts";
 import type { DelegateRequest } from "../../src/substrate/engines/types.ts";
 import { messageQueueState } from "../../src/shared/message-queue.ts";
-import { CheckpointPhase, chatCheckpointRef } from "../../src/main/chat-checkpoints.ts";
+import { CHECKPOINT_FILE_MAX_BYTES, CheckpointPhase, chatCheckpointRef } from "../../src/main/chat-checkpoints.ts";
+import { SkippedBy } from "../../src/shared/chat-rewind.ts";
+import { CustomEvent, customRecord } from "../../src/shared/custom-events.ts";
 import { latestRun } from "../../src/shared/coordinator.ts";
 import { git } from "../../src/substrate/snapshots.ts";
+import type { JobSpawn } from "../../src/substrate/jobs.ts";
+import { JobRole, JobScopeKind } from "../../src/shared/jobs.ts";
+import { PermissionMode } from "../../src/shared/permissions.ts";
 import type { EventEnvelope } from "../../src/substrate/types.ts";
+import { isRewindId } from "../../src/shared/chat-rewind.ts";
 
 const rigs: Rig[] = [];
 after(async () => {
@@ -108,14 +115,20 @@ it("rewinds a game chat: the message and its answer leave, files come back, and 
     stopsBuild: false,
   });
   const result = await rig.core.rewindChat(thread, boss.eventId, boss.messageId, { files: true });
-  assert.deepEqual(result, {
-    text: "Add a boss",
-    messageId: boss.messageId,
-    imageCount: 0,
-    pickedImages: 0,
-    files: 2,
-    held: [],
-  });
+  // The files came back, so the folder as it was before is kept for Bring back newer version.
+  assert.ok(isRewindId(result.undo?.rewindId), "the rewind can be brought back");
+  assert.deepEqual(
+    { ...result, undo: undefined },
+    {
+      text: "Add a boss",
+      messageId: boss.messageId,
+      imageCount: 0,
+      pickedImages: 0,
+      files: 2,
+      held: [],
+      undo: undefined,
+    },
+  );
   assert.equal(await exists(path.join(dir, "step-2.js")), false, "the answer’s file went");
   assert.equal(await exists(path.join(dir, "outside.txt")), false, "asked for, the outside change went too");
   assert.equal(await readFile(path.join(dir, "step-1.js"), "utf8"), "step 1\n", "the earlier answer’s file stayed");
@@ -240,9 +253,10 @@ it("follow-ups on hold leave with the message, its pictures come back, and the r
     1,
     "the picture was saved as a reference",
   );
-  // A follow-up sent meanwhile is put on hold, so it still waits when the answer ends. It asks
-  // another model, so it waits for a turn of its own instead of being steered into this one.
-  await rig.core.sendUserMessage("And add rain", { thread, engine: "claude-code", model: "another-model" });
+  // A follow-up sent meanwhile is put on hold, so it still waits when the answer ends. It asks for
+  // a model that keeps no session, which this turn cannot go on with, so it waits for a turn of its
+  // own instead of joining this one.
+  await rig.core.sendUserMessage("And add rain", { thread, engine: "ollama" });
   let events = await rig.core.store.listEvents(thread);
   await rig.core.changeQueuedMessage(thread, bubble(events, "And add rain").messageId, "hold");
   release.resolve();
@@ -314,16 +328,16 @@ it("a build after the message leaves the chat with it: files come back when it l
   const turns = answeringEngine(rig);
   await rig.core.sendUserMessage("Make a village", { thread, engine: "claude-code" });
   await waitForLog(rig.core, handled(thread, 1), 20000, "the answer");
-  // A night built after it and paused without landing: the game's history did not move.
+  // A run built after it and paused without landing: the game's history did not move.
   await rig.core.append(
     [
-      custom("run_started", { runId: "night", project, engine: "claude-code", goal: "A village" }),
-      { type: "messages", messages: [{ role: "assistant", content: "The night paused." }] },
-      custom("autopilot_paused", { runId: "night" }),
+      custom("run_started", { runId: "paused", project, engine: "claude-code", goal: "A village" }),
+      { type: "messages", messages: [{ role: "assistant", content: "The run paused." }] },
+      custom("autopilot_paused", { runId: "paused" }),
     ],
     thread,
   );
-  assert.equal(latestRun(await harnessEvents(rig, thread))?.runId, "night", "the paused night owns the chat");
+  assert.equal(latestRun(await harnessEvents(rig, thread))?.runId, "paused", "the paused run owns the chat");
   const village = bubble(await rig.core.store.listEvents(thread), "Make a village");
   assert.deepEqual(await rig.core.rewindPreview(thread, village.eventId, village.messageId), {
     files: { state: "restore", files: 1, outside: [], outsideUnknown: false, nested: [], tooLarge: 0 },
@@ -332,15 +346,15 @@ it("a build after the message leaves the chat with it: files come back when it l
   const result = await rig.core.rewindChat(thread, village.eventId, village.messageId, { files: true });
   assert.equal(result.files, 1);
   assert.equal(await exists(path.join(dir, "step-1.js")), false, "the answer's file went");
-  // Routing: the night is not the chat's any more, in the harness's view and in the chat's.
+  // Routing: the run is not the chat's any more, in the harness's view and in the chat's.
   assert.equal(latestRun(await harnessEvents(rig, thread)), null);
   assert.equal(latestRun(await rig.core.store.chatState(thread)), null);
   await rig.core.sendUserMessage("Make a castle", { thread, engine: "claude-code" });
   await waitForLog(rig.core, handled(thread, 2), 20000, "the answer after the rewind");
   assert.equal(turns.length, 2);
-  assert.ok(!turns[1]!.coordinator, "a turn of the chat's own, not the night's coordinator");
+  assert.ok(!turns[1]!.coordinator, "a turn of the chat's own, not the run's coordinator");
   assert.equal(turns[1]!.resume, undefined, "with a fresh session");
-  assert.doesNotMatch(turns[1]!.prompt, /Make a village|The night paused/);
+  assert.doesNotMatch(turns[1]!.prompt, /Make a village|The run paused/);
   // A Plan-mode send is no longer a follow-up to a paused build: it gets its plan review.
   await rig.core.sendUserMessage("Dig a moat", {
     thread,
@@ -405,13 +419,13 @@ it("rewound past a later build, the next message's run tools reach the build fro
   await rig.core.append(
     [
       custom("run_started", {
-        runId: "night-a",
+        runId: "run-a",
         project,
         engine: "claude-code",
         goal: "A forest",
         integrationHead: head,
       }),
-      custom("autopilot_paused", { runId: "night-a" }),
+      custom("autopilot_paused", { runId: "run-a" }),
     ],
     thread,
   );
@@ -420,15 +434,15 @@ it("rewound past a later build, the next message's run tools reach the build fro
   // Build B began after the message and landed.
   await rig.core.append(
     [
-      custom("run_started", { runId: "night-b", project, engine: "claude-code", goal: "A desert" }),
-      custom("run_finished", { runId: "night-b", project, landed: true }),
+      custom("run_started", { runId: "run-b", project, engine: "claude-code", goal: "A desert" }),
+      custom("run_finished", { runId: "run-b", project, landed: true }),
     ],
     thread,
   );
   const autumn = bubble(await rig.core.store.listEvents(thread), "Make it autumn");
   await rig.core.rewindChat(thread, autumn.eventId, autumn.messageId, { files: true });
-  assert.equal(latestRun(await harnessEvents(rig, thread))?.runId, "night-a", "the chat is build A's again");
-  assert.equal(latestRun(await rig.core.store.listEvents(thread))?.runId, "night-b", "the log still holds build B");
+  assert.equal(latestRun(await harnessEvents(rig, thread))?.runId, "run-a", "the chat is build A's again");
+  assert.equal(latestRun(await rig.core.store.listEvents(thread))?.runId, "run-b", "the log still holds build B");
 
   useTools = true;
   await rig.core.sendUserMessage("How is the forest?", { thread, engine: "claude-code" });
@@ -436,7 +450,7 @@ it("rewound past a later build, the next message's run tools reach the build fro
   assert.equal(answers.length, 1, "build A's coordinator answered");
   const [tried] = answers;
   assert.doesNotMatch(JSON.stringify(tried), /refused/, JSON.stringify(tried));
-  assert.equal(JSON.parse(tried!.run_status!).run.runId, "night-a");
+  assert.equal(JSON.parse(tried!.run_status!).run.runId, "run-a");
   assert.match(tried!.show_build!, /Live/);
   assert.match(tried!.resume_run!, /Resume requested for the same run/);
 });
@@ -462,15 +476,15 @@ it("after a landed build, or with no saved copy, only the conversation rewinds a
   });
   await rig.core.sendUserMessage("Make a village", { thread, engine: "claude-code" });
   await waitForLog(rig.core, handled(thread, 1), 20000, "the answer");
-  // A night landed after it: its commit moved the game's history.
-  await writeFile(path.join(dir, "landed.js"), "the night's work\n");
+  // A run landed after it: its commit moved the game's history.
+  await writeFile(path.join(dir, "landed.js"), "the run's work\n");
   await git(dir, ["add", "-A"]);
-  await git(dir, ["commit", "-q", "-m", "land the night"]);
+  await git(dir, ["commit", "-q", "-m", "land the run"]);
   const head = (await git(dir, ["rev-parse", "HEAD"])).trim();
   await rig.core.append(
     [
-      custom("run_started", { runId: "landed-night", project, engine: "claude-code" }),
-      custom("run_finished", { runId: "landed-night", project, landed: true }),
+      custom("run_started", { runId: "landed-run", project, engine: "claude-code" }),
+      custom("run_finished", { runId: "landed-run", project, landed: true }),
     ],
     thread,
   );
@@ -481,7 +495,7 @@ it("after a landed build, or with no saved copy, only the conversation rewinds a
   const result = await rig.core.rewindChat(thread, village.eventId, village.messageId, { files: true });
   assert.equal(result.files, null, "files asked for, but a landed build keeps them");
   assert.equal(await readFile(path.join(dir, "step-1.js"), "utf8"), "step 1\n");
-  assert.equal(await readFile(path.join(dir, "landed.js"), "utf8"), "the night's work\n");
+  assert.equal(await readFile(path.join(dir, "landed.js"), "utf8"), "the run's work\n");
   assert.equal((await git(dir, ["rev-parse", "HEAD"])).trim(), head);
   assert.equal(latestRun(await harnessEvents(rig, thread)), null);
   // The bubble with no queue record rewinds by its own id, and comes back to the composer.
@@ -546,7 +560,7 @@ it("rewinding over a running build stops it first; the build leaves the chat and
   await rig.core.sendUserMessage("Make a village", { thread, engine: "codex" });
   await waitForLog(rig.core, handled(thread, 1), 20000, "the chat's answer");
   const run = {
-    runId: "running-night",
+    runId: "running-run",
     project,
     engine: "codex",
     goal: "Build a village",
@@ -593,6 +607,99 @@ it("rewinding over a running build stops it first; the build leaves the chat and
     assert.equal(chatTurns.length, 2);
     assert.equal(chatTurns[1]!.resume, undefined);
     assert.equal(await exists(dir), true);
+  } finally {
+    await rig.core.stopThread(thread).catch(() => {});
+    await running.catch(() => {});
+  }
+});
+
+it("a rewind over a running build waits for the build's jobs to end, and their lines leave with it", {
+  skip: process.platform === "win32" && "process groups and /bin/sh are POSIX",
+}, async () => {
+  // The job winds down a second after its Stop, as a real build tool does.
+  const jobSpawn: JobSpawn = async (request) => ({
+    child: spawn("/bin/sh", ["-c", request.command], { cwd: request.cwd, detached: true, stdio: "pipe" }),
+    sandboxed: false,
+  });
+  const rig = await startRig({}, { jobSpawn });
+  rigs.push(rig);
+  const project = "rewind-running-job";
+  await rig.core.games.scaffold(project);
+  const thread = await rig.core.createGameThread(project);
+  const workerStarted = deferred();
+  let building = false;
+  rig.core.engines.register({
+    id: "codex",
+    label: "codex",
+    kind: "delegated",
+    status: async () => ({ code: "ready", detail: "" }),
+    models: async () => [],
+    complete: async () => ({
+      message: { role: "assistant", content: '{"pick":"A","reason":"fixture"}' },
+      usage: {},
+      model: "fixture",
+      engine: "codex",
+      stopReason: "stop",
+    }),
+    delegate: async (request) => {
+      const answer = (summary: string) => ({
+        ok: true,
+        summary,
+        sessionId: request.resume ?? "session",
+        turns: 1,
+        usage: {},
+        durationMs: 1,
+        engine: "codex",
+      });
+      if (request.coordinator || !building) return answer("Answered.");
+      workerStarted.resolve();
+      await new Promise<void>((resolve) => request.signal?.addEventListener("abort", () => resolve(), { once: true }));
+      return answer("Stopped.");
+    },
+  });
+  await rig.core.sendUserMessage("Make a village", { thread, engine: "codex" });
+  await waitForLog(rig.core, handled(thread, 1), 20000, "the chat's answer");
+  building = true;
+  const runId = "running-job-run";
+  const running = rig.core.host.dispatch({
+    type: "run_start",
+    threadId: thread,
+    run: {
+      runId,
+      project,
+      engine: "codex",
+      goal: "Build a village",
+      reference: { name: "village", shots: [] },
+      budgets: { wallClockMs: 7200000, maxIterations: 5 },
+    },
+  });
+  try {
+    await workerStarted.promise;
+    const job = await rig.core.jobs.start({
+      owner: { project, chatThreadId: thread, role: JobRole.Lead, scope: { kind: JobScopeKind.Run, runId } },
+      title: "Unreal build",
+      command: "trap 'sleep 1; exit 0' TERM; sleep 30 & wait",
+      cwd: rig.core.games.dirFor(project),
+      policy: {},
+      mode: PermissionMode.Bypass,
+    });
+    const village = bubble(await rig.core.store.listEvents(thread), "Make a village");
+    await rig.core.rewindChat(thread, village.eventId, village.messageId, { files: true });
+    const raw = await rig.core.store.listEvents(thread);
+    const jobEnd = raw.find((e) => {
+      const custom = customRecord(e.data);
+      return custom?.event_type === CustomEvent.JobEnded && custom.payload.jobId === job.id;
+    });
+    const rewound = raw.findLast((e) => customRecord(e.data)?.event_type === CustomEvent.ConversationRewound);
+    assert.ok(jobEnd && rewound, "the job ended and the chat went back");
+    assert.ok(jobEnd.id < rewound.id, "the job's end is in the log the rewind read");
+    const view = await harnessEvents(rig, thread);
+    assert.deepEqual(
+      [...customEvents(view, "job_started"), ...customEvents(view, "job_ended")],
+      [],
+      "the build's job left the chat with the build",
+    );
+    await running;
   } finally {
     await rig.core.stopThread(thread).catch(() => {});
     await running.catch(() => {});
@@ -658,7 +765,7 @@ it("a build that does not close in time fails the rewind, and the queue its Stop
     type: "run_start",
     threadId: thread,
     run: {
-      runId: "stuck-night",
+      runId: "stuck-run",
       project,
       engine: "codex",
       goal: "Build a village",
@@ -735,4 +842,128 @@ it("without a saved copy from before the message, a rewind asked to restore the 
     false,
     "the message left the chat",
   );
+});
+
+it("tells the chat once when a checkpoint leaves a file out for its size", async () => {
+  const rig = await startRig();
+  rigs.push(rig);
+  const project = "rewind-big-files";
+  await rig.core.games.scaffold(project);
+  const thread = await rig.core.createGameThread(project);
+  const dir = rig.core.games.dirFor(project);
+  const tooLarge = CHECKPOINT_FILE_MAX_BYTES + 1;
+  const grow = (file: string) => truncate(path.join(dir, file), tooLarge);
+  await writeFile(path.join(dir, "theme.wav"), "small\n");
+  await writeFile(path.join(dir, "intro.mp4"), "");
+  await grow("intro.mp4");
+  const prompts: string[] = [];
+  rig.core.engines.register({
+    id: "claude-code",
+    label: "Claude",
+    kind: "delegated",
+    status: async () => ({ code: "ready", detail: "" }),
+    models: async () => [],
+    delegate: async (request) => {
+      prompts.push(request.prompt);
+      const step = prompts.length;
+      await writeFile(path.join(request.cwd ?? dir, `step-${step}.js`), `step ${step}\n`);
+      // The third answer grows a saved file past the limit.
+      if (step === 3) await grow("theme.wav");
+      return {
+        ok: true,
+        summary: `Answered step ${step}.`,
+        sessionId: `session-${step}`,
+        turns: 1,
+        usage: {},
+        durationMs: 1,
+        engine: "claude-code",
+      };
+    },
+  });
+  const send = (text: string) => rig.core.sendUserMessage(text, { thread, engine: "claude-code" });
+  const skips = (events: EventEnvelope[]) =>
+    customEvents(
+      events.filter((e) => e.thread_id === thread),
+      CustomEvent.CheckpointSkipped,
+    );
+
+  await send("Make a racer");
+  await waitForLog(rig.core, handled(thread, 1), 20000, "first answer");
+  await send("Add a track");
+  await waitForLog(rig.core, handled(thread, 2), 20000, "second answer");
+  await send("Add music");
+  await waitForLog(rig.core, (events) => skips(events).length >= 2, 20000, "a second set of files left out");
+  const events = await rig.core.store.listEvents(thread);
+  const [first, second, ...more] = skips(events);
+  assert.deepEqual(more, [], "the same set is told once");
+  assert.equal(first?.by, SkippedBy.Checkpoint);
+  assert.deepEqual(first?.files, [{ file: "intro.mp4", bytes: tooLarge }]);
+  assert.equal(first?.fileLimitBytes, CHECKPOINT_FILE_MAX_BYTES);
+  assert.deepEqual(second?.files, [
+    { file: "intro.mp4", bytes: tooLarge },
+    { file: "theme.wav", bytes: tooLarge },
+  ]);
+  assert.match(prompts[0] ?? "", /^Studio notice: Rewind cannot bring back these files.*intro\.mp4 \(50 MB\)/);
+  assert.doesNotMatch(prompts[1] ?? "", /Rewind cannot bring back/, "told once, then used up");
+
+  // A rewind that leaves a file as it is says so too.
+  const music = bubble(events, "Add music");
+  await refExists(dir, chatCheckpointRef(thread, music.messageId, CheckpointPhase.After));
+  const preview = await rig.core.rewindPreview(thread, music.eventId, music.messageId);
+  assert.deepEqual(preview.files.state === "restore" && preview.files.tooLargeFiles, ["theme.wav"]);
+  await rig.core.rewindChat(thread, music.eventId, music.messageId, { files: true });
+  const rewound = skips(await rig.core.store.listEvents(thread)).filter((p) => p.by === SkippedBy.Rewind);
+  assert.deepEqual(
+    rewound.map((p) => p.files),
+    [[{ file: "theme.wav", bytes: tooLarge }]],
+  );
+});
+
+it("when every changed file is too large to save, only the chat rewinds and the files are named", async () => {
+  const rig = await startRig();
+  rigs.push(rig);
+  const project = "rewind-only-big-files";
+  await rig.core.games.scaffold(project);
+  const thread = await rig.core.createGameThread(project);
+  const dir = rig.core.games.dirFor(project);
+  const tooLarge = CHECKPOINT_FILE_MAX_BYTES + 1;
+  await writeFile(path.join(dir, "theme.wav"), "small\n");
+  rig.core.engines.register({
+    id: "claude-code",
+    label: "Claude",
+    kind: "delegated",
+    status: async () => ({ code: "ready", detail: "" }),
+    models: async () => [],
+    delegate: async () => {
+      // The answer only grows a saved file past the limit.
+      await truncate(path.join(dir, "theme.wav"), tooLarge);
+      return {
+        ok: true,
+        summary: "Answered.",
+        sessionId: "session-1",
+        turns: 1,
+        usage: {},
+        durationMs: 1,
+        engine: "claude-code",
+      };
+    },
+  });
+  await rig.core.sendUserMessage("Add music", { thread, engine: "claude-code" });
+  await waitForLog(rig.core, handled(thread, 1), 20000, "the answer");
+  const music = bubble(await rig.core.store.listEvents(thread), "Add music");
+  await refExists(dir, chatCheckpointRef(thread, music.messageId, CheckpointPhase.After));
+
+  const preview = await rig.core.rewindPreview(thread, music.eventId, music.messageId);
+  assert.deepEqual(preview.files, { state: "unavailable", reason: "too-large", tooLargeFiles: ["theme.wav"] });
+  await rig.core.rewindChat(thread, music.eventId, music.messageId);
+  const records = customEvents(
+    (await rig.core.store.listEvents(thread)).filter((e) => e.thread_id === thread),
+    CustomEvent.CheckpointSkipped,
+  ).filter((p) => p.by === SkippedBy.Rewind);
+  assert.deepEqual(
+    records.map((p) => p.files),
+    [[{ file: "theme.wav", bytes: tooLarge }]],
+    "the rewind that left them says so",
+  );
+  assert.equal((await readFile(path.join(dir, "theme.wav"))).length, tooLarge, "the file stays as it is");
 });

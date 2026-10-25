@@ -10,13 +10,15 @@ import path from "node:path";
 import { redactSecrets } from "../shared/redact.ts";
 
 export const LOG_FILE = "studio.log";
-/** 5 files of 5 MB: a few nights of harness stderr. */
+/** 5 files of 5 MB: a few runs of harness stderr. */
 export const LOG_MAX_BYTES = 5 * 1024 * 1024;
 export const LOG_FILES = 5;
 
 const TAIL_CHUNK_BYTES = 8 * 1024;
 
-const EMAIL = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g;
+// A local part has only one possible start. Retrying inside a long word makes a failed
+// address search quadratic whenever some other address puts an @ anywhere in the line.
+const EMAIL = /(?<![\w.+-])[\w.+-]+@[\w-]+(?:\.[\w-]+)+/;
 const REGEXP_SPECIAL = /[.*+?^$()|[\]{}\\]/g;
 
 /**
@@ -34,8 +36,25 @@ function homePattern(home: string): RegExp | null {
 }
 
 function scrubWithPattern(text: string, pattern: RegExp | null): string {
-  const out = redactSecrets(text).replace(EMAIL, "[email]");
+  const redacted = redactSecrets(text);
+  // Text without an @ holds no address to find.
+  const out = redacted.includes("@") ? scrubEmails(redacted) : redacted;
   return pattern ? out.replace(pattern, "~") : out;
+}
+
+function scrubEmails(text: string): string {
+  const parts: string[] = [];
+  let remaining = text;
+  let match = EMAIL.exec(remaining);
+  // Restart the boundary after each match: a glued +name or ..name belongs to the next address.
+  // Searching only the remaining suffix avoids rescanning long non-address words.
+  while (match) {
+    parts.push(remaining.slice(0, match.index), "[email]");
+    remaining = remaining.slice(match.index + match[0].length);
+    match = EMAIL.exec(remaining);
+  }
+  parts.push(remaining);
+  return parts.join("");
 }
 
 /** Read backwards by bytes, decoding only after complete line boundaries were collected. */

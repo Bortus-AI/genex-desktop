@@ -473,12 +473,12 @@ describe("steered session: an engine without input mid-turn is interrupted and r
     await q.send("and ducks"); // joins the first prompt
     prepared.resolve();
     await started.promise;
-    await q.send("make it night"); // interrupts that leg before it read anything
+    await q.send("make it run"); // interrupts that leg before it read anything
     await until(() => seen.length === 3);
-    assert.equal(calls[1], withSteers(withSteers("PROMPT", ["and ducks"]), ["make it night"]));
+    assert.equal(calls[1], withSteers(withSteers("PROMPT", ["and ducks"]), ["make it run"]));
     assert.deepEqual(
       seen,
-      ["build a pond", "and ducks", "make it night"],
+      ["build a pond", "and ducks", "make it run"],
       "neither was read: both get turns of their own, in order",
     );
     q.queue.stop();
@@ -498,7 +498,7 @@ describe("steered session: an engine without input mid-turn is interrupted and r
             // The interrupt for the first message lands; a second is sent while the leg winds down.
             q.onInterrupt(() => {
               q.onInterrupt(() => {});
-              void q.send("and night").then(() => cut.resolve());
+              void q.send("and run").then(() => cut.resolve());
             });
             started.resolve();
             await cut.promise;
@@ -513,14 +513,14 @@ describe("steered session: an engine without input mid-turn is interrupted and r
     await q.send("and ducks");
     await until(() => q.state("build a pond")?.state === "handled");
     assert.equal(calls.length, 2);
-    assert.equal(calls[1], steeredTurnPrompt(["and ducks", "and night"]));
+    assert.equal(calls[1], steeredTurnPrompt(["and ducks", "and run"]));
     const textOf = (messageId: string) =>
       q.events.find(
         (r) => r.data.event_type === "coordinator_message_queued" && r.data.payload.messageId === messageId,
       )!.data.payload.action.text;
     assert.deepEqual(
       custom(q.events, "coordinator_message_delivered").map((e) => textOf(payloadOf(e).messageId)),
-      ["and ducks", "and night"],
+      ["and ducks", "and run"],
     );
     q.queue.stop();
   });
@@ -579,6 +579,50 @@ describe("steered session: an engine without input mid-turn is interrupted and r
     ]);
     assert.equal(result.summary, "done");
     assert.equal("steered" in result, false, "the result is the engine's, untouched");
+  });
+  it("a session the engine answers it cannot find (another account, never saved) starts fresh, so the chat goes on", async () => {
+    const lost: DelegateResult = {
+      ok: false,
+      summary: "",
+      turns: 0,
+      usage: {},
+      engine: "claude-code",
+      stopReason: "error",
+      errorText: "No conversation found with session ID: aa932c8a-f6c0-463c-8fa0-87a9ae52895c",
+    };
+    const calls: Array<{ prompt: string; resume: string | null }> = [];
+    const result = await steeredCall({ cancelled: false }, undefined, {
+      prompt: "PROMPT",
+      resume: "aa932c8a-f6c0-463c-8fa0-87a9ae52895c",
+      fresh: () => "FRESH",
+      call: async (prompt, resume) => {
+        calls.push({ prompt, resume });
+        return calls.length === 1 ? lost : ok("done", "s2");
+      },
+    });
+    assert.deepEqual(
+      calls.map((c) => [c.prompt, c.resume]),
+      [
+        ["PROMPT", "aa932c8a-f6c0-463c-8fa0-87a9ae52895c"],
+        ["FRESH", null],
+      ],
+    );
+    assert.equal(result.summary, "done");
+
+    // A failure that only mentions Resume (a usage cap's words) is an answer, never a lost session.
+    const capped = { ...lost, errorText: "You've hit your weekly limit; press Resume once it resets" };
+    const once: Array<string | null> = [];
+    const answer = await steeredCall({ cancelled: false }, undefined, {
+      prompt: "PROMPT",
+      resume: "s1",
+      fresh: () => "FRESH",
+      call: async (_prompt, resume) => {
+        once.push(resume);
+        return capped;
+      },
+    });
+    assert.deepEqual(once, ["s1"]);
+    assert.equal(answer, capped);
   });
 });
 
@@ -682,18 +726,18 @@ describe("steer through the host and the harness process", () => {
           return stopped("codex-thread", 3);
         }
         assert.equal(request.resume, "codex-thread");
-        assert.equal(request.prompt.split("\n\n")[0], steeredTurnPrompt(["Make it night"]).split("\n\n")[0]);
-        assert.match(request.prompt, /> Make it night/);
+        assert.equal(request.prompt.split("\n\n")[0], steeredTurnPrompt(["Make it run"]).split("\n\n")[0]);
+        assert.match(request.prompt, /> Make it run/);
         return ok("Night falls on the pond.", "codex-thread");
       },
     });
     await rig.core.sendUserMessage("Build a pond", { thread, engine: "codex" });
     await started.promise;
-    await rig.core.sendUserMessage("Make it night", { thread, engine: "codex" });
+    await rig.core.sendUserMessage("Make it run", { thread, engine: "codex" });
     const events = (await waitForLog(rig.core, handledCount(thread, 1), 15000)).filter((e) => e.thread_id === thread);
     assert.equal(calls.length, 2);
-    const night = byText(events, "Make it night");
-    assert.equal(night.state, "delivered");
+    const loopRun = byText(events, "Make it run");
+    assert.equal(loopRun.state, "delivered");
     assert.deepEqual(
       custom(events, "coordinator_message_delivered").map((e) => payloadOf(e).how),
       ["interrupt"],
@@ -789,6 +833,136 @@ describe("steer through the host and the harness process", () => {
     const rewound = await rig.core.rewindChat(thread, pond.eventId!, pond.messageId);
     assert.equal(rewound.text, "Build a pond");
     assert.deepEqual(rewound.held, [], "a delivered message does not come back as a waiting follow-up");
+  });
+
+  it("the Loop switched on while the chat's answer works: read at the session's next step, which goes on in the Loop and starts the build", async () => {
+    const rig = await startRig();
+    rigs.push(rig);
+    const project = "steer-loop";
+    await rig.core.games.scaffold(project);
+    const thread = await rig.core.createGameThread(project);
+    const chat: DelegateRequest[] = [],
+      runs: DelegateRequest[] = [],
+      started = deferred();
+    rig.core.engines.register({
+      id: "claude-code",
+      label: "Claude",
+      kind: "delegated",
+      steersMidTurn: true,
+      status: async () => ({ code: "ready", detail: "" }),
+      models: async () => [],
+      delegate: async (request) => {
+        // The build the turn launches: its sessions end at once, and the test stops it.
+        const inTheGame = request.cwd?.endsWith(`/games/${project}`) === true;
+        if (request.director || !inTheGame) {
+          runs.push(request);
+          return ok("Looked around.", `run-session-${runs.length}`);
+        }
+        chat.push(request);
+        if (chat.length === 1) {
+          // Flipped: Auto is handed the Loop's start too, for a Loop the user asks for in words.
+          assert.deepEqual(
+            request.interviewTools?.map((tool) => tool.name),
+            ["start_autopilot"],
+            "Loop off: only the Loop asked for in words",
+          );
+          // A session that reads words mid-turn: the switch must never be handed to it as words.
+          request.steer?.ready(() => assert.fail("a switch is never read as words mid-turn"));
+          started.resolve();
+          await whenAborted(request.signal);
+          return stopped("chat-session", 3);
+        }
+        assert.equal(request.resume, "chat-session", "the same session goes on");
+        assert.ok(
+          (request.interviewTools ?? []).some((tool) => tool.name === "start_autopilot"),
+          "with the Loop's start",
+        );
+        assert.match(request.prompt, /The Loop is on/);
+        assert.match(request.prompt, /> make it in the loop/);
+        return ok("Starting the Loop for the boss fight.", "chat-session", {
+          studioToolCalls: [
+            { name: "start_autopilot", args: { goal: "a boss fight with a giant exterminator", direction: "dark" } },
+          ],
+        });
+      },
+    });
+    await rig.core.sendUserMessage("Build the boss fight", { thread, engine: "claude-code" });
+    await started.promise;
+    await rig.core.sendUserMessage("make it in the loop", { thread, engine: "claude-code", autopilot: {} });
+    let events = (await waitForLog(rig.core, handledCount(thread, 1), 30000)).filter((e) => e.thread_id === thread);
+    assert.equal(chat.length, 2, "one answer, cut once at its next step");
+    assert.equal(byText(events, "make it in the loop").state, "delivered", "read by the answer: never queued");
+    assert.deepEqual(
+      custom(events, "coordinator_message_delivered").map((e) => payloadOf(e).how),
+      ["interrupt"],
+    );
+    events = (await waitForLog(rig.core, (es) => custom(es, "run_registered").length > 0, 30000)).filter(
+      (e) => e.thread_id === thread,
+    );
+    assert.equal(custom(events, "run_registered").length, 1, "the Loop started from the answer");
+    await rig.core.stopThread(thread);
+    await waitForLog(
+      rig.core,
+      (es) => custom(es, "run_finished").length + custom(es, "autopilot_paused").length > 0,
+      60000,
+    );
+  });
+
+  it("a build the answer launched before an engine, model or effort change starts on the change", async () => {
+    const asked = { engine: "claude-code", model: "opus", effort: "medium", autopilot: { hours: 2 } };
+    const cases: Array<[string, Record<string, unknown>, Record<string, unknown>]> = [
+      ["effort", { effort: "high" }, { engine: "claude-code", model: "opus", effort: "high" }],
+      ["model", { model: "sonnet" }, { engine: "claude-code", model: "sonnet", effort: "medium" }],
+      ["engine", { engine: "codex", model: "gpt-5" }, { engine: "codex", model: "gpt-5", effort: "medium" }],
+    ];
+    for (const [label, change, expected] of cases) {
+      const rig = await startRig();
+      rigs.push(rig);
+      const project = `steer-kept-${label}`;
+      await rig.core.games.scaffold(project);
+      const thread = await rig.core.createGameThread(project);
+      const started = deferred();
+      let chatTurns = 0;
+      const engine = (id: string, label: string) => ({
+        id,
+        label,
+        kind: "delegated" as const,
+        status: async () => ({ code: "ready" as const, detail: "" }),
+        models: async () => [],
+        delegate: async (request: DelegateRequest) => {
+          const inTheGame = request.cwd?.endsWith(`/games/${project}`) === true;
+          if (request.director || !inTheGame) return ok("Looked around.", `run-${id}`);
+          chatTurns++;
+          started.resolve();
+          await whenAborted(request.signal);
+          // Cut once it recorded the build's start: the turn ends on it.
+          return stopped("chat-session", 2, {
+            studioToolCalls: [{ name: "start_autopilot", args: { goal: "a boss fight", direction: "dark" } }],
+          });
+        },
+      });
+      rig.core.engines.register(engine("claude-code", "Claude"));
+      rig.core.engines.register(engine("codex", "Codex"));
+      await rig.core.sendUserMessage("Build the boss fight", { thread, ...asked });
+      await started.promise;
+      await rig.core.sendUserMessage("and make it harder", { thread, ...asked, ...change });
+      const events = (await waitForLog(rig.core, (es) => custom(es, "run_registered").length > 0, 30000)).filter(
+        (e) => e.thread_id === thread,
+      );
+      const run = payloadOf(custom(events, "run_registered")[0]);
+      assert.equal(chatTurns, 1, `${label}: no leg ran after the cut`);
+      assert.deepEqual(
+        { engine: run.engine, model: run.model, effort: run.effort },
+        expected,
+        `${label}: the build starts on the change`,
+      );
+      await rig.core.stopThread(thread);
+      await waitForLog(
+        rig.core,
+        (es) => custom(es, "run_finished").length + custom(es, "autopilot_paused").length > 0,
+        60000,
+      );
+    }
   });
 
   it("a message steered into a turn that continues the build reaches the builder, restated or not", async () => {
@@ -944,11 +1118,11 @@ describe("steer through the host and the harness process", () => {
           event_type: "coordinator_message_delivered",
           payload: { messageId: "ducks", into: "pond", how: "interrupt" },
         },
-        { type: "messages", messages: [{ role: "user", content: "Make it night" }] },
+        { type: "messages", messages: [{ role: "user", content: "Make it run" }] },
         {
           type: "custom",
           event_type: "coordinator_message_queued",
-          payload: { messageId: "night", action: action("night", "Make it night") },
+          payload: { messageId: "night", action: action("night", "Make it run") },
         },
         { type: "custom", event_type: "coordinator_message_steering", payload: { messageId: "night", into: "pond" } },
       ],
@@ -961,7 +1135,7 @@ describe("steer through the host and the harness process", () => {
     assert.equal(prompts.length, 2, "the cut-short turn once, the unread message once");
     assert.match(prompts[0]!, /LATEST USER MESSAGE:\nBuild a pond/);
     assert.match(prompts[0]!, /address it too:\n> And ducks/, "the message it had read rides with it");
-    assert.match(prompts[1]!, /LATEST USER MESSAGE:\nMake it night/);
+    assert.match(prompts[1]!, /LATEST USER MESSAGE:\nMake it run/);
     const events = await rig.core.store.listEvents(thread);
     assert.deepEqual(
       ["pond", "ducks", "night"].map((id) => messageQueueState(events as never).messages.get(id)!.state),

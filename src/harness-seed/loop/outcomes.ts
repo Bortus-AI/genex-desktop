@@ -27,10 +27,12 @@ export const StopCode = {
   Done: "done",
   /** The same unjudgeable cause, build after build: no third build on it. */
   CircuitBreak: "circuit-break",
-  /** The builder's engine is out of usage — a cap that outlives the night. */
+  /** The builder's engine is out of usage — a cap that outlives the run. */
   UsageLimit: "usage-limit",
   /** The engine failed build turn after build turn. */
   EngineExhausted: "engine-exhausted",
+  /** The builder's engine cannot run its sandbox on this computer: it refused the build before it began. */
+  SandboxUnavailable: "sandbox-unavailable",
   /** Nothing could be seen to judge: the observation layer is down, the build is kept unjudged. */
   ObservationDown: "observation-down",
   /** The judge could not answer, twice in a row. */
@@ -75,6 +77,7 @@ const DIED_EARLY = new Set<string | null>([
   StopCode.ObservationDown,
   StopCode.UsageLimit,
   StopCode.EngineExhausted,
+  StopCode.SandboxUnavailable,
   StopCode.AttemptNotKept,
 ]);
 

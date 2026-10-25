@@ -1,6 +1,8 @@
 /** Evidence for the round, with patience for a blind camera, and whether the build it saw can be judged at all. */
 import { gatherEvidence, observationOnlyFailure, withObservationPatience } from "../../evidence.ts";
 import { demosNamedByChecks } from "../../spec.ts";
+import { racesThrottleBot } from "../../throttle-bot.ts";
+import { statePathsNamedByChecks } from "../../state-shape.ts";
 import { normalizeReason } from "../../replan.ts";
 import { GIT, commitAll, shortSha } from "../../git.ts";
 import { StopCode, stopWith } from "../../outcomes.ts";
@@ -13,6 +15,7 @@ import { BuildFailure } from "./build.ts";
 import { MOTION_FRAMES } from "../policy.ts";
 import { brokenStreakWords } from "../rules.ts";
 import { roundFields } from "../record.ts";
+import { ownsCameraWiring } from "../camera-wiring.ts";
 
 /** Observation outages in a row that stop the facet: the challenger is held in the worktree, unjudged. */
 const OUTAGES_TO_STOP = 2;
@@ -61,13 +64,20 @@ async function gatherOnce(loop: FacetLoop, round: FacetRound): Promise<AnyRecord
       motion: legacy ? 0 : MOTION_FRAMES,
       audio: !legacy,
       // Every demo a check names runs; the integration facet — the only judgeable build of
-      // the merged game — runs all of them.
+      // the merged game — runs all of them. Under the cap, a demo this challenger added runs
+      // before the ones the accepted build already showed.
       requiredDemos: demosNamedByChecks(spec.checks),
+      knownDemos: loop.incumbentEvidence?.registeredDemos ?? null,
+      // A board that carries `throttle-bot-loses` races the throttle-only bot (evidence.ts).
+      challenge: racesThrottleBot(spec.checks),
+      // The paths the board reads are cut last when the state is over the studio's budget.
+      keepPaths: statePathsNamedByChecks(spec.checks),
       ...(role === FacetRole.Integration ? { maxDemos: Infinity } : {}),
+      camerasOwned: ownsCameraWiring(loop),
       setup: facetSetup,
       // An error the incumbent (or the base, before any incumbent) already logs is the
-      // build's, not this challenger's: five workers once lost their first iteration to
-      // one shader line in a base nobody owned.
+      // build's, not this challenger's: one shader line in a base nobody owns must not cost
+      // every worker its first iteration.
       // `consoleBaseline` is every message the incumbent logged; `consoleErrors` is the last
       // five a prompt shows — a baseline built from five forgives the wrong ones.
       inheritedConsole: [

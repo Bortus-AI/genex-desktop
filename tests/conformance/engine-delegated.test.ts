@@ -18,7 +18,9 @@ import { STEER_STALL_MS, steerFeed, steerSession, userFrame } from "../../src/su
 import { credentialHomes } from "../../src/substrate/credential-homes.ts";
 import { absoluteRule } from "../../src/substrate/engines/claude-permissions.ts";
 import { EngineError, type Engine } from "../../src/substrate/engines/types.ts";
-import { registeredSchema, scriptedClaude } from "../helpers/scripted-claude.ts";
+import { StopReason } from "../../src/shared/engine-requests.ts";
+import { PermissionMode } from "../../src/shared/permissions.ts";
+import { registeredSchema, scriptedClaude, wokenSession } from "../helpers/scripted-claude.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
 // An engine resolves — and sweeps — its login homes the moment it is built, and `CLAUDE_CONFIG_DIR`
@@ -105,7 +107,7 @@ type Send =
     }) => boolean)
   | null;
 
-async function engineWithLogin(queryFn: never): Promise<ClaudeCodeEngine> {
+async function engineWithLogin(queryFn: never, platform?: NodeJS.Platform): Promise<ClaudeCodeEngine> {
   const root = await tmpDir("studio-engine-");
   const home = path.join(root, "claude-home");
   await mkdir(home, { recursive: true });
@@ -115,6 +117,7 @@ async function engineWithLogin(queryFn: never): Promise<ClaudeCodeEngine> {
     engineHome: home,
     systemHome: path.join(root, "no-system-login"),
     queryFn,
+    ...(platform ? { platform } : {}),
   });
 }
 
@@ -137,7 +140,122 @@ const successRun = [
   },
 ];
 
+/** The CLI's own words when the sandbox a session asks for cannot run on this computer. */
+const SANDBOX_REFUSAL =
+  "sandbox required but unavailable: sandbox is enabled but the Windows sandbox is not active on this session (feature gate off). set sandbox.failIfUnavailable=false to run without it";
+/** A refused session's result: an error before any turn. */
+const sandboxRefusedResult = {
+  type: "result",
+  subtype: "error_during_execution",
+  is_error: true,
+  errors: [SANDBOX_REFUSAL],
+  num_turns: 0,
+};
+
+/**
+ * How a refused session's stream ends: on the result alone, the CLI's refusal thrown (after init
+ * when the CLI sent one: the SDK yields it first), or the result followed by the SDK's own throw.
+ */
+function refusalThrow(ending: string, initialized: boolean): { throwOn?: Error; throwAfter?: Error } {
+  if (ending === "result") return {};
+  if (ending === "result-then-throw") return { throwAfter: new Error("Claude Code process exited with code 1") };
+  return initialized ? { throwAfter: new Error(SANDBOX_REFUSAL) } : { throwOn: new Error(SANDBOX_REFUSAL) };
+}
+
+/** A worker's delegation in a disposable folder: its session asks for Claude Code's sandbox. */
+async function workerRequest() {
+  const cwd = await tmpDir("claude-worker-start-");
+  return {
+    cwd,
+    prompt: "Build the fixture",
+    worker: {
+      id: "fixture-worker",
+      title: "Fixture worker",
+      mode: PermissionMode.Manual,
+      writeRoots: [cwd],
+      neverTouch: { roots: [], open: [] },
+      research: false,
+    },
+  };
+}
+
 describe("claude code delegated engine", () => {
+  it("WIN-275: a worker whose sandbox the CLI cannot run here ends as sandbox_unavailable, its box still required off Windows", async () => {
+    const init = { type: "system", subtype: "init", model: "claude-sonnet-5", session_id: "refused", tools: [] };
+    for (const platform of ["win32", "darwin"] as const)
+      for (const initialized of [false, true])
+        for (const ending of ["throw", "result", "result-then-throw"]) {
+          const label = `${platform}/${initialized ? "after init" : "before init"}/${ending}`;
+          const messages = [...(initialized ? [init] : []), ...(ending === "throw" ? [] : [sandboxRefusedResult])];
+          const sdk = fakeQuery(messages, refusalThrow(ending, initialized));
+          const result = await (await engineWithLogin(sdk.fn, platform)).delegate(await workerRequest());
+          assert.equal(result.ok, false, label);
+          assert.equal(result.stopReason, StopReason.SandboxUnavailable, label);
+          assert.ok(result.errorText?.includes(SANDBOX_REFUSAL), `${label}: the CLI's own reason is kept`);
+          const sandbox = sdk.seen[0]?.sandbox as Record<string, unknown>;
+          // Windows: Claude Code's sandbox cannot start there, so Genex's runs the worker's
+          // commands (claude-windows-commands.test.ts) and the CLI has no box of its own to refuse.
+          if (platform === "win32") {
+            assert.equal(sandbox.enabled, false, `${label}: Genex's sandbox holds the commands`);
+            continue;
+          }
+          assert.equal(sandbox.enabled, true, label);
+          assert.equal(sandbox.failIfUnavailable, true, `${label}: never run without the box`);
+        }
+  });
+
+  it("WIN-275: a session that already replied, or failed some other way, keeps its own ending", async () => {
+    const replied = { type: "assistant", message: { content: [{ type: "text", text: "Building." }] } };
+    const afterReply = fakeQuery([replied, sandboxRefusedResult]);
+    const result = await (await engineWithLogin(afterReply.fn)).delegate(await workerRequest());
+    assert.equal(result.stopReason, "error_during_execution", "a session that worked is a failed build, judged as one");
+    const other = fakeQuery([], { throwOn: new Error("fixture startup refused") });
+    await assert.rejects((await engineWithLogin(other.fn)).delegate(await workerRequest()), { kind: "other" });
+    const signedOut = fakeQuery([], { throwOn: new Error("not logged in") });
+    await assert.rejects((await engineWithLogin(signedOut.fn)).delegate(await workerRequest()), { kind: "auth" });
+  });
+
+  it("preserves a result's auth failure when the SDK only throws its exit code", async () => {
+    for (const platform of ["win32", "darwin"] as const) {
+      const sdk = fakeQuery(
+        [
+          {
+            type: "result",
+            subtype: "error_during_execution",
+            is_error: true,
+            errors: ["not logged in"],
+            num_turns: 0,
+          },
+        ],
+        { throwAfter: new Error("Claude Code process exited with code 1") },
+      );
+      await assert.rejects((await engineWithLogin(sdk.fn, platform)).delegate(await workerRequest()), { kind: "auth" });
+    }
+  });
+
+  it("keeps a typed SDK failure ahead of an earlier result's auth text", async () => {
+    for (const kind of ["auth", "rate_limit", "usage_limit", "unavailable", "timeout", "aborted"] as const) {
+      const failure = new EngineError(kind, "claude-code", `fixture ${kind}`);
+      const sdk = fakeQuery(
+        [
+          {
+            type: "result",
+            subtype: "error_during_execution",
+            is_error: true,
+            errors: ["not logged in"],
+            num_turns: 0,
+          },
+        ],
+        { throwAfter: failure },
+      );
+      await assert.rejects(
+        (await engineWithLogin(sdk.fn)).delegate(await workerRequest()),
+        (error) => error === failure,
+        kind,
+      );
+    }
+  });
+
   it("streams only reply text, preserves long completed replies, and retains tool results", async () => {
     const text = "The bridge and lights are ready. ".repeat(200);
     const { fn, seen } = fakeQuery([
@@ -261,6 +379,28 @@ describe("claude code delegated engine", () => {
     assert.equal(toolUse.parts[0]?.name, "Write");
   });
 
+  it("runs on the account chosen in Settings: an added one in its own home, the Terminal login in the CLI's", async () => {
+    const root = await tmpDir("studio-engine-accounts-");
+    const home = path.join(root, "claude-home");
+    const systemHome = path.join(root, "dot-claude");
+    for (const dir of [home, systemHome]) {
+      await mkdir(dir, { recursive: true });
+      await writeFile(path.join(dir, ".credentials.json"), "{}");
+    }
+    const { fn, seen } = fakeQuery(successRun);
+    const engine = new ClaudeCodeEngine({ resolveCli: fixtureCodingCli, engineHome: home, systemHome, queryFn: fn });
+    const added = await engine.accounts.newAccount();
+    await writeFile(path.join(added.home, ".credentials.json"), "{}");
+    await engine.accounts.remember(added.id, { email: "work@example.com" });
+    await engine.accounts.choose(added.id);
+    await engine.delegate({ prompt: "build", cwd: "/tmp/game-workspace" });
+    await engine.accounts.choose("terminal");
+    await engine.delegate({ prompt: "build", cwd: "/tmp/game-workspace" });
+    const envs = seen.map((call) => (call as { env: Record<string, string> }).env.CLAUDE_CONFIG_DIR);
+    assert.deepEqual(envs, [added.home, undefined]);
+    assert.deepEqual(await engine.resolveLogin(), { source: "system", home: systemHome });
+  });
+
   it("turns a subscription throttle into a recoverable engine error", async () => {
     const root = await tmpDir("studio-engine-");
     const { fn } = fakeQuery([], { throwOn: new Error("Claude usage limit reached; resets at 5pm") });
@@ -277,13 +417,16 @@ describe("claude code delegated engine", () => {
       (err: unknown) => {
         assert.ok(err instanceof EngineError);
         assert.equal(err.kind, "rate_limit");
+        // The reset the thrown text names rides with it, so the host can resume after it.
+        const wait = err.retryAfterMs ?? 0;
+        assert.ok(wait > 0 && wait <= 24 * 3_600_000, `the wait until 5pm: ${err.retryAfterMs}`);
         return true;
       },
     );
   });
 
   it("turns a weekly cap into usage_limit — the run must end, not wait", async () => {
-    // The wording the CLI actually used the night a run burned every facet's strikes on it.
+    // The wording the CLI actually used the run a run burned every facet's strikes on it.
     const root = await tmpDir("studio-engine-");
     const { fn } = fakeQuery([], {
       throwOn: new Error("You've hit your weekly limit · resets Sep 1 at 10am (Europe/Belgrade)"),
@@ -605,7 +748,7 @@ describe("claude code delegated engine", () => {
   });
 
   /**
-   * One session: a waking night's lead is its chat's own session, resumed in the game folder where
+   * One session: a waking run's lead is its chat's own session, resumed in the game folder where
    * that session lives, with the integration worktree it leads readable and no hands of its own.
    */
   it("resumes a read-only lead in the game folder, with the build it leads readable and nothing to write with", async () => {
@@ -614,7 +757,7 @@ describe("claude code delegated engine", () => {
     const game = "/tmp/game-workspace";
     const build = "/tmp/studio-scratch/autopilot/run_lead/integration";
     await engine.delegate({
-      prompt: "lead the night",
+      prompt: "lead the run",
       cwd: game,
       readOnly: true,
       resume: "chat-session",
@@ -749,6 +892,17 @@ describe("claude code delegated engine", () => {
     assert.equal(init.session_id, "ses_1");
   });
 
+  it("marks the CLI's own API error on the mirrored message, so no reader takes it for the model's words", () => {
+    const errored = compactSdkMessage({
+      type: "assistant",
+      error: "rate_limit",
+      message: { content: [{ type: "text", text: "You've hit your session limit · resets 3pm" }] },
+    }) as { apiError?: string; parts: unknown[] };
+    assert.equal(errored.apiError, "rate_limit");
+    const spoken = compactSdkMessage({ type: "assistant", message: { content: [{ type: "text", text: "Done." }] } });
+    assert.equal((spoken as { apiError?: string }).apiError, undefined);
+  });
+
   it("preserves completed reply text so the durable message matches its stream", () => {
     const compacted = compactSdkMessage({
       type: "assistant",
@@ -772,6 +926,9 @@ describe("claude code delegated engine", () => {
       systemHome: path.join(root, "no-system-login"),
       protectedPaths: [path.join(root, "secrets"), path.join(root, "engine-homes")],
       queryFn: fn,
+      // Claude Code's own sandbox runs the shell here; on Windows Genex's does
+      // (claude-windows-commands.test.ts), so the platform is pinned, not the host's.
+      platform: "darwin",
     });
     let result;
     try {
@@ -804,7 +961,8 @@ describe("claude code delegated engine", () => {
     // Flipped (step 1): research is part of building — web search and page reading, with the
     // shell still sandboxed.
     assert.deepEqual(call.allowedTools, ["mcp__studio__checkpoint", "Bash", "WebSearch", "WebFetch"]);
-    assert.deepEqual(call.disallowedTools, ["SendMessage", "ListAgents"]);
+    // Flipped: no session gets Claude Code's own sub-agents; Genex runs the workers.
+    assert.deepEqual(call.disallowedTools, ["SendMessage", "ListAgents", "Agent", "Task"]);
     // Thinking arrives as a summary instead of an empty block, for the chat's Thinking details.
     assert.equal((call.settings as Record<string, unknown>).showThinkingSummaries, true);
     // The delegate default is ABSENT, not empty: a build session is exactly where a project
@@ -842,8 +1000,7 @@ describe("claude code delegated engine", () => {
     assert.equal(call.effort, "high");
     const settings = call.settings as { permissions: { deny: string[]; allow?: string[] } };
     // Flipped (permissions port): Claude Code reads a rule's "/abs" relative to the working
-    // directory; only "//abs" is the filesystem root. The single-slash rules this once sent
-    // guarded nothing real.
+    // directory; only "//abs" is the filesystem root. Single-slash rules guard nothing real.
     assert.deepEqual(
       settings.permissions.deny,
       [
@@ -885,7 +1042,7 @@ describe("claude code delegated engine", () => {
     assert.ok(!deny.some((rule) => rule.includes("stills")));
   });
 
-  it("P02-F6. a judge that answers nothing is a failure, and the model asked for stands in for one the CLI did not name", async () => {
+  it("a judge that answers nothing is a failure, and the model asked for stands in for one the CLI did not name", async () => {
     const silent = [
       { type: "system", subtype: "init", tools: [] },
       { type: "result", subtype: "success", is_error: false, result: "", num_turns: 1, total_cost_usd: 0, usage: {} },
@@ -961,7 +1118,7 @@ describe("claude code delegated engine", () => {
     // Options.skills is a context filter, not a sandbox: a bundled skill's frontmatter is
     // prompt weight that can only make two verdicts that should be the same differ.
     assert.deepEqual(call.skills, [], "the judge loads no skills at all");
-    // P02-F3: no user, project or local settings reach a judge (their hooks, permissions or
+    // No user, project or local settings reach a judge (their hooks, permissions or
     // memory would make two verdicts that should be the same differ).
     assert.deepEqual(call.settingSources, [], "the judge reads no settings files");
     const banned = call.disallowedTools as string[];
@@ -1358,6 +1515,38 @@ describe("steering a running Claude Code turn", () => {
     assert.deepEqual(result.steered, []);
   });
 
+  it("an Auto chat handed only its Loop start still takes input mid-turn: that tool makes no interview", {
+    timeout,
+  }, async () => {
+    const { fn } = steerableQuery(async function* ({ read }) {
+      await read();
+      yield steerInit();
+      yield said("Done.");
+      yield { type: "result", subtype: "success", is_error: false, result: "Done.", num_turns: 1, usage: {} };
+    });
+    const engine = await engineWithLogin(fn);
+    const readies: Array<unknown> = [];
+    await engine.delegate({
+      prompt: "auto brief",
+      cwd: "/tmp/x",
+      interviewTools: [
+        {
+          name: "start_autopilot",
+          description: "Start a Loop, only when asked.",
+          parameters: { type: "object", properties: { goal: { type: "string" } }, required: ["goal"] },
+          onlyWhenAsked: true,
+        },
+      ],
+      steer: {
+        ready: (s) => {
+          readies.push(s);
+        },
+      },
+    });
+    assert.equal(readies.length, 1);
+    assert.equal(typeof readies[0], "function", "told it takes input mid-turn");
+  });
+
   it("a message the CLI discards is not delivered, and the input still ends", { timeout }, async () => {
     const { fn } = steerableQuery(async function* ({ read }) {
       await read();
@@ -1569,7 +1758,7 @@ describe("engine registry & fallback policy", () => {
     assert.deepEqual(await registry.fallbackFor("claude-code", { kind: "auth" }), []);
   });
 
-  it("an outage falls back only to an engine that can do the job: tools need a direct engine (P01-F1)", async () => {
+  it("an outage falls back only to an engine that can do the job: tools need a direct engine", async () => {
     const registry = new EngineRegistry();
     registry.register(engine("ollama", "direct", "ready"));
     registry.register(engine("claude-code", "delegated", "ready"));
@@ -1582,6 +1771,23 @@ describe("engine registry & fallback policy", () => {
       ["claude-code", "bonsai"],
       "a job with no tools may still move to a subscription",
     );
+  });
+
+  it("never moves work onto a metered API the person did not pick: no fallback, no first ready engine", async () => {
+    const registry = new EngineRegistry();
+    registry.register(engine("openrouter", "direct", "ready"));
+    registry.register(engine("opencode", "delegated", "ready"));
+    registry.register(engine("claude-code", "delegated", "ready"));
+    registry.register(engine("ollama", "direct", "ready"));
+    registry.setPreferredOrder(["openrouter", "opencode", "claude-code", "ollama"]);
+    assert.deepEqual(await registry.fallbackFor("claude-code", { kind: "rate_limit" }), ["ollama"]);
+    assert.deepEqual(await registry.fallbackFor("ollama", { kind: "unavailable" }, { tools: true }), []);
+    assert.deepEqual(await registry.fallbackFor("ollama", { kind: "unavailable" }), ["claude-code"]);
+    assert.deepEqual(await registry.fallbackFor("openrouter", { kind: "unavailable" }), ["claude-code", "ollama"]);
+    assert.equal((await registry.firstReady())?.id, "claude-code");
+    assert.equal((await registry.firstReady("direct"))?.id, "ollama");
+    // The person's own pick still reaches it: the registry holds it like any other engine.
+    assert.equal(registry.get("openrouter").id, "openrouter");
   });
 
   it("describes engines for the picker, including unavailable ones", async () => {
@@ -1601,7 +1807,8 @@ describe("engine registry & fallback policy", () => {
 describe("the modeller on claude code (AG-930)", () => {
   it("exposes mcp__studio__blender__model only when the studio granted it, inside the one studio server", async () => {
     const plain = fakeQuery(successRun);
-    const engine = await engineWithLogin(plain.fn);
+    // The pinned list names Claude Code's own Bash: off Windows (claude-windows-commands.test.ts).
+    const engine = await engineWithLogin(plain.fn, "darwin");
     await engine.delegate({ prompt: "build", cwd: "/tmp/game-workspace" });
     assert.deepEqual(
       (plain.seen[0] as Record<string, unknown>).allowedTools,
@@ -1611,7 +1818,7 @@ describe("the modeller on claude code (AG-930)", () => {
     );
 
     const granted = fakeQuery(successRun);
-    const withTool = await engineWithLogin(granted.fn);
+    const withTool = await engineWithLogin(granted.fn, "darwin");
 
     await withTool.delegate({
       prompt: "build",
@@ -1713,7 +1920,7 @@ describe("a connector's tool on claude code (PR4)", () => {
   });
 });
 
-describe("a failed studio tool on claude code (P06-F7)", () => {
+describe("a failed studio tool on claude code", () => {
   it("answers the model with isError, not as a plain result", async () => {
     const script = scriptedClaude([{ tool: "boom" }, { tool: "refused" }, { tool: "fine" }]);
     const engine = await engineWithLogin(script.queryFn);
@@ -1830,6 +2037,25 @@ describe("Claude CLI model discovery", () => {
     assert.equal(aborted, true);
   });
 
+  it("asks without the CLI's own sandbox on Windows only, where it outran the deadline", async () => {
+    const sandboxes: Record<string, unknown> = {};
+    for (const platform of ["win32", "darwin", "linux"] as const) {
+      const engine = await engineWithLogin(
+        ((request: { options: { sandbox: unknown } }) => {
+          sandboxes[platform] = request.options.sandbox;
+          return { supportedModels: async () => [], close() {}, async *[Symbol.asyncIterator]() {} };
+        }) as never,
+        platform,
+      );
+      await engine.refreshModels();
+    }
+    assert.deepEqual(sandboxes, {
+      win32: { enabled: false },
+      darwin: { enabled: true },
+      linux: { enabled: true },
+    });
+  });
+
   it("marks the model the CLI's default resolves to, the first one listed", async () => {
     const engine = await engineWithLogin((() => ({
       supportedModels: async () => [
@@ -1847,7 +2073,7 @@ describe("Claude CLI model discovery", () => {
   });
 });
 
-describe("choosing a fallback when an engine's status hangs (P01-F8)", () => {
+describe("choosing a fallback when an engine's status hangs", () => {
   it("does not wait on a status that never answers: probes are bounded and side by side", async () => {
     const registry = new EngineRegistry({ statusProbeMs: 50 });
     const engine = (id: string, kind: "direct" | "delegated", status: () => Promise<unknown>) =>
@@ -1980,5 +2206,106 @@ describe("Compact now on claude code", () => {
     assert.equal(result.compacted, undefined);
     assert.equal(result.errorText, "Not enough messages to compact.");
     assert.equal(result.sessionId, SESSION, "the session is untouched and still resumable");
+  });
+});
+
+/**
+ * A provider that answers "Your organization has disabled Claude subscription access…" reports it
+ * as a `success`-subtype result flagged `is_error`, in words that match none of the sign-in words.
+ * Read as an ordinary failed turn, a lost account would close the run and land an unchecked build.
+ * A revoked or disabled access is a sign-in failure the user has to fix.
+ */
+describe("an account whose access was taken away (provider lost)", () => {
+  /** The words the CLI said, exactly. */
+  const DISABLED =
+    "Your organization has disabled Claude subscription access for Claude Code · Use an Anthropic API key instead, or ask your admin to enable access";
+
+  /** The stream as the run's log recorded it: the CLI's message as an assistant text, then the result. */
+  const observed = (text: string, assistant: Record<string, unknown> = {}, result: Record<string, unknown> = {}) => [
+    { type: "system", subtype: "init", model: "claude-opus-5-5", session_id: "ses_lead", tools: [] },
+    { type: "assistant", message: { content: [{ type: "text", text }] }, parent_tool_use_id: null, ...assistant },
+    {
+      type: "result",
+      subtype: "success",
+      is_error: true,
+      num_turns: 5,
+      total_cost_usd: 15.904740000000002,
+      result: text,
+      ...result,
+    },
+  ];
+
+  const isAuth = (err: unknown): boolean => {
+    assert.ok(err instanceof EngineError, String(err));
+    assert.equal(err.kind, "auth", err.message);
+    return true;
+  };
+
+  it("D1. a disabled subscription reported inside a success result is a sign-in failure, and the engine stops claiming to be ready", async () => {
+    const engine = await engineWithLogin(fakeQuery(observed(DISABLED)).fn);
+    await assert.rejects(
+      () => engine.delegate({ prompt: "wake", cwd: "/tmp/x", resume: "ses_lead" }),
+      (err: unknown) => isAuth(err) && (err as Error).message.includes("disabled Claude subscription access"),
+    );
+    const after = await engine.status();
+    assert.equal(after.code, "needs_login");
+    assert.match(after.detail, /disabled Claude subscription access/);
+  });
+
+  it("D2. a judge that meets the same answer fails on sign-in, not as some other error to retry", async () => {
+    const engine = await engineWithLogin(fakeQuery(observed(DISABLED)).fn);
+    await assert.rejects(
+      () => engine.complete({ model: "opus", messages: [{ role: "user", content: "BUILD A vs BUILD B" }] }),
+      isAuth,
+    );
+  });
+
+  it("D3. the CLI's own error code on the reply decides, whatever the words, even when the result calls itself a success", async () => {
+    for (const [code, text, flagged] of [
+      ["oauth_org_not_allowed", "Claude Code is not available to this organization", true],
+      ["account_on_hold", "Request refused", false],
+      ["authentication_failed", "Request refused", true],
+    ] as const) {
+      const engine = await engineWithLogin(fakeQuery(observed(text, { error: code }, { is_error: flagged })).fn);
+      await assert.rejects(() => engine.delegate({ prompt: "build", cwd: "/tmp/x" }), isAuth, code);
+    }
+  });
+
+  it("D4. words that only look like it stay an ordinary failure (hostile inputs)", async () => {
+    const lookalikes: Array<[string, Record<string, unknown>]> = [
+      ["API Error: 529 Overloaded", { error: "overloaded" }],
+      ["I disabled the subscription button in the HUD", {}],
+      ["The organization has disabled tyre spray in the rain", {}],
+      ["Your account screen is disabled until the race ends", {}],
+      ["subscription access panel opened", {}],
+      ["Access to the pit lane was revoked by the race director", {}],
+    ];
+    for (const [text, assistant] of lookalikes) {
+      const engine = await engineWithLogin(fakeQuery(observed(text, assistant)).fn);
+      const result = await engine.delegate({ prompt: "build", cwd: "/tmp/x" });
+      assert.equal(result.ok, false, text);
+      assert.equal(result.errorText, text);
+      assert.equal((await engine.status()).code, "ready", `${text} leaves the sign-in alone`);
+    }
+    // A turn that answered after an error on its way is not a lost account.
+    const recovered = [
+      ...observed(DISABLED, { error: "oauth_org_not_allowed" }).slice(0, 2),
+      { type: "assistant", message: { content: [{ type: "text", text: "Built it." }] }, parent_tool_use_id: null },
+      { type: "result", subtype: "success", is_error: false, num_turns: 3, result: "Built it." },
+    ];
+    const engine = await engineWithLogin(fakeQuery(recovered).fn);
+    assert.equal((await engine.delegate({ prompt: "build", cwd: "/tmp/x" })).ok, true);
+  });
+});
+
+/** A session that ended its turn to wait on a background sleep, then was woken by it after its input had ended. */
+const wokenRun = wokenSession();
+
+describe("a session that goes on after its input ended", () => {
+  it("without a worker's seat, a session a background task woke after its last result keeps that result's verdict: its own loop resumes it", async () => {
+    const engine = await engineWithLogin(fakeQuery(wokenRun).fn);
+    const answer = await engine.delegate({ prompt: "Make the character.", cwd: await tmpDir("claude-woken-") });
+    assert.equal(answer.ok, true);
+    assert.equal(answer.summary, "Done.");
   });
 });

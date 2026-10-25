@@ -11,7 +11,8 @@ import { sameSnapshot, shareRecords } from "./snapshot-equality.ts";
  */
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { ThreadKind } from "../../shared/event-log.ts";
-import type { ThreadStatusMap } from "../../shared/ui-events.ts";
+import { isPermissionMode } from "../../shared/permissions.ts";
+import type { ThreadStatusMap, UiEvent, UiEventMap } from "../../shared/ui-events.ts";
 import type { ConversationRecord, GameProject, StudioApi } from "../../shared/studio-api.ts";
 import type { ThreadMeta } from "../types.ts";
 import { createRefresher } from "./refresher.ts";
@@ -39,6 +40,17 @@ export interface ThreadsState {
   stageThreadId: string | null;
   /** The game chat Cmd-1 returns to, remembered across launches. */
   lastGameThreadId: string | null;
+  /**
+   * The game whose page Live holds or is loading, as main last said (`preview.identity`); null
+   * before any load and after a failed one. Opening a game never loads it, so Live keeps this game
+   * (paused out of sight) while another is on the stage, and that one waits for Play.
+   */
+  liveProject: string | null;
+  /**
+   * What the person is waited on to finish in, per chat: each lock's label ("Unreal") a call waits
+   * on there, in the order the waits began.
+   */
+  personFirst: Readonly<Record<string, readonly string[]>>;
 }
 
 export const initialThreads = (lastGameThreadId: string | null = null): ThreadsState => ({
@@ -49,6 +61,8 @@ export const initialThreads = (lastGameThreadId: string | null = null): ThreadsS
   stageProject: null,
   stageThreadId: null,
   lastGameThreadId,
+  liveProject: null,
+  personFirst: {},
 });
 
 const text = (value: unknown): string | undefined => (typeof value === "string" ? value : undefined);
@@ -86,6 +100,7 @@ export function threadMeta(thread: ConversationRecord | null | undefined): Threa
   if (text(raw.lastEngine)) meta.lastEngine = text(raw.lastEngine);
   if (text(raw.lastModel) !== undefined) meta.lastModel = text(raw.lastModel);
   if (text(raw.lastEffort) !== undefined) meta.lastEffort = text(raw.lastEffort);
+  if (isPermissionMode(raw.permissionMode)) meta.permissionMode = raw.permissionMode;
   if (thread) META_CACHE.set(thread, meta);
   return meta;
 }
@@ -122,33 +137,54 @@ export const studioThreadOf = (state: ThreadsState): ConversationRecord | null =
  * was made), then by title. Opening a game is not work: a row never moves because it was selected.
  */
 export function sidebarGames(games: readonly GameProject[], records: readonly ConversationRecord[]): GameProject[] {
-  const recent = (game: GameProject) =>
-    Math.max(
-      Date.parse(game.createdAt) || 0,
-      ...records
-        .filter((thread) => threadMeta(thread).project === game.name)
-        .map((thread) => Date.parse(thread.updated_at) || 0),
-    );
+  const activity = new Map<string, number>();
+  for (const thread of records) {
+    const project = threadMeta(thread).project;
+    if (typeof project !== "string") continue;
+    const updated = Date.parse(thread.updated_at) || 0;
+    activity.set(project, Math.max(activity.get(project) ?? -Infinity, updated));
+  }
+  const recent = new Map(
+    games.map((game) => [game, Math.max(Date.parse(game.createdAt) || 0, activity.get(game.name) ?? -Infinity)]),
+  );
   return [...games].sort((a, b) => {
     if (Boolean(a.pinned) !== Boolean(b.pinned)) return a.pinned ? -1 : 1;
-    return recent(b) - recent(a) || a.title.localeCompare(b.title);
+    return (recent.get(b) ?? 0) - (recent.get(a) ?? 0) || a.title.localeCompare(b.title);
   });
+}
+
+function railChats(records: readonly ConversationRecord[]) {
+  let studio: ConversationRecord | undefined;
+  const byProject = new Map<string, { freshest: ConversationRecord; ids: Set<string> }>();
+  for (const thread of records) {
+    const meta = threadMeta(thread);
+    if (meta.kind !== ThreadKind.Game) {
+      studio ??= thread;
+      continue;
+    }
+    if (!isLiveGameChat(meta) || typeof meta.project !== "string") continue;
+    const chats = byProject.get(meta.project);
+    if (!chats) {
+      byProject.set(meta.project, { freshest: thread, ids: new Set([thread.id]) });
+      continue;
+    }
+    chats.ids.add(thread.id);
+    // Equal timestamps used to sort the later input first.
+    if (thread.updated_at >= chats.freshest.updated_at) chats.freshest = thread;
+  }
+  return { studio, byProject };
 }
 
 /** The rail's order for Alt-↑/↓: Studio, then each game's primary (else freshest) chat. */
 export function railThreadIds(records: readonly ConversationRecord[], games: readonly GameProject[]): string[] {
   const ids: string[] = [];
-  const studio = records.find((thread) => !isGameThread(thread));
+  const { studio, byProject } = railChats(records);
   if (studio) ids.push(studio.id);
   for (const game of games) {
-    const chats = records
-      .filter((thread) => {
-        const meta = threadMeta(thread);
-        return isLiveGameChat(meta) && meta.project === game.name;
-      })
-      .sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1));
-    const chat = chats.find((thread) => thread.id === game.primaryThreadId) ?? chats[0];
-    if (chat) ids.push(chat.id);
+    const chats = byProject.get(game.name);
+    if (!chats) continue;
+    const primary = game.primaryThreadId;
+    ids.push(primary !== undefined && chats.ids.has(primary) ? primary : chats.freshest.id);
   }
   return ids;
 }
@@ -217,6 +253,34 @@ export function statusReported(state: ThreadsState, all: ThreadStatusMap): Threa
   return { ...state, status: all, statusSource: "live" };
 }
 
+/**
+ * A call began or stopped waiting for the person to finish in an app a plugin guards. Read field
+ * by field: a wait with no chat or no label to name is not shown. A chat keeps every label waited
+ * on there; the end of one wait forgets only its own label.
+ */
+export function personFirstReported(state: ThreadsState, notice: UiEventMap[typeof UiEvent.PersonFirst]): ThreadsState {
+  const { threadId, label, waiting } = notice;
+  const named = typeof label === "string" && label.trim() !== "";
+  const placed = typeof threadId === "string" && threadId !== "" && !(threadId in Object.prototype);
+  if (!named || !placed) return state;
+  const app = label.trim();
+  const shown = Object.hasOwn(state.personFirst, threadId) ? (state.personFirst[threadId] ?? []) : [];
+  if (waiting === true)
+    return shown.includes(app)
+      ? state
+      : { ...state, personFirst: { ...state.personFirst, [threadId]: [...shown, app] } };
+  if (!shown.includes(app)) return state;
+  const left = shown.filter((other) => other !== app);
+  const { [threadId]: _ended, ...rest } = state.personFirst;
+  return { ...state, personFirst: left.length ? { ...rest, [threadId]: left } : rest };
+}
+
+/** What the person is waited on to finish in, in one chat (the first wait still going); null when nothing waits for them there. */
+export function personFirstLabel(state: ThreadsState, threadId: string | null): string | null {
+  if (!threadId || !Object.hasOwn(state.personFirst, threadId)) return null;
+  return state.personFirst[threadId]?.[0] ?? null;
+}
+
 /** A harness that is not ready has nothing running: no stale "working" line survives it. */
 export function harnessDown(state: ThreadsState): ThreadsState {
   return statusReported(state, {});
@@ -225,6 +289,20 @@ export function harnessDown(state: ThreadsState): ThreadsState {
 /** A bootstrap's snapshot, unless the harness has already reported since. */
 export function statusBootstrapped(state: ThreadsState, snapshot: ThreadStatusMap | undefined): ThreadsState {
   return state.statusSource === "live" ? state : { ...state, status: snapshot ?? {}, statusSource: "bootstrap" };
+}
+
+/** What main says Live loaded or is loading: its game, or none once a load failed. */
+export function liveIdentified(
+  state: ThreadsState,
+  identity: { project: string | null; error: string | null } | null | undefined,
+): ThreadsState {
+  const project = identity && !identity.error ? identity.project : null;
+  return project === state.liveProject ? state : { ...state, liveProject: project };
+}
+
+/** A load of this game failed before main named it: Live holds no page of it. */
+export function liveLoadFailed(state: ThreadsState, project: string): ThreadsState {
+  return state.liveProject === project ? { ...state, liveProject: null } : state;
 }
 
 /**
