@@ -121,7 +121,9 @@ look, act, pause, play, step, reset, state). A project declares it in `studio.js
 inside the project, the engine a runtime an enabled plugin declares and the studio starts in its
 native-job sandbox with the GPU, as Godot needs to draw); the delegation then gives every role a `GameBridgeTarget`
 ([`src/main/core/game-bridge-target.ts`](../src/main/core/game-bridge-target.ts)) whose game runs in
-the `ProcessSandbox`. The playtest shorthands are not offered there; its moves are drawn on the
+the `ProcessSandbox`. Handing a session its computer starts nothing (every chat turn is handed one):
+the game starts on the session's first move and stops at its release, and until it runs the tool
+offers what a conforming game may do. The playtest shorthands are not offered there; its moves are drawn on the
 worker's agent screen like a browser game's (`targetFramePort`). Every plugin is held to the shared
 conformance suite (`tests/conformance/play-protocol.test.ts`, run against
 `tests/fixtures/fake-play-game.mjs`; `PLAY_GAME_COMMAND` points it at another game).
