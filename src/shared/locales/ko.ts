@@ -1608,7 +1608,11 @@ export default {
     "Grok 계정으로 로그인해 주세요. 로그인 정보는 Grok Build가 보관해요.",
   "Switch to another Grok account": "다른 Grok 계정으로 전환",
   "Update Grok Build": "Grok Build 업데이트",
+  "Update Grok Build from Settings › Model Providers.": "설정 › 모델 제공자에서 Grok Build를 업데이트해 주세요.",
   "xAI blocked this Grok account: {reason}": "xAI가 이 Grok 계정을 차단했어요: {reason}",
+  "xAI no longer accepts this Grok Build.": "xAI가 이 Grok Build를 더 이상 받지 않아요.",
+  "xAI no longer accepts this version. Update it to keep building.":
+    "xAI가 이 버전을 더 이상 받지 않아요. 업데이트하고 계속 만들어 보세요.",
   "{amount} Nex, get Nex": "{amount} Nex, Nex 받기",
   "Get credits": "크레딧 받기",
   "Get the Epic Games Launcher": "Epic Games Launcher 받기",

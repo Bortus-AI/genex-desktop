@@ -15,6 +15,7 @@ import { clip } from "./common.ts";
 import { DelegateEventType } from "./types.ts";
 import { studioToolName } from "./studio-tool-prompts.ts";
 import type { Usage } from "../types.ts";
+import { stripTerminalCodes } from "../../shared/terminal.ts";
 
 /** Grok Build's event types (`streaming-json`). Its wire spelling: never rename a value. */
 export const GrokEvent = {
@@ -289,11 +290,12 @@ function quotedBody(message: string): Record_ | null {
 
 /**
  * The HTTP status of the last API error the CLI logged (`RUST_LOG=error` puts it on stderr as a
- * `status=` field): Grok's own error event leaves it out once its retries for a 429 ran out.
+ * `status=` field): Grok's own error event leaves it out once its retries for a 429 ran out. Some
+ * versions colour the log whatever `NO_COLOR` says, so the colours come off first.
  */
 export function grokStderrStatus(stderr: string): number | null {
   let status: number | null = null;
-  for (const line of stderr.split("\n")) {
+  for (const line of stripTerminalCodes(stderr).split("\n")) {
     if (!LOG_ERROR_LINE.test(line)) continue;
     const field = LOG_STATUS_FIELD.exec(line);
     if (field) status = Number(field[1]);

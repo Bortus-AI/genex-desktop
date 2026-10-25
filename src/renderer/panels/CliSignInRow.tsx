@@ -60,6 +60,8 @@ interface CliRowWords {
   again: { title: string; line: string };
   /** OpenCode's own free models running with no provider signed in; Grok Build has none. */
   freeOnly?: { status: string; line: string };
+  /** Why an installed CLI too old to run needs its update; a row without one says it could not check. */
+  outdatedLine?: string;
 }
 
 /** Grok Build's row, in the person's language (the renderer loads it before this module). */
@@ -79,6 +81,7 @@ const GROK_WORDS = {
   update: t("Update Grok Build"),
   connectedLine: t("Runs on your Grok account"),
   unreachable: t("Grok Build didn't answer. Check the installation, then try again."),
+  outdatedLine: t("xAI no longer accepts this version. Update it to keep building."),
 } as const;
 
 const OPEN_CODE_ROW: CliRowWords = {
@@ -94,7 +97,7 @@ const GROK_ROW: CliRowWords = {
   again: { title: GROK_WORDS.signInAgain, line: GROK_WORDS.signInAgainLine },
 };
 
-/** The row by its state: installing, missing, signing in, free models only, connected or unreachable. */
+/** The row by its state: installing, missing, signing in, free models only, connected, outdated or unreachable. */
 function cliRowView(state: OpenCodeRowState, act: CliRowActions, words: CliRowWords): RowView {
   switch (state) {
     case OpenCodeRowState.Installing:
@@ -130,14 +133,42 @@ function cliRowView(state: OpenCodeRowState, act: CliRowActions, words: CliRowWo
       return words.freeOnly ? freeOnlyView(act, words, words.freeOnly) : connectedView(act, words);
     case OpenCodeRowState.Connected:
       return connectedView(act, words);
+    case OpenCodeRowState.Outdated:
+      if (words.outdatedLine) return outdatedView(act, words, words.outdatedLine);
+      return unreachableView(act, words);
     default:
-      return {
-        tone: RowTone.Danger,
-        status: WORDS.couldNotCheck,
-        line: words.unreachable,
-        actions: <Button onClick={act.recheck}>{WORDS.tryAgain}</Button>,
-      };
+      return unreachableView(act, words);
   }
+}
+
+/**
+ * The CLI is installed but too old to run: its installer puts the current one in place, as the
+ * subscriptions' rows update theirs (its own update would first need it to run).
+ */
+function outdatedView(act: CliRowActions, words: CliRowWords, line: string): RowView {
+  return {
+    tone: RowTone.Warning,
+    status: t("Update needed"),
+    line,
+    actions: (
+      <>
+        <Button variant="default" onClick={act.install}>
+          {words.update}
+        </Button>
+        <Button onClick={act.recheck}>{WORDS.checkAgain}</Button>
+      </>
+    ),
+  };
+}
+
+/** The CLI did not answer: check again. */
+function unreachableView(act: CliRowActions, words: CliRowWords): RowView {
+  return {
+    tone: RowTone.Danger,
+    status: WORDS.couldNotCheck,
+    line: words.unreachable,
+    actions: <Button onClick={act.recheck}>{WORDS.tryAgain}</Button>,
+  };
 }
 
 /** The CLI's own sign-in runs in the row's terminal, below: finish it there, or stop it. */

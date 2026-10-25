@@ -24,6 +24,7 @@ import { CodingCliState } from "../../shared/coding-cli.ts";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { EngineId } from "../../shared/providers.ts";
 import { OpenCodeDialect, OpenCodeVersionProblem, openCodeRelease } from "./opencode-cli.ts";
+import { GROK_MIN_VERSION, grokTooOld } from "./grok-cli.ts";
 export interface CliInstallation {
   status: CodingCliStatus;
   env: NodeJS.ProcessEnv;
@@ -143,6 +144,7 @@ const MESSAGE = {
     "This OpenCode is too old for Genex. Update OpenCode (Genex runs 1.18, and 2.x from 2.0.20), then check again.",
   OpenCodeTooNew: (major: number | null) =>
     `Genex doesn't run OpenCode ${major ?? ""}.x yet. Install OpenCode 2.x or 1.18, then check again.`,
+  GrokTooOld: `This Grok Build is too old: xAI serves ${GROK_MIN_VERSION} or later. Update it, then check again.`,
 } as const;
 
 const diagnostics = new Map<string, { at: number; value: CliInstallation }>();
@@ -789,8 +791,12 @@ async function checkCliCapabilities(
     await keepAnswers();
   }
 }
-/** The options a CLI must list: OpenCode's by the command line its version speaks; throws for a version it cannot run. */
+/**
+ * The options a CLI must list: OpenCode's by the command line its version speaks; throws for a
+ * version it cannot run, and for a Grok Build older than xAI serves.
+ */
 function requiredFlags(provider: CodingProvider, version: string): string[] {
+  if (provider === EngineId.Grok && grokTooOld(version)) throw new Error(MESSAGE.GrokTooOld);
   if (provider !== EngineId.OpenCode) return REQUIRED_FLAGS[provider];
   const release = openCodeRelease(version);
   if ("problem" in release) throw new Error(openCodeVersionMessage(release.problem, release.major));

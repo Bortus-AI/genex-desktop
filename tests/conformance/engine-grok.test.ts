@@ -133,6 +133,11 @@ describe("Grok Build's stream", () => {
       "only an error line counts",
     );
     assert.equal(grokStderrStatus(""), null);
+    assert.equal(
+      grokStderrStatus(await fixture("grok-outdated-cli-1.0.3.stderr")),
+      426,
+      "a real log, coloured whatever NO_COLOR says, still names its status",
+    );
   });
 
   it("reports a compaction and the session it kept", async () => {
@@ -439,6 +444,29 @@ describe("Grok Build sessions", () => {
     const refused = await ending("grok-model-refused-1.0.70.jsonl");
     assert.equal(refused.ok, false);
     assert.match(refused.errorText ?? "", /^xAI refused grok-4\.7 [\s\S]*Pick another model/);
+  });
+
+  it("says to update a CLI xAI refuses as outdated, and reads outdated until the CLI changes", async () => {
+    let version = "grok 1.0.3 (1a29d5bc12d4) [stable]";
+    const root = await tmpDir("grok-outdated-");
+    const engine = new GrokEngine({
+      scratchRoot: path.join(root, "scratch"),
+      home: path.join(root, ".grok"),
+      resolveCli: async () => ({ ready: true, path: "/Users/me/.grok/bin/grok", version, detail: "ok" }),
+      probe: () => probed(SIGNED_IN),
+      execFn: async function* () {
+        yield* await events("grok-outdated-cli-1.0.3.jsonl");
+      },
+    });
+    const outcome = await engine.delegate({ cwd: await game(), prompt: "x" });
+    assert.equal(outcome.ok, false, "an outcome the chat shows, never a fallback to another engine");
+    assert.match(outcome.errorText ?? "", /too old for xAI[\s\S]*Update it in Settings › Model Providers/);
+    const status = await engine.status();
+    assert.equal(status.code, "error");
+    assert.match(status.remedy ?? "", /Update Grok Build/);
+    assert.equal((await engine.account()).cli.state, "incompatible", "Settings offers the update");
+    version = "grok 1.0.70 (f50904eaee6c)";
+    assert.equal((await engine.status()).code, "ready", "an updated CLI is asked afresh");
   });
 
   it("calls a failure with no status a sign-in failure only when the CLI says it is signed out", async () => {

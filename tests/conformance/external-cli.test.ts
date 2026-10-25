@@ -802,12 +802,12 @@ const GROK_FLAGS =
   "--max-turns --no-plan --output-format --permission-mode --prompt-file --prompt-json --reasoning-effort --resume " +
   "--rules --sandbox --session-id --tools";
 test("Grok Build is ready when its help lists every option Genex passes; one that lacks one is refused by name", async () => {
-  const grokCli = async (relative: string, help: string) => {
+  const grokCli = async (relative: string, help: string, version = "grok 1.0.70 (f50904eaee6c)") => {
     const file = path.join(root, exe(relative));
     await launcher(
       file,
-      `#!/bin/sh\ncase "$1" in\n --version) echo 'grok 1.0.70 (f50904eaee6c)';;\n *) echo '${help}';;\nesac\n`,
-      `console.log(process.argv[2] === "--version" ? "grok 1.0.70 (f50904eaee6c)" : ${JSON.stringify(help)});\n`,
+      `#!/bin/sh\ncase "$1" in\n --version) echo '${version}';;\n *) echo '${help}';;\nesac\n`,
+      `console.log(process.argv[2] === "--version" ? ${JSON.stringify(version)} : ${JSON.stringify(help)});\n`,
     );
     await chmod(file, 0o755);
     return file;
@@ -819,6 +819,14 @@ test("Grok Build is ready when its help lists every option Genex passes; one tha
   const refused = await discoverCodingCli("grok", { ...options, override: await grokCli("grok-old/grok", older) });
   assert.equal(refused.status.state, "incompatible");
   assert.match(refused.status.detail, /--prompt-file/);
+  const outdated = await discoverCodingCli("grok", {
+    ...options,
+    override: await grokCli("grok-outdated/grok", GROK_FLAGS, "grok 1.0.3 (1a29d5bc12d4) [stable]"),
+  });
+  assert.equal(outdated.status.state, "incompatible", "xAI refuses a CLI older than 1.0.13");
+  assert.match(outdated.status.detail, /too old[\s\S]*1\.0\.13/);
+  const minimum = await grokCli("grok-minimum/grok", GROK_FLAGS, "grok 1.0.13 (abc) [stable]");
+  assert.equal((await discoverCodingCli("grok", { ...options, override: minimum })).status.state, "ready");
 });
 test.after(async () => {
   await rm(root, { recursive: true, force: true });

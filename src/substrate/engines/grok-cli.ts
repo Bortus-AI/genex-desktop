@@ -30,6 +30,10 @@ const DEFAULT_REPLY_TOKENS = 32_768;
 const DEFAULT_CONTEXT_TOKENS = 200_000;
 /** The ACP version the probe speaks. */
 const ACP_PROTOCOL_VERSION = 1;
+/** The oldest Grok Build xAI's API serves: an older CLI is refused with 426 Upgrade Required. */
+export const GROK_MIN_VERSION = "1.0.13";
+/** The HTTP status xAI refuses an outdated CLI with. */
+export const GROK_OUTDATED_STATUS = 426;
 
 /** The probe's JSON-RPC requests, by id: `initialize` first, then the two questions. */
 const ProbeRequest = {
@@ -281,6 +285,19 @@ export async function probeGrok(
     child.stdin?.end();
     await stopChild(child, { signal: "SIGTERM" }).catch(() => {});
   }
+}
+
+/** Is this `grok --version` line older than xAI serves? An unreadable one is left to the CLI. */
+export function grokTooOld(version: string | undefined): boolean {
+  const found = /(\d+)\.(\d+)\.(\d+)/.exec(version ?? "");
+  if (!found) return false;
+  const minimum = GROK_MIN_VERSION.split(".").map(Number);
+  const parts = found.slice(1).map(Number);
+  for (const [index, part] of parts.entries()) {
+    const floor = minimum[index] ?? 0;
+    if (part !== floor) return part < floor;
+  }
+  return false;
 }
 
 /** What one `grok` turn is started with. */

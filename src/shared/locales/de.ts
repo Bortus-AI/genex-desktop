@@ -1709,7 +1709,11 @@ export default {
     "Melde dich mit deinem Grok-Konto an. Grok Build speichert die Anmeldung.",
   "Switch to another Grok account": "Zu einem anderen Grok-Konto wechseln",
   "Update Grok Build": "Grok Build aktualisieren",
+  "Update Grok Build from Settings › Model Providers.": "Aktualisiere Grok Build unter Einstellungen › Modellanbieter.",
   "xAI blocked this Grok account: {reason}": "xAI hat dieses Grok-Konto gesperrt: {reason}",
+  "xAI no longer accepts this Grok Build.": "xAI akzeptiert diese Grok Build-Version nicht mehr.",
+  "xAI no longer accepts this version. Update it to keep building.":
+    "xAI akzeptiert diese Version nicht mehr. Aktualisier sie, um weiterzubauen.",
   "{amount} Nex, get Nex": "{amount} Nex, Nex holen",
   "Get credits": "Credits holen",
   "Get the Epic Games Launcher": "Epic Games Launcher holen",

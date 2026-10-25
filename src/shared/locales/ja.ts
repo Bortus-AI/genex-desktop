@@ -1643,7 +1643,12 @@ export default {
     "Grokアカウントでサインインしてください。サインイン情報はGrok Buildが保持します。",
   "Switch to another Grok account": "別のGrokアカウントに切り替える",
   "Update Grok Build": "Grok Buildをアップデート",
+  "Update Grok Build from Settings › Model Providers.":
+    "設定 › モデルプロバイダーからGrok Buildをアップデートしてください。",
   "xAI blocked this Grok account: {reason}": "xAIがこのGrokアカウントをブロックしました: {reason}",
+  "xAI no longer accepts this Grok Build.": "xAIはこのGrok Buildを受け付けなくなりました。",
+  "xAI no longer accepts this version. Update it to keep building.":
+    "xAIはこのバージョンを受け付けなくなりました。アップデートして続けましょう。",
   "{amount} Nex, get Nex": "{amount} Nex、Nexを入手",
   "Get credits": "クレジットを入手",
   "Get the Epic Games Launcher": "Epic Games Launcherを入手",

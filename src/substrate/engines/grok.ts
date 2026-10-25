@@ -31,6 +31,7 @@ import { StudioBridge, answerBridgeCall, bridgeTools } from "./studio-bridge.ts"
 import { BLIND_JUDGE_NOTE, JUDGE_RULES, offLimitsNote, planModeNote, readOnlyNote } from "./codex-prompts.ts";
 import {
   GROK_HOSTS,
+  GROK_OUTDATED_STATUS,
   GrokAccess,
   GrokAuthMethod,
   type GrokAccount,
@@ -112,6 +113,10 @@ const MESSAGE = {
   SignInRemedy: () => t("Sign in to Grok from Settings › Model Providers."),
   Blocked: (reason: string) => t("xAI blocked this Grok account: {reason}", { reason }),
   Unreachable: () => t("Grok Build didn't answer. Check the installation, then try again."),
+  Outdated: () => t("xAI no longer accepts this Grok Build."),
+  UpdateRemedy: () => t("Update Grok Build from Settings › Model Providers."),
+  OutdatedRun: (version: string | undefined) =>
+    `This Grok Build${version ? ` (${version})` : ""} is too old for xAI. Update it in Settings › Model Providers, then send again.`,
   Ready: (version: string | undefined, count: number) =>
     t("Grok Build {version}, {count, plural, one {# model} other {# models}}", {
       version: version ?? "",
@@ -212,6 +217,8 @@ export class GrokEngine implements Engine {
   readonly #home: string;
   /** Whose sign-in the probe the picker shows found; none before the first one. */
   #account: GrokAccount | null = null;
+  /** The CLI (its path and version line) xAI refused as outdated; another CLI is asked afresh. */
+  #outdated: string | null = null;
 
   constructor(options: GrokEngineOptions = {}) {
     this.#scratchRoot = options.scratchRoot ?? path.join(os.tmpdir(), `studio-${EngineId.Grok}`);
@@ -234,6 +241,8 @@ export class GrokEngine implements Engine {
         remedy: MESSAGE.InstallRemedy(),
       };
     if (!cli.ready) return { code: EngineStatusCode.Error, detail: cli.detail };
+    if (this.#isOutdated(cli))
+      return { code: EngineStatusCode.Error, detail: MESSAGE.Outdated(), remedy: MESSAGE.UpdateRemedy() };
     await this.refreshModels().catch(() => {});
     const account = this.#account;
     if (!account) return { code: EngineStatusCode.Error, detail: MESSAGE.Unreachable() };
@@ -259,7 +268,7 @@ export class GrokEngine implements Engine {
       source: this.#account?.method ? LoginSource.System : LoginSource.None,
       afterSignOut: "signed-out",
       cli: {
-        state: cliState(cli),
+        state: this.#isOutdated(cli) ? CodingCliState.Incompatible : cliState(cli),
         ...(cli.path ? { path: cli.path } : {}),
         ...(cli.version ? { version: cliVersion(cli.version) } : {}),
       },
@@ -618,12 +627,29 @@ export class GrokEngine implements Engine {
     );
   }
 
+  /** Did xAI refuse this very CLI as outdated? */
+  #isOutdated(cli: ResolvedCli): boolean {
+    return this.#outdated !== null && this.#outdated === cliIdentity(cli);
+  }
+
+  /**
+   * xAI refused the CLI as outdated: the chat says to update it, and the engine reads outdated
+   * (Settings offers the update) until another CLI is found. Never a failure another engine takes.
+   */
+  async #outdatedEnding(partial: () => PartialDelegateState): Promise<DelegateResult> {
+    const cli = await this.#resolveCli();
+    this.#outdated = cliIdentity(cli);
+    const ending = { stopReason: StopReason.Error, errorText: MESSAGE.OutdatedRun(cliVersion(cli.version)) };
+    return this.#billed(partialDelegateResult(this.id, ending, partial()));
+  }
+
   /** A failure Grok reported: one the run policy knows is thrown, the rest is an outcome. */
   async #failedEnding(
     run: GrokRun,
     partial: () => PartialDelegateState,
     model: string | undefined,
   ): Promise<DelegateResult> {
+    if (failureStatus(run) === GROK_OUTDATED_STATUS) return this.#outdatedEnding(partial);
     const error = await this.#failureError(run);
     if (error.kind !== EngineFailureKind.Other) throw error;
     const failure = run.failure ?? { message: MESSAGE.NoAnswer, status: null };
@@ -639,7 +665,7 @@ export class GrokEngine implements Engine {
    */
   async #failureError(run: GrokRun): Promise<EngineError> {
     const failure = run.failure ?? { message: MESSAGE.NoAnswer, status: null };
-    const status = failure.status ?? grokStderrStatus(run.stderr);
+    const status = failureStatus(run);
     if (status !== null) return classifyHttpFailure(this.id, status, failure.message);
     await this.refreshModels(true).catch(() => {});
     if (this.#account && !this.#account.method)
@@ -674,6 +700,16 @@ function countTokens(run: GrokRun, translated: Translated): void {
   if (!translated.totals) return;
   Object.assign(run.usage, translated.totals);
   if (translated.turns !== undefined) run.turns = translated.turns;
+}
+
+/** The HTTP status a failed run names: in its error, else in the CLI's error log. */
+function failureStatus(run: GrokRun): number | null {
+  return run.failure?.status ?? grokStderrStatus(run.stderr);
+}
+
+/** Which CLI this is: its path and version line, so an update or another install reads afresh. */
+function cliIdentity(cli: ResolvedCli): string {
+  return `${cli.path ?? ""}\0${cli.version ?? ""}`;
 }
 
 /** What a session's tools may do: a build edits; a read-only session, a lead while its build runs and Plan only look. */
