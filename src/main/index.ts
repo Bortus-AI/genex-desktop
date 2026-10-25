@@ -266,6 +266,7 @@ import { BootPhase, type SandboxProblem, StartStep, StudioPlatform } from "../sh
 import { SandboxUnavailableError } from "../substrate/sandbox-unavailable.ts";
 import { type Painter, paintWhileUsed } from "../substrate/paint-while-used.ts";
 import { ensureHostGit, longPath, takeBackSandboxEntries } from "../substrate/windows-sandbox.ts";
+import { ensureMacGit } from "../substrate/git-policy.ts";
 import { installWindowsSandbox } from "../substrate/windows-sandbox-setup.ts";
 import { toolchain } from "../substrate/toolchain.ts";
 import { errorMessage } from "../shared/errors.ts";
@@ -2209,9 +2210,11 @@ async function settleDataFolder(): Promise<boolean> {
   return false;
 }
 
-/** The host's own Git for repairing build copies after a move (Windows); elsewhere the PATH's. */
+/** The host's own Git for repairing build copies after a move (Windows, a Mac without developer tools); elsewhere the PATH's. */
 function hostGitForMoves(): { hostGit?: () => Promise<boolean> } {
-  return process.platform === StudioPlatform.Windows ? { hostGit: () => ensureHostGit() } : {};
+  if (process.platform === StudioPlatform.Windows) return { hostGit: () => ensureHostGit() };
+  if (process.platform === StudioPlatform.Mac) return { hostGit: () => ensureMacGit(resources) };
+  return {};
 }
 
 /** Move the data with the start window showing how far, then start Genex again; quitting waits for it. */

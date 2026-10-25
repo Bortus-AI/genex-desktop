@@ -133,6 +133,7 @@ import { SnapshotEngine, SnapshotIndex, HARNESS_WORKSPACE } from "../substrate/s
 import { gitMissingProblem, SandboxUnavailableError } from "../substrate/sandbox-unavailable.ts";
 import { claudeFolderDenyWrites, ProcessSandbox } from "../substrate/spawn.ts";
 import { ensureHostGit } from "../substrate/windows-sandbox.ts";
+import { ensureMacGit } from "../substrate/git-policy.ts";
 import { type JobProbe, JobService, type JobSpawn } from "../substrate/jobs.ts";
 import { type AppLookPort, type ScreenAccess, unsupportedAppLook } from "../substrate/app-look.ts";
 import { checkLinuxIsolation } from "../substrate/linux-isolation.ts";
@@ -812,6 +813,9 @@ export class StudioCore {
     if (process.platform === StudioPlatform.Windows && !(await ensureHostGit())) {
       throw new SandboxUnavailableError(gitMissingProblem());
     }
+    // A Mac without Apple's developer tools: its /usr/bin/git only asks to install them, so the host
+    // and every PATH made from the app's (the agents', the terminal's) run Genex's own git instead.
+    if (process.platform === StudioPlatform.Mac) await ensureMacGit(this.options.paths.resources);
     await this.#restoreGamesRoot();
     for (const dir of Object.values(this.layout)) await ensureDir(dir);
     await this.#loadSettings();
