@@ -78,13 +78,14 @@ export type GrokAccess = (typeof GrokAccess)[keyof typeof GrokAccess];
 const BRIDGE_RULE = "Bash(node .studio/bridge/tool.mjs *)";
 /**
  * Tools no studio session runs: a question nobody is there to answer, Grok's own plan mode (the
- * studio's Plan is a read-only session), background schedulers and workflows that outlive the turn,
- * and feedback to xAI.
+ * studio's Plan is a read-only session) and goal (no turn sets one, so marking it done only fails),
+ * background schedulers and workflows that outlive the turn, and feedback to xAI.
  */
 const NEVER_TOOLS = [
   "ask_user_question",
   "enter_plan_mode",
   "exit_plan_mode",
+  "update_goal",
   "scheduler_create",
   "scheduler_delete",
   "scheduler_list",

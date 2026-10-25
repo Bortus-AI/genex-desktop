@@ -339,6 +339,11 @@ describe("Grok Build sessions", () => {
     assert.ok(argv.includes("--always-approve"), "nobody is there to approve a build's calls");
     assert.ok(argv.includes("--no-wait-for-background"), "nothing it starts outlives the turn");
     assert.match(flag(argv, "--disallowed-tools") ?? "", /ask_user_question/);
+    assert.match(
+      flag(argv, "--disallowed-tools") ?? "",
+      /update_goal/,
+      "no studio turn sets Grok's own goal, so marking it done only fails",
+    );
     assert.equal(flag(argv, "--model"), undefined, "with no pick, Grok's own default runs");
     assert.deepEqual(prompts[0], [{ type: "text", text: (prompts[0] as Array<{ text: string }>)[0]?.text }]);
     assert.match((prompts[0] as Array<{ text: string }>)[0]?.text ?? "", /^Make a red square/);

@@ -237,7 +237,7 @@ answer after `initialize`, with no session and no model call. A turn is headless
 streaming-json`, the prompt a file of ACP content blocks (pictures included: Grok reads no piped
 stdin, and on Windows the sandbox passes none), resumed by `--resume` (by id, from any folder).
 Each turn gets `--sandbox off` (the studio's holds it), `--no-wait-for-background`, Grok's own ask
-tools, plan mode, schedulers and workflows removed, and `GROK_HOME` named outright; the person's
+tools, plan mode, goal, schedulers and workflows removed, and `GROK_HOME` named outright; the person's
 Claude and Cursor MCP servers, hooks and skills, Grok's memory and its updater are off by variable,
 and `RUST_LOG=error` makes its error log name a failed call's HTTP status (`grokStderrStatus`),
 which a 429 after Grok's own retries leaves out of the `error` event. A build and a read-only
