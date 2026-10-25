@@ -178,6 +178,8 @@ const FIXED_ENV = {
   NODE_USE_ENV_PROXY: "1",
   // Windows paths reach native programs unchanged.
   MSYS_NO_PATHCONV: "1",
+  // Git's curl is built with OpenSSL and Schannel; Schannel cannot work under the write-restricted token.
+  CURL_SSL_BACKEND: "openssl",
 } as const;
 /** curl's schannel revocation check cannot reach its CRL servers through the proxy. */
 const CURLRC = "ssl-revoke-best-effort\n";

@@ -1548,6 +1548,7 @@ describe("the env file", () => {
       GIT_TERMINAL_PROMPT: "0",
       NODE_USE_ENV_PROXY: "1",
       MSYS_NO_PATHCONV: "1",
+      CURL_SSL_BACKEND: "openssl",
       HARNESS_WS: "C:\\ws",
       HOME: "C:\\home-for-this-run",
     });

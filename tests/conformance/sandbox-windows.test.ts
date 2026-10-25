@@ -360,10 +360,20 @@ describe("Windows sandbox: environment", { skip: SKIP, timeout: TEST_TIMEOUT_MS 
     assert.ok(status.sid, "the sandbox user has a SID");
     const acl = { sandboxUserSid: status.sid, holderPid: holder.pid, srtWin };
     try {
-      srt.grantWindowsAcl({ ...acl, read: [theirs[2]], write: [theirs[1]] });
-      srt.stampWindowsAcl({ ...acl, denyRead: [theirs[0]], denyWrite: [] });
+      // As a host on sandbox-runtime 0.0.81 starts and ends a session: srt-win refuses the
+      // ordinary token's grant once a write grant is kept. A write root of theirs would be kept.
+      const { grantWindowsAclPersistent } = await import(
+        "@anthropic-ai/sandbox-runtime/dist/sandbox/windows-sandbox-utils.js"
+      );
+      await grantWindowsAclPersistent({
+        ...acl,
+        read: [theirs[1], theirs[2]],
+        write: [],
+        denyRead: [theirs[0]],
+        denyWrite: [],
+      });
+      srt.revokeWindowsAclChecked(acl);
       srt.restoreWindowsAcl(acl);
-      srt.revokeWindowsAcl(acl);
     } finally {
       holder.kill();
       for (const dir of theirs) await removeTree(dir);
@@ -493,6 +503,17 @@ describe("Windows sandbox: network", { skip: SKIP, timeout: TEST_TIMEOUT_MS }, (
     const opened = await inside(probe, { policy: { allowedDomains: ["genex-overlay-probe.invalid"] } });
     assert.equal(opened.stdout.trim(), "502", `the proxy let it through to DNS: ${opened.stderr}`);
     assert.equal((await inside(probe)).stdout.trim(), "403", "closed again after the run");
+  });
+
+  it("runs Git's own curl on OpenSSL, since Schannel cannot work under the write-restricted token", async () => {
+    const which = await inside(`command -v curl; curl -V | head -n 1`);
+    assert.equal(which.code, 0, which.stderr);
+    const [where = "", version = ""] = which.stdout.trim().split("\n");
+    assert.doesNotMatch(where, /\/windows\/system32\//i, `System32's Schannel curl: ${which.stdout}`);
+    const backend = await inside(`curl -sS -m 15 -o /dev/null -w '%{ssl_verify_result}' https://registry.npmjs.org/`, {
+      policy: { allowedDomains: ["registry.npmjs.org"] },
+    });
+    assert.doesNotMatch(backend.stderr, /schannel/i, `${version}: ${backend.stderr}`);
   });
 
   it("reaches an allowed registry over HTTPS with curl and with Node's fetch", async () => {

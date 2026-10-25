@@ -113,8 +113,10 @@ the setup screen opens on `git-missing`. What differs from macOS:
 - No Schannel client works under the write-restricted token (`System32\curl.exe`, PowerShell
   web requests, .NET `HttpClient`, `winget`); no Genex path runs one. Git for Windows' own git uses
   OpenSSL (`http.sslBackend=openssl`, which SRT injects), and the env file puts Git Bash's own
-  folders, its OpenSSL curl among them, ahead of the toolchain PATH, so `curl` in a command is not
-  System32's (`renderEnvFile`).
+  folders ahead of the toolchain PATH, so `curl` in a command is Git's, not System32's
+  (`renderEnvFile`), and sets `CURL_SSL_BACKEND=openssl`, since Git's curl carries Schannel too.
+  srt-win 0.0.81 also refuses an ordinary-token `acl grant` (what 0.0.73 made) once it keeps a
+  write grant for this user.
 - Neither `spawn()`'s environment nor stdin reaches the child: each run's variables
   (`windowsRunEnv`) go to an env file in scratch and its stdin to a file, each deleted by the
   command as it reads it, for a long-lived process (`spawnLongLived`'s `stdin`, OpenCode's brief)
