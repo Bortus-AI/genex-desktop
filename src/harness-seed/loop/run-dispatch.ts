@@ -559,7 +559,7 @@ async function resumedJournal(host: Host, threadId: string, runId: string): Prom
 }
 
 /** The profile a resumed journal goes on in (`resumedJournal`); null with no journal. */
-function journalProfile(journal: AnyRecord | null): LoopProfile | null {
+function resumedProfile(journal: AnyRecord | null): LoopProfile | null {
   if (!journal) return null;
   return journal.director?.open || journal.kind === OLDER_LEAD_JOURNAL_KIND ? LoopProfile.Open : LoopProfile.Web;
 }
@@ -611,7 +611,7 @@ async function routeOf(host: Host, run: Run, { threadId, resume }: { threadId: s
   } catch {
     return refusedRoute(OPEN_LOOP_REFUSAL.journalUnreadable);
   }
-  const resumedIn = journalProfile(journal);
+  const resumedIn = resumedProfile(journal);
   const games = await listedGames(host);
   if (!games) return refusedRoute(OPEN_LOOP_REFUSAL.gamesUnreadable);
   const game = games.find((listed) => listed.name === run.project);
