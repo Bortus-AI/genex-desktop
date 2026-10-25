@@ -1164,6 +1164,9 @@ the `src/page/*.ts` file it is built from, so the page world cannot reach main, 
 `node tests/e2e/run-preview-visibility.mjs` exercises real Electron windows with forced
 capture failures: hidden/minimized windows remain hidden, failed evidence stays unavailable,
 and parallel private previews retain input, capture and reload without show/focus/restore events.
+A window nothing was loaded into (the stand-in of a game whose build failed is served no page)
+refuses every script, capture and input call at once with its load error: Electron holds a
+script until a load stops, and none is coming, so each call would wait out its whole deadline.
 Reports include timestamped native events under `.studio-dev/evidence/preview-visibility`.
 `STUDIO_PACKAGE_DIR="out/Genex-darwin-arm64" node tests/e2e/run-computer-smoke.mjs`
 runs the existing scripted worker/playtester checks against the packaged application.
