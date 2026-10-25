@@ -1066,6 +1066,8 @@ export interface ProviderInfo {
   readonly billing: Billing;
   /** Subscriptions only. */
   readonly signIn: SignInCopy | null;
+  /** Shipped before a live test proved it: Settings and the picker say Beta. */
+  readonly beta?: true;
 }
 // ↑ src/shared/providers.ts
 
