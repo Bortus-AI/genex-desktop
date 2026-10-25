@@ -169,6 +169,37 @@ it("AUDIT-STOP-RACE: cancellation is visible before a delayed queue-pause write"
   }
 });
 
+import { lookAtStart, observeStart } from "../../src/harness-seed/loop/director/setup.ts";
+
+it("STOP-AT-START. Stop while a Loop looks at its starting game: the look ends at once and no second look begins, however long the page holds a call", async () => {
+  const calls: string[] = [];
+  const ctx = {
+    threadId: "thread",
+    cancelled: false,
+    setStatus: () => {},
+    notify: () => {},
+    call: async (method: string) => {
+      calls.push(method);
+      if (method === HostMethod.PreviewLoad) return "url";
+      // A page that never answers: the host holds each call for its whole deadline (minutes).
+      return new Promise(() => {});
+    },
+  };
+  const run = { runId: "run_stop_at_start", project: "game", goal: "update the multiplayer" };
+  const loopRun = { ctx, run, lookAtStart: (prefix?: string) => lookAtStart(loopRun as never, prefix) };
+  const looking = lookAtStart(loopRun as never, "iter_000_before");
+  while (calls.length < 2) await nextTurn();
+  ctx.cancelled = true;
+  const stillLooking = "still looking";
+  assert.equal(await Promise.race([looking, setTimeoutPromise(2 * SECOND_MS, stillLooking)]), null);
+  const seen = calls.length;
+  assert.equal(
+    await Promise.race([observeStart(loopRun as never), setTimeoutPromise(2 * SECOND_MS, stillLooking)]),
+    null,
+  );
+  assert.equal(calls.length, seen, "a stopped run asks the page nothing more");
+});
+
 import { timedWorkRemaining } from "../../src/harness-seed/loop/director/budgets.ts";
 import { restoreLoopRun } from "../../src/harness-seed/loop/director/journal.ts";
 import { reopenedJournal } from "../../src/harness-seed/loop/director/reopen.ts";
@@ -3897,6 +3928,122 @@ describe("a Loop chat asked for research (corner-guy)", () => {
       "the answer reaches the chat",
     );
     assert.ok(!messages.some((m) => /loads clean|black|console error/.test(m.content ?? "")), "no verdict on a plan");
+  });
+});
+
+/**
+ * A build paused long ago is still the chat's latest run, so its coordinator answers the chat. Work
+ * the person asks for that is not that build's — "update our multiplayer" after a paused visual
+ * build — had one way through: resume_run, which restarted the old build with its old goal and hours.
+ * A contained change after a paused build is made in the chat by one builder, and the build stays
+ * paused.
+ */
+describe("a change after a paused build (stale-pause)", () => {
+  it("stale-pause. a contained change after a paused build: one builder makes it in the chat, nothing resumes", async () => {
+    const rig = await startRig({ replies: [] });
+    rigs.push(rig);
+    await rig.core.games.scaffold("paused-plaza");
+    const thread = await rig.core.createGameThread("paused-plaza");
+    const runId = "run_paused_plaza";
+    await rig.core.append(
+      [
+        { type: "messages", messages: [{ role: "user", content: "Make the plaza photoreal" }] },
+        {
+          type: "custom",
+          event_type: "run_started",
+          payload: { runId, project: "paused-plaza", goal: "a photoreal plaza", mode: "autopilot", engine: "codex" },
+        },
+        {
+          type: "custom",
+          event_type: "run_finished",
+          payload: { runId, project: "paused-plaza", victory: false, stoppedBecause: "stopped by the user" },
+        },
+        { type: "custom", event_type: "autopilot_paused", payload: { runId, project: "paused-plaza" } },
+      ],
+      thread,
+    );
+    const answers: string[] = [];
+    let built = 0;
+    rig.core.engines.register({
+      id: "codex",
+      label: "fixture",
+      kind: "delegated",
+      status: async () => ({ code: "ready", detail: "" }),
+      models: async () => [],
+      delegate: async (request: DelegateRequest) => {
+        if (request.coordinator) {
+          const text = "Update the multiplayer packages to their newest versions";
+          answers.push(
+            String(
+              await request.onLiveTool!("continue_build", { text, build: false }).catch((err) => `refused: ${err}`),
+            ),
+          );
+          return {
+            ok: true,
+            summary: "Updating the multiplayer here.",
+            sessionId: "coordinator",
+            turns: 1,
+            usage: {},
+            engine: "codex",
+          };
+        }
+        await writeFile(path.join(request.cwd, "multiplayer.txt"), "0.17.1");
+        built++;
+        return {
+          ok: true,
+          summary: "Updated the multiplayer.",
+          sessionId: "builder",
+          turns: 1,
+          usage: {},
+          engine: "codex",
+        };
+      },
+    });
+    await rig.core.sendUserMessage("Update our in-game multiplayer", { thread, engine: "codex" });
+    const events = await waitForLog(
+      rig.core,
+      (log) => customEvents(log, "coordinator_message_handled").length === 1,
+      30_000,
+      "the message answered",
+    );
+    assert.doesNotMatch(answers.join("\n"), /refused/, "the change is taken, not refused for a paused run");
+    assert.equal(built, 1, "one builder made the change in the chat");
+    assert.equal(await readFile(path.join(rig.core.games.dirFor("paused-plaza"), "multiplayer.txt"), "utf8"), "0.17.1");
+    const restarted = customEvents(events, "run_registered").length + customEvents(events, "run_started").length;
+    assert.equal(restarted, 1, "the paused build did not start again");
+  });
+
+  it("stale-pause words. after a paused build, only going on with that build resumes it; other work is made in the chat", async () => {
+    const { afterLoopRunNote } = await import("../../src/harness-seed/loop/after-loop-run-prompts.ts");
+    const { coordinatorPrompt } = await import("../../src/harness-seed/loop/coordinator-prompts.ts");
+    const { coordinatorTools } = await import("../../src/harness-seed/loop/run-inbox.ts");
+    const paused = {
+      runId: "run_paused",
+      state: "paused",
+      goal: "a photoreal plaza",
+      stoppedBecause: "stopped by the user",
+    };
+    const note = afterLoopRunNote(paused as never, "claude-code");
+    const coordinator = coordinatorPrompt({
+      events: [],
+      run: { runId: "run_paused", state: "paused" },
+      text: "update our multiplayer",
+      journal: null,
+      savedPlan: null,
+      history: "",
+    });
+    const resume = coordinatorTools.find((tool) => tool.name === "resume_run")?.description ?? "";
+    for (const [label, words] of [
+      ["the chat's own session", note],
+      ["the run's coordinator", coordinator],
+      ["resume_run", resume],
+    ]) {
+      assert.doesNotMatch(String(words), /new instruction after a stop is a request to continue/i, `${label}`);
+      assert.doesNotMatch(String(words), /or with work for it/, `${label}`);
+      assert.doesNotMatch(String(words), /requests further work, including a new instruction after Stop/, `${label}`);
+    }
+    assert.match(note, /stays paused/, "the session's own work leaves the build paused");
+    assert.match(coordinator, /build: false[^\n]*stays paused/i, "the coordinator hands other work to one builder");
   });
 });
 

@@ -75,7 +75,7 @@ export const coordinatorTools: readonly StudioToolSpec[] = [
   {
     name: CoordinatorTool.ResumeRun,
     description:
-      "Continue a paused run with its saved plan and completed work when the user requests further work, including a new instruction after Stop. Supply that instruction as text before builders resume. Questions alone do not resume work.",
+      "Continue a paused run with its saved plan and completed work when the user asks to go on with that build — resume, continue, keep going, run it again — including new guidance for it after Stop. Supply that instruction as text before builders resume. Questions alone do not resume work, and other work asked for after a stop is continue_build with build false.",
     parameters: {
       type: "object",
       properties: {
@@ -93,7 +93,7 @@ export const coordinatorTools: readonly StudioToolSpec[] = [
   {
     name: CoordinatorTool.ContinueBuild,
     description:
-      "Continue implementation in this game's existing conversation after the run has finished. Use for a requested change or unfinished work, never a question. The saved plan and results are retained; this does not repeat intake or create a new timed run.",
+      "Continue implementation in this game's existing conversation after the run has finished, or make a contained change (build false) after a paused run, which stays paused. Use for a requested change or unfinished work, never a question. The saved plan and results are retained; this does not repeat intake or create a new timed run.",
     parameters: {
       type: "object",
       properties: {
@@ -101,7 +101,7 @@ export const coordinatorTools: readonly StudioToolSpec[] = [
         build: {
           type: "boolean",
           description:
-            "false for a contained change (a fix, a tweak, one feature): one builder makes it in this chat and the build stays finished. Omit to continue the build itself.",
+            "false for a contained change (a fix, a tweak, one feature): one builder makes it in this chat and the build stays finished or paused. Omit to continue a finished build itself.",
         },
       },
       required: ["text"],
