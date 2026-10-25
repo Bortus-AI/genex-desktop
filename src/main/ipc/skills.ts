@@ -47,8 +47,7 @@ export function registerSkillsIpc(handle: IpcHandle, { core, subscription, home 
     if (!providerSkillsPending)
       providerSkillsPending = (async () => {
         const claude = await subscription(EngineId.ClaudeCode)?.resolveLogin(),
-          codex = await subscription(EngineId.Codex)?.resolveLogin(),
-          grok = await subscription(EngineId.Grok)?.resolveLogin();
+          codex = await subscription(EngineId.Codex)?.resolveLogin();
         return Promise.all([
           claudeGlobalSkills(claude?.home ?? path.join(home(), ".claude"), home()),
           codexGlobalSkills(core.layout.harnessWs, codex ?? null),

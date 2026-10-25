@@ -296,7 +296,7 @@ async function checkEnginesAndToolchain(smoke: Smoke): Promise<void> {
   const described = (await core.engines.describe()).map((engine) => engine.id).sort();
   check(
     "engines are described for the picker",
-    [EngineId.ClaudeCode, EngineId.Codex, EngineId.Grok, EngineId.Ollama].every((id) => described.includes(id)),
+    [EngineId.ClaudeCode, EngineId.Codex, EngineId.Ollama].every((id) => described.includes(id)),
     described.join(","),
   );
   // A Finder-launched app is born with launchd's PATH — no Homebrew, no nvm, no Volta — so

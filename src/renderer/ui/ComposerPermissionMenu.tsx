@@ -58,10 +58,6 @@ const ENGINE_MODE_WORDS: Partial<Record<string, Partial<Record<PermissionModeTyp
     [PermissionMode.Auto]: t("Game folder only, no network"),
     [PermissionMode.Bypass]: t("Runs outside its sandbox"),
   },
-  [EngineId.Grok]: {
-    [PermissionMode.Auto]: "Writes in the game folder",
-    [PermissionMode.Bypass]: "Runs outside its sandbox",
-  },
 };
 
 /** One glyph per mode, so the pill says which one is on even where the bar has no room for words. */

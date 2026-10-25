@@ -443,10 +443,6 @@ function accountCalls(bridge: BridgeCalls) {
     codexLoginOpenBrowser: () => invoke("studio:codex-login.browser"),
     codexLoginRetry: (method) => invoke("studio:codex-login.retry", { method }),
     onCodexLogin: (listener) => subscribe("studio:codex-login", listener),
-    grokLoginState: () => invoke("studio:grok-login.state"),
-    grokLoginCancel: () => invoke("studio:grok-login.cancel"),
-    grokLoginOpenBrowser: () => invoke("studio:grok-login.browser"),
-    onGrokLogin: (listener) => subscribe("studio:grok-login", listener),
   } satisfies Partial<StudioApi>;
 }
 

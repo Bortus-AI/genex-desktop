@@ -174,7 +174,6 @@ describe("one engine voice", () => {
   it("one tool, spelled the way each engine can call it", () => {
     assert.equal(toolCall(CLAUDE, "computer"), "mcp__studio__computer");
     assert.equal(toolCall(CODEX, "computer"), `${BRIDGE_TOOL_CMD} computer`);
-    assert.equal(toolCall("grok", "computer"), `${BRIDGE_TOOL_CMD} computer`);
     // A local engine drives its tools through the studio's own tool loop: neither spelling.
     assert.equal(toolCall("ollama", "computer"), "computer");
     // OpenCode has no channel for the studio's tools either: it runs the same bridge as Codex.
@@ -187,8 +186,6 @@ describe("one engine voice", () => {
     assert.doesNotMatch(toolSyntax(CLAUDE), /tool\.mjs/);
     assert.match(toolSyntax(CODEX), /tool\.mjs <name> --field=value/);
     assert.doesNotMatch(toolSyntax(CODEX), /mcp__/);
-    assert.match(toolSyntax("grok"), /tool\.mjs <name> --field=value/);
-    assert.doesNotMatch(toolSyntax("grok"), /mcp__/);
     assert.doesNotMatch(toolSyntax("ollama"), /mcp__|tool\.mjs/);
   });
 

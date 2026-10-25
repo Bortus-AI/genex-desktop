@@ -66,9 +66,6 @@ const LISTEN_SYSCALL = "listen";
 const MESSAGE = {
   Unavailable: (problem: SandboxProblem) =>
     [`sandbox unavailable on ${problem.platform} (${problem.code})`, ...problem.details].join(": "),
-  /** Shown above a verify failure's own text, which no longer names Secondary Logon as the fix. */
-  WfpVerify:
-    "The sandbox account could not be signed in to check its network fence. Secondary Logon being stopped is only one cause; this also happens when that account cannot read the sandbox program in your user folder. Set up repairs the account and its filters.",
   Launch: {
     [SandboxLaunchCode.ArgvTooLong]:
       "The command is too long for Windows to start (over 32,767 characters). Put it in a script file and run that.",
@@ -152,18 +149,6 @@ export function sandboxProblem(check: SandboxCheck): SandboxProblem | null {
     missingTools: check.missingTools,
     installCommands: linuxInstallCommands(check.missingTools),
   };
-}
-
-/** A verify failure's detail without srt-win's Secondary Logon sentence, which is not the cause. */
-function verifyDetails(details: readonly string[]): string[] {
-  const kept = details
-    .map((detail) => {
-      let text = detail;
-      for (const hint of SECLOGON_HINTS) text = text.replaceAll(hint, "");
-      return text.trim();
-    })
-    .filter((detail) => detail.length > 0);
-  return [MESSAGE.WfpVerify, ...kept];
 }
 
 /** The setup problem a Windows `initialize` error stands for, by its `code`; null for any other error. */

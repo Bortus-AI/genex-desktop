@@ -7,7 +7,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { EngineDescriptor } from "./types.ts";
 import { type ClaudeLoginState, isClaudeLoginActive } from "../shared/claude-login.ts";
 import { isCodexLoginActive } from "../shared/codex-login.ts";
-import { isGrokLoginActive, type GrokLoginState } from "../shared/grok-login.ts";
 import { SECOND_MS } from "../shared/duration.ts";
 import { EngineStatusCode, needsSignIn } from "../shared/engine-descriptor.ts";
 import { t } from "../shared/i18n.ts";
@@ -99,7 +98,7 @@ export function useClaudeLogin(engine: string): ClaudeLoginState | null {
       // Another subscription's card is not this one's: a Claude sign-in left waiting for its code
       // must not put its code box, its phase or its trouble on the ChatGPT card.
       setState(null);
-      if (engine !== EngineId.ClaudeCode) return;
+      if (loginKind(engine) !== "terminal") return;
       let revision = -1;
       const update = (next: ClaudeLoginState): void => {
         if (!alive() || next.revision < revision) return;
@@ -109,31 +108,6 @@ export function useClaudeLogin(engine: string): ClaudeLoginState | null {
       const unsubscribe = window.studio.onClaudeLogin(update);
       void window.studio
         .claudeLoginState()
-        .then(update)
-        .catch(() => {});
-      return unsubscribe;
-    },
-    [engine],
-  );
-  return state;
-}
-
-/** Grok Build's device-code sign-in. Null for every other provider. */
-export function useGrokLogin(engine: string): GrokLoginState | null {
-  const [state, setState] = useState<GrokLoginState | null>(null);
-  useAsyncEffect(
-    (alive) => {
-      setState(null);
-      if (loginKind(engine) !== "device") return;
-      let revision = -1;
-      const update = (next: GrokLoginState): void => {
-        if (!alive() || next.revision < revision) return;
-        revision = next.revision;
-        setState(next);
-      };
-      const unsubscribe = window.studio.onGrokLogin(update);
-      void window.studio
-        .grokLoginState()
         .then(update)
         .catch(() => {});
       return unsubscribe;
@@ -207,16 +181,7 @@ export function useSubscriptionAuth(
   const needsLogin = engine !== undefined && needsSignIn(engine);
   // A console sign-in reports its own progress; any other is polled through the engine status.
   const consoleLogin = loginKind(engineId) === "console";
-  const deviceLogin = loginKind(engineId) === "device";
-  const reportsOwnLogin = consoleLogin || deviceLogin;
   useConsoleLogin(consoleLogin, { setWaiting, setError, setMissingCli });
-  const grok = useGrokLogin(engineId);
-  useEffect(() => {
-    if (!deviceLogin || !grok) return;
-    setWaiting(isGrokLoginActive(grok));
-    setError(grok.error ?? null);
-    setMissingCli(false);
-  }, [deviceLogin, grok]);
 
   const refresh = useCallback(async (): Promise<void> => {
     await window.studio.recheckEngines(engineId).catch(() => {});
@@ -224,15 +189,15 @@ export function useSubscriptionAuth(
   }, [onRefresh, engineId]);
 
   useEffect(() => {
-    if (!reportsOwnLogin && engine?.status.code === EngineStatusCode.Ready) {
+    if (!consoleLogin && engine?.status.code === EngineStatusCode.Ready) {
       setWaiting(false);
       setError(null);
       setMissingCli(false);
     }
-  }, [engine?.status.code, reportsOwnLogin]);
+  }, [engine?.status.code, consoleLogin]);
 
   const login = useClaudeLogin(engineId);
-  usePolledSignIn(signInPolling({ consoleLogin: reportsOwnLogin, waiting, needsLogin, login }), refresh);
+  usePolledSignIn(signInPolling({ consoleLogin, waiting, needsLogin, login }), refresh);
 
   // Claude can request a separate profile. Codex always creates an app-specific login; the
   // user can sign into their existing subscription without changing their terminal's login.
@@ -246,7 +211,7 @@ export function useSubscriptionAuth(
       setError(result.error ?? t("Couldn't start sign-in"));
       return;
     }
-    if (!reportsOwnLogin) {
+    if (!consoleLogin) {
       setWaiting(true);
       void refresh();
     }

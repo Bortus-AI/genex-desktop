@@ -139,6 +139,7 @@ export const Markdown = memo(function Markdown({
   useChatFileNames(threadId, names);
   const root = useRef<HTMLDivElement>(null);
   useShownBlocks(root, blocks);
+  useGameImages(root, html?.__html ?? blocks?.join("\n") ?? "", threadId);
   const slots = useCommandSlots(root, html?.__html ?? "", Boolean(renderCommand));
   return (
     <>

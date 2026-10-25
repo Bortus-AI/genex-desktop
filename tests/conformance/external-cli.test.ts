@@ -713,7 +713,6 @@ test("Windows standard folders: the native installers first, then npm's prefix a
   const env = { APPDATA: "C:\\Users\\Ada\\AppData\\Roaming", LOCALAPPDATA: "C:\\Users\\Ada\\AppData\\Local" };
   assert.deepEqual(await standardCliDirs("C:\\Users\\Ada", "win32", env), [
     "C:\\Users\\Ada\\.local\\bin",
-    "C:\\Users\\Ada\\.grok\\bin",
     "C:\\Users\\Ada\\AppData\\Local\\Programs\\OpenAI\\Codex\\bin",
     "C:\\Users\\Ada\\.grok\\bin",
     // Flipped (Cursor): its PowerShell installer's own folder.

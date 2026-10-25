@@ -113,11 +113,3 @@ describe("console errors as evidence", () => {
     assert.deepEqual(consoleProblems([], [shader]), { problems: [], warnings: [] });
   });
 });
-
-describe("Claude's sandbox on Windows", () => {
-  it("continues when the Windows sandbox feature is off, and still requires it elsewhere", () => {
-    assert.equal(claudeSandboxShape({}, StudioPlatform.Windows).failIfUnavailable, false);
-    assert.equal(claudeSandboxShape({}, StudioPlatform.Mac).failIfUnavailable, undefined);
-    assert.equal(claudeSandboxShape({ autoAllowBashIfSandboxed: true }, StudioPlatform.Windows).enabled, true);
-  });
-});

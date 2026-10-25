@@ -1,6 +1,5 @@
 import { isClaudeLoginActive } from "../shared/claude-login.ts";
 import { isCodexLoginActive } from "../shared/codex-login.ts";
-import { isGrokLoginActive } from "../shared/grok-login.ts";
 import { updateCodingCli } from "../substrate/cli-update.ts";
 import { HarnessLogBatch } from "./harness-log-batch.ts";
 import { createDesktopControl } from "./desktop-control-host.ts";
@@ -46,7 +45,6 @@ import type { GameFullScreen } from "./game-full-screen.ts";
 import { wireGameFullScreen } from "./full-screen-view.ts";
 import { HarnessState } from "../shared/protocol.ts";
 import { ClaudeCodeEngine } from "../substrate/engines/claude-code.ts";
-import { GrokEngine } from "../substrate/engines/grok.ts";
 import { CodexEngine } from "../substrate/engines/codex.ts";
 import { CursorEngine } from "../substrate/engines/cursor.ts";
 import { configureCodingClis, resolveCodingCli } from "../substrate/engines/external-cli.ts";
@@ -701,10 +699,6 @@ const { codexLogin, claudeLogin, openCodeLogin, grokLogin, cursorLogin } = creat
     const page = livePage();
     if (page) pushToRenderer(page, "studio:claude-login", state);
   },
-  showGrokState: (state) => {
-    const page = livePage();
-    if (page) pushToRenderer(page, "studio:grok-login", state);
-  },
 });
 // The person approved Genex on OpenRouter in the browser: the app comes forward to show it connected.
 const openRouterLogin = createOpenRouterLogin({
@@ -726,8 +720,7 @@ function reviveCrashedWindow(): void {
 function subscription(id: string): SubscriptionEngine | null {
   if (!core?.engines.has(id)) return null;
   const engine = core.engines.get(id);
-  if (engine instanceof ClaudeCodeEngine || engine instanceof CodexEngine || engine instanceof GrokEngine)
-    return engine;
+  if (engine instanceof ClaudeCodeEngine || engine instanceof CodexEngine) return engine;
   return null;
 }
 

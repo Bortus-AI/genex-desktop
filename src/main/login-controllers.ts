@@ -15,8 +15,6 @@ import type { ClaudeLoginState } from "../shared/claude-login.ts";
 import type { CodexLoginState } from "../shared/codex-login.ts";
 import { ClaudeLoginController } from "./claude-login.ts";
 import { CodexLoginController } from "./codex-login.ts";
-import { GrokLoginController } from "./grok-login.ts";
-import type { GrokLoginState } from "../shared/grok-login.ts";
 import type { TerminalService } from "./terminal-service.ts";
 import { EngineId } from "../shared/providers.ts";
 import { TerminalKind } from "../shared/terminal.ts";
@@ -86,7 +84,6 @@ export function createLoginControllers({
   pushUiEvent,
   showCodexState,
   showClaudeState,
-  showGrokState,
   requireCli = requireCodingCli,
   findBinary = findClaudeBinary,
   onOpenCodeSignedIn,

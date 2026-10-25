@@ -155,10 +155,6 @@ const METHODS = [
   "codexLoginOpenBrowser",
   "codexLoginRetry",
   "onCodexLogin",
-  "grokLoginState",
-  "grokLoginCancel",
-  "grokLoginOpenBrowser",
-  "onGrokLogin",
   "subscriptionForgetStudioLogin",
   "subscriptionAccounts",
   "subscriptionUseAccount",
@@ -321,7 +317,6 @@ type StudioEvent = Parameters<Parameters<StudioApi["onEvent"]>[0]>[0];
 type TerminalEvent = Parameters<Parameters<StudioApi["onTerminal"]>[0]>[0];
 type ClaudeLogin = Parameters<Parameters<StudioApi["onClaudeLogin"]>[0]>[0];
 type CodexLogin = Parameters<Parameters<StudioApi["onCodexLogin"]>[0]>[0];
-type GrokLogin = Parameters<Parameters<StudioApi["onGrokLogin"]>[0]>[0];
 type RunSummary = Parameters<Parameters<StudioApi["onRunSummary"]>[2]>[0];
 type StoreSheetPush = Parameters<Parameters<StudioApi["onStoreSheet"]>[0]>[0];
 
@@ -337,7 +332,6 @@ export interface FakeStudioApi {
   emitTerminal(event: TerminalEvent): void;
   emitClaudeLogin(state: ClaudeLogin): void;
   emitCodexLogin(state: CodexLogin): void;
-  emitGrokLogin(state: GrokLogin): void;
   emitRunSummary(project: string, runId: string, summary: RunSummary): void;
   /** Push the store's purchase sheet (or null once it closes), as main does in the studio window. */
   emitStoreSheet(sheet: StoreSheetPush): void;
@@ -471,7 +465,6 @@ export function fakeStudioApi(overrides: Partial<StudioApi> = {}, options: FakeS
     onTerminal: new Set<(event: TerminalEvent) => void>(),
     onClaudeLogin: new Set<(state: ClaudeLogin) => void>(),
     onCodexLogin: new Set<(state: CodexLogin) => void>(),
-    onGrokLogin: new Set<(state: GrokLogin) => void>(),
     onRunSummary: new Set<{ project: string; runId: string; listener: (summary: RunSummary) => void }>(),
     onStoreSheet: new Set<(sheet: StoreSheetPush) => void>(),
   };
@@ -484,7 +477,6 @@ export function fakeStudioApi(overrides: Partial<StudioApi> = {}, options: FakeS
     onTerminal: ((listener: (event: TerminalEvent) => void) => subscribe(sets.onTerminal, listener)) as never,
     onClaudeLogin: ((listener: (state: ClaudeLogin) => void) => subscribe(sets.onClaudeLogin, listener)) as never,
     onCodexLogin: ((listener: (state: CodexLogin) => void) => subscribe(sets.onCodexLogin, listener)) as never,
-    onGrokLogin: ((listener: (state: GrokLogin) => void) => subscribe(sets.onGrokLogin, listener)) as never,
     onRunSummary: ((project: string, runId: string, listener: (summary: RunSummary) => void) =>
       subscribe(sets.onRunSummary, { project, runId, listener })) as never,
     onStoreSheet: ((listener: (sheet: StoreSheetPush) => void) => subscribe(sets.onStoreSheet, listener)) as never,
@@ -519,9 +511,6 @@ export function fakeStudioApi(overrides: Partial<StudioApi> = {}, options: FakeS
     },
     emitCodexLogin: (state) => {
       for (const listener of [...sets.onCodexLogin]) listener(state);
-    },
-    emitGrokLogin: (state) => {
-      for (const listener of [...sets.onGrokLogin]) listener(state);
     },
     emitRunSummary: (project, runId, summary) => {
       for (const entry of [...sets.onRunSummary])

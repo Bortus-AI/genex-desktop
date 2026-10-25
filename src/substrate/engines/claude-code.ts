@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { realpath } from "node:fs/promises";
-import { StudioPlatform } from "../../shared/boot.ts";
 import { ModelCatalog, CatalogError, CATALOG_DEADLINE_MS } from "./model-catalog.ts";
 import { ModelCatalogSource, ModelCatalogProblemCode } from "../../shared/model-catalog.ts";
 import { t } from "../../shared/i18n.ts";
@@ -2514,7 +2513,7 @@ export function toollessSandbox(platform: NodeJS.Platform = process.platform): {
  */
 function unattendedSandbox(request: DelegateRequest, protectedPaths: string[]): Record<string, unknown> {
   return {
-    ...claudeSandboxShape(),
+    enabled: true,
     autoAllowBashIfSandboxed: true,
     allowUnsandboxedCommands: false,
     filesystem: {

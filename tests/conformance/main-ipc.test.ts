@@ -367,15 +367,6 @@ function loginFixture(
       dismiss: async () => {},
       openBrowser: async () => {},
     },
-    grokLogin: {
-      start: async (home: string) => {
-        started.push(`grok ${home}`);
-        return { revision: 1, phase: "waiting" as const, lines: [], hasBrowserUrl: false };
-      },
-      snapshot: () => ({ revision: 0, phase: "idle" as const, lines: [], hasBrowserUrl: false }),
-      cancel: async () => ({ revision: 0, phase: "cancelled" as const, lines: [], hasBrowserUrl: false }),
-      openBrowser: async () => {},
-    },
     subscription: (id) => engines.get(id) ?? null,
     busy: () => busy,
     pushUiEvent: () => {},
@@ -800,7 +791,6 @@ describe("both sign-in paths go through the controllers", () => {
       pushUiEvent: () => {},
       showCodexState: () => {},
       showClaudeState: () => {},
-      showGrokState: () => {},
       requireCli: async (provider) => {
         asked.push(provider);
         throw new Error(`${provider} is not installed`);

@@ -17,12 +17,27 @@ export interface MarkdownFiles {
   names: ChatFileRef[];
 }
 
-/** A Markdown image of a game file: a relative image path, not a web address or a climb out. */
-function gameImagePath(href: string): string | null {
+/**
+ * A Markdown image of a game file, from the document it was written in. A climb out of the game
+ * or into `.git` is not one.
+ */
+function gameImagePath(href: string, base?: string): string | null {
   const file = fileDestination(href);
   if (!file || !imageType(file)) return null;
-  const outside = file.split("/").some((part) => part === ".." || part === ".git");
-  return outside ? null : file;
+  const folder = base ? base.replace(/\\/g, "/").replace(/[^/]*$/, "") : "";
+  const parts: string[] = [];
+  for (const part of `${folder}${file.replace(/\\/g, "/")}`.split("/")) {
+    if (!part || part === ".") continue;
+    if (part === "..") {
+      if (parts.length === 0) return null;
+      parts.pop();
+      continue;
+    }
+    if (part === ".git") return null;
+    parts.push(part);
+  }
+  const resolved = parts.join("/");
+  return imageType(resolved) ? resolved : null;
 }
 
 /** A link with no scheme (`docs/BRIEF.md`), a `file:` URL or an absolute path names a file. */
@@ -113,7 +128,7 @@ const parser = new Marked({
       // A real web address is the browser's image. A game file is filled in by the chat
       // (`data-game-image`); a relative path is not a page on this app.
       if (/^https?:\/\//i.test(href) && safeDestination(href)) return false;
-      const file = gameImagePath(href);
+      const file = gameImagePath(href, files?.base);
       if (!file) return escapeHtml(text);
       const ref: ChatFileRef = files?.base ? { name: file, base: files.base } : { name: file };
       files?.names.push(ref);

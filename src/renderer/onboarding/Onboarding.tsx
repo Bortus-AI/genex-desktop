@@ -25,7 +25,6 @@ import type { EngineDescriptor } from "../types.ts";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { t } from "../../shared/i18n.ts";
 import type { CodexLoginState } from "../../shared/codex-login.ts";
-import type { GrokLoginState } from "../../shared/grok-login.ts";
 import { EngineStatusCode } from "../../shared/engine-descriptor.ts";
 import type { ModelInstallJob } from "../../shared/model-install.ts";
 import { EngineId } from "../../shared/providers.ts";
@@ -36,7 +35,7 @@ import { GenexLogo } from "../ui/GenexLogo.tsx";
 import { Icon } from "../ui/icons.tsx";
 import { LoaderGrid } from "../ui/LoadingState.tsx";
 import { CODE_FALLBACK_LABEL, useCodeFallback } from "../ui/SignInCard.tsx";
-import { useClaudeLogin, useGrokLogin, useSubscriptionAuth } from "../subscription-auth.ts";
+import { useClaudeLogin, useSubscriptionAuth } from "../subscription-auth.ts";
 import { useCliInstall } from "../cli-install.ts";
 import { LOCAL_SERVER_WORDS, problemWords } from "../words.ts";
 import { openSettings, SettingsSection } from "../settings-navigation.ts";
@@ -121,7 +120,6 @@ const BUILDS_WITH: readonly string[] = [EngineId.ClaudeCode, EngineId.Codex, Eng
 const MARK_OF: Record<Subscription, Provider> = {
   [EngineId.ClaudeCode]: Provider.Claude,
   [EngineId.Codex]: Provider.Codex,
-  [EngineId.Grok]: Provider.Grok,
 };
 
 function useReducedMotion(): boolean {
@@ -814,18 +812,15 @@ function ConnectButton({
   );
 }
 
-/** Each subscription's sign-in state, the button it shows, and the actions behind it. */
+/** Both subscriptions' sign-in state, the button each shows, and the actions behind them. */
 function useSubscriptions(engines: EngineDescriptor[], onEnginesRefresh: () => void, onTerminal: () => void) {
   const claudeAuth = useSubscriptionAuth(engines, onEnginesRefresh, EngineId.ClaudeCode);
   const codexAuth = useSubscriptionAuth(engines, onEnginesRefresh, EngineId.Codex);
-  const grokAuth = useSubscriptionAuth(engines, onEnginesRefresh, EngineId.Grok);
   const claudeLogin = useClaudeLogin(EngineId.ClaudeCode);
   const codexLogin = useCodexLogin();
-  const grokLogin = useGrokLogin(EngineId.Grok);
   const codeFallback = useCodeFallback(claudeLogin?.phase);
   const claudeInstall = useCliInstall(EngineId.ClaudeCode);
   const codexInstall = useCliInstall(EngineId.Codex);
-  const grokInstall = useCliInstall(EngineId.Grok);
   const [checking, setChecking] = useState<Partial<Record<Subscription, boolean>>>({});
   const [problem, setProblem] = useState<string | null>(null);
 
@@ -844,22 +839,9 @@ function useSubscriptions(engines: EngineDescriptor[], onEnginesRefresh: () => v
       checking: checking[EngineId.Codex],
       installing: codexInstall.installing,
     }),
-    [EngineId.Grok]: connectView(EngineId.Grok, {
-      engine: grokAuth.engine,
-      grokActive: grokAuth.waiting,
-      grok: grokLogin?.phase,
-      checking: checking[EngineId.Grok],
-      installing: grokInstall.installing,
-    }),
   };
-  const auths = { [EngineId.ClaudeCode]: claudeAuth, [EngineId.Codex]: codexAuth, [EngineId.Grok]: grokAuth };
-  const installers = {
-    [EngineId.ClaudeCode]: claudeInstall,
-    [EngineId.Codex]: codexInstall,
-    [EngineId.Grok]: grokInstall,
-  };
-  const auth = (id: Subscription) => auths[id];
-  const installer = (id: Subscription) => installers[id];
+  const auth = (id: Subscription) => (id === EngineId.Codex ? codexAuth : claudeAuth);
+  const installer = (id: Subscription) => (id === EngineId.Codex ? codexInstall : claudeInstall);
   const recheck = async (id: Subscription) => {
     setChecking((current) => ({ ...current, [id]: true }));
     try {
@@ -881,7 +863,7 @@ function useSubscriptions(engines: EngineDescriptor[], onEnginesRefresh: () => v
     void Promise.resolve(step(id, view)).catch((err) => setProblem(problemWords(err)));
   };
   const cancel = (id: Subscription) => {
-    const cancelled = cancelLogin(id);
+    const cancelled = id === EngineId.Codex ? window.studio.codexLoginCancel() : window.studio.claudeLoginCancel();
     void cancelled.catch((err) => setProblem(problemWords(err)));
   };
   const trouble = (id: Subscription): string | null | undefined => {
@@ -890,47 +872,12 @@ function useSubscriptions(engines: EngineDescriptor[], onEnginesRefresh: () => v
     if (notStarting) return notStarting;
     const installProblem = installer(id).problem;
     if (installProblem) return installProblem;
-    return loginTrouble(id, { claudeLogin, claudeAuth, codexLogin, codexAuth, grokLogin, grokAuth });
+    if (id === EngineId.ClaudeCode)
+      return (claudeLogin?.phase === "failed" ? claudeLogin.error : null) ?? claudeAuth.error;
+    return (codexLogin?.phase === "failed" ? codexLogin.error : null) ?? codexAuth.error;
   };
-  const shown = problem ?? trouble(EngineId.ClaudeCode) ?? trouble(EngineId.Codex) ?? trouble(EngineId.Grok);
-  return {
-    views,
-    recheck,
-    act,
-    cancel,
-    shown,
-    claudeAuth,
-    codexAuth,
-    grokAuth,
-    claudeLogin,
-    codexLogin,
-    grokLogin,
-    codeFallback,
-  };
-}
-
-function cancelLogin(id: Subscription): Promise<unknown> {
-  if (id === EngineId.Codex) return window.studio.codexLoginCancel();
-  if (id === EngineId.Grok) return window.studio.grokLoginCancel();
-  return window.studio.claudeLoginCancel();
-}
-
-function loginTrouble(
-  id: Subscription,
-  logins: {
-    claudeLogin: { phase?: string; error?: string } | null;
-    claudeAuth: { error: string | null };
-    codexLogin: CodexLoginState | null;
-    codexAuth: { error: string | null };
-    grokLogin: GrokLoginState | null;
-    grokAuth: { error: string | null };
-  },
-): string | null {
-  if (id === EngineId.ClaudeCode)
-    return (logins.claudeLogin?.phase === "failed" ? logins.claudeLogin.error : null) ?? logins.claudeAuth.error;
-  if (id === EngineId.Grok)
-    return (logins.grokLogin?.phase === "failed" ? logins.grokLogin.error : null) ?? logins.grokAuth.error;
-  return (logins.codexLogin?.phase === "failed" ? logins.codexLogin.error : null) ?? logins.codexAuth.error;
+  const shown = problem ?? trouble(EngineId.ClaudeCode) ?? trouble(EngineId.Codex);
+  return { views, recheck, act, cancel, shown, claudeAuth, codexAuth, claudeLogin, codexLogin, codeFallback };
 }
 
 type Subscriptions = ReturnType<typeof useSubscriptions>;
@@ -955,9 +902,6 @@ function useRecheckOnReturn(s: Subscriptions) {
   useEffect(() => {
     if (s.codexLogin?.phase === "connected") void s.codexAuth.refresh();
   }, [s.codexLogin?.phase]);
-  useEffect(() => {
-    if (s.grokLogin?.phase === "connected") void s.grokAuth.refresh();
-  }, [s.grokLogin?.phase]);
 }
 
 /** When each mark connected here (not one that was already connected on arrival), in performance.now() time. */
@@ -965,35 +909,25 @@ function useConnectedAt(views: Record<Subscription, ConnectView>): RefObject<Rec
   const on = {
     [Provider.Claude]: views[EngineId.ClaudeCode].kind === ConnectViewKind.On,
     [Provider.Codex]: views[EngineId.Codex].kind === ConnectViewKind.On,
-    [Provider.Grok]: views[EngineId.Grok].kind === ConnectViewKind.On,
   };
-  const connectedAt = useRef<Record<Provider, number>>({
-    [Provider.Claude]: -1,
-    [Provider.Codex]: -1,
-    [Provider.Grok]: -1,
-  });
+  const connectedAt = useRef<Record<Provider, number>>({ [Provider.Claude]: -1, [Provider.Codex]: -1 });
   const seen = useRef<Record<Provider, boolean> | null>(null);
   useEffect(() => {
     const before = seen.current;
     seen.current = on;
     if (!before) return;
     for (const id of MARK_PROVIDERS) if (on[id] && !before[id]) connectedAt.current[id] = performance.now();
-  }, [on.claude, on.codex, on.grok]);
+  }, [on.claude, on.codex]);
   return connectedAt;
 }
 
 /** Each mark stands over its own button, wherever the row puts it: the buttons' centres on the art. */
 function useMarkPlaces() {
   const area = useRef<HTMLDivElement>(null);
-  const slots = {
-    [Provider.Claude]: useRef<HTMLDivElement>(null),
-    [Provider.Codex]: useRef<HTMLDivElement>(null),
-    [Provider.Grok]: useRef<HTMLDivElement>(null),
-  };
+  const slots = { [Provider.Claude]: useRef<HTMLDivElement>(null), [Provider.Codex]: useRef<HTMLDivElement>(null) };
   const markX = useRef<Record<Provider, number>>({
-    [Provider.Claude]: MARKS.width / 2 - 200,
-    [Provider.Codex]: MARKS.width / 2,
-    [Provider.Grok]: MARKS.width / 2 + 200,
+    [Provider.Claude]: MARKS.width / 2 - 128,
+    [Provider.Codex]: MARKS.width / 2 + 128,
   });
   const [placed, setPlaced] = useState(0);
   useLayoutEffect(() => {
@@ -1008,7 +942,7 @@ function useMarkPlaces() {
     };
     measure();
     const observer = new ResizeObserver(measure);
-    for (const element of [area.current, slots.claude.current, slots.codex.current, slots.grok.current])
+    for (const element of [area.current, slots.claude.current, slots.codex.current])
       if (element) observer.observe(element);
     return () => observer.disconnect();
   }, []);
@@ -1021,7 +955,6 @@ function useMarksArt(views: Record<Subscription, ConnectView>, markX: RefObject<
   const marks: Record<Provider, MarkState> = {
     [Provider.Claude]: markState(views[EngineId.ClaudeCode]),
     [Provider.Codex]: markState(views[EngineId.Codex]),
-    [Provider.Grok]: markState(views[EngineId.Grok]),
   };
   const marksNow = useRef(marks);
   marksNow.current = marks;
@@ -1033,11 +966,7 @@ function useMarksArt(views: Record<Subscription, ConnectView>, markX: RefObject<
       ctx,
       marksNow.current,
       now === null ? 0 : (now - born.current) / SECOND_MS,
-      {
-        [Provider.Claude]: age(Provider.Claude),
-        [Provider.Codex]: age(Provider.Codex),
-        [Provider.Grok]: age(Provider.Grok),
-      },
+      { [Provider.Claude]: age(Provider.Claude), [Provider.Codex]: age(Provider.Codex) },
       markX.current,
       palette,
     );
@@ -1090,7 +1019,7 @@ function Connect({
           width={MARKS.width}
           height={MARKS.height}
           draw={drawArt}
-          still={`${marks.claude}:${marks.codex}:${marks.grok}:${placed}`}
+          still={`${marks.claude}:${marks.codex}:${placed}`}
         />
         <div className="onboarding-choices">
           {SUBSCRIPTIONS.map((id) => (

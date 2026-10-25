@@ -15,7 +15,7 @@ import { PickerLabel } from "../ui/PickerPanel.tsx";
 import { Icon, type IconName } from "../ui/icons.tsx";
 import { isRovingKey, RovingAxis, rovingTarget } from "../ui/roving-focus.ts";
 import { GameAvatar } from "../ui/GameAvatar.tsx";
-import { CLAUDE_CODE_MARK, CODEX_MARK, GROK_MARK, type ProviderMark } from "../ui/provider-marks.ts";
+import { CLAUDE_CODE_MARK, CODEX_MARK } from "../ui/provider-marks.ts";
 import { relativeTime } from "../chat-labels.ts";
 import { activityNotices, dayGroup, type Notice, NoticeKind, noticeSource, waitingNotices } from "../notifications.ts";
 import { isGameThread, threadMeta } from "../state/threads.ts";
@@ -300,19 +300,9 @@ export function NotificationsMenu({ items, games, threads, onOpen, onRead, onCle
   );
 }
 
-const PROVIDER_MARKS: Partial<Record<string, ProviderMark>> = {
-  [EngineId.ClaudeCode]: CLAUDE_CODE_MARK,
-  [EngineId.Codex]: CODEX_MARK,
-  [EngineId.Grok]: GROK_MARK,
-};
-
-function providerMark(engine: string | undefined): ProviderMark | undefined {
-  return engine ? PROVIDER_MARKS[engine] : undefined;
-}
-
 function ProviderGlyph({ engine }: { engine?: string }): JSX.Element {
-  const mark = providerMark(engine);
-  if (!mark) return <Icon name="globe" size={15} />;
+  if (engine !== EngineId.ClaudeCode && engine !== EngineId.Codex) return <Icon name="globe" size={15} />;
+  const mark = engine === EngineId.Codex ? CODEX_MARK : CLAUDE_CODE_MARK;
   const gradient = `notify-mark-${engine}`;
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden>

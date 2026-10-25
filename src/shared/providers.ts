@@ -66,7 +66,6 @@ export interface ProviderInfo {
 export const EngineId = {
   ClaudeCode: "claude-code",
   Codex: "codex",
-  Grok: "grok",
   Bonsai: "bonsai",
   Ollama: "ollama",
   OpenCode: "opencode",

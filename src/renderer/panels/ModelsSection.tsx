@@ -12,8 +12,7 @@ import { CodingCliState } from "../../shared/coding-cli.ts";
 import { EngineStatusCode } from "../../shared/engine-descriptor.ts";
 import { t } from "../../shared/i18n.ts";
 import { EngineId } from "../../shared/providers.ts";
-import { SUBSCRIPTION_ENGINES, useClaudeLogin, useGrokLogin, useSubscriptionAuth } from "../subscription-auth.ts";
-import type { GrokLoginState } from "../../shared/grok-login.ts";
+import { SUBSCRIPTION_ENGINES, useClaudeLogin, useSubscriptionAuth } from "../subscription-auth.ts";
 import type { EngineDescriptor } from "../types.ts";
 import { Button } from "../ui/Button.tsx";
 import {
@@ -430,7 +429,7 @@ function signInState(
   const claudeActive = claudeLogin !== null && isClaudeLoginActive(claudeLogin);
   return {
     claudeLogin,
-    signingIn: engineId === EngineId.Codex || engineId === EngineId.Grok ? waiting : claudeActive,
+    signingIn: engineId === EngineId.Codex ? waiting : claudeActive,
     loginError: (claudeLogin?.phase === "failed" ? claudeLogin.error : undefined) ?? error,
   };
 }
@@ -523,7 +522,6 @@ function ProviderRow({
 }: { engineId: string } & ModelSettingsProps): JSX.Element | null {
   const { engine, waiting, error, signIn, refresh } = useSubscriptionAuth(engines, onEnginesRefresh, engineId);
   const login = useClaudeLogin(engineId);
-  const grok = useGrokLogin(engineId);
   const cliMissing = cliMissingFor(engine);
   const words = PROVIDERS[engineId] ?? { name: engine?.label ?? "", plans: t("subscription"), guide: "" };
   const act = useRowActions(engineId, words.guide, refresh, signIn);

@@ -423,9 +423,9 @@ wins over a bundled seed. No remove/reinstall workaround is required for a norma
 
 Settings below Harness opens Model Providers, Local Models and Harness. Add more models in the game model
 list opens Model Providers, preserving the conversation and restoring composer focus on
-dismissal. Model Providers contains one row per Claude Code, Codex and Grok Build connection with its CLI version and state;
+dismissal. Model Providers contains one row per Claude Code/Codex connection with its CLI version and state;
 Local Models contains downloadable models and their durable installation status. First-launch
-setup links open these same sections. Codex, Claude Code and Grok Build remain independently installed and
+setup links open these same sections. Codex and Claude Code remain independently installed and
 updated. A new Studio build does not install or update those coding executables.
 
 Each chat consumes its own activity projection: connecting tools, thinking,

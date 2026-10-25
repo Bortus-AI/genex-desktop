@@ -4,7 +4,7 @@ import { problemWords } from "../words.ts";
 import type { ClaudeLoginState } from "../../shared/claude-login.ts";
 import { t } from "../../shared/i18n.ts";
 import { EngineId } from "../../shared/providers.ts";
-import { signInVendor, useClaudeLogin, useGrokLogin } from "../subscription-auth.ts";
+import { signInVendor, useClaudeLogin } from "../subscription-auth.ts";
 import { useCliInstall } from "../cli-install.ts";
 import { SHOW_TERMINAL_EVENT } from "../panels/terminal-events.ts";
 
@@ -68,11 +68,8 @@ function signInLabel({ engine, busy, stalled, flat }: CardState): string {
 }
 
 /** Stop the sign-in under way for `engine`. */
-function cancelSignIn(engine: string): Promise<unknown> {
-  if (engine === EngineId.Codex) return window.studio.codexLoginCancel();
-  if (engine === EngineId.Grok) return window.studio.grokLoginCancel();
-  return window.studio.claudeLoginCancel();
-}
+const cancelSignIn = (engine: string): Promise<unknown> =>
+  engine === EngineId.Codex ? window.studio.codexLoginCancel() : window.studio.claudeLoginCancel();
 
 /** The Claude sign-in's own steps: its page again, the code box on request, and its terminal. */
 function ClaudeSignInSteps({
@@ -121,7 +118,6 @@ export function SignInCard({
 }): JSX.Element {
   const vendor = signInVendor(engine);
   const login = useClaudeLogin(engine);
-  const grok = useGrokLogin(engine);
   const [code, setCode] = useState("");
   const [codeError, setCodeError] = useState<string | null>(null);
   // Nothing typed for one subscription belongs to the next one either.

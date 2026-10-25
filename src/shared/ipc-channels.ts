@@ -177,9 +177,6 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:codex-login.dismiss": "codexLoginDismiss",
   "studio:codex-login.browser": "codexLoginOpenBrowser",
   "studio:codex-login.retry": "codexLoginRetry",
-  "studio:grok-login.state": "grokLoginState",
-  "studio:grok-login.cancel": "grokLoginCancel",
-  "studio:grok-login.browser": "grokLoginOpenBrowser",
   "studio:open-url": "openUrl",
   "studio:play.feed": "playFeed",
   "studio:play.shelves": "playShelves",
@@ -473,9 +470,6 @@ export interface StudioInvokePayloads {
   "studio:codex-login.dismiss": undefined;
   "studio:codex-login.browser": undefined;
   "studio:codex-login.retry": { method: Arg<"codexLoginRetry", 0> };
-  "studio:grok-login.state": undefined;
-  "studio:grok-login.cancel": undefined;
-  "studio:grok-login.browser": undefined;
   "studio:open-url": { url: string };
   "studio:play.feed": Arg<"playFeed", 0>;
   "studio:play.shelves": undefined;

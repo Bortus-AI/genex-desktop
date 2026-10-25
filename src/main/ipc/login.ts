@@ -152,8 +152,6 @@ export function registerLoginIpc(
     await codexLogin.openBrowser();
     return true;
   });
-  registerGrokLogin(handle, grokLogin);
-
   handle("studio:codex-login.retry", async (payload) => {
     if (payload?.method !== "browser" && payload?.method !== "device") throw new Error(MESSAGE.unknownMethod);
     const method = payload.method;

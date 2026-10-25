@@ -81,7 +81,6 @@ const HELP_ARGS: Record<CodingProvider, string[]> = {
 };
 const REQUIRED_FLAGS: Record<Exclude<CodingProvider, typeof EngineId.OpenCode>, string[]> = {
   [EngineId.Codex]: ["--json", "--output-schema", "--ignore-user-config", "--skip-git-repo-check"],
-  [EngineId.Grok]: GROK_REQUIRED_FLAGS,
   [EngineId.ClaudeCode]: [
     "--input-format",
     "--output-format",
@@ -486,7 +485,6 @@ function windowsCliDirs(home: string, env: NodeJS.ProcessEnv): string[] {
   const localAppData = variable("LOCALAPPDATA", join(home, "AppData", "Local"));
   return [
     join(home, ".local", "bin"),
-    join(home, ".grok", "bin"),
     // Codex's own installer (install.ps1) puts its launcher here and adds it to the user's PATH,
     // which a Studio already running never sees.
     join(localAppData, "Programs", "OpenAI", "Codex", "bin"),

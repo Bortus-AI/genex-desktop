@@ -72,7 +72,7 @@ const RULES: Record<VocabularyRule, RuleSpec> = {
       new RegExp(String.raw`(?:^|[^=!<>])=\s*${ENGINE}`),
       new RegExp(String.raw`(?:\breturn|=>)\s*${ENGINE}`),
     ],
-    instead: "EngineId.ClaudeCode, EngineId.Codex, EngineId.Grok, EngineId.Bonsai, EngineId.Ollama",
+    instead: "EngineId.ClaudeCode, EngineId.Codex, EngineId.Bonsai, EngineId.Ollama",
   },
   [VocabularyRule.StatusCode]: {
     applies: EVERYWHERE,

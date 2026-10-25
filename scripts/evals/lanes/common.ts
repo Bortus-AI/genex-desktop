@@ -335,7 +335,7 @@ export const RAW_LANE_CREDENTIAL_POLICY = "credentials:contractor";
 export function laneChildEnv(
   parent: NodeJS.ProcessEnv,
   homes: EvalCliHomes,
-  engine: Exclude<CodingProvider, typeof EngineId.Grok>,
+  engine: CodingProvider,
   pathPrefix: readonly string[] = [],
 ): NodeJS.ProcessEnv {
   const contractor = childEnv(strippedEnv(parent), { base: "contractor", vendor: CONTRACTOR_VENDOR[engine] });

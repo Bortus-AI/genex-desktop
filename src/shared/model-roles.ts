@@ -32,11 +32,10 @@ export const CODEX_MODELS: readonly EngineModelRow[] = [];
 export const ENGINE_MODELS: Readonly<Record<string, readonly EngineModelRow[]>> = {
   [EngineId.ClaudeCode]: CLAUDE_CODE_MODELS,
   [EngineId.Codex]: CODEX_MODELS,
-  [EngineId.Grok]: GROK_MODELS,
 };
 
 /** Ids of the delegated ("your subscription, their harness") engines, in preference order. */
-export const DELEGATED_ENGINES: readonly string[] = [EngineId.ClaudeCode, EngineId.Codex, EngineId.Grok];
+export const DELEGATED_ENGINES: readonly string[] = [EngineId.ClaudeCode, EngineId.Codex];
 
 /** The engine's name as a person says it, for a role line that names one. */
 export const ENGINE_LABELS: Readonly<Record<string, string>> = {
@@ -64,7 +63,7 @@ export function engineLabel(engine: string | null | undefined): string {
 
 /** True when this engine hires a vendor harness — the engines that have roles at all. */
 export function isDelegated(engine: string | null | undefined): boolean {
-  return engine === EngineId.ClaudeCode || engine === EngineId.Codex || engine === EngineId.Grok;
+  return engine === EngineId.ClaudeCode || engine === EngineId.Codex;
 }
 
 /** Session engines that are not delegated presets: they hold a session and can cross roles too. */

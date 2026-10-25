@@ -27,7 +27,7 @@ export function shouldWelcome(allowed: boolean | undefined, games: number, stora
 /** A subscription first launch offers to connect: Claude Code or Codex. */
 export type Subscription = SubscriptionId;
 /** The subscriptions, in the order their buttons stand. */
-export const SUBSCRIPTIONS: readonly Subscription[] = SUBSCRIPTION_ENGINES;
+export const SUBSCRIPTIONS: readonly Subscription[] = [EngineId.ClaudeCode, EngineId.Codex];
 
 type Words = Record<
   "connect" | "install" | "installing" | "update" | "updating" | "recheck" | "on" | "notStarting",
@@ -54,15 +54,6 @@ const WORDS: Record<Subscription, Words> = {
     recheck: t("Check Codex again"),
     on: t("ChatGPT connected"),
     notStarting: t("Codex is signed in, but Genex couldn't start it."),
-  },
-  [EngineId.Grok]: {
-    connect: "Connect Grok Build",
-    install: "Set up Grok Build",
-    installing: "Setting up Grok Build…",
-    update: "Update Grok Build",
-    updating: "Updating Grok Build…",
-    recheck: "Check Grok Build again",
-    on: "Grok Build connected",
   },
 };
 
@@ -97,8 +88,6 @@ export interface ConnectInput {
   claude?: ClaudeLoginState["phase"];
   codexActive?: boolean;
   codex?: CodexLoginState["phase"];
-  grokActive?: boolean;
-  grok?: GrokLoginState["phase"];
   /** A recheck the user started, or the one on returning to the window. */
   checking?: boolean;
   /** The app is installing or updating the CLI for the person. */
@@ -142,14 +131,6 @@ export function connectView(id: Subscription, input: ConnectInput): ConnectView 
     return {
       kind: ConnectViewKind.Busy,
       label: verifying ? t("Checking…") : t("Finish in your browser"),
-      cancel: !verifying,
-    };
-  }
-  if (id === EngineId.Grok && input.grokActive) {
-    const verifying = input.grok === "verifying";
-    return {
-      kind: ConnectViewKind.Busy,
-      label: verifying ? "Checking…" : "Finish in your browser",
       cancel: !verifying,
     };
   }

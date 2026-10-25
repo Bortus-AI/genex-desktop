@@ -4,7 +4,8 @@
 
 One conversation per game. User messages are right-aligned bubbles, images above or alone; long
 ones fold with Show more. Any existing file the chat names is a link: game Markdown and
-images open beside it, others in their app (programs only shown). Only the prompt bar sends.
+images open beside it, others in their app (programs only shown). A picture a reply embeds
+(`![…](art/ship.png)`) is shown in the message from that game file. Only the prompt bar sends.
 Dropped pictures stay pictures; other files become links. @ tags (max 5): local games read-only,
 Genex ones in `.studio/refs/`, assets `src/assets/`.
 

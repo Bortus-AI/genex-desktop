@@ -53,7 +53,6 @@ const NATIVE_CHANNELS = [
   "studio:local-server.find",
   "studio:codex-login.browser",
   "studio:codex-login.retry",
-  "studio:grok-login.browser",
   "studio:claude-login.browser",
   "studio:open-url",
   // A macOS notification lands in the developer's Notification Center, outside the fixture.

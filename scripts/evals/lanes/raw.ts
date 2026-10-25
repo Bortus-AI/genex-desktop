@@ -461,7 +461,7 @@ export function systemRawLaneDeps(
 }
 
 /** The engine a raw lane's agent runs, or an error for a Genex lane. */
-function rawEngine(request: LaneRunRequest): Exclude<CodingProvider, typeof EngineId.Grok> {
+function rawEngine(request: LaneRunRequest): CodingProvider {
   if (request.lane.agent === EvalAgent.ClaudeCli) return EngineId.ClaudeCode;
   if (request.lane.agent === EvalAgent.CodexCli) return EngineId.Codex;
   throw new Error(`lane ${request.lane.id} is not a raw CLI lane`);

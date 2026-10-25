@@ -37,7 +37,6 @@ export type PickerChoices = Readonly<Record<string, Readonly<Record<string, bool
 const VENDOR_GROUP: Partial<Record<string, string>> = {
   [EngineId.Codex]: MODEL_PICKER_WORDS.chatGptModels,
   [EngineId.ClaudeCode]: MODEL_PICKER_WORDS.claudeModels,
-  [EngineId.Grok]: MODEL_PICKER_WORDS.grokModels,
 };
 
 /** A model this Mac runs through the studio's own loop: Ollama, Bonsai — never a metered API. */

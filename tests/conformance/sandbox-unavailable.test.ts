@@ -109,43 +109,18 @@ describe("sandbox problem mapping", () => {
   });
 
   it("Windows initialize errors map by their code, never by their words", () => {
-    for (const code of [
-      "not_provisioned",
-      "wfp_fence_inactive",
-      "wfp_verify_unparseable",
-      "wfp_verify_inconclusive",
-      "wfp_verify_bind_failed",
-    ]) {
+    for (const code of ["not_provisioned", "wfp_fence_inactive"]) {
       const error = Object.assign(new Error("anything at all"), { code });
       assert.equal(windowsSetupProblem(error)?.code, SandboxProblemCode.NotProvisioned, code);
     }
     for (const error of [
       Object.assign(new Error("Sandbox user is not provisioned"), { code: "spawn_failed" }),
       Object.assign(new Error("not_provisioned"), { code: "ENOENT" }),
-      Object.assign(new Error("ensure the Secondary Logon service (seclogon) is running"), { code: "spawn_failed" }),
       new Error("not_provisioned"),
       "not_provisioned",
       null,
     ])
       assert.equal(windowsSetupProblem(error), null, String(error));
-  });
-
-  it("a WFP verify failure explains the sign-in, and does not tell the person to start Secondary Logon", () => {
-    const vendor = [
-      'WFP egress fence could not be verified — `srt-win wfp verify` exited 1 with unparseable output ""',
-      '(stderr: "srt-win: error: spawn runner for egress probe: CreateProcessWithLogonW(srt-sandbox):',
-      'Access is denied. (0x80070005) — ensure the Secondary Logon service (seclogon) is running.")',
-    ].join(" ");
-    const problem = windowsSetupProblem(Object.assign(new Error(vendor), { code: "wfp_verify_unparseable" }), [vendor]);
-    assert.equal(problem?.code, SandboxProblemCode.NotProvisioned);
-    assert.match(problem?.details[0] ?? "", /Set up repairs the account/);
-    assert.equal(
-      problem?.details.some((detail) => detail.includes("ensure the Secondary Logon service (seclogon) is running")),
-      false,
-    );
-    assert.match(problem?.details.join("\n") ?? "", /Access is denied/);
-    const fence = windowsSetupProblem(Object.assign(new Error("fence"), { code: "wfp_fence_inactive" }), [vendor]);
-    assert.deepEqual(fence?.details, [vendor], "only a verify code is rewritten");
   });
 });
 

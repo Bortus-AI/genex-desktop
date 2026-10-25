@@ -1792,7 +1792,6 @@ export class WindowsSandboxSession {
       const plan = await this.#setOwnEntries(grants);
       await this.#initialize(plan.config);
       await this.#grantAncestors(grants);
-      await this.#grantProgram();
       this.#applied = grants;
       this.#appliedDenies = new Set(denies.map(pathKey));
       this.#ownEntries = plan.own;
@@ -1930,11 +1929,6 @@ export class WindowsSandboxSession {
     const all = this.#plan(grants, false);
     if (own) this.#deps.log?.(MESSAGE.OwnEntriesOff(sentToSrt(all.config)));
     return all;
-  }
-
-  /** The sandbox account's access to srt-win. A refusal is ignored; initialize then says why. */
-  async #grantProgram(): Promise<void> {
-    await this.#deps.grantProgram?.().catch(() => {});
   }
 
   /**

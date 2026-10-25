@@ -158,7 +158,7 @@ describe("model roles", () => {
   });
 
   it("both subscriptions have roles; a local engine has none", () => {
-    assert.deepEqual([...DELEGATED_ENGINES], ["claude-code", "codex", "grok"]);
+    assert.deepEqual([...DELEGATED_ENGINES], ["claude-code", "codex"]);
     assert.equal(isDelegated("codex"), true);
     assert.equal(isDelegated("ollama"), false);
     assert.equal(describeRoles("ollama", "qwen3.8:27b-mlx"), "");

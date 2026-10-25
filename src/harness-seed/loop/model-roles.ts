@@ -37,7 +37,6 @@ export interface ModelRow {
 export const EngineId = {
   ClaudeCode: "claude-code",
   Codex: "codex",
-  Grok: "grok",
   Bonsai: "bonsai",
   Ollama: "ollama",
   OpenCode: "opencode",
@@ -121,11 +120,10 @@ export const CODEX_MODELS: ModelRow[] = [];
 export const ENGINE_MODELS: Record<string, ModelRow[]> = {
   [EngineId.ClaudeCode]: CLAUDE_CODE_MODELS,
   [EngineId.Codex]: CODEX_MODELS,
-  [EngineId.Grok]: GROK_MODELS,
 };
 
 /** Ids of the delegated ("your subscription, their harness") engines, in preference order. */
-export const DELEGATED_ENGINES = [EngineId.ClaudeCode, EngineId.Codex, EngineId.Grok];
+export const DELEGATED_ENGINES = [EngineId.ClaudeCode, EngineId.Codex];
 
 /** The engine's name as a person says it, for a role line that names one. */
 export const ENGINE_LABELS: Record<string, string> = {
@@ -141,7 +139,7 @@ export function engineLabel(engine: string | null | undefined): string {
 
 /** True when this engine hires a vendor harness — the engines that have roles at all. */
 export function isDelegated(engine: string | null | undefined): boolean {
-  return engine === EngineId.ClaudeCode || engine === EngineId.Codex || engine === EngineId.Grok;
+  return engine === EngineId.ClaudeCode || engine === EngineId.Codex;
 }
 
 /** The catalog for a session provider, or `[]` for a completion-only engine. */

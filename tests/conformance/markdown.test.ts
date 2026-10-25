@@ -35,6 +35,10 @@ test("a picture of a game file is loaded from the game, not from the app's own a
   assert.doesNotMatch(html, /src="art\//);
   assert.doesNotMatch(html, /data-game-image="\.\./);
   assert.match(html, /src="https:\/\/example.com\/ship.png"/);
+  const nested = markdownHtml("![photo](photo.png)", {
+    files: { lookup: () => undefined, names: [], base: "docs/guide.md" },
+  });
+  assert.match(nested, /data-game-image="docs\/photo.png"/);
 });
 
 test("unsafe Markdown destinations cannot create executable links or images", () => {
