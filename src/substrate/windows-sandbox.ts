@@ -178,18 +178,9 @@ const FIXED_ENV = {
   NODE_USE_ENV_PROXY: "1",
   // Windows paths reach native programs unchanged.
   MSYS_NO_PATHCONV: "1",
-  // Git's curl is built with OpenSSL and Schannel; Schannel cannot work under the write-restricted token.
-  CURL_SSL_BACKEND: "openssl",
 } as const;
 /** curl's schannel revocation check cannot reach its CRL servers through the proxy. */
 const CURLRC = "ssl-revoke-best-effort\n";
-/**
- * Git Bash's own folders, put ahead of the toolchain PATH: its POSIX tools beat `System32`'s `find`
- * and `sort`, and its curl, which brings its own TLS (OpenSSL), beats `System32\curl.exe`, whose
- * Schannel a sandboxed command's write-restricted token cannot use. Git for Windows keeps its
- * programs in the one of `ucrt64`, `mingw64` and `clangarm64` its build uses.
- */
-const GIT_BASH_PATH = "/usr/bin:/ucrt64/bin:/mingw64/bin:/clangarm64/bin";
 
 const MESSAGE = {
   BadEnvName: (name: string) => `refusing to write the environment variable ${JSON.stringify(name)}`,
@@ -510,9 +501,10 @@ export interface EnvFileInput {
 
 /**
  * The env file a Git Bash command sources first (`. file`): every variable exported under its
- * own single quotes, the toolchain PATH put after Git's own programs ({@link GIT_BASH_PATH}), and
- * Git's credential helper switched off by appending to the `GIT_CONFIG_*` list srt already set
- * (its `safe.directory` entries and its `http.sslBackend=openssl` stay).
+ * own single quotes, the toolchain PATH put after Git's `/usr/bin` (so the POSIX tools beat
+ * `System32`'s `find` and `sort`), and Git's credential helper switched off by appending to the
+ * `GIT_CONFIG_*` list srt already set (its `safe.directory` entries and its
+ * `http.sslBackend=openssl` stay).
  */
 export function renderEnvFile(input: EnvFileInput): string {
   const lines: string[] = [];
@@ -521,7 +513,7 @@ export function renderEnvFile(input: EnvFileInput): string {
     lines.push(`export ${name}=${quote(value)}`);
   }
   const tools = msysPathList(input.toolPath);
-  lines.push(`export PATH=${quote(tools ? `${GIT_BASH_PATH}:${tools}` : GIT_BASH_PATH)}":$PATH"`);
+  lines.push(`export PATH=${quote(tools ? `/usr/bin:${tools}` : "/usr/bin")}":$PATH"`);
   lines.push(
     "__genex_n=${GIT_CONFIG_COUNT:-0}",
     'export "GIT_CONFIG_KEY_${__genex_n}=credential.helper" "GIT_CONFIG_VALUE_${__genex_n}="',

@@ -1494,16 +1494,11 @@ describe("the env file", () => {
       assert.throws(() => renderEnvFile({ vars: { [name]: "v" }, toolPath: "" }), /refusing/, JSON.stringify(name));
   });
 
-  it("puts the toolchain after Git's own programs and keeps what the shell had", async () => {
-    // Git's curl brings its own TLS; System32's, on the toolchain PATH, uses Schannel, which a
-    // sandboxed command's write-restricted token cannot use.
-    const git = "/usr/bin:/ucrt64/bin:/mingw64/bin:/clangarm64/bin";
+  it("puts the toolchain after Git's /usr/bin and keeps what the shell had", async () => {
     const file = path.join(await tmpDir("windows-env-"), "run.env");
-    await writeFile(file, renderEnvFile({ vars: {}, toolPath: "C:\\nvm\\v24;;C:\\Windows\\System32" }));
+    await writeFile(file, renderEnvFile({ vars: {}, toolPath: "C:\\nvm\\v24;;D:\\Tools" }));
     const out = await sourced(file, 'printf "%s" "$PATH"', "PATH=/before;");
-    assert.equal(out, `${git}:/c/nvm/v24:/c/Windows/System32:/before`);
-    await writeFile(file, renderEnvFile({ vars: {}, toolPath: "" }));
-    assert.equal(await sourced(file, 'printf "%s" "$PATH"', "PATH=/before;"), `${git}:/before`);
+    assert.equal(out, "/usr/bin:/c/nvm/v24:/d/Tools:/before");
   });
 
   it("switches Git's credential helper off after the entries srt set", async () => {
@@ -1548,7 +1543,6 @@ describe("the env file", () => {
       GIT_TERMINAL_PROMPT: "0",
       NODE_USE_ENV_PROXY: "1",
       MSYS_NO_PATHCONV: "1",
-      CURL_SSL_BACKEND: "openssl",
       HARNESS_WS: "C:\\ws",
       HOME: "C:\\home-for-this-run",
     });

@@ -505,21 +505,17 @@ describe("Windows sandbox: network", { skip: SKIP, timeout: TEST_TIMEOUT_MS }, (
     assert.equal((await inside(probe)).stdout.trim(), "403", "closed again after the run");
   });
 
-  it("runs Git's own curl on OpenSSL, since Schannel cannot work under the write-restricted token", async () => {
-    const which = await inside(`command -v curl; curl -V | head -n 1`);
-    assert.equal(which.code, 0, which.stderr);
-    const [where = "", version = ""] = which.stdout.trim().split("\n");
-    assert.doesNotMatch(where, /\/windows\/system32\//i, `System32's Schannel curl: ${which.stdout}`);
-    const backend = await inside(`curl -sS -m 15 -o /dev/null -w '%{ssl_verify_result}' https://registry.npmjs.org/`, {
-      policy: { allowedDomains: ["registry.npmjs.org"] },
-    });
-    assert.doesNotMatch(backend.stderr, /schannel/i, `${version}: ${backend.stderr}`);
+  it("reaches an allowed Git host over HTTPS with git, on the OpenSSL backend sandbox-runtime sets", async () => {
+    const policy = { allowedDomains: ["github.com"] };
+    const git = await inside("git ls-remote https://github.com/git/git.git HEAD", { policy });
+    assert.equal(git.code, 0, git.stderr);
+    assert.match(git.stdout, /^[0-9a-f]{40}\tHEAD/);
   });
 
-  it("reaches an allowed registry over HTTPS with curl and with Node's fetch", async () => {
+  it("reaches an allowed registry over HTTPS with Node's fetch", async () => {
+    // Not with curl: Git for Windows' curl uses Schannel alone, which the write-restricted token
+    // every command runs under (sandbox-runtime 0.0.81) cannot use.
     const policy = { allowedDomains: ["registry.npmjs.org"] };
-    const viaCurl = await inside(curl("https://registry.npmjs.org/left-pad"), { policy });
-    assert.equal(viaCurl.stdout.trim(), "200", viaCurl.stderr);
     const viaNode = await inside(
       `node -e 'fetch("https://registry.npmjs.org/left-pad").then(r=>console.log(r.status),e=>console.log(e.cause?.code??e.message))'`,
       { policy },
