@@ -152,6 +152,18 @@ A dispatch with `package_run` checks a build before it is released: give it a Pa
 of a download, with that run's commit driving the agent command. No other machine runs and no issue
 is touched. Dispatch it from a ref the `canary` environment allows.
 
+Adding `upgrade_from` (a release tag) checks the update from that release instead. Each Azure owner
+installs the release, with one game in its library (`canary-kept-game`, a `.claude` folder and a
+dependency tree), and starts it once, which sets the sandbox up for that release's srt-win; then the
+build goes over it as Squirrel's update. The steps are `earlier-release`, `install`, `upgrade-card`
+(the card that asks to update the sandbox, `upgrade-card.png`), `upgrade-approval` (pressing Update
+raises exactly one approval prompt), `upgrade-start` (the studio up with no harness rewind) and
+`agent-command`, run on that same profile. The VM shows approval prompts on the owner's desktop
+(`PromptOnSecureDesktop 0`), where `scripts/canary/windows/uac-approver.ps1`, started there as
+SYSTEM, photographs (`uac-<n>.png`) and approves each one. The standard user then installs the build
+on the updated machine, as before. The build needs a higher version than the release, or Squirrel
+has nothing to update: dispatch Package with `only: win32` and `version` (for example `0.1.99`).
+
 Azure setup, once: the subscription owner runs `scripts/canary/azure-setup.sh` in Cloud Shell. It
 creates an app registration whose only credential is GitHub's OIDC token for the `canary`
 environment, gives it Contributor on the subscription, and sets a budget alert. Its three IDs go
