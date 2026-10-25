@@ -1050,6 +1050,8 @@ export default {
   "Couldn’t install: this game is larger than it says.":
     "インストールできませんでした。このゲームは表示されたサイズより大きいです。",
   "Couldn’t install: this game isn’t signed.": "インストールできませんでした。このゲームは署名されていません。",
+  "Couldn’t install: this game needs Rosetta to run on this Mac.":
+    "インストールできませんでした。このゲームをこのMacで動かすにはRosettaが必要です。",
   "Couldn’t install: this game’s files aren’t safe to open.":
     "インストールできませんでした。このゲームのファイルは安全に開けません。",
   "Couldn’t load other versions.": "ほかのバージョンを読み込めませんでした。",

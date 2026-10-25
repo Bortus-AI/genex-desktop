@@ -1030,6 +1030,8 @@ export default {
   "Couldn’t install: this game doesn’t run on this Mac.": "설치하지 못했어요. 이 게임은 이 Mac에서 실행되지 않아요.",
   "Couldn’t install: this game is larger than it says.": "설치하지 못했어요. 이 게임이 표시된 크기보다 커요.",
   "Couldn’t install: this game isn’t signed.": "설치하지 못했어요. 이 게임은 서명되지 않았어요.",
+  "Couldn’t install: this game needs Rosetta to run on this Mac.":
+    "설치하지 못했어요. 이 Mac에서 이 게임을 실행하려면 Rosetta가 필요해요.",
   "Couldn’t install: this game’s files aren’t safe to open.":
     "설치하지 못했어요. 이 게임의 파일은 열기에 안전하지 않아요.",
   "Couldn’t load other versions.": "다른 버전을 불러오지 못했어요.",

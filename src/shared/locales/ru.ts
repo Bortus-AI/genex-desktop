@@ -1067,6 +1067,8 @@ export default {
   "Couldn’t install: this game doesn’t run on this Mac.": "Не удалось установить: эта игра не работает на этом Mac.",
   "Couldn’t install: this game is larger than it says.": "Не удалось установить: игра больше, чем заявлено.",
   "Couldn’t install: this game isn’t signed.": "Не удалось установить: у этой игры нет подписи.",
+  "Couldn’t install: this game needs Rosetta to run on this Mac.":
+    "Не удалось установить: этой игре нужна Rosetta, чтобы работать на этом Mac.",
   "Couldn’t install: this game’s files aren’t safe to open.":
     "Не удалось установить: файлы этой игры небезопасно открывать.",
   "Couldn’t load other versions.": "Не удалось загрузить другие версии.",

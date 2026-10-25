@@ -800,14 +800,11 @@ export class DelegationService {
     const shape = await readProjectShape(initialRoot).catch(() => null);
     if (shape?.runtime !== TargetRuntime.Bridge)
       return computerTools(this.#x.previews, grant, initialRoot, outDir, session);
-    const tools = computerTools(this.#x.previews, grant, initialRoot, outDir, session, {
+    // Started on the session's first move, never here: every chat turn is handed a computer, and a
+    // native game opens a window of its own. Until it runs, the tool offers what such a game may do.
+    return computerTools(this.#x.previews, grant, initialRoot, outDir, session, {
       bridge: { sandbox: this.#core.sandbox, engine: (engine, root) => this.#core.startEngine(engine, root) },
     });
-    // A Play Protocol game says what it can do only once it runs: start it now, so the tool the
-    // session is handed offers only what this game can do. A game that fails to start is said on
-    // the first call.
-    await tools.prepare().catch(() => {});
-    return tools;
   }
 
   /**
