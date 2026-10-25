@@ -106,6 +106,10 @@ const BUILD_CHANGES: ReadonlySet<CoordinatorTool> = new Set<CoordinatorTool>([
   CoordinatorTool.ResumeRun,
   CoordinatorTool.LandBuild,
 ]);
+/** May continue_build go on after a run in this state: a finished one, or a paused one for a contained change? */
+function continuesAfter(state: string, contained: boolean): boolean {
+  return state === RunState.Finished || (contained && state === RunState.Paused);
+}
 /** Titles a thread has before its first message names it. */
 const PLACEHOLDER_TITLES: readonly string[] = [NEW_GAME_TITLE, NEW_CHAT_TITLE];
 /** Characters of a first message kept as the thread's title. */
@@ -136,7 +140,8 @@ const MESSAGE = {
     "The chat is in Plan mode, so this did not run: starting, continuing, resuming or landing a build waits until the plan is approved. Put it in your plan instead.",
   runChanged: "The run changed. This message cannot control another run; read the current state.",
   onlyPausedResumes: "Only a paused run from this conversation can be resumed. No new run was started.",
-  continueWhichRun: "Continue the active run with steer_run, or a paused run with resume_run.",
+  continueWhichRun:
+    "Continue the active run with steer_run. A paused run goes on with resume_run; a contained change after it is continue_build with build false.",
   continueNeedsText: "Continued work needs a message and an instruction.",
   noProjectFolder: "This run has no project folder to show.",
   noIntegrationToShow: "This run has no integration branch to show yet.",
@@ -766,13 +771,15 @@ export class ConversationService {
   }
 
   async #continueBuild({ threadId, runId, args, messageId, events, run }: CoordinatorCall): Promise<string> {
-    // A finished run is over for the chat, though the harness holds it through the learning pass
-    // that follows (it stays in `activeRunIds` until `run.settled`): that pass never holds the chat.
-    if (run.state !== RunState.Finished) throw new Error(MESSAGE.continueWhichRun);
-    const text = textArg(args.text);
-    if (!text || !messageId) throw new Error(MESSAGE.continueNeedsText);
     // A contained change goes to one builder turn even when a Loop came with the message.
     const contained = args.build === false;
+    // A finished run is over for the chat, though the harness holds it through the learning pass
+    // that follows (it stays in `activeRunIds` until `run.settled`): that pass never holds the chat.
+    // After a paused one, a contained change is made in the chat and the build stays paused: other
+    // work is not that build's to resume.
+    if (!continuesAfter(run.state, contained)) throw new Error(MESSAGE.continueWhichRun);
+    const text = textArg(args.text);
+    if (!text || !messageId) throw new Error(MESSAGE.continueNeedsText);
     // Once per message, unless the request changed (a message steered into this turn restated it):
     // the builder takes the latest.
     const previous = payloadsOf(events, CustomEvent.RunFollowupRequested)
