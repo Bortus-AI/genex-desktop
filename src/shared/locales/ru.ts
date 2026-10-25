@@ -2378,6 +2378,7 @@ export default {
   "No comments on {title} yet": "У игры «{title}» пока нет комментариев",
   "No compatible newer release is available for this installed plugin":
     "Для этого плагина нет более новой совместимой версии",
+  "No cover yet, so it goes out without a picture.": "Обложки пока нет, так что игра выйдет без картинки.",
   "No dash at the ends": "Без дефиса в начале и конце",
   "No friends yet — send your link and play together.": "Друзей пока нет — отправь ссылку и играйте вместе.",
   "No games for “{query}”.": "Нет игр по запросу «{query}».",
@@ -6148,6 +6149,8 @@ export default {
   "That price isn’t one the store takes. Ask the agent to pick another.":
     "Магазин не принимает такую цену. Попроси агента выбрать другую.",
   "The item store is off right now.": "Магазин предметов сейчас выключен.",
+  "This game is still the empty starter: build something first, then publish.":
+    "Это пока пустой стартовый проект: сначала собери что-нибудь, потом публикуй.",
   "This game sells as many items as it can.": "В этой игре уже продаётся максимум предметов.",
   "You get per sale": "Ты получаешь с продажи",
   "You get per sale ({share})": "Ты получаешь с продажи ({share})",
