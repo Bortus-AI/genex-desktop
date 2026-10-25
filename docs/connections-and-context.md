@@ -234,8 +234,10 @@ Agent Client Protocol, and its `_x.ai/auth/info` (`methodId`: `cached_token` for
 when signed out) and `_x.ai/models/list` (names, context windows, effort levels, the current model)
 answer after `initialize`, with no session and no model call. A turn is headless
 ([grok-events.ts](../src/substrate/engines/grok-events.ts)): `grok --prompt-file … --output-format
-streaming-json`, the prompt a file of ACP content blocks (pictures included: Grok reads no piped
-stdin, and on Windows the sandbox passes none), resumed by `--resume` (by id, from any folder).
+streaming-json`, the prompt a file of ACP content blocks (Grok reads no piped stdin, and on Windows
+the sandbox passes none), resumed by `--resume` (by id, from any folder). Grok drops a picture block
+(its ACP says `image: false`), so each picture is a file beside the prompt that the words name, and
+Grok's own `read_file` shows it to the model (`grok-prompts.ts`).
 Each turn gets `--sandbox off` (the studio's holds it), `--no-wait-for-background`, Grok's own ask
 tools, plan mode, goal, schedulers and workflows removed, and `GROK_HOME` named outright; the person's
 Claude and Cursor MCP servers, hooks and skills, Grok's memory and its updater are off by variable,

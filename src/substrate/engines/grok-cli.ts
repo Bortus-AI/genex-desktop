@@ -12,6 +12,7 @@
  */
 import path from "node:path";
 import { createInterface } from "node:readline";
+import { picturesNote } from "./grok-prompts.ts";
 import { CatalogError } from "./model-catalog.ts";
 import { ModelContextSource, type EngineModel } from "./types.ts";
 import { spawnCommand } from "../command-launch.ts";
@@ -415,10 +416,11 @@ export function grokSandbox(input: {
   };
 }
 
-/** A turn's prompt as the ACP content blocks `--prompt-file` takes: the words, then each picture. */
-export function grokPromptBlocks(words: string, images: ReadonlyArray<{ data: string; mimeType: string }>): string {
-  return JSON.stringify([
-    { type: "text", text: words },
-    ...images.map((image) => ({ type: "image", data: image.data, mimeType: image.mimeType })),
-  ]);
+/**
+ * A turn's prompt as the ACP content blocks `--prompt-file` takes: one text block, the words and
+ * then the picture files Grok Build opens itself (it drops a picture block).
+ */
+export function grokPromptBlocks(words: string, pictures: readonly string[]): string {
+  const text = pictures.length ? `${words}\n\n${picturesNote(pictures)}` : words;
+  return JSON.stringify([{ type: "text", text }]);
 }

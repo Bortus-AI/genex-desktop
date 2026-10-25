@@ -12,8 +12,9 @@
  * hosts are reachable. Its own permission rules keep a read-only session to reading and the
  * studio bridge (`grokTurnArgv`).
  *
- * The prompt goes in a file of ACP content blocks (pictures included: Grok reads no piped stdin,
- * and on Windows the sandbox would not pass one on); each stdout line is one event
+ * The prompt goes in a file of ACP content blocks (Grok reads no piped stdin, and on Windows the
+ * sandbox would not pass one on), its pictures as files beside it for Grok's own `read_file`
+ * (`grok-prompts.ts`); each stdout line is one event
  * (`grok-events.ts`); a session is resumed by its id (`--resume`). Studio tools arrive through the
  * file bridge Codex uses.
  */
@@ -61,6 +62,7 @@ import type { PartialDelegateState } from "./common.ts";
 import { ProcessSandbox, type SandboxOptions, shellQuote } from "../spawn.ts";
 import { childEnv } from "../child-env.ts";
 import { credentialHomes, grokHome } from "../credential-homes.ts";
+import { sniffImage } from "../image-sniff.ts";
 import { stopChild } from "../process-tree.ts";
 import type { Usage } from "../types.ts";
 import { CodingCliState } from "../../shared/coding-cli.ts";
@@ -451,7 +453,8 @@ export class GrokEngine implements Engine {
     const folder = await mkdtemp(path.join(temporary, "prompt-"));
     try {
       const promptFile = path.join(folder, PROMPT_FILE);
-      await writeFile(promptFile, grokPromptBlocks(turn.prompt, turn.images), "utf8");
+      const pictures = await writePictures(folder, turn.images);
+      await writeFile(promptFile, grokPromptBlocks(turn.prompt, pictures), "utf8");
       const argv = grokTurnArgv({
         access: turn.access,
         promptFile,
@@ -722,6 +725,23 @@ function sessionAccess(request: DelegateRequest): GrokAccess {
 /** The chat's mode as Grok Build honours it (Auto or Plan), or null for unattended work. */
 function chatMode(request: DelegateRequest): PermissionMode | null {
   return request.permissions ? engineMode(EngineId.Grok, request.permissions.mode) : null;
+}
+
+/**
+ * A turn's pictures as files in its prompt folder, for Grok Build's own `read_file`; the bytes name
+ * each one's type, and bytes that are no picture it can read stay out.
+ */
+async function writePictures(folder: string, images: TurnSetup["images"]): Promise<string[]> {
+  const files: string[] = [];
+  for (const image of images) {
+    const bytes = Buffer.from(image.data, "base64");
+    const sniffed = sniffImage(bytes);
+    if (!sniffed) continue;
+    const file = path.join(folder, `picture-${files.length + 1}${sniffed.ext}`);
+    await writeFile(file, bytes);
+    files.push(file);
+  }
+  return files;
 }
 
 /** A judge's question as one prompt: the system words, the conversation, and the critic's two rules. */

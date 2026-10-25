@@ -28,6 +28,9 @@ const TURN_TIMEOUT_MS = 120_000;
 const PROOF = { file: "grok-proof.txt", text: "ok" } as const;
 const PROBE_SOURCE = `import { writeFileSync } from "node:fs";\nwriteFileSync(${JSON.stringify(PROOF.file)}, ${JSON.stringify(PROOF.text)});\nconsole.log("probe ran");\n`;
 /** The variables that point the CLI at the fake instead of xAI, for the test's whole process. */
+/** A 64×64 red square: Grok Build attaches no picture smaller than a vision model reads. */
+const RED_SQUARE_PNG =
+  "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAb0lEQVR4nO3PAQkAAAyEwO9feoshgnABdLep8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3IPanc8OLDQitxAAAAAElFTkSuQmCC";
 const FAKE_ENDPOINTS = ["GROK_HOME", "GROK_CLI_CHAT_PROXY_BASE_URL", "GROK_XAI_API_BASE_URL"] as const;
 
 /** The real `grok` binary. */
@@ -125,6 +128,19 @@ describe("Grok Build with the real CLI", { skip: !LIVE && "set STUDIO_GROK_CLI_T
     assert.ok(result.sessionId, "a session Continue can resume");
     assert.equal(await readFile(path.join(dir, PROOF.file), "utf8"), PROOF.text);
     assert.match(fake.commandOutput() ?? "", /probe ran/);
+  });
+
+  it("a judge's picture reaches the model: Grok opens the file its prompt names, in the real sandbox", {
+    timeout: TURN_TIMEOUT_MS,
+  }, async () => {
+    fake.nextPicture();
+    const response = await engine().complete({
+      messages: [
+        { role: "user", content: "What colour is it?", images: [{ data: RED_SQUARE_PNG, mimeType: "image/png" }] },
+      ],
+    });
+    assert.equal(response.message.content, FAKE_DONE_TEXT);
+    assert.deepEqual(fake.picturesSent(), [`data:image/png;base64,${RED_SQUARE_PNG}`]);
   });
 
   it("a read-only session runs from its own folder, and its sandbox keeps the game as it is", {

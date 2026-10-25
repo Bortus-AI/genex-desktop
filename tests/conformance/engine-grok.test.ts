@@ -12,7 +12,7 @@
  */
 import assert from "node:assert/strict";
 import { constants } from "node:fs";
-import { access, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
+import { access, mkdir, readdir, readFile, realpath, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
@@ -24,6 +24,11 @@ import { ProcessSandbox } from "../../src/substrate/spawn.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
 const FIXTURES = path.join(import.meta.dirname, "..", "fixtures", "transcripts");
+/** A picture's bytes as a PNG begins: enough for the studio to call it one. */
+const PNG_DATA = Buffer.concat([
+  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+  Buffer.alloc(8),
+]).toString("base64");
 const fixture = (name: string) => readFile(path.join(FIXTURES, name), "utf8");
 const events = async (name: string) =>
   (await fixture(name))
@@ -218,10 +223,14 @@ async function engineWith(
   const root = await tmpDir("grok-engine-");
   const seen: GrokInvocation[] = [];
   const prompts: unknown[] = [];
+  const beside: Array<Record<string, Buffer>> = [];
   const execFn: GrokExec = async function* (invocation) {
     seen.push(invocation);
     const file = invocation.argv[invocation.argv.indexOf("--prompt-file") + 1];
-    if (invocation.argv.includes("--prompt-file") && file) prompts.push(JSON.parse(await readFile(file, "utf8")));
+    if (invocation.argv.includes("--prompt-file") && file) {
+      prompts.push(JSON.parse(await readFile(file, "utf8")));
+      beside.push(await filesBeside(file));
+    }
     yield* stream(invocation);
   };
   const engine = new GrokEngine({
@@ -232,7 +241,35 @@ async function engineWith(
     resolveCli: ready,
     probe: () => probed(options.probe ?? SIGNED_IN),
   });
-  return { engine, seen, prompts, root };
+  return { engine, seen, prompts, beside, root };
+}
+
+/** The files beside a turn's prompt file while the turn runs: its pictures, by path. */
+async function filesBeside(promptFile: string): Promise<Record<string, Buffer>> {
+  const folder = path.dirname(promptFile);
+  const names = (await readdir(folder)).filter((name) => name !== path.basename(promptFile));
+  return Object.fromEntries(
+    await Promise.all(names.map(async (name) => [path.join(folder, name), await readFile(path.join(folder, name))])),
+  );
+}
+
+/** A turn's prompt words, and that its file holds nothing else: Grok drops a picture block. */
+function promptWords(prompt: unknown): string {
+  const blocks = prompt as Array<{ type: string; text: string }>;
+  assert.equal(blocks.length, 1, "the words alone: Grok Build reads no picture from its prompt file");
+  assert.equal(blocks[0]?.type, "text");
+  return blocks[0]?.text ?? "";
+}
+
+/** The pictures a turn had: each a file beside its prompt, named in the words for Grok's read_file. */
+function assertPicturesNamed(words: string, files: Record<string, Buffer> | undefined): void {
+  const pictures = Object.entries(files ?? {});
+  assert.equal(pictures.length, 1, "a picture whose bytes are no picture stays out");
+  const [file, bytes] = pictures[0] ?? ["", Buffer.alloc(0)];
+  assert.match(file, /\.png$/, "the bytes name its type");
+  assert.deepEqual(bytes, Buffer.from(PNG_DATA, "base64"));
+  assert.ok(words.includes(file), "the words name the picture's file");
+  assert.match(words, /read_file/, "for Grok's own read_file, which shows a picture as one");
 }
 
 async function game(): Promise<string> {
@@ -388,7 +425,7 @@ describe("Grok Build sessions", () => {
   });
 
   it("puts a picked model, an effort it offers and the pictures into the turn; an effort it does not offer stays out", async () => {
-    const { engine, seen, prompts } = await engineWith(() => replay([]), {
+    const { engine, seen, prompts, beside } = await engineWith(() => replay([]), {
       probe: "grok-probe-signed-out-1.0.70.jsonl",
     });
     await engine.models();
@@ -400,7 +437,10 @@ describe("Grok Build sessions", () => {
       model: "grok-4.6",
       effort: "xhigh",
       resume: "01a16f21",
-      images: [{ label: "reference", mimeType: "image/png", data: "aGk=" }],
+      images: [
+        { label: "reference", mimeType: "image/png", data: PNG_DATA },
+        { label: "not a picture", mimeType: "image/png", data: "aGk=" },
+      ],
     });
     await engine.delegate({ cwd, prompt: "x", model: "grok-4.5", effort: "xhigh" });
     const [first, second] = seen.map((invocation) => invocation.argv);
@@ -408,7 +448,10 @@ describe("Grok Build sessions", () => {
     assert.equal(flag(first, "--reasoning-effort"), "xhigh");
     assert.equal(flag(first, "--resume"), "01a16f21");
     assert.equal(flag(second, "--reasoning-effort"), undefined, "Grok 4.5 has no xhigh");
-    assert.deepEqual((prompts[0] as unknown[])[1], { type: "image", data: "aGk=", mimeType: "image/png" });
+    const words = promptWords(prompts[0]);
+    assert.match(words, /^Match this/);
+    assertPicturesNamed(words, beside[0]);
+    assert.deepEqual(beside[1], {}, "a turn with no picture has none beside its prompt");
   });
 
   it("runs a read-only session from a scratch folder, the only one its sandbox lets it write, with no editing tools", async () => {
@@ -618,12 +661,21 @@ describe("Grok Build sessions", () => {
 
 describe("Grok Build one-shot answers", () => {
   it("answers a judge with no tool approved, the critic's rules appended and its pictures in the prompt", async () => {
-    const { engine, seen, prompts } = await engineWith(async function* () {
+    const { engine, seen, prompts, beside } = await engineWith(async function* () {
       yield* await events("grok-live-judge-1.0.70.jsonl");
     });
     const response = await engine.complete({
       systemPrompt: "You judge builds.",
-      messages: [{ role: "user", content: "A or B?", images: [{ data: "aGk=", mimeType: "image/png" }] }],
+      messages: [
+        {
+          role: "user",
+          content: "A or B?",
+          images: [
+            { data: PNG_DATA, mimeType: "image/png" },
+            { data: "aGk=", mimeType: "image/png" },
+          ],
+        },
+      ],
     });
     assert.equal(response.message.content, "Four");
     assert.equal(response.engine, "grok");
@@ -631,9 +683,9 @@ describe("Grok Build one-shot answers", () => {
     assert.ok(!argv.includes("--always-approve") && !argv.includes("--allow"), "nothing it could run is approved");
     assert.match(flag(argv, "--disallowed-tools") ?? "", /run_terminal_command/);
     assert.ok(argv.includes("--disable-web-search"));
-    const [words, picture] = prompts[0] as Array<Record<string, string>>;
-    assert.match(words?.text ?? "", /You judge builds\.[\s\S]*A or B\?[\s\S]*Answer only from what is written/);
-    assert.deepEqual(picture, { type: "image", data: "aGk=", mimeType: "image/png" });
+    const words = promptWords(prompts[0]);
+    assert.match(words, /You judge builds\.[\s\S]*A or B\?[\s\S]*Answer only from what is written/);
+    assertPicturesNamed(words, beside[0]);
     await assert.rejects(
       engine.complete({
         messages: [{ role: "user", content: "x" }],

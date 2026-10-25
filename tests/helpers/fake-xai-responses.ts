@@ -4,9 +4,10 @@
  * Grok's own session service (`GROK_CLI_CHAT_PROXY_BASE_URL`), signed in with a made-up token
  * (`fakeGrokSignIn`), so nothing reaches xAI and nothing is billed.
  *
- * The script is one shell command, then done. The first turn request gets a call to Grok's shell
- * (`run_terminal_command`); a request that carries that call's output gets a short reply. Grok's
- * side requests (a session title, a status line) get a few words. Every request is kept.
+ * The script is one call, then done: a shell command (`run_terminal_command`), or Grok's own
+ * `read_file` of the first picture file the prompt names (`nextPicture`). A request that carries
+ * that call's output gets a short reply. Grok's side requests (a session title, a status line) get
+ * a few words. Every request is kept.
  */
 import { createServer, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -26,8 +27,15 @@ export interface FakeXai {
   commandOutput: () => string | null;
   /** Script the next turns: forget the last output, and run `command` instead. */
   next: (command: string) => void;
+  /** Script the next turns: forget the last output, and read the first picture the prompt names. */
+  nextPicture: () => void;
+  /** The pictures (data URLs) Grok sent the model with a call's output. */
+  picturesSent: () => string[];
   close: () => Promise<void>;
 }
+
+/** A picture file a turn's prompt names, as Grok Build's prompt hands them over. */
+const PICTURE_FILE = /(?:\/|[A-Za-z]:\\)[^\s"]*picture-\d+\.(?:png|jpg|webp|gif)/;
 
 interface ResponsesBody {
   model?: string;
@@ -81,7 +89,7 @@ const message = (text: string) => ({
 export async function startFakeXai(first: string): Promise<FakeXai> {
   const requests: unknown[] = [];
   let output: string | null = null;
-  let command = first;
+  let command: string | null = first;
   const reply = (body: ResponsesBody): Array<Record<string, unknown>> => {
     const system = body.input?.find((item) => item.role === "system")?.content;
     if (SIDE_REQUEST.test(typeof system === "string" ? system : "")) return [message(SIDE_TEXT)];
@@ -89,6 +97,11 @@ export async function startFakeXai(first: string): Promise<FakeXai> {
     if (result) {
       output = typeof result.output === "string" ? result.output : JSON.stringify(result.output);
       return [message(FAKE_DONE_TEXT)];
+    }
+    if (command === null) {
+      const picture = PICTURE_FILE.exec(JSON.stringify(body.input ?? []).replaceAll("\\\\", "\\"))?.[0] ?? "";
+      const args = JSON.stringify({ target_file: picture });
+      return [{ type: "function_call", id: "fc_fake", call_id: "call_fake_1", name: "read_file", arguments: args }];
     }
     const args = JSON.stringify({ command, description: "Run the probe" });
     return [
@@ -115,6 +128,23 @@ export async function startFakeXai(first: string): Promise<FakeXai> {
       output = null;
       command = scripted;
     },
+    nextPicture: () => {
+      output = null;
+      command = null;
+    },
+    picturesSent: () => picturesIn(requests as ResponsesBody[]),
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
   };
+}
+
+/** The data URLs of the pictures in the call outputs Grok sent. */
+function picturesIn(requests: readonly ResponsesBody[]): string[] {
+  return requests.flatMap((body) =>
+    (body.input ?? []).flatMap((item) => {
+      if (item.type !== "function_call_output" || !Array.isArray(item.output)) return [];
+      return (item.output as Array<{ type?: string; image_url?: unknown }>).flatMap((part) =>
+        part.type === "input_image" && typeof part.image_url === "string" ? [part.image_url] : [],
+      );
+    }),
+  );
 }
