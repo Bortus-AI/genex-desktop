@@ -159,7 +159,11 @@ describe("Windows sandbox: a frozen folder in a write root", { skip: SKIP, timeo
       const run = (command: string) =>
         box.run({ command, cwd: path.join(workspaceRoot, "harness"), timeoutMs: RUN_TIMEOUT_MS });
       const read = await run("cat skills/director.md");
-      assert.equal(read.stdout, "playbook", read.stderr);
+      const acls = () =>
+        [workspaceRoot, path.dirname(frozen), frozen, path.join(frozen, "director.md")]
+          .map((p) => execFileSync("icacls", [p], { encoding: "utf8" }))
+          .join("\n");
+      assert.equal(read.stdout, "playbook", `${read.stderr}\n${read.stderr ? acls() : ""}`);
       const written = await run("printf x > skills/director.md");
       assert.notEqual(written.code, 0, "the frozen folder stays write-denied");
       const beside = await run("printf ok > beside.txt && cat beside.txt");
