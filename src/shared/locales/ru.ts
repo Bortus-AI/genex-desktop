@@ -4570,6 +4570,7 @@ export default {
     "Windows не получил разрешения на установку. Нажми «Сделать за меня» ещё раз и выбери «Да», когда Windows спросит.",
   "Windows needs a one-time setup of the protected workspace, approved by an administrator.":
     "Windows нужно один раз настроить защищённое рабочее пространство с разрешения администратора.",
+  "Windows will ask you to allow it once.": "Windows один раз попросит это разрешить.",
   "Windows will ask you to allow this once. If it asks for a password, an administrator of this PC can enter theirs. Agents work in their own protected space, away from your files.":
     "Windows один раз попросит это разрешить. Если спросит пароль, его может ввести администратор этого компьютера. Агенты работают в своём защищённом пространстве, вдали от твоих файлов.",
   "Windows wouldn’t start Genex’s protected space.": "Windows не запустила защищённое пространство Genex.",
@@ -5989,6 +5990,7 @@ export default {
   "Drag to turn": "Потяни, чтобы повернуть",
   "Genex hasn’t confirmed it yet. It shows under My items once it does. You won’t be charged twice.":
     "Genex ещё не подтвердил оплату. Предмет появится в «Мои предметы», как только это случится. Дважды не спишем.",
+  "Genex’s protected space needs an update": "Защищённому пространству Genex нужно обновление",
   Get: "Получить",
   "Get in {game}": "Получить в {game}",
   Inappropriate: "Неприемлемо",

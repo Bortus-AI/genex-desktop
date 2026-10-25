@@ -4326,6 +4326,7 @@ export default {
     "Windows 没有获得安装许可。请再按一次“帮我完成”，并在 Windows 询问时选“是”。",
   "Windows needs a one-time setup of the protected workspace, approved by an administrator.":
     "Windows 需要一次性设置受保护的工作区，并由管理员批准。",
+  "Windows will ask you to allow it once.": "Windows 会请你允许一次。",
   "Windows will ask you to allow this once. If it asks for a password, an administrator of this PC can enter theirs. Agents work in their own protected space, away from your files.":
     "Windows 会请你允许一次。如果要求输入密码，这台电脑的管理员可以输入自己的密码。智能体在自己的受保护空间里工作，远离你的文件。",
   "Windows wouldn’t start Genex’s protected space.": "Windows 未能启动 Genex 的受保护空间。",
@@ -5623,6 +5624,7 @@ export default {
   "Drag to turn": "拖动旋转",
   "Genex hasn’t confirmed it yet. It shows under My items once it does. You won’t be charged twice.":
     "Genex 还没确认。确认后会显示在“我的物品”中。不会重复扣费。",
+  "Genex’s protected space needs an update": "Genex 的受保护空间需要更新",
   Get: "领取",
   "Get in {game}": "在 {game} 中获取",
   Inappropriate: "不当内容",

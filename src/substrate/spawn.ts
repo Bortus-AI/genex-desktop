@@ -9,7 +9,7 @@
  * tools. Host RPC arguments are therefore not pre-contained: a path-taking method validates its
  * own paths.
  *
- * Verified against @anthropic-ai/sandbox-runtime 0.0.73:
+ * Verified against @anthropic-ai/sandbox-runtime 0.0.81:
  *  - `SandboxManager.initialize(config)` is a **singleton**; per-run policy goes through the
  *    `customConfig` argument of `wrapWithSandboxArgv`.
  *  - `network.deniedDomains` and `filesystem.denyWrite` are **required** by the config schema
@@ -17,7 +17,8 @@
  *  - `wrapWithSandboxArgv()` returns `{ argv, env }`, which we spawn without a shell.
  *
  * On Windows the backend is srt-win under Git Bash, with session-wide grants and the environment
- * in an env file; `windows-sandbox.ts` holds those rules and the one grant session.
+ * in an env file; `windows-sandbox.ts` holds those rules and the one grant session. Its loopback
+ * mode is fixed by the install, which Genex makes closed (`toRuntimeConfig`).
  */
 import { type ChildProcess, type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -833,7 +834,9 @@ export class ProcessSandbox {
       network: {
         allowedDomains: policy.allowedDomains,
         deniedDomains: [],
-        allowLocalBinding: policy.allowLocalBinding,
+        // Windows: loopback is the install's, machine-wide, and Genex installs it closed (commands
+        // reach the sandbox's proxies only); srt-win refuses a session or command that asks otherwise.
+        allowLocalBinding: this.#platform !== StudioPlatform.Windows && policy.allowLocalBinding,
       },
       filesystem: {
         allowWrite: policy.allowWrite,
@@ -1248,7 +1251,7 @@ export class ProcessSandbox {
 
   /**
    * srt assigns its own `TMPDIR` (`/tmp/claude`) *inside* the wrapped argv, so an env override
-   * cannot win — the assignment has to happen in the command itself. Verified against 0.0.73.
+   * cannot win — the assignment has to happen in the command itself. Verified against 0.0.81.
    */
   #withTmp(command: string, tmp: string): string {
     const dir = shellQuote(tmp);

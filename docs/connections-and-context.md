@@ -666,13 +666,14 @@ Package inspection checks both ASAR and unpacked resources for Codex/Claude nati
 The packaged smoke matrix uses isolated discovery roots for neither/one/both providers and scripted
 status/structured execution. Live subscription execution is separate: explicitly select GPT-5.6-Sol,
 never Astra. A fixture or successful version probe is not live Claude SDK compatibility evidence.
-The version-guarded `scripts/patch-sandbox-runtime.mjs` fixes SRT 0.0.73 at install/build time.
+The version-guarded `scripts/patch-sandbox-runtime.mjs` fixes SRT 0.0.81 at install/build time.
 Absolute-path lookup checks filesystem executability without a one-second `which` subprocess.
-Windows `initialize()` runs srt-win's egress check, folder grants and deny stamps through SRT's own
-async runner instead of `spawnSync`, which froze the start window ("Not Responding") on Electron's
-main thread; `sandbox-windows-start.test.ts` fails on Windows CI when the start holds the event loop.
-Those steps report their times (`setStudioStepLog`); with the session's own steps and the core's
-boot marks they land in `studio.log`, so a slow start names its slow step. The core's Windows
+SRT 0.0.81 runs Windows `initialize()` (its one `acl grant --persistent` and the egress check)
+off the event loop itself; the patch moves the session release (`acl revoke`, `acl restore`) there
+too, which `spawnSync` ran on Electron's main thread and froze the window ("Not Responding");
+`sandbox-windows-start.test.ts` fails on Windows CI when the start holds the event loop.
+The grant and the egress check report their times (`setStudioStepLog`); with the session's own
+steps and the core's boot marks they land in `studio.log`, so a slow start names its slow step. The core's Windows
 sandbox starts in the background (`startInBackground`): `create` refuses only what Set up fixes,
 the window opens on the games, and every launch waits for the rest or retries a failed start.
 The patch changes neither sandbox policy nor command execution. Re-review on dependency changes.

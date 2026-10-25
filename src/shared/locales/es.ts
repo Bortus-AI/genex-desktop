@@ -4661,6 +4661,7 @@ export default {
     "Windows no obtuvo permiso para instalar. Pulsa «Hazlo por mí» otra vez y elige Sí cuando Windows lo pregunte.",
   "Windows needs a one-time setup of the protected workspace, approved by an administrator.":
     "Windows necesita configurar una vez el espacio de trabajo protegido, con la aprobación de un administrador.",
+  "Windows will ask you to allow it once.": "Windows te pedirá permiso una sola vez.",
   "Windows will ask you to allow this once. If it asks for a password, an administrator of this PC can enter theirs. Agents work in their own protected space, away from your files.":
     "Windows te pedirá permiso una sola vez. Si pide una contraseña, un administrador de este PC puede escribir la suya. Los agentes trabajan en su propio espacio protegido, lejos de tus archivos.",
   "Windows wouldn’t start Genex’s protected space.": "Windows no quiso iniciar el espacio protegido de Genex.",
@@ -6038,6 +6039,7 @@ export default {
   "Drag to turn": "Arrastra para girar",
   "Genex hasn’t confirmed it yet. It shows under My items once it does. You won’t be charged twice.":
     "Genex aún no lo ha confirmado. Aparecerá en Mis objetos cuando lo haga. No se te cobrará dos veces.",
+  "Genex’s protected space needs an update": "El espacio protegido de Genex necesita una actualización",
   Get: "Obtener",
   "Get in {game}": "Obtener en {game}",
   Inappropriate: "Inapropiado",

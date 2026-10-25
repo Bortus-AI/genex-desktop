@@ -264,7 +264,13 @@ import { samePath } from "../substrate/paths.ts";
 import { BootPhase, type SandboxProblem, StartStep, StudioPlatform } from "../shared/boot.ts";
 import { SandboxUnavailableError } from "../substrate/sandbox-unavailable.ts";
 import { type Painter, paintWhileUsed } from "../substrate/paint-while-used.ts";
-import { ensureHostGit, longPath, takeBackSandboxEntries } from "../substrate/windows-sandbox.ts";
+import {
+  type DetachedSpawn,
+  ensureHostGit,
+  forgetKeptGrants,
+  longPath,
+  takeBackSandboxEntries,
+} from "../substrate/windows-sandbox.ts";
 import { installWindowsSandbox } from "../substrate/windows-sandbox-setup.ts";
 import { toolchain } from "../substrate/toolchain.ts";
 import { errorMessage } from "../shared/errors.ts";
@@ -391,12 +397,14 @@ app.on("open-url", (event, url) => {
 // anything else runs: no profile, no window (main/windows-install.ts).
 const squirrelStep = squirrelStartup(process.platform, process.argv, process.execPath);
 if (squirrelStep) {
-  // The sandbox's grants and denies outlive each launch; an uninstall takes them back.
-  if (squirrelStep.takeBackSandbox)
-    takeBackSandboxEntries(
-      (file, args, env) => spawn(file, args, { env, detached: true, stdio: "ignore", windowsHide: true }),
-      os.homedir(),
-    );
+  // The sandbox's grants and denies outlive each launch; an uninstall takes them back: Genex's own,
+  // and the write grants srt-win keeps.
+  if (squirrelStep.takeBackSandbox) {
+    const detached: DetachedSpawn = (file, args, env) =>
+      spawn(file, args, { env, detached: true, stdio: "ignore", windowsHide: true });
+    takeBackSandboxEntries(detached, os.homedir());
+    forgetKeptGrants(detached);
+  }
   await runSquirrelStep(squirrelStep, (file, args) =>
     spawn(file, args, { detached: true, stdio: "ignore", windowsHide: true }),
   );
