@@ -9,6 +9,10 @@
 #   Standard  the standard user's lived-in profile and run, at its own desktop (standard-user.ps1)
 #   Collect   zip the evidence and upload it to the run's storage
 #
+# With UpgradeFrom (a release tag; canary.yml `upgrade_from`) the owner installs that release first
+# and the unreleased build over it (run.ts --upgrade-from): Windows then shows its approval prompt on
+# the owner's desktop, and uac-approver.ps1, started there as SYSTEM, photographs and approves it.
+#
 # The VM exists for one run and is deleted after it; nothing here runs on a person's machine.
 param(
   [Parameter(Mandatory)] [string] $Phase,
@@ -21,6 +25,7 @@ param(
   [string] $UserName = "canary-user",
   [string] $UserPassword = "",
   [string] $UploadUrl = "",
+  [string] $UpgradeFrom = "",
   [int] $Files = 150000
 )
 $ErrorActionPreference = "Stop"
@@ -145,8 +150,16 @@ switch ($Phase) {
     Invoke-WebRequest $SourceUrl -OutFile "$Root\src.zip" -UseBasicParsing
     Expand-Archive "$Root\src.zip" -DestinationPath $Upload -Force
     icacls $Root /grant "*S-1-5-11:(OI)(CI)M" /T /C /Q | Out-Null
-    # The owner approves Genex's one administrator prompt; a test cannot click Yes, so it passes by itself.
-    Set-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" ConsentPromptBehaviorAdmin 0
+    # The owner approves Genex's one administrator prompt; a test cannot click Yes, so it passes by
+    # itself. An upgrade run shows it on the owner's desktop instead, where uac-approver.ps1 sees,
+    # photographs and approves each one, so the run can count them.
+    $policies = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+    if ($UpgradeFrom) {
+      Set-ItemProperty $policies ConsentPromptBehaviorAdmin 5
+      Set-ItemProperty $policies PromptOnSecureDesktop 0
+    } else {
+      Set-ItemProperty $policies ConsentPromptBehaviorAdmin 0
+    }
     # A new account's first sign-in goes straight to the desktop (no privacy questions or animation).
     New-Item -Force "HKLM:\SOFTWARE\Policies\Microsoft\Windows\OOBE" | Out-Null
     Set-ItemProperty "HKLM:\SOFTWARE\Policies\Microsoft\Windows\OOBE" DisablePrivacyExperience 1 -Type DWord
@@ -163,12 +176,22 @@ switch ($Phase) {
     Wait-Desktop $OwnerName
     $out = Join-Path $Evidence "owner"
     New-Item -ItemType Directory -Force -Path $out | Out-Null
+    $upgrade = ""
+    $stop = Join-Path $Root "uac-stop"
+    if ($UpgradeFrom) {
+      $upgrade = " --upgrade-from '$UpgradeFrom'"
+      Remove-Item $stop -Force -ErrorAction SilentlyContinue
+      $approver = "$Upload\scripts\canary\windows\uac-approver.ps1"
+      & "$Upload\scripts\canary\windows\in-session.ps1" -UserName $OwnerName `
+        -CommandLine "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$approver`" -Out `"$out`" -Stop `"$stop`""
+    }
     $script = @(
       "& '$Node' '$Upload\scripts\canary\lived-in-profile.ts' --home `$env:USERPROFILE --force-own-home --files $Files",
-      "& '$Node' '$Upload\scripts\canary\run.ts' --machine '$Machine' --kind exe --tag '$Tag' --persona owner --evidence '$out' --release-src '$Upload\release-src'$(if (Test-Path $Built) { " --package '$Built'" })",
+      "& '$Node' '$Upload\scripts\canary\run.ts' --machine '$Machine' --kind exe --tag '$Tag' --persona owner --evidence '$out' --release-src '$Upload\release-src'$(if (Test-Path $Built) { " --package '$Built'" })$upgrade",
       "exit `$LASTEXITCODE"
     ) -join "`n"
     $code = Invoke-Interactive $OwnerName $script (Join-Path $Evidence "owner.out.log")
+    if ($UpgradeFrom) { New-Item -ItemType File -Force -Path $stop | Out-Null }
     Set-AutoLogon $UserName $UserPassword
     if ($code -eq $TaskHasNotRun) { Write-Output "owner run did not start in $TaskStartMinutes minutes" }
     Write-Output "owner run exit $code; $UserName logs on next"

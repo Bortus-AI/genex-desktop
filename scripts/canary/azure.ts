@@ -4,7 +4,8 @@
 // it only calls out.
 //
 //   node scripts/canary/azure.ts run --machine windows-11 --image <urn> --tag v0.1.11 \
-//     --source <zip> --evidence <dir> [--size <vm size>] [--location <region>[,<region>…]]
+//     --source <zip> --evidence <dir> [--size <vm size>] [--location <region>[,<region>…]] \
+//     [--upgrade-from <release tag>]
 //   node scripts/canary/azure.ts sweep     delete canary resource groups past their expiry
 //
 // The phases on the VM are scripts/canary/windows/azure-vm.ps1.
@@ -313,6 +314,8 @@ interface RunOptions {
   machine: string;
   image: string;
   tag: string;
+  /** Upgrade mode: the release the owner installs before the build (canary.yml `upgrade_from`). */
+  upgradeFrom?: string;
   source: string;
   evidence: string;
   size: string;
@@ -455,6 +458,7 @@ async function runMachine(
       UserName: USER_NAME,
       UserPassword: userPassword,
       Files: String(AZURE_PROFILE_FILES),
+      ...(options.upgradeFrom ? { UpgradeFrom: options.upgradeFrom } : {}),
     };
     await phase(group, "Prepare", {
       ...common,
@@ -549,6 +553,7 @@ async function main(): Promise<void> {
       evidence: { type: "string" },
       size: { type: "string", default: "" },
       location: { type: "string", default: "" },
+      "upgrade-from": { type: "string", default: "" },
     },
   });
   if (positionals[0] === "sweep") return sweep();
@@ -557,7 +562,8 @@ async function main(): Promise<void> {
     throw new Error("usage: azure.ts run --machine --image --tag --source --evidence | azure.ts sweep");
   const nodeVersion = process.version.replace(/^v/, "");
   const locations = values.location ? values.location.split(",").map((name) => name.trim()) : DEFAULT_LOCATIONS;
-  await runMachine({ machine, image, tag, source, evidence, nodeVersion }, values.size, locations);
+  const upgradeFrom = values["upgrade-from"] ? { upgradeFrom: values["upgrade-from"] } : {};
+  await runMachine({ machine, image, tag, source, evidence, nodeVersion, ...upgradeFrom }, values.size, locations);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await main();
