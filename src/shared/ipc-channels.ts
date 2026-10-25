@@ -150,6 +150,7 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:claude-login.browser": "claudeLoginOpenBrowser",
   "studio:claude-login.cancel": "claudeLoginCancel",
   "studio:opencode.signin": "openCodeSignIn",
+  "studio:grok.signin": "grokSignIn",
   "studio:cursor.signin": "cursorSignIn",
   "studio:cursor.signout": "cursorSignOut",
   "studio:openrouter.key.save": "openRouterKeySave",
@@ -442,6 +443,7 @@ export interface StudioInvokePayloads {
   "studio:claude-login.browser": undefined;
   "studio:claude-login.cancel": undefined;
   "studio:opencode.signin": undefined;
+  "studio:grok.signin": undefined;
   "studio:cursor.signin": undefined;
   "studio:cursor.signout": undefined;
   "studio:openrouter.key.save": { key: string };

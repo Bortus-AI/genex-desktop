@@ -24,6 +24,7 @@ import { CodingCliState } from "../../shared/coding-cli.ts";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { EngineId } from "../../shared/providers.ts";
 import { OpenCodeDialect, OpenCodeVersionProblem, openCodeRelease } from "./opencode-cli.ts";
+import { GROK_MIN_VERSION, grokTooOld } from "./grok-cli.ts";
 export interface CliInstallation {
   status: CodingCliStatus;
   env: NodeJS.ProcessEnv;
@@ -51,6 +52,7 @@ const CLI_BINARY = {
   [EngineId.Codex]: "codex",
   [EngineId.ClaudeCode]: "claude",
   [EngineId.OpenCode]: "opencode",
+  [EngineId.Grok]: "grok",
   [EngineId.Cursor]: "cursor-agent",
 } as const satisfies Record<CodingProvider, string>;
 /** Whose variables each CLI's own process keeps (`childEnv`'s vendor). */
@@ -58,6 +60,7 @@ const CLI_VENDOR = {
   [EngineId.Codex]: "codex",
   [EngineId.ClaudeCode]: "claude",
   [EngineId.OpenCode]: "opencode",
+  [EngineId.Grok]: "grok",
   [EngineId.Cursor]: "cursor",
 } as const satisfies Record<CodingProvider, string>;
 /** Where the user is sent to install each CLI. */
@@ -65,6 +68,7 @@ const GUIDANCE_URL = {
   [EngineId.Codex]: "https://developers.openai.com/codex/cli/",
   [EngineId.ClaudeCode]: "https://code.claude.com/docs/en/setup",
   [EngineId.OpenCode]: "https://opencode.ai/docs/",
+  [EngineId.Grok]: "https://docs.x.ai/build/overview",
   [EngineId.Cursor]: "https://cursor.com/docs/cli/installation",
 } as const satisfies Record<CodingProvider, string>;
 /** The help each CLI is asked for, and the options it must list: every one Studio passes. */
@@ -72,6 +76,7 @@ const HELP_ARGS: Record<CodingProvider, string[]> = {
   [EngineId.Codex]: ["exec", "--help"],
   [EngineId.ClaudeCode]: ["--help"],
   [EngineId.OpenCode]: ["run", "--help"],
+  [EngineId.Grok]: ["--help"],
   [EngineId.Cursor]: ["--help"],
 };
 const REQUIRED_FLAGS: Record<Exclude<CodingProvider, typeof EngineId.OpenCode>, string[]> = {
@@ -85,6 +90,21 @@ const REQUIRED_FLAGS: Record<Exclude<CodingProvider, typeof EngineId.OpenCode>, 
     "--mcp-config",
     "--allowedTools",
     "--disallowedTools",
+  ],
+  // Its help lists these; `grok.ts` also passes `--no-wait-for-background`, which only its manual names.
+  [EngineId.Grok]: [
+    "--prompt-file",
+    "--output-format",
+    "--resume",
+    "--model",
+    "--reasoning-effort",
+    "--always-approve",
+    "--allow",
+    "--tools",
+    "--disallowed-tools",
+    "--disable-web-search",
+    "--sandbox",
+    "--cwd",
   ],
   [EngineId.Cursor]: ["--print", "--output-format", "--resume", "--model", "--force", "--trust", "--sandbox", "--mode"],
 };
@@ -139,6 +159,7 @@ const MESSAGE = {
     "This OpenCode is too old for Genex. Update OpenCode (Genex runs 1.18, and 2.x from 2.0.20), then check again.",
   OpenCodeTooNew: (major: number | null) =>
     `Genex doesn't run OpenCode ${major ?? ""}.x yet. Install OpenCode 2.x or 1.18, then check again.`,
+  GrokTooOld: `This Grok Build is too old: xAI serves ${GROK_MIN_VERSION} or later. Update it, then check again.`,
 } as const;
 
 const diagnostics = new Map<string, { at: number; value: CliInstallation }>();
@@ -382,9 +403,9 @@ const macApplications = (home: string): string[] => ["/Applications", path.join(
  * Where installers put these CLIs when the login shell does not say (a slow or broken shell profile,
  * or an install whose PATH line was never added). Settings has no manual path picker, so this list
  * is the whole answer: native installers, Homebrew, npm prefixes, Volta, Bun, Claude Code's legacy
- * `~/.claude/local` install (reached only through a shell alias), pnpm, mise and asdf shims, the
- * Node versions of nvm and fnm, newest first, and last the copies the Claude and ChatGPT apps ship.
- * On Windows: Claude Code's and Codex's native installers, npm's global prefix,
+ * `~/.claude/local` install (reached only through a shell alias), Grok Build's `~/.grok/bin`, pnpm,
+ * mise and asdf shims, the Node versions of nvm and fnm, newest first, and last the copies the Claude
+ * and ChatGPT apps ship. On Windows: Claude Code's, Codex's and Grok Build's native installers, npm's global prefix,
  * the Node installer's folder, pnpm, Volta, Bun and Scoop.
  */
 export async function standardCliDirs(
@@ -409,6 +430,7 @@ export async function standardCliDirs(
     path.join(home, ".bun/bin"),
     path.join(home, ".codex/bin"),
     path.join(home, ".opencode/bin"),
+    path.join(home, ".grok/bin"),
     path.join(home, mac ? "Library/pnpm" : ".local/share/pnpm"),
     path.join(home, ".local/share/mise/shims"),
     path.join(home, ".asdf/shims"),
@@ -466,6 +488,8 @@ function windowsCliDirs(home: string, env: NodeJS.ProcessEnv): string[] {
     // Codex's own installer (install.ps1) puts its launcher here and adds it to the user's PATH,
     // which a Studio already running never sees.
     join(localAppData, "Programs", "OpenAI", "Codex", "bin"),
+    // Grok Build's own installer (install.ps1) copies `grok.exe` here.
+    join(home, ".grok", "bin"),
     // Cursor's installer (install.ps1) puts its launchers here and adds the folder to the user's PATH.
     join(localAppData, "cursor-agent"),
     join(appData, "npm"),
@@ -784,8 +808,12 @@ async function checkCliCapabilities(
     await keepAnswers();
   }
 }
-/** The options a CLI must list: OpenCode's by the command line its version speaks; throws for a version it cannot run. */
+/**
+ * The options a CLI must list: OpenCode's by the command line its version speaks; throws for a
+ * version it cannot run, and for a Grok Build older than xAI serves.
+ */
 function requiredFlags(provider: CodingProvider, version: string): string[] {
+  if (provider === EngineId.Grok && grokTooOld(version)) throw new Error(MESSAGE.GrokTooOld);
   if (provider !== EngineId.OpenCode) return REQUIRED_FLAGS[provider];
   const release = openCodeRelease(version);
   if ("problem" in release) throw new Error(openCodeVersionMessage(release.problem, release.major));

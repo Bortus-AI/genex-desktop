@@ -4,6 +4,7 @@
  * `~/.codex` holds a ChatGPT refresh token when Codex uses its file store, `~/.claude` holds
  * Claude Code's settings and transcripts, OpenCode keeps every provider it signs in to in
  * `auth.json` under its data folder (`$XDG_DATA_HOME/opencode`, default `~/.local/share/opencode`),
+ * Grok Build keeps its Grok sign-in in `auth.json` under its home (`$GROK_HOME`, default `~/.grok`),
  * and Cursor's CLI keeps its settings and chats in `~/.cursor` and the sign-in Genex has it write
  * to a file in `auth.json` (`cursorHomes`).
  * Studio borrows either subscription as the 'system' login, and `CODEX_HOME` / `CLAUDE_CONFIG_DIR`
@@ -73,10 +74,12 @@ export function credentialHomes(
     path.join(home, ".codex"),
     path.join(home, ".claude"),
     openCodeDataHome({}, home),
+    grokHome({}, home),
     ...cursorHomes({}, home, platform),
     env.CODEX_HOME,
     env.CLAUDE_CONFIG_DIR,
     env.XDG_DATA_HOME && path.isAbsolute(env.XDG_DATA_HOME) ? openCodeDataHome(env, home) : undefined,
+    env.GROK_HOME,
     ...cursorHomes(env, home, platform),
     ...logins,
   ];
@@ -100,6 +103,11 @@ export function openCodeDataHome(
   const data =
     env.XDG_DATA_HOME && path.isAbsolute(env.XDG_DATA_HOME) ? env.XDG_DATA_HOME : path.join(home, ".local", "share");
   return path.join(data, "opencode");
+}
+
+/** Where Grok Build keeps its sign-in (`auth.json`), sessions and settings: `$GROK_HOME`, else `~/.grok`. */
+export function grokHome(env: Record<string, string | undefined> = process.env, home: string = os.homedir()): string {
+  return env.GROK_HOME && path.isAbsolute(env.GROK_HOME) ? env.GROK_HOME : path.join(home, ".grok");
 }
 
 /** A variable's folder when it names an absolute one. */
@@ -151,14 +159,14 @@ export function openCodeServicePassword(
 }
 
 /**
- * The sign-in homes of the CLIs that run inside the studio's own sandbox (OpenCode, which has no
- * sandbox of its own, and Cursor, whose own sandbox cannot start inside Genex's): the only homes a
- * sandbox may exempt for the CLI it runs (`SandboxOptions.ownHome`).
+ * The sign-in homes of the CLIs that run inside the studio's own sandbox (OpenCode and Grok Build,
+ * which bring no sandbox of their own, and Cursor, whose own sandbox cannot start inside Genex's):
+ * the only homes a sandbox may exempt for the CLI it runs (`SandboxOptions.ownHome`).
  */
 export function sandboxedCliHomes(
   env: Record<string, string | undefined> = process.env,
   home: string = os.homedir(),
   platform: NodeJS.Platform = process.platform,
 ): string[] {
-  return [openCodeDataHome(env, home), ...cursorHomes(env, home, platform)];
+  return [openCodeDataHome(env, home), grokHome(env, home), ...cursorHomes(env, home, platform)];
 }

@@ -1,6 +1,6 @@
 /**
- * The scripted engines of a fixture session: Ollama, Claude Code, Codex, OpenCode, Cursor, OpenRouter
- * and local server stand-ins that answer from fixed text, never reach an account, a key, a server or the
+ * The scripted engines of a fixture session: Ollama, Claude Code, Codex, OpenCode, Grok Build, Cursor,
+ * OpenRouter and local server stand-ins that answer from fixed text, never reach an account, a key, a server or the
  * network, and start no vendor worker. Markers in
  * the user's words (`fixture:pending`, `fixture:stream`, `fixture:plan`, …) choose the script.
  */
@@ -33,6 +33,7 @@ const FIXTURE_ENGINES = [
   EngineId.ClaudeCode,
   EngineId.Codex,
   EngineId.OpenCode,
+  EngineId.Grok,
   EngineId.Cursor,
   EngineId.OpenRouter,
   EngineId.LocalServer,
@@ -135,8 +136,8 @@ const COMMAND_MARKER = "fixture:command";
 const LATEST_MESSAGE = "LATEST USER MESSAGE:\n";
 
 /**
- * First launch: an empty library, Claude Code waiting for a sign-in, Codex, OpenCode and Cursor not
- * installed, OpenRouter with no key, and no local server.
+ * First launch: an empty library, Claude Code waiting for a sign-in, Codex, OpenCode, Grok Build and
+ * Cursor not installed, OpenRouter with no key, and no local server.
  */
 export const FIRST_LAUNCH_STATUS: Record<string, EngineStatus> = {
   [EngineId.ClaudeCode]: {
@@ -145,6 +146,7 @@ export const FIRST_LAUNCH_STATUS: Record<string, EngineStatus> = {
   },
   [EngineId.Codex]: { code: EngineStatusCode.NotInstalled, detail: "AG-933 fixture; no Codex app" },
   [EngineId.OpenCode]: { code: EngineStatusCode.NotInstalled, detail: "AG-933 fixture; no OpenCode CLI" },
+  [EngineId.Grok]: { code: EngineStatusCode.NotInstalled, detail: "AG-933 fixture; no Grok Build CLI" },
   [EngineId.Cursor]: NO_CURSOR,
   [EngineId.OpenRouter]: { code: EngineStatusCode.NeedsLogin, detail: "AG-933 fixture; no OpenRouter key" },
   [EngineId.LocalServer]: NO_LOCAL_SERVER,

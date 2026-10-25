@@ -10,7 +10,7 @@ import { CODEX_STUDIO_AUTH_ARGS, codexSubscriptionEnv } from "../../substrate/en
 import { requireCodingCli } from "../../substrate/engines/external-cli.ts";
 import type { ClaudeLoginController } from "../claude-login.ts";
 import type { CodexLoginController } from "../codex-login.ts";
-import type { CursorLogin, OpenCodeLogin, SubscriptionEngine } from "../login-controllers.ts";
+import type { CliLogin, OpenCodeLogin, SubscriptionEngine } from "../login-controllers.ts";
 import type { IpcHandle } from "./registrar.ts";
 import { EngineId } from "../../shared/providers.ts";
 import { LoginSource } from "../../shared/engine-descriptor.ts";
@@ -48,7 +48,8 @@ export interface LoginIpcDeps {
   claudeLogin: Pick<ClaudeLoginController, "start" | "snapshot" | "submitCode" | "openBrowser" | "cancel">;
   codexLogin: Pick<CodexLoginController, "start" | "snapshot" | "cancel" | "dismiss" | "openBrowser">;
   openCodeLogin: OpenCodeLogin;
-  cursorLogin: CursorLogin;
+  grokLogin: CliLogin;
+  cursorLogin: CliLogin;
   /** The Cursor engine, to sign it out; null while none is registered. */
   cursor(): CursorAccount | null;
   subscription(id: string): SubscriptionEngine | null;
@@ -65,6 +66,7 @@ export function registerLoginIpc(
     claudeLogin,
     codexLogin,
     openCodeLogin,
+    grokLogin,
     cursorLogin,
     cursor,
     subscription,
@@ -123,6 +125,8 @@ export function registerLoginIpc(
 
   // OpenCode's own sign-in in the terminal: it changes no account a run is using, so it is never refused.
   handle("studio:opencode.signin", async () => openCodeLogin.start());
+  // Grok Build's own `grok login` in the terminal: the next session reads it, so it is never refused either.
+  handle("studio:grok.signin", async () => grokLogin.start());
 
   // Cursor's own sign-in in its Settings row's terminal, and its sign-out: the CLI forgets the
   // account it keeps, which a turn already running keeps until it ends.

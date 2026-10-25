@@ -12,6 +12,7 @@ const UPDATE_ARGS: Record<CodingProvider, readonly string[]> = {
   [EngineId.ClaudeCode]: ["update"],
   [EngineId.Codex]: ["update"],
   [EngineId.OpenCode]: ["upgrade"],
+  [EngineId.Grok]: ["update"],
   [EngineId.Cursor]: ["update"],
 };
 /** Update only the selected installation; never fall back to a different installer. */

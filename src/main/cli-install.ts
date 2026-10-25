@@ -41,6 +41,7 @@ const INSTALLABLE: readonly CodingProvider[] = [
   EngineId.ClaudeCode,
   EngineId.Codex,
   EngineId.OpenCode,
+  EngineId.Grok,
   EngineId.Cursor,
 ];
 

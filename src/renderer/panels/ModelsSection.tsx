@@ -35,7 +35,6 @@ import { CatalogNoteKind, catalogNote } from "./catalog-note.ts";
 import { type ProviderWords, RowHeading, RowTone, type RowView } from "./provider-row.tsx";
 import { MeteredProviderRows } from "./MeteredProviders.tsx";
 import { LocalServerRow } from "./LocalServerRow.tsx";
-import { CursorProviderRow } from "./CursorRow.tsx";
 
 const PROVIDERS: Record<string, ProviderWords> = {
   [EngineId.ClaudeCode]: {
@@ -596,7 +595,6 @@ export function ModelProvidersSection({ engines, onEnginesRefresh }: ModelSettin
       {SUBSCRIPTION_ENGINES.map((id) => (
         <ProviderRow key={id} engineId={id} engines={engines} onEnginesRefresh={onEnginesRefresh} />
       ))}
-      <CursorProviderRow engines={engines} onEnginesRefresh={onEnginesRefresh} />
       <MeteredProviderRows engines={engines} onEnginesRefresh={onEnginesRefresh} />
       {localServer && <LocalServerRow engine={localServer} onEnginesRefresh={onEnginesRefresh} />}
     </div>

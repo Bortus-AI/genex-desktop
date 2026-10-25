@@ -865,11 +865,24 @@ export default {
   "Cursor's sign-in status could not be read.": "Der Anmeldestatus von Cursor konnte nicht gelesen werden.",
   "Finish signing in to Cursor in your browser. Cursor keeps the sign-in.":
     "Schließ die Anmeldung bei Cursor im Browser ab. Cursor speichert die Anmeldung.",
+  "Finish signing in to Grok in your browser.": "Schließ die Anmeldung bei Grok in deinem Browser ab.",
+  "Grok Build didn't answer. Check the installation, then try again.":
+    "Grok Build hat nicht geantwortet. Prüf die Installation und versuch es noch mal.",
+  "Grok Build isn't installed on this Mac.": "Grok Build ist auf diesem Mac nicht installiert.",
+  "Grok Build isn't signed in.": "Grok Build ist nicht angemeldet.",
+  "Grok Build sign-in": "Grok Build-Anmeldung",
+  "Grok Build {version}, {count, plural, one {# model} other {# models}}":
+    "Grok Build {version}, {count, plural, one {# Modell} other {# Modelle}}",
+  "Grok Build's model list could not be read.": "Die Modellliste von Grok Build konnte nicht gelesen werden.",
   "Install Cursor": "Cursor installieren",
   "Install Cursor from Settings › Model Providers.": "Installiere Cursor unter Einstellungen › Modellanbieter.",
   "Install Cursor's CLI to build with your Cursor plan.":
     "Installiere die Cursor-CLI, um mit deinem Cursor-Tarif zu bauen.",
+  "Install Grok Build": "Grok Build installieren",
+  "Install Grok Build from Settings › Model Providers.": "Installiere Grok Build unter Einstellungen › Modellanbieter.",
+  "Install it to build games with your Grok account.": "Installier es, um mit deinem Grok-Konto Spiele zu bauen.",
   "Installing Cursor. This can take a minute.": "Cursor wird installiert. Das kann eine Minute dauern.",
+  "Installing Grok Build. This can take a minute.": "Grok Build wird installiert. Das kann eine Minute dauern.",
   "Nex lives in your Genex account. Sign in once, then pay here.":
     "Nex liegen in deinem Genex-Konto. Melde dich einmal an und bezahl dann hier.",
   Color: "Farbe",
@@ -1708,13 +1721,26 @@ export default {
   "Get Nex": "Nex holen",
   Nex: "Nex",
   "Not signed in to Cursor.": "Nicht bei Cursor angemeldet.",
+  "Runs on your Grok account": "Läuft über dein Grok-Konto",
+  "Sign in again…": "Erneut anmelden…",
   "Sign in to Cursor from Settings › Model Providers.":
     "Melde dich unter Einstellungen › Modellanbieter bei Cursor an.",
+  "Sign in to Grok from Settings › Model Providers.": "Melde dich unter Einstellungen › Modellanbieter bei Grok an.",
   "Sign in with your Cursor account to build with your plan.":
     "Melde dich mit deinem Cursor-Konto an, um mit deinem Tarif zu bauen.",
+  "Sign in with your Grok account. Grok Build keeps the sign-in.":
+    "Melde dich mit deinem Grok-Konto an. Grok Build speichert die Anmeldung.",
+  "Switch to another Cursor account": "Zu einem anderen Cursor-Konto wechseln",
+  "Switch to another Grok account": "Zu einem anderen Grok-Konto wechseln",
   "Update Cursor": "Cursor aktualisieren",
+  "Update Grok Build": "Grok Build aktualisieren",
+  "Update Grok Build from Settings › Model Providers.": "Aktualisiere Grok Build unter Einstellungen › Modellanbieter.",
   "Uses your Cursor plan": "Nutzt deinen Cursor-Tarif",
   "Your Cursor account has no model it can run.": "Dein Cursor-Konto hat kein Modell, das es ausführen kann.",
+  "xAI blocked this Grok account: {reason}": "xAI hat dieses Grok-Konto gesperrt: {reason}",
+  "xAI no longer accepts this Grok Build.": "xAI akzeptiert diese Grok Build-Version nicht mehr.",
+  "xAI no longer accepts this version. Update it to keep building.":
+    "xAI akzeptiert diese Version nicht mehr. Aktualisier sie, um weiterzubauen.",
   "{amount} Nex, get Nex": "{amount} Nex, Nex holen",
   "Get credits": "Credits holen",
   "Get the Epic Games Launcher": "Epic Games Launcher holen",

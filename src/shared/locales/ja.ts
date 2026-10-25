@@ -800,11 +800,25 @@ export default {
   "Cursor's sign-in status could not be read.": "Cursorのサインイン状態を読み取れませんでした。",
   "Finish signing in to Cursor in your browser. Cursor keeps the sign-in.":
     "ブラウザーでCursorへのサインインを完了してください。サインインはCursorが保存します。",
+  "Finish signing in to Grok in your browser.": "ブラウザでGrokへのサインインを完了してください。",
+  "Grok Build didn't answer. Check the installation, then try again.":
+    "Grok Buildが応答しませんでした。インストールを確認してから、もう一度お試しください。",
+  "Grok Build isn't installed on this Mac.": "このMacにGrok Buildがインストールされていません。",
+  "Grok Build isn't signed in.": "Grok Buildにサインインしていません。",
+  "Grok Build sign-in": "Grok Buildのサインイン",
+  "Grok Build {version}, {count, plural, one {# model} other {# models}}":
+    "Grok Build {version}、モデル{count, plural, other {#個}}",
+  "Grok Build's model list could not be read.": "Grok Buildのモデル一覧を読み込めませんでした。",
   "Install Cursor": "Cursorをインストール",
   "Install Cursor from Settings › Model Providers.": "設定 › モデルプロバイダーからCursorをインストールしてください。",
   "Install Cursor's CLI to build with your Cursor plan.":
     "CursorのCLIをインストールすると、Cursorのプランでつくれます。",
+  "Install Grok Build": "Grok Buildをインストール",
+  "Install Grok Build from Settings › Model Providers.":
+    "設定 › モデルプロバイダーからGrok Buildをインストールしてください。",
+  "Install it to build games with your Grok account.": "インストールすると、Grokアカウントでゲームをつくれます。",
   "Installing Cursor. This can take a minute.": "Cursorをインストールしています。1分ほどかかることがあります。",
+  "Installing Grok Build. This can take a minute.": "Grok Buildをインストールしています。1分ほどかかることがあります。",
   "Nex lives in your Genex account. Sign in once, then pay here.":
     "NexはGenexアカウントに保管されます。一度サインインすれば、ここで支払えます。",
   Color: "色",
@@ -1640,12 +1654,26 @@ export default {
   "Get Nex": "Nexを入手",
   Nex: "Nex",
   "Not signed in to Cursor.": "Cursorにサインインしていません。",
+  "Runs on your Grok account": "Grokアカウントで動作",
+  "Sign in again…": "もう一度サインイン…",
   "Sign in to Cursor from Settings › Model Providers.": "設定 › モデルプロバイダーからCursorにサインインしてください。",
+  "Sign in to Grok from Settings › Model Providers.": "設定 › モデルプロバイダーからGrokにサインインしてください。",
   "Sign in with your Cursor account to build with your plan.":
     "Cursorのアカウントでサインインすると、プランでつくれます。",
+  "Sign in with your Grok account. Grok Build keeps the sign-in.":
+    "Grokアカウントでサインインしてください。サインイン情報はGrok Buildが保持します。",
+  "Switch to another Cursor account": "別のCursorアカウントに切り替える",
+  "Switch to another Grok account": "別のGrokアカウントに切り替える",
   "Update Cursor": "Cursorをアップデート",
+  "Update Grok Build": "Grok Buildをアップデート",
+  "Update Grok Build from Settings › Model Providers.":
+    "設定 › モデルプロバイダーからGrok Buildをアップデートしてください。",
   "Uses your Cursor plan": "Cursorのプランを使います",
   "Your Cursor account has no model it can run.": "Cursorのアカウントで実行できるモデルがありません。",
+  "xAI blocked this Grok account: {reason}": "xAIがこのGrokアカウントをブロックしました: {reason}",
+  "xAI no longer accepts this Grok Build.": "xAIはこのGrok Buildを受け付けなくなりました。",
+  "xAI no longer accepts this version. Update it to keep building.":
+    "xAIはこのバージョンを受け付けなくなりました。アップデートして続けましょう。",
   "{amount} Nex, get Nex": "{amount} Nex、Nexを入手",
   "Get credits": "クレジットを入手",
   "Get the Epic Games Launcher": "Epic Games Launcherを入手",
