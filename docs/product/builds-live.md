@@ -2,9 +2,9 @@
 
 ## From a request to a game
 
-Auto edits directly or starts a Loop when asked; Loop delegates workers (four by
-default) while the chat leads. Parts grow boldly within the ask; an art director reviews the whole
-game; only its blockers send a part back. Other
+Auto edits directly or starts a Loop when asked; Loop delegates workers while the chat leads.
+Parts grow boldly within the ask; an art director reviews the whole game; only its blockers send a
+part back. Other
 projects' Loops run [in place](projects-engines.md#loops-in-place). Loop hours are a soft cap (a
 reviewer's yes ends it early, in place after the lead's named gaps; 15 minutes' grace).
 Acceptance survives workers and restarts. External blockers pause the run at its
@@ -38,8 +38,8 @@ below), then the finish check tinted Checking, Not yet (reasons, round of 3), Do
 line each round. In place, save points form one line showing each change; workers hang off
 it, solid under the save point taking their work, else ghosts.
 
-Agents test in hidden windows, never Live; blind judges play when screenshots can't decide;
-chat frames never certify a build. A finished worker, passing checks, integration and Live's
+Agents test hidden, only while playing (Godot too), never Live; blind judges play when screenshots
+can't decide; chat frames never certify a build. A finished worker, passing checks, integration and Live's
 revision are distinct facts; Builds and Studio report missing checks, coverage, revisions and
 studio-verified plays; chat shows a delivery's capture, failures too.
 
