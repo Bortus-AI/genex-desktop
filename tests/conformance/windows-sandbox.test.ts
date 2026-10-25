@@ -1911,12 +1911,20 @@ describe("the grant session", () => {
     assert.deepEqual(s.runtime.last().filesystem.allowWrite, [WS]);
   });
 
-  it("an srt-win timeout in an ACL step is not tried again", async () => {
+  it("an srt-win timeout in an ACL step is not tried again, and says an antivirus can cause it", async () => {
+    // Issue #476: a real-time antivirus scanning every file srt-win touched held its ACL step past
+    // its deadline, and the agents never started with only srt-win's own words to go on.
     const s = session();
     s.runtime.failInitializeIn("acl", "srt_win_timeout");
     await assert.rejects(
       s.session.join({}, { grants: { write: [GAMES], read: [] }, config: BASE_CONFIG }),
-      /srt_win_timeout/,
+      (error: unknown) => {
+        assert.ok(error instanceof SandboxLaunchError, String(error));
+        assert.equal(error.code, SandboxLaunchCode.SrtWinTimeout);
+        assert.match(error.message, /antivirus/i);
+        assert.match(error.message, /srt-win acl failed: srt_win_timeout/, "srt-win's words stay for the report");
+        return true;
+      },
     );
     assert.deepEqual(s.runtime.calls, ["initialize"]);
   });
@@ -2400,6 +2408,21 @@ describe("Genex's own deny entries", () => {
     deny: DenyAccess.Write,
     guard: false,
   };
+
+  it("says why Genex cannot set its own entries: no sandbox users' group, or PowerShell refused the batch", async () => {
+    // Issue #476: the log said "no sandbox users' group, or PowerShell could not set them", and a
+    // report could not tell an install to repair from a PowerShell an antivirus or policy blocks.
+    const logged: string[] = [];
+    const log = (line: string) => logged.push(line);
+    const noGroup = holder(await tmpDir("windows-denies-"), 1, [], { sid: async () => null, log });
+    assert.equal(await noGroup.sync([ssh]), false);
+    const refused = holder(await tmpDir("windows-denies-"), 1, [], { edit: async () => null, log });
+    assert.equal(await refused.sync([ssh]), false);
+    assert.deepEqual(logged, [
+      "own entries: the sandbox user is not in the sandbox users' group",
+      "own entries: Windows PowerShell could not run Genex's batch (an antivirus or a policy may block it)",
+    ]);
+  });
 
   it("records each entry before setting it, and takes back what is no longer needed", async () => {
     const holders = await tmpDir("windows-denies-");
@@ -3465,6 +3488,21 @@ describe("what is not set up yet", () => {
     // A sandbox user that is not there is a first install, whatever a stale marker says.
     const missing = { provisioned: false, credPresent: false, markerVersion: 2, setupVersion: 3 };
     assert.deepEqual(needs(setupGaps({ user: missing, wfp: installed, logonService: on })), [WindowsSetupNeed.Sandbox]);
+  });
+
+  it("asks for the install again where the sandbox user is not in the sandbox users' group", () => {
+    // Issue #476: an install without the group (made by another program's srt-win) turned Genex's
+    // own entries off for good, so srt-win walked the profile for every deny at every start.
+    const installed = { state: "installed" };
+    for (const user of [
+      { ...set, inSandboxGroup: false },
+      { ...set, groupExists: false, inSandboxGroup: false },
+    ]) {
+      assert.deepEqual(needs(setupGaps({ user, wfp: installed, logonService: on })), [WindowsSetupNeed.Reinstall]);
+    }
+    // An srt-win that does not say leaves it as it is.
+    assert.deepEqual(setupGaps({ user: { ...set, inSandboxGroup: true }, wfp: installed, logonService: on }), []);
+    assert.deepEqual(setupGaps({ user: set, wfp: installed, logonService: on }), []);
   });
 
   it("names a disabled Secondary Logon service beside whatever else is missing", () => {

@@ -209,6 +209,11 @@ const MESSAGE = {
   NoMembers: "the Windows sandbox session has no members",
   UserNotSetUp: (user: boolean, cred: boolean) => `Sandbox user is not provisioned (user=${user}, cred=${cred}).`,
   FiltersNotSetUp: "WFP filters are not installed for the sandbox user.",
+  NotInGroup: "The sandbox user is not in the sandbox users' group.",
+  /** Why Genex's own entries are off this start: srt-win's group, or PowerShell ({@link ownAclEntries}). */
+  OwnNoGroup: "own entries: the sandbox user is not in the sandbox users' group",
+  OwnPowerShellRefused:
+    "own entries: Windows PowerShell could not run Genex's batch (an antivirus or a policy may block it)",
   OtherRelease: (installed: number | undefined, needed: number) =>
     `The sandbox was set up by another release (setup version ${installed ?? "unknown"}; this one needs ${needed}).`,
   LogonServiceDisabled:
@@ -1357,7 +1362,10 @@ export function ownAclEntries(holders: string, deps: OwnAclDeps): OwnAclEntries 
   return {
     async sync(entries) {
       const sid = await deps.sid();
-      if (!sid) return false;
+      if (!sid) {
+        deps.log?.(MESSAGE.OwnNoGroup);
+        return false;
+      }
       const wanted = mergeEntries(entries);
       const others = otherHolders(holders, self, alive, readOwnRecord);
       const stale = others.stale.flatMap((holder) => (holder.record ? [holder.record] : []));
@@ -1378,7 +1386,10 @@ export function ownAclEntries(holders: string, deps: OwnAclDeps): OwnAclEntries 
         return { previous, edits, later };
       });
       const left = edits.length > 0 ? await setAll(edits, later) : [];
-      if (!left) return false;
+      if (!left) {
+        deps.log?.(MESSAGE.OwnPowerShellRefused);
+        return false;
+      }
       await withRecord(async () => {
         const walks = walksAfterSync(readOwnRecord(recordFile) ?? previous, stale, later, left, wanted);
         if (edits.length > 0 || walks.length > 0) await save(ownRecord(sid, wanted, walks));
@@ -1512,11 +1523,15 @@ export function sandboxUserRefused(error: unknown): boolean {
   return hresult !== undefined && Number(hresult) === ACCESS_DENIED_HRESULT;
 }
 
+/** Whether sandbox-runtime failed because an srt-win call ran out of time. */
+function srtWinTimedOut(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === SRT_WIN_TIMEOUT;
+}
+
 /** Whether sandbox-runtime failed because srt-win's egress check (`wfp`) ran out of time. */
 function egressCheckTimedOut(error: unknown): boolean {
-  if (typeof error !== "object" || error === null) return false;
-  const timedOut = "code" in error && error.code === SRT_WIN_TIMEOUT;
-  return timedOut && "subcommand" in error && error.subcommand === SrtWinSubcommand.Wfp;
+  if (!srtWinTimedOut(error) || typeof error !== "object" || error === null) return false;
+  return "subcommand" in error && error.subcommand === SrtWinSubcommand.Wfp;
 }
 
 /**
@@ -1726,6 +1741,9 @@ export class WindowsSandboxSession {
 
   /** What a failed start reports: plain words for a refusal that outlasted the pauses (the log keeps srt-win's), else the runtime's own error. */
   #startFailure(error: unknown): unknown {
+    if (srtWinTimedOut(error)) {
+      return new SandboxLaunchError(SandboxLaunchCode.SrtWinTimeout, errorMessage(error), { cause: error });
+    }
     if (!sandboxUserRefused(error)) return error;
     this.#deps.log?.(MESSAGE.LogonRefusedAtLast(error));
     return new SandboxLaunchError(SandboxLaunchCode.SandboxUserRefused, undefined, { cause: error });
@@ -2175,6 +2193,8 @@ export interface SrtSetupStatus {
     markerVersion?: number;
     /** The setup version this srt-win needs; absent from an srt-win that does not say. */
     setupVersion?: number;
+    /** Whether the sandbox user is in the sandbox users' group; absent from an srt-win that does not say. */
+    inSandboxGroup?: boolean;
   };
   wfp: { state: string };
 }
@@ -2202,6 +2222,8 @@ function srtGaps({ user, wfp }: SrtSetupStatus): WindowsSetupGap[] {
   if (setupVersion !== undefined && markerVersion !== setupVersion) {
     return [{ need: WindowsSetupNeed.Reinstall, detail: MESSAGE.OtherRelease(markerVersion, setupVersion) }];
   }
+  // Without the group Genex cannot set its own entries, and srt-win walks the profile for every deny.
+  if (user.inSandboxGroup === false) return [{ need: WindowsSetupNeed.Reinstall, detail: MESSAGE.NotInGroup }];
   return wfp.state === WFP_ABSENT ? sandbox(MESSAGE.FiltersNotSetUp) : [];
 }
 

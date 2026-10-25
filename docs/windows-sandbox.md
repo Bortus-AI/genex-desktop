@@ -83,7 +83,12 @@ the setup screen opens on `git-missing`. What differs from macOS:
   check (`windowsSetupGaps`, from `user status`' `markerVersion` and `setupVersion`) finds it
   before the window opens: the setup card asks for one OK with one Update button
   (`WindowsSetupNeed.Reinstall`), which runs the elevated install again and upgrades it in place.
-  It never starts that prompt by itself. Genex installs with `skipProfileGrant` (`--skip-profile-grant`):
+  It never starts that prompt by itself. The same need covers a sandbox user that is not in the
+  `sandbox-runtime-users` group (an install another program's srt-win made): without the group
+  Genex cannot set its own entries, srt-win then stamps every deny, walking the profile, and a
+  real-time antivirus can hold that past its deadline. The log says why own entries are off (no
+  group, or Windows PowerShell could not run Genex's batch), and an srt-win step that runs out of
+  time fails the start as `SandboxLaunchCode.SrtWinTimeout`, whose words name the antivirus. Genex installs with `skipProfileGrant` (`--skip-profile-grant`):
   Genex grants its own folders, and the sandbox account is one per PC, so srt-win's read grant on
   the whole profile would let every sandboxed session of every user read this person's
   configuration. It passes `--force` only over a newer release's install, never over another
