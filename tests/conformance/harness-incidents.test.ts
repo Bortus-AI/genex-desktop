@@ -4100,6 +4100,124 @@ describe("a change after a paused build (stale-pause)", () => {
 });
 
 /**
+ * While a Loop prepared its start (its first look at the game), the chat's messages waited for its
+ * lead to sit down: twenty minutes of silence, and "stop the workers" reached nobody. The chat had no
+ * way to stop a build either, and told the person to use a button. A message sent while a Loop
+ * starts is answered by the chat at once, and the chat stops (and restarts) the build itself.
+ */
+describe("the chat while a Loop starts (chat-stop)", () => {
+  it("chat-stop. a message while the Loop prepares is answered at once, and the chat's stop_run stops the build", {
+    timeout: 120_000,
+  }, async () => {
+    const rig = await startRig({ replies: [] });
+    rigs.push(rig);
+    await rig.core.games.scaffold("starting-plaza");
+    const thread = await rig.core.createGameThread("starting-plaza");
+    // The page never answers a step while the start is looked at: the Loop stays preparing.
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const studioCall = rig.preview.studioCall.bind(rig.preview);
+    rig.preview.studioCall = async (method, arg) => {
+      await held;
+      return studioCall(method, arg);
+    };
+    const answers: string[] = [];
+    registerFakeEngine(rig, {
+      complete: () => null,
+      delegate: async (request) => {
+        if (!request.coordinator) return null;
+        answers.push(String(await request.onLiveTool!("stop_run", {}).catch((err) => `refused: ${err}`)));
+        return { summary: "Stopping the build.", sessionId: "coordinator" };
+      },
+    });
+    const runId = rig.core.newRunId();
+    // The start answers once the run is over: the row talks to the chat meanwhile.
+    const running = rig.core.dispatchRun({
+      runId,
+      goal: "a plaza",
+      project: "starting-plaza",
+      mode: "autopilot",
+      engine: "fake-delegate",
+      reference: { name: "plaza", shots: [], kind: "direction" },
+      budgets: { wallClockMs: 3_600_000 },
+    } as never);
+    void running.catch(() => {});
+    await waitForLog(
+      rig.core,
+      (log) => customEvents(log, "autopilot_started").some((e) => e.runId === runId),
+      60_000,
+      "the run started",
+    );
+    await rig.core.sendUserMessage("stop the workers", { thread, engine: "fake-delegate" });
+    const events = await waitForLog(
+      rig.core,
+      (log) => customEvents(log, "coordinator_message_handled").length === 1,
+      30_000,
+      "the chat answered while the Loop prepared",
+    );
+    assert.equal(
+      customEvents(events, "run_finished").filter((e) => e.runId === runId).length,
+      0,
+      "answered before the build closed",
+    );
+    assert.doesNotMatch(answers.join("\n"), /refused/, "the chat's stop is taken");
+    release();
+    const closed = await waitForLog(
+      rig.core,
+      (log) => customEvents(log, "run_finished").some((e) => e.runId === runId),
+      60_000,
+      "the build closed",
+    );
+    const close = customEvents(closed, "run_finished").find((e) => e.runId === runId);
+    assert.match(String(close?.stoppedBecause), /stop/i, JSON.stringify(close));
+    await running;
+  });
+
+  it("chat-stop restart. stop_run with restart: the build stops, then goes on again with the chat's instruction", async () => {
+    const { stopAfterReply } = await import("../../src/harness-seed/loop/chat-stop.ts");
+    const calls: Array<{ method: string; params: Record<string, unknown> }> = [];
+    let close = () => {};
+    const closed = new Promise<void>((resolve) => {
+      close = resolve;
+    });
+    const build = { run: { runId: "run_restart", project: "plaza" }, threadId: "thread", settled: closed, closed };
+    const studio = {
+      host: {
+        call: async (method: string, params: Record<string, unknown>) => {
+          calls.push({ method, params });
+          return null;
+        },
+        notify: () => {},
+      },
+      cancels: new Set<string>(),
+      activeRuns: new Map([["run_restart", build]]),
+      startingRuns: new Map(),
+    };
+    const stopping = stopAfterReply(
+      studio as never,
+      { threadId: "thread", runId: "run_restart", messageId: "m1" },
+      { restart: true, text: "update the multiplayer first" },
+    );
+    await nextTurn();
+    assert.equal((build as { stopped?: boolean }).stopped, true, "the build's own Stop");
+    assert.equal(studio.cancels.has("thread"), true, "and the chat's");
+    assert.ok(!calls.some((c) => c.method === HostMethod.CoordinatorTool), "nothing goes on before it has stopped");
+    close();
+    await stopping;
+    const resume = calls.find((c) => c.method === HostMethod.CoordinatorTool);
+    assert.deepEqual(resume?.params, {
+      threadId: "thread",
+      runId: "run_restart",
+      messageId: "m1",
+      name: "resume_run",
+      args: { text: "update the multiplayer first" },
+    });
+  });
+});
+
+/**
  * "Can you start a 3h Loop…" sent with Mode on Auto (Loop off) reached a contractor with no launch
  * tool: it worked on in its own turn and said "The 3-hour loop starts now" while no run started and
  * the Builds bar stayed empty. Asked in words, an Auto chat starts the Loop itself, for the hours named.

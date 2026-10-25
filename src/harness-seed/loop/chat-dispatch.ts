@@ -10,6 +10,7 @@ import { runTurn, type TurnOptions, type TurnOutcome } from "./turn-loop.ts";
 import * as turnLoopParts from "./turn-loop.ts";
 import { sayInTurn, TurnStatus, TurnStop } from "./turn-record.ts";
 import { runCoordinatorTurn } from "./coordinator.ts";
+import { type StopAsk, stopAfterReply, stopAskedFor } from "./chat-stop.ts";
 import * as coordinatorParts from "./coordinator.ts";
 import * as coordinatorPromptsParts from "./coordinator-prompts.ts";
 import * as chatSessionParts from "./chat-session.ts";
@@ -589,11 +590,23 @@ async function coordinatorAnswer(
   const frameCount = action.stills?.length ?? 0;
   const reopen = reopens(coordinated, commission) ? { hours: commissionHours(commission), frameCount } : null;
   await runCoordinatorTurn(ctx, { ...action, turnId, run: existing, ...(steer ? { steer } : {}), reopen });
+  const stop = ctx.cancelled ? null : await stopAsked(host, action, existing);
+  if (stop) return stopOutcome(stop);
   const followup = ctx.cancelled ? null : await followupFor(host, action, existing);
   if (!followup) return undefined;
   // A contained change is one builder turn, Loop or not: only more work reopens the build.
   if (reopen && !followup.contained) return reopenOutcome(reopen.hours, reopenRequest(followup.text, steer));
   return runTurn(turnCtx, followupOptions(action, turnId, followup, existing, steer));
+}
+
+/** The stop the run's coordinator recorded for this message (chat-stop.ts), or null. */
+function stopAsked(host: Host, action: QueueAction, existing: RunRecord): Promise<StopAsk | null> {
+  return stopAskedFor(host, { threadId: action.threadId, runId: String(existing.runId), messageId: action.messageId });
+}
+
+/** The coordinator's stop of the build, done once the reply ends (`afterTheReply`). */
+function stopOutcome(stop: StopAsk): TurnOutcome {
+  return { stopped: TurnStop.Done, round: 0, details: { stopRun: stop } };
 }
 
 /** The coordinator's continued work as a reopen of the same build, done once the reply ends (`afterTheReply`). */
@@ -602,19 +615,25 @@ function reopenOutcome(hours: number | null, text: string): TurnOutcome {
 }
 
 /**
- * What the reply asked for, done once it has ended: the paused run the chat's own session asked
- * to resume (its lead is that same session), the finished build it or the run's coordinator asked to
- * reopen, or the run an interview launched.
+ * What the reply asked for, done once it has ended: the build the run's coordinator asked to stop
+ * (and maybe go on again), the paused run the chat's own session asked to resume (its lead is that
+ * same session), the finished build it or the run's coordinator asked to reopen, or the run an
+ * interview launched.
  */
 async function afterTheReply(
   studio: Studio,
   ctx: HarnessCtx,
   asked: QueueAction,
   outcome: TurnOutcome | undefined,
-  { after, coordinated }: RoutedLoopRuns,
+  { after, coordinated, existing }: RoutedLoopRuns & { existing: RunRecord | null },
 ): Promise<void> {
   // A message sent while the turn worked may have changed its settings: what it asked for follows them.
   const action = followedSettings(asked, outcome);
+  const stop = existing ? outcome?.details?.stopRun : null;
+  if (existing && stop) {
+    const where = { threadId: action.threadId, runId: String(existing.runId), messageId: action.messageId };
+    return stopAfterReply(studio, where, stop);
+  }
   const resume = after ? outcome?.details?.resumeRun : null;
   if (after && resume) return resumeAfterReply(studio, ctx, after, resume);
   const loopRun = after ?? coordinated;
