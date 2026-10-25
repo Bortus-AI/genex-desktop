@@ -1,4 +1,5 @@
 import { realpath } from "node:fs/promises";
+import { StudioPlatform } from "../../shared/boot.ts";
 import { ModelCatalog, CatalogError, CATALOG_DEADLINE_MS } from "./model-catalog.ts";
 import { ModelCatalogSource, ModelCatalogProblemCode } from "../../shared/model-catalog.ts";
 import { validateClaudeModels } from "./claude-telemetry.ts";
@@ -752,7 +753,7 @@ export class ClaudeCodeEngine implements Engine {
           // No prompt is ever sent, so no tool can run; the judge's sandbox shape holds regardless.
           maxTurns: 1,
           permissionMode: "default",
-          sandbox: { enabled: true },
+          sandbox: claudeSandboxShape(),
           env: this.#sessionEnv(installation.env, login),
           abortController: controller,
         },
@@ -832,7 +833,7 @@ export class ClaudeCodeEngine implements Engine {
             allowedTools: [],
             maxTurns: 1,
             permissionMode: "default",
-            sandbox: { enabled: true },
+            sandbox: claudeSandboxShape(),
             env: this.#sessionEnv(installation.env, login),
             abortController,
           },
@@ -981,7 +982,7 @@ export class ClaudeCodeEngine implements Engine {
       allowedTools: [],
       ...(this.#skills.judge !== undefined ? { skills: this.#skills.judge } : {}),
       disallowedTools: [...JUDGE_DISALLOWED_TOOLS],
-      sandbox: { enabled: true },
+      sandbox: claudeSandboxShape(),
       ...modelOption(request.model ?? this.#model),
       ...(request.effort ? { effort: request.effort } : {}),
       ...(request.preferences ? { settings: await this.preferenceSettings(request.model, request.preferences) } : {}),
@@ -1954,13 +1955,25 @@ function permissionOptions(request: DelegateRequest, running: RunningSession): R
 }
 
 /**
+ * Claude's own sandbox. On Windows the feature is often off, and requiring it aborts the
+ * session before any command. Sandbox when Claude can, and continue when it cannot.
+ */
+export function claudeSandboxShape(
+  shape: Record<string, unknown> = {},
+  platform: NodeJS.Platform = process.platform,
+): Record<string, unknown> {
+  const whenMissing = platform === StudioPlatform.Windows ? { failIfUnavailable: false } : {};
+  return { enabled: true, ...whenMissing, ...shape };
+}
+
+/**
  * An unattended session's shell: sandboxed, auto-allowed only because it cannot step outside
  * (allowUnsandboxedCommands: false makes the CLI ignore dangerouslyDisableSandbox entirely), and
  * never writing the studio's protected folders or an optimization candidate's fence.
  */
 function unattendedSandbox(request: DelegateRequest, protectedPaths: string[]): Record<string, unknown> {
   return {
-    enabled: true,
+    ...claudeSandboxShape(),
     autoAllowBashIfSandboxed: true,
     allowUnsandboxedCommands: false,
     filesystem: {

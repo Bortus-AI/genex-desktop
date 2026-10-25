@@ -23,6 +23,7 @@ import { errorMessage } from "../../shared/errors.ts";
 import { CodingCliState } from "../../shared/coding-cli.ts";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { EngineId } from "../../shared/providers.ts";
+import { GROK_AUTO_UPDATE_FLAG, GROK_REQUIRED_FLAGS } from "./grok-cli.ts";
 export interface CliInstallation {
   status: CodingCliStatus;
   env: NodeJS.ProcessEnv;
@@ -58,16 +59,9 @@ const HELP_ARGS: Record<CodingProvider, string[]> = {
   [EngineId.ClaudeCode]: ["--help"],
   [EngineId.Grok]: ["--help"],
 };
-const REQUIRED_FLAGS: Record<CodingProvider, string[]> = {
+const REQUIRED_FLAGS: Record<CodingProvider, readonly string[]> = {
   [EngineId.Codex]: ["--json", "--output-schema", "--ignore-user-config", "--skip-git-repo-check"],
-  [EngineId.Grok]: [
-    "--output-format",
-    "--prompt-file",
-    "--always-approve",
-    "--sandbox",
-    "--resume",
-    "--no-auto-update",
-  ],
+  [EngineId.Grok]: GROK_REQUIRED_FLAGS,
   [EngineId.ClaudeCode]: [
     "--input-format",
     "--output-format",
@@ -78,6 +72,10 @@ const REQUIRED_FLAGS: Record<CodingProvider, string[]> = {
     "--allowedTools",
     "--disallowedTools",
   ],
+};
+/** Flags Studio uses when the CLI lists them, and still accepts the CLI when it does not. */
+const OPTIONAL_FLAGS: Partial<Record<CodingProvider, readonly string[]>> = {
+  [EngineId.Grok]: [GROK_AUTO_UPDATE_FLAG],
 };
 /** How long reading the login shell's PATH, and each `--version`/`--help` probe, may take. */
 const LOGIN_PATH_TIMEOUT_MS = 8 * SECOND_MS;
@@ -592,6 +590,8 @@ async function checkCliCapabilities(
   const help = known?.help ?? (await probe(file, HELP_ARGS[provider], probeEnv, signal, platform));
   const missing = REQUIRED_FLAGS[provider].filter((flag) => !help.includes(flag));
   if (missing.length) throw new Error(MESSAGE.MissingOptions(missing));
+  const optional = OPTIONAL_FLAGS[provider];
+  if (optional) status.acceptedFlags = optional.filter((flag) => help.includes(flag));
   if (identity && !known) answered.set(identity, { version: status.version, help });
 }
 /** Brief cache for UI/model-list reads only. Sessions and explicit Recheck bypass it. */

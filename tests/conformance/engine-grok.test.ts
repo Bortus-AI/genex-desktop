@@ -12,6 +12,7 @@ import { GrokEngine, type GrokEngineOptions } from "../../src/substrate/engines/
 import {
   allowedGrokLoginUrl,
   deviceCodeFrom,
+  grokArgv,
   grokEffortArgs,
   grokFailureKind,
   GrokSandbox,
@@ -21,7 +22,6 @@ import {
 } from "../../src/substrate/engines/grok-cli.ts";
 import { fixtureCodingCli } from "../helpers/external-cli.ts";
 import { tmpDir } from "../helpers/tmp.ts";
-import { DelegateEventType } from "../../src/substrate/engines/types.ts";
 
 function scripted(events: unknown[]): {
   fn: GrokExec;
@@ -137,7 +137,8 @@ describe("grok headless", () => {
   it("translates a streaming-json turn into the studio's log", () => {
     const text = translateGrokEvent({ type: "text", data: "Built" });
     assert.equal(text.text, "Built");
-    assert.equal(text.events[0]?.type, DelegateEventType.Assistant);
+    assert.equal(text.events.length, 0);
+    assert.equal(translateGrokEvent({ type: "thought", data: " is a wedge" }).events.length, 0);
     const tool = translateGrokEvent({
       type: "tool_call",
       toolCallId: "call_1",
@@ -190,6 +191,10 @@ describe("grok headless", () => {
       assert.ok(argv.includes("--always-approve"));
       assert.ok(argv.includes("--prompt-file"));
       assert.ok(argv.includes("--no-auto-update"));
+      assert.deepEqual(
+        grokArgv(argv, []),
+        argv.filter((arg) => arg !== "--no-auto-update"),
+      );
       assert.ok(argv.includes(GrokSandbox.Workspace));
       assert.ok(argv.includes("--model") && argv.includes("grok-4.7"));
       assert.deepEqual(grokEffortArgs("max"), ["--effort", "xhigh"]);

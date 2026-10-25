@@ -23,6 +23,26 @@ const FLAGS =
   "--json --output-schema --ignore-user-config --skip-git-repo-check --input-format --output-format --strict-mcp-config --setting-sources --permission-mode --mcp-config --allowedTools --disallowedTools";
 const exe = cliName;
 const launcher = writeCliLauncher;
+test("Grok 1.0.70 is usable without --no-auto-update, and a newer CLI still records the flag", async () => {
+  const help = "--output-format --prompt-file --always-approve --sandbox --resume";
+  const old = await cli("grok-old/grok", "grok 1.0.70");
+  await launcher(
+    old,
+    `#!/bin/sh\ncase "$1" in\n --version) echo 'grok 1.0.70';;\n *) echo '${help}';;\nesac\n`,
+    `console.log(process.argv[2] === "--version" ? "grok 1.0.70" : ${JSON.stringify(help)});\n`,
+  );
+  const found = await discoverCodingCli("grok", { ...options, override: old });
+  assert.equal(found.status.state, "ready");
+  assert.deepEqual(found.status.acceptedFlags, []);
+  const newer = await cli("grok-new/grok", "grok 1.2.0");
+  await launcher(
+    newer,
+    `#!/bin/sh\ncase "$1" in\n --version) echo 'grok 1.2.0';;\n *) echo '${help} --no-auto-update';;\nesac\n`,
+    `console.log(process.argv[2] === "--version" ? "grok 1.2.0" : ${JSON.stringify(`${help} --no-auto-update`)});\n`,
+  );
+  const listed = await discoverCodingCli("grok", { ...options, override: newer });
+  assert.deepEqual(listed.status.acceptedFlags, ["--no-auto-update"]);
+});
 test("fixture host discovery does not execute a provider from the inherited PATH", async () => {
   const bin = path.join(root, "inherited-provider");
   const marker = path.join(root, "must-not-run");

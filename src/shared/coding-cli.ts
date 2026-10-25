@@ -13,6 +13,11 @@ export interface CodingCliStatus {
   selection: "automatic" | "manual";
   path?: string;
   version?: string;
+  /**
+   * Optional flags this CLI's `--help` listed. Absent when discovery did not record them.
+   * An empty list means the probe ran and none of those flags were listed.
+   */
+  acceptedFlags?: string[];
   detail: string;
   guidanceUrl: string;
 }

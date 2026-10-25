@@ -22,6 +22,36 @@ function unfinishedName(text: string): string | null {
   return tail && /^\S*$/.test(text.slice(tail.end)) ? tail.name : null;
 }
 
+/**
+ * Pictures the reply named in the game (`![…](art/ship.png)`). The page cannot fetch them
+ * itself; main reads the file and the image is its data URL.
+ */
+function useGameImages(root: RefObject<HTMLDivElement | null>, html: string, threadId: string | null): void {
+  // biome-ignore lint/correctness/useExhaustiveDependencies: new HTML is the reason to load its pictures
+  useLayoutEffect(() => {
+    const node = root.current;
+    if (!node || !threadId) return;
+    let current = true;
+    for (const image of node.querySelectorAll("img[data-game-image]")) {
+      const path = image.getAttribute("data-game-image");
+      if (!path || image.getAttribute("src")) continue;
+      void window.studio
+        .readGameFile(threadId, path)
+        .then((file) => {
+          if (!current) return;
+          if (file.src) image.setAttribute("src", file.src);
+          else image.replaceWith(document.createTextNode(image.getAttribute("alt") ?? path));
+        })
+        .catch(() => {
+          if (current) image.replaceWith(document.createTextNode(image.getAttribute("alt") ?? path));
+        });
+    }
+    return () => {
+      current = false;
+    };
+  }, [html, threadId]);
+}
+
 /** Where one offered command's actions are drawn. */
 interface CommandSlot {
   node: Element;
@@ -84,6 +114,7 @@ export const Markdown = memo(function Markdown({
   shown.current = names;
   useChatFileNames(threadId, names);
   const root = useRef<HTMLDivElement>(null);
+  useGameImages(root, html.__html, threadId);
   const slots = useCommandSlots(root, html.__html, Boolean(renderCommand));
   return (
     <>

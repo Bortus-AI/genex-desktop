@@ -31,6 +31,27 @@ test("one activity trail preserves chronology without swallowing replies, failur
   }
 });
 
+test("a Grok reply's token pieces are one message, and its reasoning pieces are one thought", () => {
+  const rows = conversationEntries([
+    { kind: "thinking", id: "t1", text: "\n\nThe original craft" },
+    { kind: "thinking", id: "t2", text: " is a blunt grey wedge" },
+    { kind: "assistant", id: "a1", text: "This", contractor: true },
+    { kind: "assistant", id: "a2", text: " is the ship.", contractor: true },
+    { kind: "assistant", id: "a3", text: "A later reply." },
+  ]);
+  assert.equal(rows[0]?.kind, "work");
+  if (rows[0]?.kind === "work") {
+    assert.equal(rows[0].items.length, 1);
+    assert.equal(rows[0].items[0]?.kind, "thought");
+    if (rows[0].items[0]?.kind === "thought")
+      assert.equal(rows[0].items[0].text, "\n\nThe original craft is a blunt grey wedge");
+  }
+  assert.equal(rows[1]?.kind, "assistant");
+  if (rows[1]?.kind === "assistant") assert.equal(rows[1].text, "This is the ship.");
+  assert.equal(rows[2]?.kind, "assistant");
+  if (rows[2]?.kind === "assistant") assert.equal(rows[2].text, "A later reply.");
+});
+
 test("history without a tool result never becomes a running or successful tool", () => {
   assert.equal(
     activitySummary([

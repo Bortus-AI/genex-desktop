@@ -2168,6 +2168,7 @@ export const PLUGINS_WORDS = {
   can: {
     credentials: (publisher: string) => `use your ${publisher} account`,
     "native-runtime": (runtimes: string) => `run ${runtimes}`,
+    "game-engine": "build in a game engine on this computer",
     observe: "see the running game",
     network: "reach the internet",
     "external-auth": "open sign-in in your browser",

@@ -129,7 +129,7 @@ and the Plugins page — no polling is needed for a change to show.
 | --- | --- | --- |
 | `apiVersion` | 1, 2, 3 | Supported SDK major; unrecognized versions are incompatible |
 | `id`, `version`, `name`, `publisher`, `description`, `backend` | 1 | Identity, semver, display text and the backend module path |
-| `capabilities` | 1 | Host services the backend may call: `settings`, `project.read`, `project.write`, `jobs` (also `events.emit`), `observe`, `credentials`, `external-auth`, `network`, (API 2) `export`, and (API 3) `native-runtime` |
+| `capabilities` | 1 | Host services the backend may call: `settings`, `project.read`, `project.write`, `jobs` (also `events.emit`), `observe`, `credentials`, `external-auth`, `network`, (API 2) `export`, (API 3) `native-runtime`, and `game-engine` (a game editor on this computer; the plugin's tools do the work) |
 | `tools[]` | 1 | `{name, description, parameters}`; scalar properties only; agent-invoked as `<id>__<name>` |
 | `tools[].confirmation` | 2 | 1–300 characters. The tool needs the user's consent before it runs; see the consent model below |
 | `tools[].host` | 3 | A program Studio runs for the tool instead of the backend; reserved for the bundled Genex plugin (see [First-party privileges](#first-party-privileges)) |
@@ -220,7 +220,7 @@ tools (`delegation-prompts.ts`).
 - `id` unique within the plugin; `label` 1–24 characters, not one of Studio's reserved labels
   (`Retry`, `Ready`, `Live`, `Builds`, `Assets`, `Export`, `Plugins`, `Reload`, `State`,
   `Close plugins`, compared case-insensitively); `ariaLabel` 1–60 characters, unique, not reserved;
-  `icon` at most 4 characters.
+  `icon` is a glyph of at most 4 characters, or a host icon: `globe`, `export`, `play`, `image`, `box`, `boxes`, `unity`, `godot`, `unreal`.
 - `target` is either `{kind: "action", name, args?}` naming a declared action (scalar args, at
   most 16 keys) — pressed, it runs the same review → ticket → native approval sequence as the
   Plugins page — or `{kind: "panel", id}` naming a declared panel, which opens as a dialog over

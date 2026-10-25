@@ -5,7 +5,8 @@
 Each game has one conversation. User messages are soft right-aligned bubbles, their images
 above; long ones fold with Show more/Show less. Replies are Markdown prose. Any file the chat
 names that exists is a link: game Markdown and images open beside the chat, others in their app
-(programs only shown). Empty chat is blank. Only the prompt bar writes and sends; a pasted image
+(programs only shown). A picture the reply embeds (`![…](art/ship.png)`) is shown in the message
+from that game file. Empty chat is blank. Only the prompt bar writes and sends; a pasted image
 adds the picture, not its file name.
 
 The chat's own work shows a short truthful status, its elapsed time beside it; waiting for an

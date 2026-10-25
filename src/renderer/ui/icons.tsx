@@ -338,6 +338,20 @@ const glyphs = {
       <path d="M4.5 7.7L12 12l7.5-4.3M12 12v8.5" />
     </g>
   ),
+  unity: (
+    <>
+      <path d="M12 3.2l8 4.6v8.4L12 20.8l-8-4.6V7.8z" />
+      <path d="M4 7.8L12 12.4l8-4.6M12 12.4v8.4" />
+    </>
+  ),
+  godot: (
+    <>
+      <rect x="6" y="4.5" width="12" height="9.5" rx="3" />
+      <path d="M9.2 9.2h.01M14.8 9.2h.01" strokeWidth={2.4} />
+      <path d="M9 14v2.2M15 14v2.2M8.5 14h7" />
+    </>
+  ),
+  unreal: <path d="M7 4.5v8.8a5 5 0 0 0 10 0V4.5" />,
   boxes: (
     <g transform="translate(-.5 0)">
       <g className="a-b1">

@@ -75,6 +75,11 @@ test("local package validation rejects links, incompatibility and duplicate decl
     const manifest = JSON.parse(await readFile(path.join(source, "plugin.json"), "utf8"));
     assert.throws(() => validateManifest({ ...manifest, apiVersion: 4 }), /incompatible/);
     assert.throws(() => validateManifest({ ...manifest, tools: [...manifest.tools, ...manifest.tools] }), /duplicate/);
+    assert.throws(
+      () => validateManifest({ ...manifest, capabilities: ["not-a-capability"] }),
+      /Unsupported plugin capability/,
+    );
+    assert.deepEqual(validateManifest({ ...manifest, capabilities: ["game-engine"] }).capabilities, ["game-engine"]);
   } finally {
     await f.close();
   }
@@ -420,6 +425,8 @@ test("toolbar validation: reserved labels, undeclared targets, confirmed status 
   assert.throws(() => validateManifest(withToolbar([item, { ...item, id: "two" }])), /ariaLabel/);
   assert.throws(() => validateManifest(withToolbar([{ ...item, label: "x".repeat(25) }])), /label/);
   assert.throws(() => validateManifest(withToolbar([{ ...item, icon: "12345" }])), /icon/);
+  for (const icon of ["unity", "godot", "unreal"] as const)
+    assert.equal(validateManifest(withToolbar([{ ...item, icon }])).toolbar![0]!.icon, icon);
   assert.throws(
     () => validateManifest(withToolbar([{ ...item, target: { kind: "action", name: "hello", args: { nested: {} } } }])),
     /args/,

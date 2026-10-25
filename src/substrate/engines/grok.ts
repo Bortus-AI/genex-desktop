@@ -10,6 +10,7 @@ import { StudioBridge } from "./studio-bridge.ts";
 import { lockUnowned, releaseLocks, releaseStaleLocks, ownershipBriefing, type LockRecord } from "./ownership-locks.ts";
 import { CHECKPOINT_TOOL, intakeToolReply, StudioTool } from "./studio-tool-prompts.ts";
 import {
+  grokArgv,
   grokDenyArgs,
   grokEffortArgs,
   grokEnv,
@@ -391,7 +392,7 @@ export class GrokEngine implements Engine {
     run.cliPath = installation?.status.path;
     run.cliVersion = cliVersion(installation?.status.version);
     const events = await openStream(this.#execFn, installation?.status.path, {
-      argv: stream.argv,
+      argv: grokArgv(stream.argv, installation?.status.acceptedFlags),
       cwd: stream.cwd,
       env,
       prompt: stream.prompt,

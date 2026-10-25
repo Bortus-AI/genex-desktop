@@ -36,6 +36,16 @@ export function conversationEntries(entries: Entry[]): ConversationEntry[] {
   const result: ConversationEntry[] = [];
   for (const entry of entries) {
     if (!isBackground(entry)) {
+      const previous = result.at(-1);
+      const sameReply =
+        entry.kind === EntryKind.Assistant &&
+        entry.contractor === true &&
+        previous?.kind === EntryKind.Assistant &&
+        previous.contractor === true;
+      if (sameReply) {
+        previous.text += entry.text;
+        continue;
+      }
       result.push(entry);
       continue;
     }
@@ -46,8 +56,11 @@ export function conversationEntries(entries: Entry[]): ConversationEntry[] {
     }
     if (entry.kind === EntryKind.Tools)
       group.items.push(...entry.rows.map((tool) => ({ kind: ActivityItemKind.Tool, id: tool.key, tool })));
-    else if (entry.kind === EntryKind.Thinking)
-      group.items.push({ kind: ActivityItemKind.Thought, id: entry.id, text: entry.text });
+    else if (entry.kind === EntryKind.Thinking) {
+      const last = group.items.at(-1);
+      if (last?.kind === ActivityItemKind.Thought) last.text += entry.text;
+      else group.items.push({ kind: ActivityItemKind.Thought, id: entry.id, text: entry.text });
+    }
     else
       group.items.push(
         ...entry.rows.map((row, i) => ({ kind: ActivityItemKind.Note, id: `${entry.id}:${i}`, text: row.text })),

@@ -2,6 +2,7 @@ import { Marked, Renderer, type Token, type Tokens } from "marked";
 import { highlightCommand } from "./command-highlight.ts";
 import { highlightCode } from "./syntax-highlight.ts";
 import { type ChatFileLookup, type ChatFileRef, wholeFileName } from "../../shared/chat-files.ts";
+import { imageType } from "../../shared/game-file.ts";
 import { fencedCommand } from "../../shared/terminal.ts";
 import { escapeAttribute, escapeHtml, fileLinkHtml, FileLinkStyle, linkifyHtml } from "./file-links.ts";
 import { answersOf } from "../chat-files.ts";
@@ -14,6 +15,14 @@ export interface MarkdownFiles {
   lookup: ChatFileLookup;
   base?: string;
   names: ChatFileRef[];
+}
+
+/** A Markdown image of a game file: a relative image path, not a web address or a climb out. */
+function gameImagePath(href: string): string | null {
+  const file = fileDestination(href);
+  if (!file || !imageType(file)) return null;
+  const outside = file.split("/").some((part) => part === ".." || part === ".git");
+  return outside ? null : file;
 }
 
 /** A link with no scheme (`docs/BRIEF.md`), a `file:` URL or an absolute path names a file. */
@@ -101,7 +110,14 @@ const parser = new Marked({
       return link ? fileLinkHtml(ref, link, escapeHtml(label), label, FileLinkStyle.Chip) : escapeHtml(label);
     },
     image({ href, text }) {
-      return safeDestination(href) ? false : escapeHtml(text);
+      // A real web address is the browser's image. A game file is filled in by the chat
+      // (`data-game-image`); a relative path is not a page on this app.
+      if (/^https?:\/\//i.test(href) && safeDestination(href)) return false;
+      const file = gameImagePath(href);
+      if (!file) return escapeHtml(text);
+      const ref: ChatFileRef = files?.base ? { name: file, base: files.base } : { name: file };
+      files?.names.push(ref);
+      return `<img data-game-image="${escapeAttribute(file)}" alt="${escapeAttribute(text)}" />`;
     },
   },
 });

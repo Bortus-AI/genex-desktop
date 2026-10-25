@@ -76,6 +76,7 @@ export function capabilityLine(
   const phrase: Array<[string, string]> = [
     [PluginCapability.Credentials, CAN.credentials(manifest.publisher)],
     [PluginCapability.NativeRuntime, CAN["native-runtime"](runtimes || "programs on this Mac")],
+    [PluginCapability.GameEngine, CAN["game-engine"]],
     [PluginCapability.Observe, CAN.observe],
     [PluginCapability.Network, CAN.network],
     [PluginCapability.ExternalAuth, CAN["external-auth"]],

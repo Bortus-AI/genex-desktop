@@ -6,7 +6,8 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { limitKind, limitResetMs } from "../../src/substrate/engines/claude-code.ts";
+import { claudeSandboxShape, limitKind, limitResetMs } from "../../src/substrate/engines/claude-code.ts";
+import { StudioPlatform } from "../../src/shared/boot.ts";
 import { consoleProblems } from "../../src/harness-seed/loop/gauntlet.ts";
 
 describe("engine limits", () => {
@@ -55,5 +56,13 @@ describe("console errors as evidence", () => {
     assert.deepEqual(all.problems, [], "a build that only carries the base's error is judgeable");
     assert.equal(all.warnings.length, 1);
     assert.deepEqual(consoleProblems([], [shader]), { problems: [], warnings: [] });
+  });
+});
+
+describe("Claude's sandbox on Windows", () => {
+  it("continues when the Windows sandbox feature is off, and still requires it elsewhere", () => {
+    assert.equal(claudeSandboxShape({}, StudioPlatform.Windows).failIfUnavailable, false);
+    assert.equal(claudeSandboxShape({}, StudioPlatform.Mac).failIfUnavailable, undefined);
+    assert.equal(claudeSandboxShape({ autoAllowBashIfSandboxed: true }, StudioPlatform.Windows).enabled, true);
   });
 });

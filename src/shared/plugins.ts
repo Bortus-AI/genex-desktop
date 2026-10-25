@@ -98,6 +98,8 @@ export const PluginCapability = {
   Network: "network",
   Export: "export",
   NativeRuntime: "native-runtime",
+  /** A game editor on this computer, such as Unity. The plugin's tools do the work. */
+  GameEngine: "game-engine",
 } as const;
 export type PluginCapability = (typeof PluginCapability)[keyof typeof PluginCapability];
 
@@ -202,7 +204,17 @@ export type PluginToolbarTarget =
   | { kind: "action"; name: string; args?: Record<string, PluginScalar> }
   | { kind: "panel"; id: string };
 /** Host icons a toolbar item may name instead of drawing its own glyph. */
-export const TOOLBAR_ICON_NAMES = ["globe", "export", "play", "image", "box", "boxes"] as const;
+export const TOOLBAR_ICON_NAMES = [
+  "globe",
+  "export",
+  "play",
+  "image",
+  "box",
+  "boxes",
+  "unity",
+  "godot",
+  "unreal",
+] as const;
 export type ToolbarIconName = (typeof TOOLBAR_ICON_NAMES)[number];
 export const isToolbarIconName = (value: unknown): value is ToolbarIconName =>
   (TOOLBAR_ICON_NAMES as readonly unknown[]).includes(value);

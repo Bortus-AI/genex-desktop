@@ -64,8 +64,20 @@ export const GROK_REQUIRED_FLAGS = [
   "--always-approve",
   "--sandbox",
   "--resume",
-  "--no-auto-update",
 ] as const;
+
+/**
+ * Passed only when `grok --help` lists it. Grok 1.0.70 does not, and an unknown flag
+ * makes the process exit before it can run. `GROK_DISABLE_AUTOUPDATER` is set either way.
+ */
+export const GROK_AUTO_UPDATE_FLAG = "--no-auto-update";
+
+/** `argv` without {@link GROK_AUTO_UPDATE_FLAG} when this CLI's help did not list it. */
+export function grokArgv(argv: readonly string[], acceptedFlags?: readonly string[]): string[] {
+  const listed = acceptedFlags === undefined || acceptedFlags.includes(GROK_AUTO_UPDATE_FLAG);
+  if (listed) return [...argv];
+  return argv.filter((arg) => arg !== GROK_AUTO_UPDATE_FLAG);
+}
 
 /** Headless output. `streaming-json` is the documented xAI-native event stream. */
 export const GROK_STREAM_FORMAT = "streaming-json";
@@ -312,20 +324,14 @@ async function* jsonEvents(stdout: AsyncIterable<string>): AsyncGenerator<Record
 function textEvent(event: Record<string, unknown>): GrokTranslated {
   const text = String(event.data ?? "");
   if (!text) return { events: [] };
-  return {
-    events: [assistant([{ type: "text", text }])],
-    text,
-    activity: ChatActivityPhase.Responding,
-  };
+  // A token is part of the live reply, not its own chat row. The finished summary is one message.
+  return { events: [], text, activity: ChatActivityPhase.Responding };
 }
 
 function thoughtEvent(event: Record<string, unknown>): GrokTranslated {
-  const text = String(event.data ?? "");
-  if (!text.trim()) return { events: [], activity: ChatActivityPhase.Thinking };
-  return {
-    events: [assistant([{ type: "thinking", text }])],
-    activity: ChatActivityPhase.Thinking,
-  };
+  if (!String(event.data ?? "").trim()) return { events: [], activity: ChatActivityPhase.Thinking };
+  // Reasoning arrives a few words at a time. A row per piece is a stack of lines, not a thought.
+  return { events: [], activity: ChatActivityPhase.Thinking };
 }
 
 function toolCallEvent(event: Record<string, unknown>): GrokTranslated {
