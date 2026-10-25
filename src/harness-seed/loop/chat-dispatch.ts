@@ -10,6 +10,7 @@ import { runTurn, type TurnOptions, type TurnOutcome } from "./turn-loop.ts";
 import * as turnLoopParts from "./turn-loop.ts";
 import { sayInTurn, TurnStatus, TurnStop } from "./turn-record.ts";
 import { runCoordinatorTurn } from "./coordinator.ts";
+import { dropSteeringBacklog } from "./steering-backlog.ts";
 import * as coordinatorParts from "./coordinator.ts";
 import * as coordinatorPromptsParts from "./coordinator-prompts.ts";
 import * as chatSessionParts from "./chat-session.ts";
@@ -167,6 +168,9 @@ export async function handleUserMessage(studio: Studio, action: QueueAction, ste
   const ctx = studio.scoped(action.threadId, StatusLane.Chat);
   if (steering) await expectSession(studio.host, action, existing, steering);
   if (asksStudioThreadToBuild(action)) return answerStudioThreadBuild(studio.host, ctx, action);
+  // A build's late steering stays with that build: the section older builds left in NOTES.md goes
+  // before the chat answers, so no later agent reads it as its own instruction.
+  if (!action.studioThread) await dropSteeringBacklog(studio.host, action.project);
 
   ctx.setStatus("thinking");
   const turn = await studio.host.call(HostMethod.TurnBegin, {

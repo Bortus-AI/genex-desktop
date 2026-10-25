@@ -94,6 +94,10 @@ Delivery and wrap-up are read from the log (`loop/run-inbox.ts`): a resumed sess
 run hands over only steers with no `run_steering_delivered` yet, and a `finish` counts only after
 the run's latest `run_registered` (`finishRequested`, the app's copy in `shared/coordinator.ts`).
 A resumed run never inherits an earlier wrap-up, and `finish_run` after Resume is recorded again.
+Steering that reaches a classic build after its last round stays with that build: kept on its report
+and handed over only if it goes on, never written into the game's NOTES.md, which every later chat
+reads. The chat removes the "Steering backlog" section older builds left there before it answers
+(`loop/steering-backlog.ts`), and prompts built from NOTES.md leave it out.
 Its director's first message (its first `worker_wait` on the long turn, `directorLoop: "turn"`) still says
 every earlier steer once, since the run may have opened a fresh session that never heard them —
 all but the chat's messages a run's lead heard or gave back ([live chat](#live-chat-during-a-build));

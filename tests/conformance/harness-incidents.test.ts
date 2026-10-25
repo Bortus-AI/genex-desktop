@@ -3901,6 +3901,93 @@ describe("a Loop chat asked for research (corner-guy)", () => {
 });
 
 /**
+ * Steering that reached a classic build after its last round was written to the game's NOTES.md
+ * under "Steering backlog" and headed the next plan. NOTES.md is read in every later chat, so a
+ * "stop the workers" said to one build stayed in the game for good, telling every later agent the
+ * work was cancelled. Such steering stays with the build it was said to, and the studio's old
+ * section no longer reaches a later chat.
+ */
+describe("steering said to a closed build (stale-backlog)", () => {
+  const STALE = [
+    "# plaza",
+    "",
+    "## Pitch",
+    "",
+    "A plaza to skate.",
+    "",
+    "## Steering backlog",
+    "",
+    '- The user explicitly cancelled the work: "ok kill the workers". Do not begin further implementation.',
+    "",
+    "## Current state",
+    "",
+    "Playable.",
+    "",
+  ].join("\n");
+
+  it("stale-backlog. a chat after that build: the old section is gone from NOTES.md and from what the agent reads, the rest kept", async () => {
+    const rig = await startRig({ replies: [] });
+    rigs.push(rig);
+    await rig.core.games.scaffold("backlog-plaza");
+    const thread = await rig.core.createGameThread("backlog-plaza");
+    const notesFile = path.join(rig.core.games.dirFor("backlog-plaza"), "NOTES.md");
+    await writeFile(notesFile, STALE);
+    const read: string[] = [];
+    rig.core.engines.register({
+      id: "codex",
+      label: "fixture",
+      kind: "delegated",
+      status: async () => ({ code: "ready", detail: "" }),
+      models: async () => [],
+      delegate: async (request: DelegateRequest) => {
+        read.push(String(request.prompt), await readFile(path.join(request.cwd, "NOTES.md"), "utf8"));
+        return { ok: true, summary: "Updated.", sessionId: "chat", turns: 1, usage: {}, engine: "codex" };
+      },
+    });
+    await rig.core.sendUserMessage("Update our in-game multiplayer", { thread, engine: "codex" });
+    await waitForLog(
+      rig.core,
+      (log) => customEvents(log, "coordinator_message_handled").length === 1,
+      30_000,
+      "answered",
+    );
+    assert.doesNotMatch(read.join("\n"), /kill the workers/, "the agent never reads the old cancellation");
+    const notes = await readFile(notesFile, "utf8");
+    assert.doesNotMatch(notes, /Steering backlog|kill the workers/);
+    assert.match(
+      notes,
+      /## Pitch\n\nA plaza to skate\.\n\n## Current state\n\nPlayable\.\n/,
+      "the rest of the notes stays",
+    );
+  });
+
+  it("stale-backlog close. steering a build got too late is kept with that build: NOTES.md is left as it was", async () => {
+    const { keepSteeringBacklog } = await import("../../src/harness-seed/loop/autopilot.ts");
+    const projectDir = await tmpDir("stale-backlog-close-");
+    const notes = "# plaza\n\n## Pitch\n\nA plaza to skate.\n";
+    await writeFile(path.join(projectDir, "NOTES.md"), notes);
+    const decisions: string[] = [];
+    const ctx = {
+      cancelled: false,
+      call: async (_method: string, params: { batch?: Array<{ payload?: { decision?: string } }> }) => {
+        for (const record of params.batch ?? []) decisions.push(String(record.payload?.decision));
+        return null;
+      },
+    };
+    const report: Record<string, unknown> = {};
+    const late = 'The user explicitly cancelled the work: "ok kill the workers".';
+    // `projectDir` is what the close was handed before; it no longer writes there.
+    await keepSteeringBacklog(
+      ctx as never,
+      { threadId: "thread", run: { runId: "run_late" }, report, projectDir, backlog: [late] } as never,
+    );
+    assert.equal(await readFile(path.join(projectDir, "NOTES.md"), "utf8"), notes);
+    assert.deepEqual(report.steeringBacklog, [late], "kept on the build's report");
+    assert.doesNotMatch(decisions.join("\n"), /NOTES\.md|next run|next plan/);
+  });
+});
+
+/**
  * "Can you start a 3h Loop…" sent with Mode on Auto (Loop off) reached a contractor with no launch
  * tool: it worked on in its own turn and said "The 3-hour loop starts now" while no run started and
  * the Builds bar stayed empty. Asked in words, an Auto chat starts the Loop itself, for the hours named.
