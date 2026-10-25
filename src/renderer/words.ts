@@ -4141,6 +4141,13 @@ export const SANDBOX_SETUP_WORDS = {
       sent: t("Report sent"),
       reportFailed: t("The report didn’t send. Try again in a moment."),
     },
+    /** An earlier Genex set the protected space up for an older sandbox: one approval updates it. */
+    reinstall: {
+      title: t("Genex’s protected space needs an update"),
+      line: t("Windows will ask you to allow it once."),
+      update: t("Update"),
+      updating: t("Waiting for your OK"),
+    },
     /** Windows' Secondary Logon service is disabled: agents start through it. */
     logonService: {
       line: t("Secondary Logon is turned off on this PC. Set up turns it back on, since agents start through it."),
