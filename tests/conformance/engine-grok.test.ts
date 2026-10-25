@@ -266,7 +266,7 @@ describe("Grok Build's sign-in and models", () => {
   it("is the CLI's own sign-in once it says one, and no one's before", async () => {
     const { engine } = await engineWith(() => replay([]));
     assert.equal((await engine.account()).source, "system");
-    assert.equal((await engine.account()).cli.version, "grok 1.0.70 (f50904eaee6c)");
+    assert.equal((await engine.account()).cli.version, "1.0.70", "the number Settings shows beside the name");
     const signedOut = await engineWith(() => replay([]), { probe: "grok-probe-signed-out-1.0.70.jsonl" });
     assert.equal((await signedOut.engine.account()).source, "none");
   });

@@ -261,7 +261,7 @@ export class GrokEngine implements Engine {
       cli: {
         state: cliState(cli),
         ...(cli.path ? { path: cli.path } : {}),
-        ...(cli.version ? { version: cli.version } : {}),
+        ...(cli.version ? { version: cliVersion(cli.version) } : {}),
       },
     };
   }
