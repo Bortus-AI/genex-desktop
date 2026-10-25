@@ -535,6 +535,7 @@ export default {
   "Ben-Day": "Ben-Day",
   "Best fit": "Idéal",
   Better: "Amélioration",
+  Beta: "Bêta",
   "Between builds": "Entre deux builds",
   "Billed by each provider you use": "Facturé par chaque fournisseur que tu utilises",
   "Billed by each provider you use.": "Facturé par chaque fournisseur que tu utilises.",
@@ -852,6 +853,37 @@ export default {
     "La recherche des compétences de Codex s’est fermée. Actualise pour réessayer.",
   "Codex skill discovery timed out. Refresh to retry.":
     "La recherche des compétences de Codex a expiré. Actualise pour réessayer.",
+  "Cursor didn't answer. Check the installation, then try again.":
+    "Cursor n’a pas répondu. Vérifie l’installation, puis réessaie.",
+  "Cursor is unavailable": "Cursor est indisponible",
+  "Cursor isn't installed on this computer.": "Cursor n’est pas installé sur cet ordinateur.",
+  "Cursor sign-in": "Connexion à Cursor",
+  "Cursor {version}, {count, plural, other {# model(s)}}":
+    "Cursor {version}, {count, plural, one {# modèle} other {# modèles}}",
+  "Cursor's CLI forgets this computer's sign-in": "La CLI de Cursor oublie la connexion de cet ordinateur",
+  "Cursor's model list could not be read.": "Impossible de lire la liste des modèles de Cursor.",
+  "Cursor's sign-in status could not be read.": "Impossible de lire l’état de connexion de Cursor.",
+  "Finish signing in to Cursor in your browser. Cursor keeps the sign-in.":
+    "Termine la connexion à Cursor dans ton navigateur. Cursor garde la connexion.",
+  "Finish signing in to Grok in your browser.": "Termine la connexion à Grok dans ton navigateur.",
+  "Grok Build didn't answer. Check the installation, then try again.":
+    "Grok Build n’a pas répondu. Vérifie l’installation, puis réessaie.",
+  "Grok Build isn't installed on this Mac.": "Grok Build n’est pas installé sur ce Mac.",
+  "Grok Build isn't signed in.": "Grok Build n’est pas connecté.",
+  "Grok Build sign-in": "Connexion à Grok Build",
+  "Grok Build {version}, {count, plural, one {# model} other {# models}}":
+    "Grok Build {version}, {count, plural, one {# modèle} other {# modèles}}",
+  "Grok Build's model list could not be read.": "Impossible de lire la liste des modèles de Grok Build.",
+  "Install Cursor": "Installer Cursor",
+  "Install Cursor from Settings › Model Providers.": "Installe Cursor depuis Réglages › Fournisseurs de modèles.",
+  "Install Cursor's CLI to build with your Cursor plan.":
+    "Installe la CLI de Cursor pour créer avec ton forfait Cursor.",
+  "Install Grok Build": "Installer Grok Build",
+  "Install Grok Build from Settings › Model Providers.":
+    "Installe Grok Build depuis Réglages › Fournisseurs de modèles.",
+  "Install it to build games with your Grok account.": "Installe-le pour créer des jeux avec ton compte Grok.",
+  "Installing Cursor. This can take a minute.": "Installation de Cursor. Ça peut prendre une minute.",
+  "Installing Grok Build. This can take a minute.": "Installation de Grok Build. Ça peut prendre une minute.",
   "Nex lives in your Genex account. Sign in once, then pay here.":
     "Tes Nex sont sur ton compte Genex. Connecte-toi une fois, puis paie ici.",
   Color: "Couleur",
@@ -1685,6 +1717,28 @@ export default {
   "Get a key": "Obtenir une clé",
   "Get Nex": "Obtenir des Nex",
   Nex: "Nex",
+  "Not signed in to Cursor.": "Tu n’es pas connecté à Cursor.",
+  "Runs on your Grok account": "Fonctionne avec ton compte Grok",
+  "Sign in again…": "Se reconnecter…",
+  "Sign in to Cursor from Settings › Model Providers.":
+    "Connecte-toi à Cursor depuis Réglages › Fournisseurs de modèles.",
+  "Sign in to Grok from Settings › Model Providers.": "Connecte-toi à Grok depuis Réglages › Fournisseurs de modèles.",
+  "Sign in with your Cursor account to build with your plan.":
+    "Connecte-toi avec ton compte Cursor pour créer avec ton forfait.",
+  "Sign in with your Grok account. Grok Build keeps the sign-in.":
+    "Connecte-toi avec ton compte Grok. Grok Build garde la connexion.",
+  "Switch to another Cursor account": "Passer à un autre compte Cursor",
+  "Switch to another Grok account": "Passer à un autre compte Grok",
+  "Update Cursor": "Mettre à jour Cursor",
+  "Update Grok Build": "Mettre à jour Grok Build",
+  "Update Grok Build from Settings › Model Providers.":
+    "Mets à jour Grok Build depuis Réglages › Fournisseurs de modèles.",
+  "Uses your Cursor plan": "Utilise ton forfait Cursor",
+  "Your Cursor account has no model it can run.": "Ton compte Cursor n’a aucun modèle qu’il peut lancer.",
+  "xAI blocked this Grok account: {reason}": "xAI a bloqué ce compte Grok : {reason}",
+  "xAI no longer accepts this Grok Build.": "xAI n’accepte plus cette version de Grok Build.",
+  "xAI no longer accepts this version. Update it to keep building.":
+    "xAI n’accepte plus cette version. Mets-la à jour pour continuer.",
   "{amount} Nex, get Nex": "{amount} Nex, obtenir des Nex",
   "Get credits": "Obtenir des crédits",
   "Get the Epic Games Launcher": "Télécharger Epic Games Launcher",
@@ -2382,6 +2436,7 @@ export default {
   "No comments on {title} yet": "Pas encore de commentaires sur {title}",
   "No compatible newer release is available for this installed plugin":
     "Aucune version plus récente et compatible n’est disponible pour ce plugin installé",
+  "No cover yet, so it goes out without a picture.": "Pas encore de couverture, donc il sort sans image.",
   "No dash at the ends": "Pas de tiret au début ni à la fin",
   "No friends yet — send your link and play together.": "Pas encore d’amis — envoie ton lien et jouez ensemble.",
   "No games for “{query}”.": "Aucun jeu pour « {query} ».",
@@ -6162,6 +6217,8 @@ export default {
   "That price isn’t one the store takes. Ask the agent to pick another.":
     "La boutique n’accepte pas ce prix. Demande à l’agent d’en choisir un autre.",
   "The item store is off right now.": "La boutique d’objets est fermée pour le moment.",
+  "This game is still the empty starter: build something first, then publish.":
+    "Ce jeu est encore le projet de départ vide : crée d’abord quelque chose, puis publie-le.",
   "This game sells as many items as it can.": "Ce jeu vend déjà autant d’objets que possible.",
   "You get per sale": "Tu touches par vente",
   "You get per sale ({share})": "Tu touches par vente ({share})",

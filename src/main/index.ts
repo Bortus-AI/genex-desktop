@@ -46,6 +46,7 @@ import { wireGameFullScreen } from "./full-screen-view.ts";
 import { HarnessState } from "../shared/protocol.ts";
 import { ClaudeCodeEngine } from "../substrate/engines/claude-code.ts";
 import { CodexEngine } from "../substrate/engines/codex.ts";
+import { CursorEngine } from "../substrate/engines/cursor.ts";
 import { configureCodingClis, resolveCodingCli } from "../substrate/engines/external-cli.ts";
 import { installCodingCli } from "../substrate/cli-installer.ts";
 import { CodingCliState } from "../shared/coding-cli.ts";
@@ -271,6 +272,7 @@ import {
   longPath,
   takeBackSandboxEntries,
 } from "../substrate/windows-sandbox.ts";
+import { ensureMacGit } from "../substrate/git-policy.ts";
 import { installWindowsSandbox } from "../substrate/windows-sandbox-setup.ts";
 import { toolchain } from "../substrate/toolchain.ts";
 import { errorMessage } from "../shared/errors.ts";
@@ -671,7 +673,7 @@ app.on("accessibility-support-changed", (_event, enabled) => {
 let liveThreadStatus: ThreadStatusMap = {};
 /** An eval-lane launch's view of the core's UI events (it digests the game its chat seeds); null otherwise. */
 let evalLaneUiTap: ((event: UiEvent) => void) | null = null;
-const { codexLogin, claudeLogin, openCodeLogin } = createLoginControllers({
+const { codexLogin, claudeLogin, openCodeLogin, grokLogin, cursorLogin } = createLoginControllers({
   terminals,
   openExternal: (url) => shell.openExternal(url),
   subscription,
@@ -679,6 +681,14 @@ const { codexLogin, claudeLogin, openCodeLogin } = createLoginControllers({
   onOpenCodeSignedIn: async () => {
     if (core?.engines.has(EngineId.OpenCode)) await core.engines.get(EngineId.OpenCode).refreshModels?.(true);
     pushUiEvent({ type: UiEvent.EnginesChanged, payload: { engine: EngineId.OpenCode } });
+  },
+  onGrokSignedIn: async () => {
+    if (core?.engines.has(EngineId.Grok)) await core.engines.get(EngineId.Grok).refreshModels?.(true);
+    pushUiEvent({ type: UiEvent.EnginesChanged, payload: { engine: EngineId.Grok } });
+  },
+  onCursorSignedIn: async () => {
+    if (core?.engines.has(EngineId.Cursor)) await core.engines.get(EngineId.Cursor).refreshModels?.(true);
+    pushUiEvent({ type: UiEvent.EnginesChanged, payload: { engine: EngineId.Cursor } });
   },
   showCodexState: (state) => {
     preview?.setOccluded(state.visible);
@@ -2107,6 +2117,12 @@ function registerIpc(studio: StudioCore, engines: EngineBoot): void {
     claudeLogin,
     codexLogin,
     openCodeLogin,
+    grokLogin,
+    cursorLogin,
+    cursor: () => {
+      const engine = core?.engines.has(EngineId.Cursor) ? core.engines.get(EngineId.Cursor) : null;
+      return engine instanceof CursorEngine ? engine : null;
+    },
     subscription,
     pushUiEvent,
     busy: () => keepAwake.held || (core?.budget.userInFlight ?? 0) > 0,
@@ -2207,9 +2223,11 @@ async function settleDataFolder(): Promise<boolean> {
   return false;
 }
 
-/** The host's own Git for repairing build copies after a move (Windows); elsewhere the PATH's. */
+/** The host's own Git for repairing build copies after a move (Windows, a Mac without developer tools); elsewhere the PATH's. */
 function hostGitForMoves(): { hostGit?: () => Promise<boolean> } {
-  return process.platform === StudioPlatform.Windows ? { hostGit: () => ensureHostGit() } : {};
+  if (process.platform === StudioPlatform.Windows) return { hostGit: () => ensureHostGit() };
+  if (process.platform === StudioPlatform.Mac) return { hostGit: () => ensureMacGit(resources) };
+  return {};
 }
 
 /** Move the data with the start window showing how far, then start Genex again; quitting waits for it. */

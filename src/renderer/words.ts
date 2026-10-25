@@ -2641,6 +2641,8 @@ export const MODEL_PICKER_WORDS = {
   subscription: t("subscription"),
   signIn: t("sign in"),
   free: t("Free"),
+  /** A provider that ships before a live test proved it, in the picker and in Settings. */
+  beta: t("Beta"),
 } as const;
 
 /** A subscription's accounts, in Model Providers and the composer's usage panel (`subscription-accounts.ts`). */
@@ -4702,6 +4704,8 @@ export const GENEX_WORDS = {
     coverLeft: (minutes: number) => t("~{minutes} min", { minutes }),
     /** Under the presses while the agent makes it: who is making it, and where it shows. */
     coverMakingSoon: t("The agent is making it in the chat. It shows here when it’s ready."),
+    /** Under the presses when the game has no picture to go out with. */
+    withoutCover: t("No cover yet, so it goes out without a picture."),
     /** What Another cover sends in the game's chat, with what the person typed. */
     coverAnotherPrompt: (want: string) =>
       want

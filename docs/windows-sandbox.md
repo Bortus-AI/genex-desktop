@@ -114,7 +114,9 @@ the setup screen opens on `git-missing`. What differs from macOS:
   global packages' files are hardlinks that share their security descriptor). So that home is
   granted entry by entry without its store, and with no link among the entries, since srt-win
   grants a link's target. npm's global prefix is granted whole: its `node_modules` are the global
-  CLIs that run in the sandbox, OpenCode among them.
+  CLIs that run in the sandbox, OpenCode among them. Cursor's own folders (`~/.cursor`,
+  `%APPDATA%\Cursor`) are granted at the sandbox's start, as OpenCode's are: its sessions run as
+  the sandbox user and read their sign-in there.
 - No Schannel client works under the write-restricted token (`System32\curl.exe`, PowerShell
   web requests, .NET `HttpClient`, `winget`), and Git for Windows' own `curl.exe` uses Schannel
   alone, so `curl` over HTTPS fails inside (`SEC_E_NO_CREDENTIALS`); plain HTTP through the proxy
@@ -220,6 +222,7 @@ the session already grants for reading, so it needs no grant of its own. The Squ
 runs its Git Bash and `cmd\git.exe` with no other Git on PATH, and the package job's chat turn
 sets `STUDIO_WINDOWS_BUNDLED_GIT_ONLY=1`, so the sandbox user runs this Git Bash. To move to a newer Git, change the
 pin; the build refuses a release that lacks a path the trim list names, so the list is reviewed.
+The macOS counterpart is [Bundled git on macOS](mac-bundled-git.md).
 The terminal panel and a chat's Run command open an installed Git Bash first, then this one, and
 PowerShell only when neither is there ([`src/main/terminal-shell.ts`](../src/main/terminal-shell.ts)).
 
