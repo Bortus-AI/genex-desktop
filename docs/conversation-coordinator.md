@@ -102,7 +102,11 @@ on the wake loop they open that message's digest, read from the journal (THE USE
 
 `finish_run` is distinct from Stop: it lets in-flight facet attempts finish, prevents new facet
 rounds, then merges, performs an integration attempt and validation, and displays accepted
-work. It does not promise the result passes all checks. Stop remains explicit cancellation.
+work. It does not promise the result passes all checks. Stop remains explicit cancellation: the
+coordinator's `stop_run` records it for its message (`run_control` of action `stop`), and the chat
+does it once the reply ends, as Builds' Stop does (`loop/chat-stop.ts`); with `restart` the build
+goes on again once it has stopped, through the host's `resume_run` with the instruction given. The
+coordinator never steers a stop or sends the person to a button.
 After a stop, `resume_run` is for going on with that build itself; other work asked for then goes to
 one builder in the chat through `continue_build` with `build: false`, which the host takes after a
 paused run too, and the build stays paused.
@@ -279,7 +283,10 @@ queue takes no switches, and a switch then waits for a turn of its own as before
 While a director run is going on the wake loop, its lead is the chat: a message sent meanwhile is
 handed to it at once, and it answers in the chat. The long turn (`directorLoop: "turn"`,
 `STUDIO_DIRECTOR_LOOP=turn`), the classic pipeline and a kept `director.ts` from before live chat
-open no line, and their messages wait for the run to close as before. A waking run's start
+open no line, and their messages wait for the run to close as before. While a waking run prepares
+its start — its first look at the game, before its lead's line opens (`director/lead-line.ts`
+`expectLeadLine`) — the run's coordinator answers what is sent at once instead (`live-chat.ts`
+`chatWaitsFor`): a question gets an answer, and a stop reaches the run. A waking run's start
 says so (`autopilot_started.liveChat`) when the chat's queue hands messages to it (main.ts tells
 `live-chat-served.ts` `serveLiveChat` which queue it wired; a kept older `message-queue.ts` lacks
 `SERVES_LIVE_CHAT`), and while it runs the composer reads "Talk to the lead while

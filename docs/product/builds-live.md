@@ -49,7 +49,8 @@ After a chat-led build, its session takes follow-ups: edits, resuming a paused r
 with its time left, starting over only when asked. With Loop on, small changes are made directly;
 more work reopens the build until checked (other projects start anew); a chat that cannot
 (Ollama's) answers as with Loop off, saying so once. **Stop** interrupts at once, keeping finished
-work: a stopped Loop shows one Stopped line with Resume, and Builds or chat makes it live. Limit, outage and crash pauses resume twice unless stopped (Settings → Harness); sign-in
+work: a stopped Loop shows one Stopped line with Resume, and Builds or chat makes it live. Asked in
+words, the chat stops or restarts a build itself, also while it is still starting. Limit, outage and crash pauses resume twice unless stopped (Settings → Harness); sign-in
 pauses wait. A crash or restart settles abandoned activity from saved state.
 
 ## Where to work
