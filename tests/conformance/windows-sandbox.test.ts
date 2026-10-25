@@ -1655,6 +1655,7 @@ function fakeOwnEntries(
   options: { available?: boolean; walk?: () => Promise<void>; walks?: string[] } = {},
 ) {
   const synced: OwnAclEntry[][] = [];
+  const rewalked: string[][] = [];
   const signals: Array<AbortSignal | undefined> = [];
   let revoked = 0;
   let walked = 0;
@@ -1663,6 +1664,10 @@ function fakeOwnEntries(
       calls.push("own entries");
       synced.push([...entries]);
       return options.available ?? true;
+    },
+    rewalk: async (paths) => {
+      calls.push("denies passed down again");
+      rewalked.push([...paths]);
     },
     walkDeferred: async (run) => {
       walked++;
@@ -1678,7 +1683,7 @@ function fakeOwnEntries(
       revoked++;
     },
   };
-  return { entries, synced, signals, revoked: () => revoked, walked: () => walked };
+  return { entries, synced, rewalked, signals, revoked: () => revoked, walked: () => walked };
 }
 
 /**
@@ -2054,6 +2059,37 @@ describe("deny paths Genex sets itself", () => {
   ];
   const WRITE_ONLY = [at("AppData", "Local", "Roblox", "AssistantSettings"), at("AI Games", "Pong", ".claude")];
 
+  it("passes its denies in a write root down again once srt-win first grants the root, once a process", async () => {
+    // srt-win's first grant of a root does not reach what is under a folder Genex denied before
+    // it: the harness's first read of skills/director.md failed with EPERM.
+    const runtime = fakeSessionRuntime();
+    const own = fakeOwnEntries(runtime.calls);
+    const claude = at("AI Games", "Pong", ".claude");
+    const elsewhere = at(".ssh");
+    const value = new WindowsSandboxSession({
+      runtime: runtime.runtime,
+      profile: PROFILE,
+      ancestors: fakeAncestors().ancestors,
+      own: own.entries,
+      keepDenies: (paths) => [...paths],
+      exists: () => true,
+    });
+    const owner = {};
+    const config = (denyWrite: string[]) => ({
+      ...BASE_CONFIG,
+      filesystem: { ...BASE_CONFIG.filesystem, denyRead: [elsewhere], denyWrite },
+    });
+    await value.join(owner, { grants: { write: [PONG], read: [] }, config: config([claude]) });
+    assert.deepEqual(runtime.calls, ["own entries", "initialize", "denies passed down again"]);
+    assert.deepEqual(own.rewalked, [[claude]], "only the denies inside srt-win's write roots");
+    const later = path.win32.join(LATE, ".claude");
+    value.update(owner, { write: [PONG, LATE], read: [] });
+    await value.join(owner, { grants: { write: [PONG, LATE], read: [] }, config: config([claude, later]) });
+    await value.settled();
+    assert.deepEqual(own.rewalked, [[claude], [later]], "a root granted before in this process is not walked again");
+    await value.dispose();
+  });
+
   it("never hands srt-win a deny on a path that exists, whose parent its stamp would walk whole", async () => {
     const s = session({ ownDenies: true, exists });
     await s.session.join({}, denying(SECRETS, WRITE_ONLY));
@@ -2076,7 +2112,11 @@ describe("deny paths Genex sets itself", () => {
         { path: "D:\\Keys\\deploy.pem", deny: DenyAccess.Read, guard: false },
       ],
     ]);
-    assert.deepEqual(s.runtime.calls, ["own entries", "initialize"], "denied before srt-win grants anything");
+    assert.deepEqual(
+      s.runtime.calls,
+      ["own entries", "initialize", "denies passed down again"],
+      "denied before srt-win grants anything, and the game's denies passed down again after its first grant",
+    );
   });
 
   it("leaves every deny to srt-win, as before, where Genex cannot set them itself, and says so", async () => {
