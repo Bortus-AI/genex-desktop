@@ -143,11 +143,7 @@ the setup screen opens on `git-missing`. What differs from macOS:
   in the background start behind the open window. Genex grants a folder to the sandbox users'
   group for reading and running, passed down through what is under it. A write grant Genex made
   before 0.0.81 (which the write-restricted token cannot use) is taken back at the first start
-  after the upgrade, a walk of that folder once. srt-win's first grant of a write root does not
-  reach what is under a folder Genex denied before it (the harness's `skills`, `prompts` and
-  `judge`, a game's `.claude`), so the files there could not even be read; once srt-win first
-  grants a root in a process, Genex writes its denies inside it again by name, which passes the
-  root's allow down with them (`rewalk`, "denies passed down again" in the log). It denies a path, where it really is, to the sandbox
+  after the upgrade, a walk of that folder once. It denies a path, where it really is, to the sandbox
   users' group, passed down through what is under the path alone, and FILE_DELETE_CHILD on its
   parent folder alone (the shape
   [sandbox-runtime#523](https://github.com/anthropic-experimental/sandbox-runtime/pull/523) proposes), with

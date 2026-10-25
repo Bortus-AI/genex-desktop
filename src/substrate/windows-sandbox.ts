@@ -1236,14 +1236,6 @@ function pendingWalks(
   return [...new Map(walks.filter((p) => named.has(pathKey(p))).map((p) => [pathKey(p), p])).values()];
 }
 
-/** The edits that pass down again what `record` sets on `paths`, as every running holder needs it. */
-function editsAgain(record: OwnRecord | null, paths: readonly string[], live: readonly OwnRecord[]): FolderOwnEdit[] {
-  const keys = new Set(paths.map(pathKey));
-  const entries = (record?.entries ?? []).filter((entry) => keys.has(pathKey(entry.path)));
-  if (!record || entries.length === 0) return [];
-  return ownEdits({ sid: record.sid, entries }, [], live).map((one) => ({ ...one, walk: OwnWalk.Again }));
-}
-
 /** How Genex's own grants and denies reach Windows: whom they name, and the editor that sets them. */
 export interface OwnAclDeps {
   /** The sandbox users' group SID; null where there is none to name ({@link srtSandboxGroup}). */
@@ -1299,11 +1291,6 @@ export interface OwnAclEntries {
    * runs out of time or is stopped stays recorded for the next call.
    */
   walkDeferred(run?: OwnWalkRun): Promise<void>;
-  /**
-   * Pass the entries this holder recorded on `paths` down again, now: srt-win's first grant of a
-   * root above them did not reach what is under them, which then lacked the root's allow.
-   */
-  rewalk(paths: readonly string[]): Promise<void>;
   /** The paths whose entries are still to be passed down ({@link walkDeferred}), as recorded. */
   walks(): string[];
   /** Take back every entry this holder recorded, except what another running Genex needs (uninstall, tests). */
@@ -1405,11 +1392,6 @@ export function ownAclEntries(holders: string, deps: OwnAclDeps): OwnAclEntries 
       for (const line of editNotes(edits, outcomes)) deps.log?.(line);
       const done = new Set(edits.filter((_, i) => outcomes[i]?.ok).map((one) => pathKey(one.dir)));
       await withRecord(() => save(recordAfterWalk(readOwnRecord(recordFile) ?? record, walked.entries, done)));
-    },
-    async rewalk(paths) {
-      const live = otherHolders(holders, self, alive, readOwnRecord).live;
-      const edits = editsAgain(readOwnRecord(recordFile), paths, live);
-      if (edits.length > 0) await ownEach(edit, edits, retryMs, deps.log);
     },
     walks() {
       return readOwnRecord(recordFile)?.walks ?? [];
@@ -1564,8 +1546,6 @@ export class WindowsSandboxSession {
   readonly #walkStops = new Set<AbortController>();
   /** The paths srt-win set entries on in the applied config: a reset takes them back. */
   #srtPaths: string[] = [];
-  /** The write roots srt-win granted in this process, whose denies were passed down again ({@link #passDeniesDown}). */
-  readonly #grantedRoots = new Set<string>();
 
   constructor(deps: WindowsSessionDeps) {
     this.#deps = deps;
@@ -1785,7 +1765,6 @@ export class WindowsSandboxSession {
       const denies = [...this.#members.values()].flatMap(memberDenies);
       const plan = await this.#setOwnEntries(grants);
       await this.#initialize(plan.config);
-      await this.#passDeniesDown(plan);
       await this.#grantAncestors(grants);
       this.#applied = grants;
       this.#appliedDenies = new Set(denies.map(pathKey));
@@ -1924,30 +1903,6 @@ export class WindowsSandboxSession {
     const all = this.#plan(grants, false);
     if (own) this.#deps.log?.(MESSAGE.OwnEntriesOff(sentToSrt(all.config)));
     return all;
-  }
-
-  /**
-   * Pass Genex's own denies inside a write root down again once srt-win has first granted the root
-   * in this process. srt-win's first grant of a root does not reach what is under a folder Genex
-   * denied before it, so the files there lacked the root's allow and could not even be read (the
-   * harness's skills, prompts and judge folders). Written again by name, each deny takes the root's
-   * allow along as it passes down. A failure undoes the initialize, so the next apply starts clean.
-   */
-  async #passDeniesDown(plan: { config: SandboxRuntimeConfig; own: OwnAclEntry[] }): Promise<void> {
-    const own = this.#deps.own;
-    if (!own || !this.#ownRouted) return;
-    const roots = entryPaths(plan.config.filesystem.allowWrite).filter(
-      (root) => !this.#grantedRoots.has(pathKey(root)),
-    );
-    const inRoot = (p: string) => roots.some((root) => insideWindowsPath(root, p));
-    const denied = plan.own.filter((entry) => entry.deny !== null && inRoot(entry.path)).map((entry) => entry.path);
-    try {
-      if (denied.length > 0) await this.#timed("denies passed down again", () => own.rewalk(denied));
-    } catch (error) {
-      await this.#deps.runtime.reset().catch(() => {});
-      throw error;
-    }
-    for (const root of roots) this.#grantedRoots.add(pathKey(root));
   }
 
   /**
