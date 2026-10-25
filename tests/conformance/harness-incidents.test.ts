@@ -169,6 +169,37 @@ it("AUDIT-STOP-RACE: cancellation is visible before a delayed queue-pause write"
   }
 });
 
+import { lookAtStart, observeStart } from "../../src/harness-seed/loop/director/setup.ts";
+
+it("STOP-AT-START. Stop while a Loop looks at its starting game: the look ends at once and no second look begins, however long the page holds a call", async () => {
+  const calls: string[] = [];
+  const ctx = {
+    threadId: "thread",
+    cancelled: false,
+    setStatus: () => {},
+    notify: () => {},
+    call: async (method: string) => {
+      calls.push(method);
+      if (method === HostMethod.PreviewLoad) return "url";
+      // A page that never answers: the host holds each call for its whole deadline (minutes).
+      return new Promise(() => {});
+    },
+  };
+  const run = { runId: "run_stop_at_start", project: "game", goal: "update the multiplayer" };
+  const loopRun = { ctx, run, lookAtStart: (prefix?: string) => lookAtStart(loopRun as never, prefix) };
+  const looking = lookAtStart(loopRun as never, "iter_000_before");
+  while (calls.length < 2) await nextTurn();
+  ctx.cancelled = true;
+  const stillLooking = "still looking";
+  assert.equal(await Promise.race([looking, setTimeoutPromise(2 * SECOND_MS, stillLooking)]), null);
+  const seen = calls.length;
+  assert.equal(
+    await Promise.race([observeStart(loopRun as never), setTimeoutPromise(2 * SECOND_MS, stillLooking)]),
+    null,
+  );
+  assert.equal(calls.length, seen, "a stopped run asks the page nothing more");
+});
+
 import { timedWorkRemaining } from "../../src/harness-seed/loop/director/budgets.ts";
 import { restoreLoopRun } from "../../src/harness-seed/loop/director/journal.ts";
 import { reopenedJournal } from "../../src/harness-seed/loop/director/reopen.ts";
