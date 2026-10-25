@@ -214,16 +214,28 @@ function toolResult(event: Record_): Translated {
   };
 }
 
-/** A result's words: its content blocks (a picture as a placeholder), else what the model was given. */
+/** A result's words: its content blocks (a picture as a placeholder), else what its raw output says. */
 function resultText(event: Record_): string {
   const blocks = Array.isArray(event.content) ? event.content : [];
   const words = blocks
     .map((block) => record(record(block).content))
     .map((content) => (content.type === "image" ? IMAGE_PLACEHOLDER : String(content.text ?? "")))
     .join("");
-  if (words) return words;
-  const raw = record(event.rawOutput);
-  return typeof raw.output_for_prompt === "string" ? raw.output_for_prompt : "";
+  return words || rawOutputText(record(event.rawOutput));
+}
+
+/**
+ * The words a tool's raw output carries when its content has none: a command's output, or the one
+ * object a tool reports under its own kind (a listing's `content`, an edit's `tool_output_for_prompt`).
+ */
+function rawOutputText(raw: Record_): string {
+  if (typeof raw.output_for_prompt === "string") return raw.output_for_prompt;
+  for (const value of Object.values(raw)) {
+    const reported = record(value);
+    const words = reported.tool_output_for_prompt ?? reported.content;
+    if (typeof words === "string") return words;
+  }
+  return "";
 }
 
 /** Grok's token buckets in the studio's names: input is uncached, reasoning is inside output. */

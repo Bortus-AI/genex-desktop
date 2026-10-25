@@ -1,12 +1,14 @@
 /**
  * Grok Build: a delegated harness the studio runs inside its own sandbox.
  *
- * The streams were recorded from the real Grok Build CLI 1.0.70 (`fixtures/transcripts/grok-*`),
- * so the translation, the command line, the environment, the sandbox and every ending are exercised
- * without an account or the network. The signed-out probe and the signed-out run are the CLI on its
- * own; every other recording had the CLI talk to a scripted stand-in for xAI's API (the model's
- * words and xAI's error bodies are the stand-in's, the events around them the CLI's). None comes
- * from a real Grok account yet.
+ * Every stream was recorded from the real Grok Build CLI (`fixtures/transcripts/grok-*`), so the
+ * translation, the command line, the environment, the sandbox and every ending are exercised without
+ * an account or the network. `grok-live-*` are turns on a real Grok account (X Premium+), in Genex's
+ * sandbox, scrubbed of the Mac's folders and the person's name; `grok-outdated-cli-*` is xAI refusing
+ * CLI 1.0.3 on that account; the signed-out probe and run are the CLI on its own. `grok-standin-*`
+ * had the CLI talk to a scripted stand-in for xAI's API, for answers a healthy account does not give
+ * on demand (401, 404, 429, a call headless mode refused): their words are the stand-in's, the events
+ * around them the CLI's.
  */
 import assert from "node:assert/strict";
 import { constants } from "node:fs";
@@ -46,8 +48,8 @@ async function translate(name: string) {
 const parts = (row: { payload: unknown }) => (row.payload as { parts: Array<Record<string, unknown>> }).parts;
 
 describe("Grok Build's stream", () => {
-  it("mirrors a build as the chat's rows: a thought, the reply, each tool call with its result, the summary", async () => {
-    const { rows, sessionId } = await translate("grok-run-1.0.70.jsonl");
+  it("mirrors a build as the chat's rows: thoughts, replies, each tool call with its result, the summary", async () => {
+    const { rows, sessionId } = await translate("grok-live-build-1.0.70.jsonl");
     const shapes = rows.flatMap((row) => parts(row).map((part) => `${row.type}:${String(part.type)}`));
     assert.deepEqual(shapes, [
       "assistant:thinking",
@@ -56,74 +58,103 @@ describe("Grok Build's stream", () => {
       "user:tool_result",
       "assistant:tool_use",
       "user:tool_result",
+      "assistant:thinking",
+      "assistant:text",
+      "assistant:tool_use",
+      "assistant:tool_use",
+      "user:tool_result",
+      "user:tool_result",
       "assistant:text",
     ]);
-    const [thought, reply, shell, shellResult, read, readResult, summary] = rows.map((row) => parts(row)[0] ?? {});
-    assert.equal(thought?.text, "I need to create a file.");
-    assert.equal(reply?.text, "I'll write the file now.", "a reply's chunks are one row");
+    const used = rows.flatMap(parts).filter((part) => part.type === "tool_use");
     assert.deepEqual(
-      { name: shell?.name, id: shell?.id, input: shell?.input },
-      { name: "Bash", id: "call_60", input: "echo hello > hello.txt && cat hello.txt" },
-      "Grok's shell reads as the Bash call it is",
+      used.map((part) => part.name),
+      ["LS", "Read", "Write", "mcp__studio__checkpoint"],
+      "Grok's own tools read as the Claude Code tools they are, the studio bridge as the studio's tool",
     );
-    assert.deepEqual(
-      { id: shellResult?.tool_use_id, error: shellResult?.is_error, content: shellResult?.content },
-      { id: "call_60", error: false, content: "hello\n" },
+    const results = new Map(
+      rows
+        .flatMap(parts)
+        .filter((part) => part.type === "tool_result")
+        .map((part) => [part.tool_use_id, String(part.content)]),
     );
-    assert.equal(read?.name, "Read");
-    assert.match(String(read?.input), /hello\.txt/);
-    assert.equal(readResult?.tool_use_id, read?.id, "a result answers its own call, by id");
-    assert.equal(summary?.text, "Done: hello.txt says hello.");
-    assert.equal(sessionId, "01a16f21-8c48-70b1-9a25-a7b9d5c998e2");
+    const [list, read, write, checkpoint] = used.map((part) => results.get(part.id) ?? "");
+    assert.match(list ?? "", /index\.html/, "a listing's words are in its raw output, not its content");
+    assert.match(read ?? "", /<!doctype html>/);
+    assert.match(write ?? "", /Wrote file successfully/, "an edit's words are in its raw output, not its diff");
+    assert.match(checkpoint ?? "", /Shown to the user/);
+    const texts = rows.flatMap(parts).filter((part) => part.type === "text");
+    assert.equal(texts.at(-1)?.text, "I replaced the empty `index.html` with a dark page that centers a red square.");
+    assert.equal(sessionId, "01a1735b-2754-7a82-92a8-305b7dae91b1");
   });
 
-  it("streams each reply's words as they arrive, one stream per reply", async () => {
-    const { deltas } = await translate("grok-run-1.0.70.jsonl");
+  it("streams each reply's words as they arrive, one stream per reply, each the reply's own row", async () => {
+    const { deltas, rows } = await translate("grok-live-build-1.0.70.jsonl");
     const streams = new Map<string, string>();
     for (const event of deltas) {
       const { streamId, delta } = event.payload as { streamId: string; delta: string };
       streams.set(streamId, (streams.get(streamId) ?? "") + delta);
     }
-    assert.deepEqual([...streams.values()], ["I'll write the file now.", "Done: hello.txt says hello."]);
+    const texts = rows
+      .flatMap(parts)
+      .filter((part) => part.type === "text")
+      .map((part) => part.text);
+    assert.equal(streams.size, 3);
+    assert.deepEqual([...streams.values()], texts);
   });
 
-  it("counts the turn's tokens as the CLI's own total, uncached input apart from cache reads", async () => {
-    const { said } = await translate("grok-run-1.0.70.jsonl");
+  it("counts the turn's tokens and price as the CLI's own total, uncached input apart from cache reads", async () => {
+    const { said } = await translate("grok-live-build-1.0.70.jsonl");
     const ended = said.findLast((part) => part.totals);
     assert.deepEqual(ended?.totals, {
-      input_tokens: 1500,
-      output_tokens: 95,
-      cache_read_tokens: 14_700,
+      input_tokens: 13_782,
+      output_tokens: 911,
+      cache_read_tokens: 44_928,
       cache_write_tokens: 0,
-      reasoning_tokens: 20,
+      reasoning_tokens: 477,
+      cost_usd: 0.01886796,
     });
-    assert.equal(ended?.turns, 3, "the model rounds the CLI counted");
+    assert.equal(ended?.turns, 4, "the model rounds the CLI counted");
     const responses = said.filter((part) => part.usage);
-    assert.equal(responses.length, 3, "one reading per model response, for a run cut short");
+    assert.equal(responses.length, 4, "one reading per model response, for a run cut short");
     assert.deepEqual(
       responses.map((part) => part.promptTokens),
-      [5200, 5400, 5600],
+      [14_219, 14_525, 14_650, 15_316],
       "each response's whole prompt, cached or not: the context it filled",
     );
   });
 
+  it("mirrors a read-only session that looked with its shell and read the file, and answered", async () => {
+    const { rows } = await translate("grok-live-readonly-1.0.70.jsonl");
+    const used = rows.flatMap(parts).filter((part) => part.type === "tool_use");
+    assert.deepEqual(
+      used.map((part) => part.name),
+      ["Bash", "Read"],
+      "approved inside a sandbox that writes only its folder",
+    );
+    const failed = rows.flatMap(parts).filter((part) => part.type === "tool_result" && part.is_error);
+    assert.deepEqual(failed, []);
+    assert.equal(rows.flatMap(parts).at(-1)?.text, "The square is blue.");
+  });
+
   it("reads a refused or failed call as an error result, so the chat shows it failed", async () => {
-    const { rows } = await translate("grok-refused-command-1.0.70.jsonl");
+    const { rows } = await translate("grok-standin-refused-command-1.0.70.jsonl");
     const result = rows.flatMap(parts).find((part) => part.type === "tool_result");
     assert.equal(result?.is_error, true);
     assert.match(String(result?.content), /cancelled/);
   });
 
   it("says a failure with the status xAI answered, from the error's own fields", async () => {
-    assert.deepEqual((await translate("grok-auth-failed-1.0.70.jsonl")).failure?.status, 401);
-    assert.deepEqual((await translate("grok-model-refused-1.0.70.jsonl")).failure?.status, 404);
+    assert.deepEqual((await translate("grok-standin-auth-failed-1.0.70.jsonl")).failure?.status, 401);
+    assert.deepEqual((await translate("grok-standin-model-refused-1.0.70.jsonl")).failure?.status, 404);
+    assert.deepEqual((await translate("grok-outdated-cli-1.0.3.jsonl")).failure?.status, 426);
     const signedOut = (await translate("grok-not-signed-in-1.0.70.jsonl")).failure;
     assert.equal(signedOut?.status, null, "no status: the engine asks the CLI whether it is signed in");
     assert.match(String(signedOut?.message), /grok login/);
-    const limited = await translate("grok-rate-limit-1.0.70.jsonl");
+    const limited = await translate("grok-standin-rate-limit-1.0.70.jsonl");
     assert.equal(limited.failure?.status, null, "Grok's own error names no status after its retries");
     assert.equal(
-      grokStderrStatus(await fixture("grok-rate-limit-1.0.70.stderr")),
+      grokStderrStatus(await fixture("grok-standin-rate-limit-1.0.70.stderr")),
       429,
       "its error log does, as a field",
     );
@@ -141,9 +172,9 @@ describe("Grok Build's stream", () => {
   });
 
   it("reports a compaction and the session it kept", async () => {
-    const { said, sessionId } = await translate("grok-compact-1.0.70.jsonl");
+    const { said, sessionId } = await translate("grok-live-compact-1.0.70.jsonl");
     assert.ok(said.some((part) => part.compacted));
-    assert.equal(sessionId, "01a16f21-8c48-70b1-9a25-a7b9d5c998e2");
+    assert.equal(sessionId, "01a1735b-2754-7a82-92a8-305b7dae91b1");
   });
 
   it("reads a studio bridge command as the studio tool it calls", () => {
@@ -167,7 +198,7 @@ describe("Grok Build's stream", () => {
 });
 
 const probed = async (name: string): Promise<GrokProbe> => parseGrokProbe((await fixture(name)).split("\n"));
-const SIGNED_IN = "grok-probe-signed-in-1.0.70.jsonl";
+const SIGNED_IN = "grok-live-probe-signed-in-1.0.70.jsonl";
 const ready = async () => ({
   ready: true,
   path: "/Users/me/.grok/bin/grok",
@@ -228,16 +259,18 @@ describe("Grok Build's sign-in and models", () => {
     assert.equal(latest?.defaultEffort, "high");
     assert.equal(older?.providerDefault, undefined);
     assert.equal(latest?.supportsVision, true, "Grok takes pictures in a prompt");
-    assert.equal((await probed("grok-probe-api-key-1.0.70.jsonl")).account.method, "xai.api_key");
+    assert.equal((await probed("grok-standin-probe-api-key-1.0.70.jsonl")).account.method, "xai.api_key");
     const signedIn = await probed(SIGNED_IN);
     assert.equal(signedIn.account.method, "cached_token", "the person's own `grok login`");
     assert.deepEqual(
-      signedIn.models.map((model) => [model.id, model.contextWindow]),
+      signedIn.models.map((model) => [model.id, model.label, model.contextWindow, model.providerDefault === true]),
       [
-        ["grok-4.6", 500_000],
-        ["grok-4.7", 256_000],
-        ["grok-code-fast-1", 256_000],
+        ["grok-4.7", "Grok 4.7", 256_000, true],
+        ["grok-4.7-build-fast", "Grok 4.7 Fast", 256_000, false],
+        ["grok-4.6", "Grok 4.6", 256_000, false],
+        ["grok-4.5", "Grok 4.5", 500_000, false],
       ],
+      "a signed-in account's models, as xAI listed them for it",
     );
     assert.throws(() => parseGrokProbe(["not json", "{}"]), /could not be read/);
   });
@@ -258,7 +291,7 @@ describe("Grok Build's sign-in and models", () => {
     assert.equal(signedOut.code, "needs_login");
     assert.match(signedOut.remedy ?? "", /Sign in to Grok/);
     const go = await at(ready);
-    assert.deepEqual([go.code, go.detail], ["ready", "Grok Build 1.0.70, 3 models"]);
+    assert.deepEqual([go.code, go.detail], ["ready", "Grok Build 1.0.70, 4 models"]);
     const silent = await new GrokEngine({
       resolveCli: ready,
       probe: async () => {
@@ -280,20 +313,24 @@ describe("Grok Build's sign-in and models", () => {
 describe("Grok Build sessions", () => {
   it("builds from a prompt file, approving calls only inside the studio's sandbox, and mirrors every event", async () => {
     const { engine, seen, prompts } = await engineWith(async function* () {
-      yield* await events("grok-run-1.0.70.jsonl");
+      yield* await events("grok-live-build-1.0.70.jsonl");
     });
     const cwd = await game();
     const mirrored: DelegateEvent[] = [];
-    const result = await engine.delegate({ cwd, prompt: "Make hello.txt", onEvent: (event) => mirrored.push(event) });
+    const result = await engine.delegate({
+      cwd,
+      prompt: "Make a red square",
+      onEvent: (event) => mirrored.push(event),
+    });
     assert.equal(result.ok, true);
-    assert.equal(result.summary, "Done: hello.txt says hello.");
-    assert.equal(result.sessionId, "01a16f21-8c48-70b1-9a25-a7b9d5c998e2");
+    assert.equal(result.summary, "I replaced the empty `index.html` with a dark page that centers a red square.");
+    assert.equal(result.sessionId, "01a1735b-2754-7a82-92a8-305b7dae91b1");
     assert.equal(result.billing, "subscription", "the person's own Grok sign-in is their plan, not a bill");
     assert.deepEqual(
       { input: result.usage.input_tokens, cached: result.usage.cache_read_tokens, output: result.usage.output_tokens },
-      { input: 1500, cached: 14_700, output: 95 },
+      { input: 13_782, cached: 44_928, output: 911 },
     );
-    assert.equal(result.contextTokens, 5600, "the last response's whole prompt");
+    assert.equal(result.contextTokens, 15_316, "the last response's whole prompt");
     const [invocation] = seen;
     const argv = invocation?.argv ?? [];
     assert.equal(flag(argv, "--output-format"), "streaming-json");
@@ -304,7 +341,7 @@ describe("Grok Build sessions", () => {
     assert.match(flag(argv, "--disallowed-tools") ?? "", /ask_user_question/);
     assert.equal(flag(argv, "--model"), undefined, "with no pick, Grok's own default runs");
     assert.deepEqual(prompts[0], [{ type: "text", text: (prompts[0] as Array<{ text: string }>)[0]?.text }]);
-    assert.match((prompts[0] as Array<{ text: string }>)[0]?.text ?? "", /^Make hello\.txt/);
+    assert.match((prompts[0] as Array<{ text: string }>)[0]?.text ?? "", /^Make a red square/);
     assert.equal(invocation?.cwd, await realpath(cwd), "a build runs in its workspace");
     assert.deepEqual(invocation?.domains, [
       "api.x.ai",
@@ -314,7 +351,7 @@ describe("Grok Build sessions", () => {
       "grok.com",
     ]);
     const rows = mirrored.filter((event) => event.type === "assistant" || event.type === "user");
-    assert.equal(rows.length, 7);
+    assert.equal(rows.length, 13);
     assert.ok(
       mirrored.some((event) => event.type === "context"),
       "how full the context is, after each response",
@@ -433,15 +470,15 @@ describe("Grok Build sessions", () => {
       return engine.delegate({ cwd, prompt: "x", model: "grok-4.7" });
     };
     await assert.rejects(
-      ending("grok-auth-failed-1.0.70.jsonl"),
+      ending("grok-standin-auth-failed-1.0.70.jsonl"),
       (err) => err instanceof EngineError && err.kind === "auth",
     );
     await assert.rejects(
-      ending("grok-rate-limit-1.0.70.jsonl", await fixture("grok-rate-limit-1.0.70.stderr")),
+      ending("grok-standin-rate-limit-1.0.70.jsonl", await fixture("grok-standin-rate-limit-1.0.70.stderr")),
       (err) => err instanceof EngineError && err.kind === "rate_limit",
       "a 429 the CLI's error log named",
     );
-    const refused = await ending("grok-model-refused-1.0.70.jsonl");
+    const refused = await ending("grok-standin-model-refused-1.0.70.jsonl");
     assert.equal(refused.ok, false);
     assert.match(refused.errorText ?? "", /^xAI refused grok-4\.7 [\s\S]*Pick another model/);
   });
@@ -467,6 +504,15 @@ describe("Grok Build sessions", () => {
     assert.equal((await engine.account()).cli.state, "incompatible", "Settings offers the update");
     version = "grok 1.0.70 (f50904eaee6c)";
     assert.equal((await engine.status()).code, "ready", "an updated CLI is asked afresh");
+  });
+
+  it("ends with Grok's own words when it does not know the model, while signed in", async () => {
+    const { engine } = await engineWith(async function* () {
+      yield* await events("grok-live-unknown-model-1.0.70.jsonl");
+    });
+    const outcome = await engine.delegate({ cwd: await game(), prompt: "x", model: "grok-9-does-not-exist" });
+    assert.equal(outcome.ok, false);
+    assert.match(outcome.errorText ?? "", /^Couldn't set model 'grok-9-does-not-exist'/);
   });
 
   it("calls a failure with no status a sign-in failure only when the CLI says it is signed out", async () => {
@@ -541,18 +587,18 @@ describe("Grok Build sessions", () => {
 
   it("compacts a session with Grok's own /compact, and says when it could not", async () => {
     const { engine, seen } = await engineWith(async function* () {
-      yield* await events("grok-compact-1.0.70.jsonl");
+      yield* await events("grok-live-compact-1.0.70.jsonl");
     });
     const cwd = await game();
     const result = await engine.delegate({
       cwd,
       prompt: "",
       compact: true,
-      resume: "01a16f21-8c48-70b1-9a25-a7b9d5c998e2",
+      resume: "01a1735b-2754-7a82-92a8-305b7dae91b1",
     });
     assert.equal(result.compacted, true);
-    assert.equal(result.sessionId, "01a16f21-8c48-70b1-9a25-a7b9d5c998e2");
-    assert.deepEqual(seen[0]?.argv.slice(0, 4), ["-p", "/compact", "--resume", "01a16f21-8c48-70b1-9a25-a7b9d5c998e2"]);
+    assert.equal(result.sessionId, "01a1735b-2754-7a82-92a8-305b7dae91b1");
+    assert.deepEqual(seen[0]?.argv.slice(0, 4), ["-p", "/compact", "--resume", "01a1735b-2754-7a82-92a8-305b7dae91b1"]);
     const failed = await (
       await engineWith(() =>
         replay([
@@ -568,13 +614,13 @@ describe("Grok Build sessions", () => {
 describe("Grok Build one-shot answers", () => {
   it("answers a judge with no tool approved, the critic's rules appended and its pictures in the prompt", async () => {
     const { engine, seen, prompts } = await engineWith(async function* () {
-      yield* await events("grok-resume-1.0.70.jsonl");
+      yield* await events("grok-live-judge-1.0.70.jsonl");
     });
     const response = await engine.complete({
       systemPrompt: "You judge builds.",
       messages: [{ role: "user", content: "A or B?", images: [{ data: "aGk=", mimeType: "image/png" }] }],
     });
-    assert.equal(response.message.content, "PASS: looks good.");
+    assert.equal(response.message.content, "Four");
     assert.equal(response.engine, "grok");
     const argv = seen[0]?.argv ?? [];
     assert.ok(!argv.includes("--always-approve") && !argv.includes("--allow"), "nothing it could run is approved");
