@@ -139,6 +139,38 @@ after(async () => {
 const inside = (command: string, extra: Partial<Parameters<ProcessSandbox["run"]>[0]> = {}) =>
   sandbox.run({ command, cwd: workspace, timeoutMs: RUN_TIMEOUT_MS, ...extra });
 
+describe("Windows sandbox: a frozen folder in a write root", { skip: SKIP, timeout: TEST_TIMEOUT_MS }, () => {
+  it("reads the files of a write-denied folder in a root srt-win grants for the first time", async () => {
+    // The harness workspace's skills, prompts and judge folders are write-denied by Genex, and
+    // srt-win grants the workspace above them: the harness's first boot could not read the
+    // skills already there (EPERM on skills/director.md on every release canary machine).
+    const root = realpathSync.native(await tmpDir("genex-frozen-in-root-"));
+    const workspaceRoot = path.join(root, "workspaces");
+    const frozen = path.join(workspaceRoot, "harness", "skills");
+    await mkdir(frozen, { recursive: true });
+    await writeFile(path.join(frozen, "director.md"), "playbook");
+    const box = await ProcessSandbox.create({
+      writableRoots: [workspaceRoot],
+      scratchDir: path.join(root, "scratch"),
+      secretPaths: [],
+      denyWrite: [frozen],
+    });
+    try {
+      const run = (command: string) =>
+        box.run({ command, cwd: path.join(workspaceRoot, "harness"), timeoutMs: RUN_TIMEOUT_MS });
+      const read = await run("cat skills/director.md");
+      assert.equal(read.stdout, "playbook", read.stderr);
+      const written = await run("printf x > skills/director.md");
+      assert.notEqual(written.code, 0, "the frozen folder stays write-denied");
+      const beside = await run("printf ok > beside.txt && cat beside.txt");
+      assert.equal(beside.stdout, "ok", beside.stderr);
+    } finally {
+      await box.dispose();
+      await removeTree(root);
+    }
+  });
+});
+
 describe("Windows sandbox: identity and files", { skip: SKIP, timeout: TEST_TIMEOUT_MS }, () => {
   it("runs Git Bash commands as the sandbox user", async () => {
     const result = await inside("echo hello-sandbox; whoami");
