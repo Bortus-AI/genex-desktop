@@ -451,6 +451,7 @@ export default {
   "Ben-Day": "本戴点",
   "Best fit": "最适合",
   Better: "改进",
+  Beta: "测试版",
   "Between builds": "构建间隙",
   "Billed by each provider you use": "由你使用的各提供方分别计费",
   "Billed by each provider you use.": "由你使用的各提供方分别计费。",

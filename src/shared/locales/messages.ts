@@ -401,6 +401,7 @@ export const MESSAGES = [
   "Being checked",
   "Ben-Day",
   "Best fit",
+  "Beta",
   "Better",
   "Between builds",
   "Billed by each provider you use",

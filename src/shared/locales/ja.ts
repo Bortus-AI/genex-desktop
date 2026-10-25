@@ -476,6 +476,7 @@ export default {
   "Ben-Day": "ベンデイ",
   "Best fit": "最適",
   Better: "改善",
+  Beta: "ベータ",
   "Between builds": "ビルドの合間",
   "Billed by each provider you use": "使うプロバイダーごとに請求されます",
   "Billed by each provider you use.": "使ったプロバイダーごとに請求されます。",

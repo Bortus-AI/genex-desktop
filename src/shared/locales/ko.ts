@@ -473,6 +473,7 @@ export default {
   "Ben-Day": "벤데이",
   "Best fit": "가장 적합",
   Better: "개선",
+  Beta: "베타",
   "Between builds": "빌드 사이",
   "Billed by each provider you use": "사용하는 제공자마다 따로 청구돼요",
   "Billed by each provider you use.": "사용하는 제공자마다 따로 청구돼요.",

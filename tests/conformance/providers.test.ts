@@ -20,6 +20,7 @@ import {
   PROVIDERS,
   SUBSCRIPTION_ENGINES,
   isLocalEngine,
+  isBeta,
   isMetered,
   loginKind,
   providerInfo,
@@ -106,6 +107,14 @@ describe("provider table", () => {
     }
     for (const provider of PROVIDERS)
       assert.equal(provider.billing === "subscription", provider.subscription, provider.id);
+  });
+
+  it("names the providers that ship in beta: Cursor, until a live test proves it", () => {
+    assert.deepEqual(
+      PROVIDERS.filter((provider) => isBeta(provider.id)).map((provider) => provider.id),
+      ["cursor"],
+    );
+    for (const id of ["gemini-cli", "constructor", null, undefined]) assert.equal(isBeta(id), false, String(id));
   });
 
   it("is served on each engine descriptor; an unlisted engine carries none", async () => {

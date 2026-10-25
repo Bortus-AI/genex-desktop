@@ -62,10 +62,11 @@ const DEFAULT_STATUS: Partial<Record<string, EngineStatus>> = {
  * How each subscription's plan limits answer, read again on every read so a reviewer can change it
  * while the window is open: a JSON file named by `STUDIO_FIXTURE_USAGE_FILE`, for example
  * `{"claude-code":"slow","codex":"failed"}`. `slow` answers after `SLOW_USAGE_MS`, `failed` throws,
- * `none` shares no limits, `signed_out` also makes the subscription signed out; anything else, or
- * no file, answers the fixed limits at once.
+ * `none` shares no limits, `signed_out` also makes the subscription signed out, `ready` makes a
+ * stand-in that starts not installed (Cursor's) ready; anything else, or no file, answers the
+ * fixed limits at once.
  */
-const FixtureUsage = { Slow: "slow", Failed: "failed", None: "none", SignedOut: "signed_out" } as const;
+const FixtureUsage = { Slow: "slow", Failed: "failed", None: "none", SignedOut: "signed_out", Ready: "ready" } as const;
 const SLOW_USAGE_MS = 8000;
 const SIGNED_OUT_STATUS: EngineStatus = { code: EngineStatusCode.NeedsLogin, detail: "AG-933 fixture; signed out" };
 
@@ -171,10 +172,7 @@ function fixtureEngine(
     supportsSessions: !(directChat && local),
     // Claude Code reads the person's messages mid-turn; Codex is interrupted and resumed instead.
     ...(id === EngineId.ClaudeCode ? { steersMidTurn: true } : {}),
-    status: async () =>
-      fixtureUsageMode(id) === FixtureUsage.SignedOut
-        ? SIGNED_OUT_STATUS
-        : (statuses[id] ?? DEFAULT_STATUS[id] ?? READY_STATUS),
+    status: async () => fixtureStatus(id, statuses),
     // A local server stand-in names its server only while the session has it ready.
     ...(id === EngineId.LocalServer
       ? {
@@ -203,6 +201,14 @@ function fixtureEngine(
     complete: (request: CompleteRequest) => completeFixture(id, request),
     delegate: (request: DelegateRequest) => delegateFixture(id, request, pendingSessions),
   };
+}
+
+/** A stand-in's status: as `STUDIO_FIXTURE_USAGE_FILE` sets it, else as the session names it, else its default. */
+function fixtureStatus(id: EngineId, statuses: Record<string, EngineStatus>): EngineStatus {
+  const mode = fixtureUsageMode(id);
+  if (mode === FixtureUsage.SignedOut) return SIGNED_OUT_STATUS;
+  if (mode === FixtureUsage.Ready) return READY_STATUS;
+  return statuses[id] ?? DEFAULT_STATUS[id] ?? READY_STATUS;
 }
 
 /** A subscription's stand-in: the only fixtures with plan limits. */

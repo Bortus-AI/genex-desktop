@@ -503,6 +503,7 @@ export default {
   "Ben-Day": "Бен-Дей",
   "Best fit": "Лучший выбор",
   Better: "Улучшение",
+  Beta: "Бета",
   "Between builds": "Между сборками",
   "Billed by each provider you use": "Оплата — отдельно у каждого провайдера",
   "Billed by each provider you use.": "Оплата у каждого провайдера, которым пользуешься.",

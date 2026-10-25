@@ -228,7 +228,8 @@ per turn, the brief on stdin, resumed by `--resume <session id>`
 ([cursor-cli.ts](../src/substrate/engines/cursor-cli.ts)). It runs on the person's Cursor account:
 Cursor's own models draw on the plan's weekly pool, and Claude, GPT and Gemini in Cursor, or use past
 the pool, are paid from the account's prepaid credit. So it is `billing: "metered"`: the app never
-picks it by itself. Settings shows it under the subscriptions ([CursorRow](../src/renderer/panels/CursorRow.tsx)),
+picks it by itself. It ships as Beta until a live test proves it (`beta` in the provider table: a
+Beta tag beside its name in Settings and its group in the picker). Settings shows it under the subscriptions ([CursorRow](../src/renderer/panels/CursorRow.tsx)),
 in OpenCode's row pattern: Install, Sign in (`cursor-agent login` in a terminal inside the row, which
 opens the browser and prints the page for Open sign-in page; `studio:cursor.signin`, native), and
 once connected Check connection, Sign out (`cursor-agent logout`, `studio:cursor.signout`, native)

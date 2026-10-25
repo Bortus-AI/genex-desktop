@@ -6,7 +6,7 @@
  * only while it loads or after a refresh failed (`catalog-note.ts`).
  */
 import type { JSX } from "react";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { type ClaudeLoginState, isClaudeLoginActive } from "../../shared/claude-login.ts";
 import { CodingCliState } from "../../shared/coding-cli.ts";
 import { EngineStatusCode } from "../../shared/engine-descriptor.ts";
@@ -35,9 +35,7 @@ import { CatalogNoteKind, catalogNote } from "./catalog-note.ts";
 import { type ProviderWords, RowHeading, RowTone, type RowView } from "./provider-row.tsx";
 import { MeteredProviderRows } from "./MeteredProviders.tsx";
 import { LocalServerRow } from "./LocalServerRow.tsx";
-
-/** Cursor's row, loaded when Settings first draws it: it is not part of what a window reads before it shows. */
-const CursorProviderRow = lazy(() => import("./CursorRow.tsx").then((row) => ({ default: row.CursorProviderRow })));
+import { CursorProviderRow } from "./CursorRow.tsx";
 
 const PROVIDERS: Record<string, ProviderWords> = {
   [EngineId.ClaudeCode]: {
@@ -598,9 +596,7 @@ export function ModelProvidersSection({ engines, onEnginesRefresh }: ModelSettin
       {SUBSCRIPTION_ENGINES.map((id) => (
         <ProviderRow key={id} engineId={id} engines={engines} onEnginesRefresh={onEnginesRefresh} />
       ))}
-      <Suspense fallback={null}>
-        <CursorProviderRow engines={engines} onEnginesRefresh={onEnginesRefresh} />
-      </Suspense>
+      <CursorProviderRow engines={engines} onEnginesRefresh={onEnginesRefresh} />
       <MeteredProviderRows engines={engines} onEnginesRefresh={onEnginesRefresh} />
       {localServer && <LocalServerRow engine={localServer} onEnginesRefresh={onEnginesRefresh} />}
     </div>

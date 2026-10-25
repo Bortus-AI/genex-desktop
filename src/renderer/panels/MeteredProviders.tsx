@@ -9,7 +9,7 @@
 import { type JSX, lazy, Suspense, useEffect, useRef, useState } from "react";
 import { type EngineStatus, EngineStatusCode } from "../../shared/engine-descriptor.ts";
 import { t } from "../../shared/i18n.ts";
-import { EngineId } from "../../shared/providers.ts";
+import { EngineId, isBeta } from "../../shared/providers.ts";
 import { TerminalKind, type TerminalSession } from "../../shared/terminal.ts";
 import { useCliInstall } from "../cli-install.ts";
 import type { EngineDescriptor } from "../types.ts";
@@ -123,6 +123,7 @@ export function ProviderCard({
         tone={checking ? RowTone.Busy : view.tone}
         status={checking ? WORDS.checking : view.status}
         view={view}
+        beta={isBeta(engine.id)}
       />
       {children}
       {connected && <PickerModels engine={engine} name={words.name} />}

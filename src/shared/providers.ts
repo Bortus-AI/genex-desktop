@@ -58,6 +58,8 @@ export interface ProviderInfo {
   readonly billing: Billing;
   /** Subscriptions only. */
   readonly signIn: SignInCopy | null;
+  /** Shipped before a live test proved it: Settings and the picker say Beta. */
+  readonly beta?: true;
 }
 
 /** The id of every engine the app knows (`Engine.id`). Persisted in settings and logs: never rename a value. */
@@ -175,6 +177,7 @@ export const PROVIDERS = [
     // anything past the pool, are paid from the account's credit: only the person's pick runs it.
     billing: "metered",
     signIn: null,
+    beta: true,
   },
   {
     id: EngineId.OpenRouter,
@@ -223,6 +226,11 @@ export function loginKind(id: string | null | undefined): LoginKind {
 /** True for a provider billed per token: the app never picks one on the person's behalf. */
 export function isMetered(id: string | null | undefined): boolean {
   return providerInfo(id)?.billing === "metered";
+}
+
+/** True for a provider that ships in beta: Settings and the model picker say so. */
+export function isBeta(id: string | null | undefined): boolean {
+  return providerInfo(id)?.beta === true;
 }
 
 /** True for a model this Mac runs itself: free, and never rate limited by anyone else. */

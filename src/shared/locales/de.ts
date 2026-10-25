@@ -537,6 +537,7 @@ export default {
   "Ben-Day": "Ben-Day",
   "Best fit": "Passt am besten",
   Better: "Verbessert",
+  Beta: "Beta",
   "Between builds": "Zwischen Builds",
   "Billed by each provider you use": "Abgerechnet von jedem Anbieter, den du nutzt",
   "Billed by each provider you use.": "Jeder Anbieter rechnet selbst ab.",
