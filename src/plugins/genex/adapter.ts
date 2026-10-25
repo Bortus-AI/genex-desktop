@@ -42,6 +42,7 @@ import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { t } from "../../shared/i18n.ts";
 import { PluginStillProblemCode } from "../../shared/plugins.ts";
+import { isBlankStill } from "../../shared/preview-contract.ts";
 import { GenexCliStopped, runGenexCli, genexCliPath } from "./cli.ts";
 import {
   appClipCommit,
@@ -1602,7 +1603,8 @@ export class GenexTools {
     const plain = readStillAnswer(
       await within(camera.shoot({ camera: COVER_FALLBACK_CAMERA }), this.#coverTimeouts.shotMs),
     );
-    if (!("still" in plain)) return;
+    // A frame still blank after the host's retakes is a loading screen, no cover: Publish says it goes without one.
+    if (!("still" in plain) || isBlankStill(plain.still.stats)) return;
     const takenAt = new Date(this.#now()).toISOString();
     await this.#coverWrite(project, () => saveShot(dir, plain.still, takenAt, GenexCoverOrigin.Studio));
   }
