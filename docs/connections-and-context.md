@@ -254,11 +254,13 @@ Grok's home (`ownHome`; on Windows the studio's sandbox grants it at start, as O
 denies writing a game's own `.grok`, and reaches only xAI's hosts (`api.x.ai`,
 `cli-chat-proxy.grok.com`, `auth.x.ai`, `accounts.x.ai`, `grok.com`). Status codes decide failures
 (401/403 sign-in, 429 rate limit, 400/404 the picked model refused); a failure with none is a
-sign-in failure only when the probe then finds Grok signed out. Recorded streams and probes:
-`tests/fixtures/transcripts/grok-*` (Grok Build 1.0.70 against a scripted stand-in for xAI);
+sign-in failure only when the probe then finds Grok signed out. xAI refuses a CLI older than 1.0.13
+with 426: discovery calls it outdated, and so does a 426 mid-session until the CLI changes, and the
+row shows Update needed with its installer. An X Premium+ account signs in (`cached_token`).
+Recorded streams and probes: `tests/fixtures/transcripts/grok-live-*` (Grok Build 1.0.70 on a real
+account), `grok-standin-*` (xAI's error answers from a scripted stand-in);
 `STUDIO_GROK_CLI_TESTS=1` runs the real CLI in the real sandbox (`grok-cli-live.test.ts`).
-Unproven: a real Grok account (which plans Grok Build accepts, its plan limits, which Genex does not
-read yet) and the CLI on Windows.
+Unproven: a real plan's usage limit (Genex does not read plan limits yet) and the CLI on Windows.
 
 Residual risk, as for OpenCode: Grok Build must read its own `auth.json` and its shell shares its
 sandbox, so a Grok session can read Grok's sign-in; every other sandbox denies `~/.grok`.
