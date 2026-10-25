@@ -53,7 +53,7 @@ project, and graph: a request to wait for the remaining workers could start a se
   ([after the build](#after-the-build-the-same-session)): it answers, after a finished run does
   requested work itself (Loop off, or a contained change with Loop on) or, with Loop on, reopens the
   same run for more work, until the ask is checked (a new run only when asked to start over; the
-  [coordinator](#the-coordinator-a-fallback)'s `continue_build` reopens one it answers for too), resumes a paused one with the latest instruction, and shows or
+  [coordinator](#the-coordinator-a-fallback)'s `continue_build` reopens one it answers for too), resumes a paused one when asked to go on with it (other work it makes itself, and the build stays paused), and shows or
   lands the build. Questions alone do not restart builders. Sending a message needs no Keep going
   button.
   Optional **Resume** also keeps the journal; a run interrupted by a quit or a crash is repaired
@@ -103,6 +103,9 @@ on the wake loop they open that message's digest, read from the journal (THE USE
 `finish_run` is distinct from Stop: it lets in-flight facet attempts finish, prevents new facet
 rounds, then merges, performs an integration attempt and validation, and displays accepted
 work. It does not promise the result passes all checks. Stop remains explicit cancellation.
+After a stop, `resume_run` is for going on with that build itself; other work asked for then goes to
+one builder in the chat through `continue_build` with `build: false`, which the host takes after a
+paused run too, and the build stays paused.
 `resume_run` can only resume a paused journal and cannot create a replacement run; a finished
 run is reopened by the harness itself once a Loop message's reply recorded `reopen_run` or the
 coordinator's `continue_build`, never through it
