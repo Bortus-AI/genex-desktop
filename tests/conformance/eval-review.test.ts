@@ -775,8 +775,7 @@ describe("eval review server: blinding", () => {
       });
       closeBeforeCleanup(() => handle.close());
       const served = await answerEverything(handle);
-      for (const body of served)
-        for (const word of forbidden) assert.ok(!names(body, word), `${mode} served ${word}`);
+      for (const body of served) for (const word of forbidden) assert.ok(!names(body, word), `${mode} served ${word}`);
       if (mode === ReviewMode.GraderValidation)
         assert.ok(
           served.some((body) => body.includes(`"family":"${GraderFamily.Claude}"`)),

@@ -377,7 +377,10 @@ describe("a Cursor session", () => {
 
 describe("a Cursor turn that fails", () => {
   it("names the failure by the Connect code the CLI printed, never by its words", async () => {
-    assert.equal(connectFailure(await fixture("cursor-usage-limit-written-2026.10.22.txt")), EngineFailureKind.UsageLimit);
+    assert.equal(
+      connectFailure(await fixture("cursor-usage-limit-written-2026.10.22.txt")),
+      EngineFailureKind.UsageLimit,
+    );
     assert.equal(connectFailure("ConnectError: [unauthenticated] token expired"), EngineFailureKind.Auth);
     assert.equal(connectFailure("ConnectError: [unavailable] upstream"), EngineFailureKind.Unavailable);
     assert.equal(connectFailure("ConnectError: [permission_denied] not on your plan"), null);
