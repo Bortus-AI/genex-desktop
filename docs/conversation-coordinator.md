@@ -69,6 +69,10 @@ project, and graph: a request to wait for the remaining workers could start a se
   state. A run that has begun writing its own end (`ActiveRun.closing`, set just before its
   `run_finished` or `autopilot_paused` is appended) no longer owns it: a Resume pressed as the
   pause shows waits for that close, then starts.
+  A paused build an earlier version left with the classic pipeline's journal, resumed on an engine
+  whose runs the director now leads, is closed as it stood instead (`run-dispatch.ts`
+  `closingOlderBuild`): the director would start it again from its goal on a fresh clock. Its work
+  is kept and the chat says why.
 
 ## Controls and delivery
 

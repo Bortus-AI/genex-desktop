@@ -3931,6 +3931,58 @@ describe("a Loop chat asked for research (corner-guy)", () => {
   });
 });
 
+import { gameRepo, loopHost } from "../helpers/loop-host.ts";
+import { copyProject, Project } from "../helpers/project-fixtures.ts";
+
+/**
+ * A build an earlier version paused with the classic pipeline's journal was resumed by the director
+ * on a session engine: it kept none of its plan, got a fresh time budget and started the whole build
+ * again from its old goal. Such a build is closed as it stood, its work kept, and the chat says why.
+ */
+describe("a paused build from an earlier version (old-pause)", () => {
+  it("old-pause. Resume on a classic journal: the build closes as it stood, never starting over on the director", {
+    timeout: 60_000,
+  }, async () => {
+    const dir = await gameRepo(await copyProject(Project.GodotGame, await tmpDir("old-pause-")));
+    const host = loopHost({
+      dir,
+      facts: [{ id: "web-game", path: "." }],
+      run: { runId: "run_old_pause", engine: "codex" },
+    });
+    host.artifacts.set("autopilot_run_old_pause", {
+      runId: "run_old_pause",
+      run: host.run,
+      plan: { facets: [{ id: "museum", title: "Museum" }] },
+      phase: "paused",
+      facets: { museum: { stoppedBecause: "stopped by the user" } },
+      finalization: { report: { runId: "run_old_pause" } },
+    });
+    await host.rec.ctx.call("events.append", {
+      threadId: host.threadId,
+      batch: [
+        {
+          type: "custom",
+          event_type: "run_finished",
+          payload: {
+            runId: "run_old_pause",
+            executionStatus: "paused",
+            paused: true,
+            integrationHead: "head-1",
+            stoppedBecause: "stopped by the user",
+          },
+        },
+      ],
+    });
+    await host.dispatch({ resume: true });
+    assert.equal(host.leadCalls().length, 0, "no director led it");
+    const closed = host.appended("run_finished").at(-1);
+    assert.match(String(closed?.stoppedBecause), /earlier version of Genex/);
+    assert.equal(closed?.executionStatus, "completed", "closed, not paused again");
+    assert.equal(closed?.integrationHead, "head-1", "what it built is kept");
+    assert.equal(host.appended("autopilot_paused").length, 0);
+  });
+});
+
 /**
  * A build paused long ago is still the chat's latest run, so its coordinator answers the chat. Work
  * the person asks for that is not that build's — "update our multiplayer" after a paused visual
