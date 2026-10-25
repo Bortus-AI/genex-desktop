@@ -153,7 +153,9 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
   project: a creator who never shared its project, `game-source.ts`) makes nothing and says so
   (`PlayRemixRefusal`). Cards and the viewer offer Remix only once main has looked at the source
   (`studio:play.remix-ready`, `remix-ready.ts`: the head commit by `git ls-remote`, its file names by a
-  blobless shallow clone, kept by commit in `play-remix-ready.json`).
+  blobless shallow clone, kept by commit in `play-remix-ready.json`). A Mac without Apple's developer
+  tools has only a stand-in for Git, which asks to install them, so there no git runs and Remix stays
+  hidden (`hostGitRuns`, asked once a minute).
   A game reaches Genex with its project only from a Publish that allowed remixing (the dialog's
   Allow remixing, ticked by default; Rights says what remixers may do): Studio stages the files the
   game's git keeps, without history, packages, agent settings, secrets or an engine's caches and
@@ -214,7 +216,9 @@ is.
   anything is unpacked (`native-zip.ts`: no entry or link outside it, nothing written through a
   link, no more than the stated size), unpacked with `ditto --noqtn`, every link resolved inside it,
   its program made runnable (an app packed on Windows carries no execute bit), the app's signature
-  (ad hoc is enough) and processor checked, then its bundle id set to
+  (ad hoc is enough) and processor checked (its Mach-O header read in the app, since `lipo` needs
+  Apple's developer tools; an Intel-only app on Apple silicon without Rosetta fails as
+  `needs-rosetta`), then its bundle id set to
   `games.genex.play.<slug>` and signed again ad hoc, so it can only write its own preferences. A
   Linux build is unpacked by the app itself (`unpackZip`: the same checks, each file no larger than
   its record, execute bits kept, links last) and its `entry` must be a regular file, an ELF program
