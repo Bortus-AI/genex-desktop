@@ -46,7 +46,9 @@ export interface ApprovalPrompt {
 /** The prompts in the helper's file, oldest first; a line that is not one is left out. */
 export function readApprovals(text: string): ApprovalPrompt[] {
   const prompts: ApprovalPrompt[] = [];
-  for (const line of text.split(/\r?\n/)) {
+  for (const raw of text.split(/\r?\n/)) {
+    // Windows PowerShell's UTF-8 starts the file with a byte-order mark.
+    const line = raw.replace(/^\uFEFF/, "");
     if (!line.trim()) continue;
     try {
       const parsed = JSON.parse(line) as Partial<ApprovalPrompt>;

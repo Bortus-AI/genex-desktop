@@ -182,8 +182,13 @@ switch ($Phase) {
       $upgrade = " --upgrade-from '$UpgradeFrom'"
       Remove-Item $stop -Force -ErrorAction SilentlyContinue
       $approver = "$Upload\scripts\canary\windows\uac-approver.ps1"
-      & "$Upload\scripts\canary\windows\in-session.ps1" -UserName $OwnerName `
-        -CommandLine "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$approver`" -Out `"$out`" -Stop `"$stop`""
+      # Without it the prompts wait unanswered: the run then fails its approval step, and says why here.
+      try {
+        & "$Upload\scripts\canary\windows\in-session.ps1" -UserName $OwnerName `
+          -CommandLine "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$approver`" -Out `"$out`" -Stop `"$stop`""
+      } catch {
+        Write-Output "the approval helper did not start: $_"
+      }
     }
     $script = @(
       "& '$Node' '$Upload\scripts\canary\lived-in-profile.ts' --home `$env:USERPROFILE --force-own-home --files $Files",

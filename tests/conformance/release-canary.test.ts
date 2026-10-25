@@ -589,7 +589,7 @@ describe("release canary upgrade", () => {
 
   test("counts the approval prompts the Update button raised, and only one passes", () => {
     const text = [
-      '{"n":1,"at":"2026-10-26T10:00:00.000Z","pid":10,"approved":"pressed Yes","shot":"uac-1.png"}',
+      '\uFEFF{"n":1,"at":"2026-10-26T10:00:00.000Z","pid":10,"approved":"pressed Yes","shot":"uac-1.png"}',
       "not a line",
       '{"n":2,"at":"2026-10-26T10:05:00.000Z","pid":11,"approved":"pressed Yes","shot":"uac-2.png"}',
       '{"n":3,"at":"2026-10-26T10:06',

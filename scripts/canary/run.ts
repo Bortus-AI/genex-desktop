@@ -117,10 +117,11 @@ async function firstStart(
   offset: number,
   evidence: string,
   shot = "first-start.png",
+  budgetMs: number = FIRST_START_BUDGET_MS[kind],
 ): Promise<Verdict & { seconds?: number }> {
   if (!installed.startedByInstaller) await platform.launch(installed, evidence);
   const log = path.join(installed.userData, "logs", "studio.log");
-  const wait = await waitForStart(log, offset, FIRST_START_BUDGET_MS[kind], clock, START_POLL_MS);
+  const wait = await waitForStart(log, offset, budgetMs, clock, START_POLL_MS);
   if (wait.timedOut) await platform.overrun?.(installed, evidence);
   await screenshot(path.join(evidence, shot));
   await platform.quit(installed);
@@ -132,7 +133,7 @@ async function firstStart(
       seconds: seconds(wait.wallMs),
       detail: `studio ready at ${seconds(readyMs)} s of its process${sandbox}`,
     };
-  const budget = `no studio after ${seconds(wait.wallMs)} s (budget ${FIRST_START_BUDGET_MS[kind] / SECOND_MS} s)${sandbox}`;
+  const budget = `no studio after ${seconds(wait.wallMs)} s (budget ${budgetMs / SECOND_MS} s)${sandbox}`;
   const why = failure ?? (problem ? `${budget}: ${problem}` : budget);
   return { outcome: StepOutcome.Fail, seconds: seconds(wait.wallMs), detail: why };
 }
@@ -293,7 +294,16 @@ async function upgradeRun(platform: Platform, record: Recorder, evidence: string
     await seedGame(userData);
     const offset = logLength(path.join(userData, "logs", "studio.log"));
     earlier = await platform.install(fetched.file, evidence);
-    const started = await firstStart(platform, earlier, PackageKind.Exe, offset, evidence, "earlier-start.png");
+    // Its own budget: what is proven here is the update, and a slow first start only delays it.
+    const started = await firstStart(
+      platform,
+      earlier,
+      PackageKind.Exe,
+      offset,
+      evidence,
+      "earlier-start.png",
+      UPGRADE_START_BUDGET_MS,
+    );
     await record.add({
       ...owner,
       step: CanaryStep.EarlierRelease,
