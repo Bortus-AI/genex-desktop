@@ -132,8 +132,12 @@ the setup screen opens on `git-missing`. What differs from macOS:
   dropped, since srt-win would create a placeholder; off the profile it is kept. srt-win's
   `argv_too_long`, `srt_win_timeout` and exit 16 `mapped_drive_cwd` become `SandboxLaunchError`
   codes.
-- Genex sets every read grant and every deny on a path that exists itself (`routeWindowsGrants`,
-  `routeWindowsDenies`, `ownAclEntries`), before srt-win starts, and keeps them between launches.
+- Genex sets every read grant, and every deny on a path that exists outside srt-win's write roots,
+  itself (`routeWindowsGrants`, `routeWindowsDenies`, `ownAclEntries`), before srt-win starts, and
+  keeps them between launches. A deny inside a write root (the harness's `skills`, `prompts` and
+  `judge`, a game's `.claude`) is srt-win's: its first grant of a root rewrote a file under a folder
+  Genex had denied itself as protected and closed, and srt-win keeps a deny under a kept root with
+  the root, so its walk of the parent runs once.
   srt-win's read grant passes its entry down through everything under each folder at every start
   (a toolchain) and takes it back at every exit; its stamp
   puts an inheritable FILE_DELETE_CHILD deny on each denied path's parent, which Windows passes

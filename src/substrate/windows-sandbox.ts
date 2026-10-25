@@ -938,6 +938,12 @@ export interface DenyRouteDeps {
   /** Where a path really is (default: Windows' own resolution, links followed, {@link longPath}). */
   realpath?: (p: string) => string;
   exists?: (p: string) => boolean;
+  /**
+   * srt-win's write roots: a deny inside one is srt-win's. Its first grant of a root rewrote a file
+   * under a folder Genex had denied as its own, protected and with no allow left (the harness's
+   * skills, unreadable at its first boot); srt-win keeps a deny under a kept root with the root.
+   */
+  srtRoots?: readonly string[];
 }
 
 /**
@@ -951,8 +957,9 @@ function setByGenex(real: string, exists: (p: string) => boolean): boolean {
 }
 
 /**
- * Split the session's deny paths between srt-win and Genex ({@link setByGenex}), each judged and
- * denied where it really is: a link is denied at its target, as srt-win's stamp would.
+ * Split the session's deny paths between srt-win and Genex ({@link setByGenex}; a path inside one of
+ * srt-win's write roots is srt-win's, {@link DenyRouteDeps.srtRoots}), each judged and denied where
+ * it really is: a link is denied at its target, as srt-win's stamp would.
  */
 export function routeWindowsDenies(
   deny: { read: readonly string[]; write: readonly string[] },
@@ -962,9 +969,10 @@ export function routeWindowsDenies(
   const exists = deps.exists ?? existsSync;
   const srt = { read: [] as string[], write: [] as string[] };
   const own: OwnAclEntry[] = [];
+  const inSrtRoot = (p: string) => (deps.srtRoots ?? []).some((root) => insideWindowsPath(root, p));
   const route = (p: string, access: DenyAccess, sent: string[]) => {
     const real = realpath(p);
-    if (!setByGenex(real, exists)) {
+    if (!setByGenex(real, exists) || inSrtRoot(p) || inSrtRoot(real)) {
       sent.push(p);
       return;
     }
@@ -1969,7 +1977,7 @@ export class WindowsSandboxSession {
     const route = { realpath: this.#deps.realpath, exists: this.#deps.exists };
     const read = [...grants.read, ...(this.#deps.launchDirs ?? [])];
     const granting = routeWindowsGrants({ write: grants.write, read }, route);
-    const denying = routeWindowsDenies(deny, route);
+    const denying = routeWindowsDenies(deny, { ...route, srtRoots: granting.srt.write });
     return { grants: granting.srt, deny: denying.srt, own: mergeEntries([...granting.own, ...denying.own]) };
   }
 }

@@ -2054,20 +2054,24 @@ describe("deny paths Genex sets itself", () => {
   ];
   const WRITE_ONLY = [at("AppData", "Local", "Roblox", "AssistantSettings"), at("AI Games", "Pong", ".claude")];
 
-  it("never hands srt-win a deny on a path that exists, whose parent its stamp would walk whole", async () => {
+  it("never hands srt-win a deny on a path that exists outside its write roots, whose parent its stamp would walk whole", async () => {
+    // Inside a write root the deny is srt-win's: its first grant of the root rewrote a file under a
+    // folder Genex had denied as its own, protected and closed (EPERM on the harness's skills).
+    // srt-win keeps a deny under a kept root with the root, so its walk of the parent runs once.
     const s = session({ ownDenies: true, exists });
     await s.session.join({}, denying(SECRETS, WRITE_ONLY));
     const sent = s.runtime.last().filesystem;
-    assert.deepEqual(sent.denyRead, [NEVER_MADE], "only a path srt-win must make a placeholder for");
-    assert.deepEqual(sent.denyWrite, []);
+    assert.deepEqual(
+      sent.denyRead,
+      [at("AI Games", "Pong", ".env"), NEVER_MADE],
+      "the write root's, and a missing path",
+    );
+    assert.deepEqual(sent.denyWrite, [at("AI Games", "Pong", ".claude")]);
     assert.deepEqual(s.own.synced, [
       [
         { path: PROFILE, deny: null, guard: true },
         { path: at(".claude"), deny: DenyAccess.Read, guard: false },
         { path: at(".ssh"), deny: DenyAccess.Read, guard: false },
-        { path: PONG, deny: null, guard: true },
-        { path: at("AI Games", "Pong", ".claude"), deny: DenyAccess.Write, guard: false },
-        { path: at("AI Games", "Pong", ".env"), deny: DenyAccess.Read, guard: false },
         { path: at("AppData", "Local", "Roblox"), deny: null, guard: true },
         { path: at("AppData", "Local", "Roblox", "AssistantSettings"), deny: DenyAccess.Write, guard: false },
         { path: at("AppData", "Roaming", "Microsoft"), deny: null, guard: true },
