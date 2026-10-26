@@ -21,6 +21,10 @@ const UPGRADE_PROBLEM =
   /\[main\] sandbox unavailable: not-provisioned[^\n]*(?:set up by another release|set up by a different release|reinstall)[^\n]*/i;
 /** The line each approval prompt leaves in the evidence folder (windows/uac-approver.ps1). */
 export const APPROVALS_FILE = "uac.jsonl";
+/** What the run writes right before it presses Update, for the helper to turn prompting on. */
+export const PROMPTS_ON_FILE = "prompts-on";
+/** What the helper writes once Windows asks for each elevation. */
+export const PROMPTS_SWITCHED_FILE = "prompts-switched";
 /** The button the update card offers (src/renderer/words.ts `SANDBOX_SETUP_WORDS.windows.reinstall.update`). */
 export const UPDATE_BUTTON = "Update";
 /** The game the earlier release is given before its first start, so its kept grants cover one. */
@@ -74,8 +78,16 @@ export function approvalsBetween(prompts: readonly ApprovalPrompt[], fromMs: num
   });
 }
 
-/** One approval for the update, as a person approves one prompt; none or more fails. */
-export function approvalVerdict(prompts: readonly ApprovalPrompt[]): Verdict {
+/**
+ * One approval for the update, as a person approves one prompt; none or more fails. Without the
+ * helper (`helperReady` false) Windows never asked: the update elevated without a prompt to count.
+ */
+export function approvalVerdict(prompts: readonly ApprovalPrompt[], helperReady = true): Verdict {
+  if (!helperReady)
+    return {
+      outcome: StepOutcome.Fail,
+      detail: "the approval helper was not running: Windows elevated the update without asking (approver-start.log)",
+    };
   const said = prompts.map((prompt) => `#${prompt.n} at ${prompt.at} (${prompt.approved}, ${prompt.shot})`).join("; ");
   if (prompts.length === 1) return { outcome: StepOutcome.Pass, detail: `one approval prompt: ${said}` };
   return { outcome: StepOutcome.Fail, detail: `${prompts.length} approval prompts${said ? `: ${said}` : ""}` };

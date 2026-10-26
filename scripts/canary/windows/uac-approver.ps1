@@ -3,7 +3,10 @@
 # cannot click Yes from the account itself, since the prompt runs above it. For each prompt it saves
 # a screenshot of the screen, presses Yes, and writes one JSON line to uac.jsonl in `Out`
 # (scripts/canary/upgrade.ts reads them). It stops once the file `Stop` exists. The VM shows the
-# prompt on the normal desktop (PromptOnSecureDesktop 0), where it can be seen and pressed.
+# prompt on the normal desktop (PromptOnSecureDesktop 0), where it can be seen and pressed. Until
+# the run writes `prompts-on` in `Out` (right before it presses Update) Windows elevates without
+# asking (ConsentPromptBehaviorAdmin 0), so the earlier release's own setup runs as before; then
+# this turns the prompt on (5, Windows' default) and writes `prompts-switched`.
 param(
   [Parameter(Mandatory)] [string] $Out,
   [Parameter(Mandatory)] [string] $Stop
@@ -46,7 +49,14 @@ function Press-Yes([int] $Id) {
 
 $seen = @{}
 $count = 0
+$policies = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+$promptsOn = Join-Path $Out "prompts-on"
+$switched = Join-Path $Out "prompts-switched"
 while (-not (Test-Path $Stop)) {
+  if ((Test-Path $promptsOn) -and -not (Test-Path $switched)) {
+    Set-ItemProperty $policies ConsentPromptBehaviorAdmin 5
+    Set-Content -Path $switched -Value (Get-Date).ToUniversalTime().ToString("o")
+  }
   foreach ($consent in Get-Process consent -ErrorAction SilentlyContinue) {
     if ($seen.ContainsKey($consent.Id)) { continue }
     $seen[$consent.Id] = $true

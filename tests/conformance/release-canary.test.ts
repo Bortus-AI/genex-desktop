@@ -610,6 +610,10 @@ describe("release canary upgrade", () => {
     assert.equal(approvalVerdict(update).outcome, StepOutcome.Pass);
     assert.equal(approvalVerdict([]).outcome, StepOutcome.Fail);
     assert.equal(approvalVerdict(prompts).outcome, StepOutcome.Fail, "two prompts for one update");
+    // Without the helper Windows elevated without asking: no prompt is no proof.
+    const unasked = approvalVerdict(update, false);
+    assert.equal(unasked.outcome, StepOutcome.Fail);
+    assert.match(unasked.detail, /without asking/);
   });
 
   test("takes Squirrel's newest app folder, never the one its update replaces", () => {

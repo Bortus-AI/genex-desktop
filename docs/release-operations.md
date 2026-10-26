@@ -158,9 +158,13 @@ dependency tree), and starts it once, which sets the sandbox up for that release
 build goes over it as Squirrel's update. The steps are `earlier-release`, `install`, `upgrade-card`
 (the card that asks to update the sandbox, `upgrade-card.png`), `upgrade-approval` (pressing Update
 raises exactly one approval prompt), `upgrade-start` (the studio up with no harness rewind) and
-`agent-command`, run on that same profile. The VM shows approval prompts on the owner's desktop
-(`PromptOnSecureDesktop 0`), where `scripts/canary/windows/uac-approver.ps1`, started there as
-SYSTEM, photographs (`uac-<n>.png`) and approves each one. The standard user then installs the build
+`agent-command`, run on that same profile. Azure's owner account is the built-in Administrator,
+which runs elevated and is never asked, so an upgrade run puts it under Admin Approval Mode
+(`FilterAdministratorToken 1`) with prompts off for the earlier release's own setup.
+`scripts/canary/windows/uac-approver.ps1`, started as SYSTEM on the owner's desktop through WMI
+(Run Command's job cannot hold a process of another session), turns the prompt on right before
+Update is pressed and shows it on the normal desktop (`PromptOnSecureDesktop 0`), where it
+photographs (`uac-<n>.png`) and approves each one; `approver-start.log` says whether it started. The standard user then installs the build
 on the updated machine, as before. The build needs a higher version than the release, or Squirrel
 has nothing to update: dispatch Package with `only: win32` and `version` (for example `0.1.99`).
 
