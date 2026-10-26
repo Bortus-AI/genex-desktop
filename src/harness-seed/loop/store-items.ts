@@ -22,14 +22,24 @@ const DESCRIPTION_CHARS = 1000;
 const PROBLEM_CHARS = 160;
 /** The price an item gets when the user named none: the store grid's first step. */
 export const DEFAULT_ITEM_PRICE = 100;
+/**
+ * The store's default grid of paid prices in Nex (0 is Free): genex.games refuses any other
+ * (`price_off_grid`) when a draft goes up, so a named price takes the nearest step.
+ */
+const PRICE_GRID = [100, 300, 800, 1200, 5000, 20000, 50000] as const;
+
+/** What a store item is once bought: kept (a class, a skin, a rod), or used up. Wire values. */
+export const StoreItemType = { Durable: "durable", Consumable: "consumable" } as const;
+export type StoreItemType = (typeof StoreItemType)[keyof typeof StoreItemType];
 
 /** The Genex tool that makes a store item's draft, asking nobody, and its command. */
 export const GenexStoreCall = { Tool: "genex__cli", ShopAdd: "shop add" } as const;
 
-/** One thing the user sells for Nex: its name, its price in whole Nex and what it is. */
+/** One thing the user sells for Nex: its name, its price in whole Nex, whether it is kept, and what it is. */
 export interface StoreItem {
   name: string;
   price: number;
+  type: StoreItemType;
   description?: string;
 }
 
@@ -50,10 +60,17 @@ function oneLine(value: unknown, max: number): string {
   return typeof value === "string" ? value.replace(/\s+/g, " ").trim().slice(0, max) : "";
 }
 
-/** A price in whole Nex as a model sends it (a number or its digits); the default for anything else. */
+/** The grid's step nearest `price` by ratio (a tie takes the higher one): 10 is 100, 500 is 800. */
+function gridPrice(price: number): number {
+  const distance = (step: number) => Math.abs(Math.log(step / price));
+  return PRICE_GRID.reduce((best, step) => (distance(step) <= distance(best) ? step : best));
+}
+
+/** A price in whole Nex as a model sends it (a number or its digits) on the store's grid; the default for anything else. */
 function priceOf(value: unknown): number {
   const price = typeof value === "string" && value.trim() !== "" ? Number(value) : value;
-  return typeof price === "number" && Number.isInteger(price) && price >= 0 ? price : DEFAULT_ITEM_PRICE;
+  if (typeof price !== "number" || !Number.isInteger(price) || price < 0) return DEFAULT_ITEM_PRICE;
+  return price === 0 ? 0 : gridPrice(price);
 }
 
 /** One item a launch named, or null when it has no name. */
@@ -62,7 +79,8 @@ function storeItemOf(entry: unknown): StoreItem | null {
   const name = oneLine(entry.name, NAME_CHARS);
   if (!name) return null;
   const description = oneLine(entry.description, DESCRIPTION_CHARS);
-  return { name, price: priceOf(entry.price), ...(description ? { description } : {}) };
+  const type = entry.type === StoreItemType.Consumable ? StoreItemType.Consumable : StoreItemType.Durable;
+  return { name, price: priceOf(entry.price), type, ...(description ? { description } : {}) };
 }
 
 /** The list a model sent: an array, or that array as JSON text (an engine that sends every field as a string). */
@@ -112,7 +130,11 @@ async function listOne(
   binding: { project: string; threadId: string },
   item: StoreItem,
 ): Promise<ListedStoreItem> {
-  const options: AnyRecord = { price: item.price, ...(item.description ? { description: item.description } : {}) };
+  const options: AnyRecord = {
+    price: item.price,
+    type: item.type,
+    ...(item.description ? { description: item.description } : {}),
+  };
   const args = { command: GenexStoreCall.ShopAdd, args: item.name, options };
   try {
     const answer = await host.call(HostMethod.PluginsInvoke, { ...binding, name: GenexStoreCall.Tool, args });

@@ -15,6 +15,7 @@ import {
   notListedWords,
   STORE_ITEMS_MAX,
   storeItemsOf,
+  StoreItemType,
   storeScopeItems,
 } from "../../src/harness-seed/loop/store-items.ts";
 import { createScope, restoreScope } from "../../src/harness-seed/loop/scope.ts";
@@ -25,7 +26,12 @@ import { argumentProblems } from "../../src/harness-seed/tools/index.ts";
 import { tools as gameTools } from "../../src/harness-seed/tools/game-tools.ts";
 
 const ASK = "create fisher game with fishing rod for nex";
-const ROD = { name: "Fishing Rod", price: 300, description: "A carbon rod that casts twice as far." };
+const ROD = {
+  name: "Fishing Rod",
+  price: 300,
+  type: StoreItemType.Durable,
+  description: "A carbon rod that casts twice as far.",
+};
 
 describe("a launch names what the user sells for Nex", () => {
   for (const name of ["start_autopilot", "start_unattended_run"]) {
@@ -44,10 +50,10 @@ describe("a launch names what the user sells for Nex", () => {
 
   it("gives an item the user priced no price the store's first step, and keeps each name once", () => {
     assert.deepEqual(
-      storeItemsOf([{ name: "Rod" }, { name: "rod", price: 800 }, { name: "Bait", price: "50" }, { price: 5 }, "Net"]),
+      storeItemsOf([{ name: "Rod" }, { name: "rod", price: 800 }, { name: "Bait", price: "300" }, { price: 5 }, "Net"]),
       [
-        { name: "Rod", price: DEFAULT_ITEM_PRICE },
-        { name: "Bait", price: 50 },
+        { name: "Rod", price: DEFAULT_ITEM_PRICE, type: "durable" },
+        { name: "Bait", price: 300, type: "durable" },
       ],
     );
     assert.deepEqual(
@@ -56,13 +62,29 @@ describe("a launch names what the user sells for Nex", () => {
         { name: "Cap", price: 2.5 },
       ]),
       [
-        { name: "Hat", price: DEFAULT_ITEM_PRICE },
-        { name: "Cap", price: DEFAULT_ITEM_PRICE },
+        { name: "Hat", price: DEFAULT_ITEM_PRICE, type: "durable" },
+        { name: "Cap", price: DEFAULT_ITEM_PRICE, type: "durable" },
       ],
     );
     const many = Array.from({ length: STORE_ITEMS_MAX + 3 }, (_, i) => ({ name: `Skin ${i}`, price: 100 }));
     assert.equal(storeItemsOf(many).length, STORE_ITEMS_MAX);
     for (const nothing of [undefined, null, "", "not json", "{}", 7, {}]) assert.deepEqual(storeItemsOf(nothing), []);
+  });
+
+  it("keeps a thing bought once by default; only one named consumable is used up", () => {
+    const named = [{ name: "Rogue" }, { name: "Potion", type: "consumable" }, { name: "Wings", type: "rig" }];
+    assert.deepEqual(
+      storeItemsOf(named).map((item) => item.type),
+      ["durable", "consumable", "durable"],
+    );
+  });
+
+  it("takes the store grid's price nearest the one the user named, never Free for a paid one", () => {
+    const priced = (price: number) => storeItemsOf([{ name: "Thing", price }])[0]?.price;
+    assert.deepEqual(
+      [10, 50, 100, 250, 500, 1000, 3000, 999999, 0].map(priced),
+      [100, 100, 100, 300, 800, 1200, 5000, 50000, 0],
+    );
   });
 
   it("names nothing when the launch names no store items", async () => {
@@ -102,7 +124,7 @@ describe("listing the items before the build", () => {
     const { host, calls } = storeHost(LOCAL);
     const listed = await listStoreItems(host, { project: "fishing-rod", threadId: "t-1" }, [
       ROD,
-      { name: "Golden Bait", price: 100 },
+      { name: "Golden Bait", price: 100, type: "durable" },
     ]);
     assert.deepEqual(
       calls.map((call) => call.params),
@@ -111,13 +133,17 @@ describe("listing the items before the build", () => {
           project: "fishing-rod",
           threadId: "t-1",
           name: GenexStoreCall.Tool,
-          args: { command: "shop add", args: "Fishing Rod", options: { price: 300, description: ROD.description } },
+          args: {
+            command: "shop add",
+            args: "Fishing Rod",
+            options: { price: 300, type: "durable", description: ROD.description },
+          },
         },
         {
           project: "fishing-rod",
           threadId: "t-1",
           name: GenexStoreCall.Tool,
-          args: { command: "shop add", args: "Golden Bait", options: { price: 100 } },
+          args: { command: "shop add", args: "Golden Bait", options: { price: 100, type: "durable" } },
         },
       ],
     );
@@ -140,7 +166,7 @@ describe("listing the items before the build", () => {
     );
     const listed = await listStoreItems(host, { project: "fishing-rod", threadId: "t-1" }, [
       ROD,
-      { name: "Golden Bait", price: 100 },
+      { name: "Golden Bait", price: 100, type: "durable" },
     ]);
     assert.equal(listed[0]?.id, undefined);
     assert.match(listed[0]?.problem ?? "", /Genex is locked/);

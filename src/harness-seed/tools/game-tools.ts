@@ -73,14 +73,19 @@ const CUT_WORDS =
 
 /** What a launch sells in the game's Genex store: never cut, listed before the build starts (loop/store-items.ts). */
 const STORE_ITEMS_WORDS =
-  'each thing the user sells for Nex, Genex\'s currency (a class, a character, a skin, an item), as {"name","price","description"}: price in whole Nex as they named it, 100 when they named none. Genex lists each in the game\'s store before the build starts, so never put these in cut. Leave it out when nothing is sold for Nex: coins, gold or gems are a currency the game keeps itself';
+  'each thing the user sells for Nex, Genex\'s currency (a class, a character, a skin, an item), as {"name","price","type","description"}: price in whole Nex as they named it (Genex takes the nearest step on the store grid), 100 when they named none; type "durable" for what is kept once bought (a class, a character, a skin), "consumable" only for what is used up. Genex lists each in the game\'s store before the build starts, so never put these in cut. Leave it out when nothing is sold for Nex: coins, gold or gems are a currency the game keeps itself';
 
 /** A store item list parameter: objects, or their JSON array as text from an engine that sends every field as a string. */
 const storeList = () => ({
   type: "array",
   items: {
     type: "object",
-    properties: { name: { type: "string" }, price: { type: "number" }, description: { type: "string" } },
+    properties: {
+      name: { type: "string" },
+      price: { type: "number" },
+      type: { type: "string" },
+      description: { type: "string" },
+    },
     required: ["name"],
   },
   acceptJsonString: true,
