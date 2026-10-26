@@ -19,7 +19,7 @@ import { useSharedSnapshot } from "../use-shared-snapshot.ts";
  */
 import { keepBuilding, keepsBuildingOn } from "../keep-building.ts";
 import type { JSX } from "react";
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { mergeChatEvents } from "../../shared/chat-history.ts";
 import { canBuildWith } from "../../shared/engine-descriptor.ts";
 import { ObserverLive } from "../../shared/observers.ts";
@@ -51,7 +51,7 @@ import { useStill } from "../stills.ts";
 import { readText, storageKeyFor, writeText } from "../storage.ts";
 import { WEB_BUILD_SHOWN_EVENT } from "../web-build-shown.ts";
 import { isPlanning, runIdIn } from "../words.ts";
-import { ShopStage, useShopItems } from "./shop/ShopStage.tsx";
+import { useShopItems } from "./shop/use-shop-items.ts";
 import type { ListingRecord } from "../../shared/item-draft.ts";
 import { AssetsCanvas } from "./AssetsCanvas.tsx";
 import { FileViewer } from "./FileViewer.tsx";
@@ -70,6 +70,9 @@ import { EmptyGame, LiveLoading, NoGame, PlanningBuild, StoppedGame } from "./st
 import { StageStrip } from "./stage/StageStrip.tsx";
 import { type StageTabKey, tabChoice, webBuildView } from "./stage/stage-tabs.ts";
 import { StillsStage } from "./stage/StillsStage.tsx";
+
+/** Shop loads when it opens: the stage's first paint carries none of it. */
+const ShopStage = lazy(() => import("./shop/ShopStage.tsx"));
 import { UnrealStage } from "./stage/UnrealStage.tsx";
 
 const EMPTY_WORKER_EVENTS: EventEnvelope[] = [];
@@ -452,7 +455,11 @@ function StageContents({
       {stageView === StageView.Assets && project ? (
         <AssetsCanvas focusJob={focusedAsset} project={project} onNotice={onNotice} />
       ) : null}
-      {stageView === StageView.Shop && project ? <ShopStage project={project} items={shop} /> : null}
+      {stageView === StageView.Shop && project ? (
+        <Suspense fallback={null}>
+          <ShopStage project={project} items={shop} />
+        </Suspense>
+      ) : null}
       {stageView === StageView.File && beside ? (
         <FileViewer threadId={threadId} target={beside} onClose={() => onCloseBeside?.()} onNotice={onNotice} />
       ) : null}
