@@ -161,7 +161,8 @@ raises exactly one approval prompt), `upgrade-start` (the studio up with no harn
 `agent-command`, run on that same profile. Azure's own account is the built-in Administrator,
 which runs elevated and is never asked even under Admin Approval Mode, so an upgrade run's owner is
 `canary-owner`, an ordinary administrator Prepare makes (UAC on, `EnableLUA 1`), with prompts off
-for the earlier release's own setup.
+for the earlier release's own setup. The earlier installer carries no Mark of the Web: with UAC on,
+SmartScreen holds a release it does not recognize at "Windows protected your PC".
 `scripts/canary/windows/uac-approver.ps1`, started as SYSTEM on the owner's desktop through WMI
 (Run Command's job cannot hold a process of another session), turns the prompt on right before
 Update is pressed and shows it on the normal desktop (`PromptOnSecureDesktop 0`), where it

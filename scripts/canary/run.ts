@@ -301,7 +301,9 @@ async function upgradeRun(platform: Platform, record: Recorder, evidence: string
     const fetched = await fetchEarlierRelease(plan.earlier, path.join(evidence, "download-earlier"));
     await seedGame(userData);
     const offset = logLength(path.join(userData, "logs", "studio.log"));
-    earlier = await platform.install(fetched.file, evidence).catch(async (error: unknown) => {
+    // Not as a download: SmartScreen holds an unrecognized release at "Windows protected your PC"
+    // where UAC is on, and the earlier release's own install is not what this run proves.
+    earlier = await platform.install(fetched.file, evidence, undefined, false).catch(async (error: unknown) => {
       await installFailed(evidence, "earlier-install");
       throw error;
     });
