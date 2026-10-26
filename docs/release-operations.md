@@ -158,9 +158,10 @@ dependency tree), and starts it once, which sets the sandbox up for that release
 build goes over it as Squirrel's update. The steps are `earlier-release`, `install`, `upgrade-card`
 (the card that asks to update the sandbox, `upgrade-card.png`), `upgrade-approval` (pressing Update
 raises exactly one approval prompt), `upgrade-start` (the studio up with no harness rewind) and
-`agent-command`, run on that same profile. Azure's owner account is the built-in Administrator,
-which runs elevated and is never asked, so an upgrade run puts it under Admin Approval Mode
-(`FilterAdministratorToken 1`) with prompts off for the earlier release's own setup.
+`agent-command`, run on that same profile. Azure's owner ran elevated and was never asked (High
+integrity under a Limited task), so an upgrade run switches UAC and Admin Approval Mode on for it
+(`EnableLUA 1`, `FilterAdministratorToken 1`, from the restart after Prepare), with prompts off for
+the earlier release's own setup.
 `scripts/canary/windows/uac-approver.ps1`, started as SYSTEM on the owner's desktop through WMI
 (Run Command's job cannot hold a process of another session), turns the prompt on right before
 Update is pressed and shows it on the normal desktop (`PromptOnSecureDesktop 0`), where it

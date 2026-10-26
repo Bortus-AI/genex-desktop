@@ -199,6 +199,9 @@ async function machineInfo(): Promise<string> {
     const script = [
       "(Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version, BuildNumber | Format-List | Out-String)",
       "(whoami /groups | Select-String 'S-1-5-32-544|Mandatory Label' | Out-String)",
+      // Whether Windows asks for approval, and of whom: the account's SID (RID 500 is the built-in Administrator).
+      "(whoami /user | Out-String)",
+      "(Get-ItemProperty 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System' | Select-Object EnableLUA, ConsentPromptBehaviorAdmin, ConsentPromptBehaviorUser, FilterAdministratorToken, PromptOnSecureDesktop | Format-List | Out-String)",
       "(Get-MpThreatDetection -ErrorAction SilentlyContinue | Format-List | Out-String)",
     ].join("; ");
     lines.push((await powershell(script)).stdout);
@@ -298,7 +301,10 @@ async function upgradeRun(platform: Platform, record: Recorder, evidence: string
     const fetched = await fetchEarlierRelease(plan.earlier, path.join(evidence, "download-earlier"));
     await seedGame(userData);
     const offset = logLength(path.join(userData, "logs", "studio.log"));
-    earlier = await platform.install(fetched.file, evidence);
+    earlier = await platform.install(fetched.file, evidence).catch(async (error: unknown) => {
+      await installFailed(evidence, "earlier-install");
+      throw error;
+    });
     // Its own budget: what is proven here is the update, and a slow first start only delays it.
     const started = await firstStart(
       platform,
@@ -332,6 +338,7 @@ async function upgradeRun(platform: Platform, record: Recorder, evidence: string
       detail: `${installed.output}, over ${earlier.packageDir}`,
     });
   } catch (error) {
+    await installFailed(evidence, "install");
     await record.add({ ...owner, step: CanaryStep.Install, outcome: StepOutcome.Fail, detail: String(error) });
     return;
   }
@@ -365,6 +372,15 @@ async function upgradeRun(platform: Platform, record: Recorder, evidence: string
       step: CanaryStep.AgentCommand,
       ...(await agentCommand(platform, plan.releaseSrc, installed, evidence, userData)),
     });
+}
+
+/** What the screen and Setup's processes looked like when an install laid nothing down: `<name>.png`, `<name>.txt`. */
+async function installFailed(evidence: string, name: string): Promise<void> {
+  await screenshot(path.join(evidence, `${name}.png`));
+  const processes = await powershell(
+    "Get-Process | Where-Object { $_.Name -match 'setup|update|genex|smartscreen|consent' } | Format-Table Id, Name, Path, StartTime -AutoSize | Out-String -Width 300",
+  );
+  await writeFile(path.join(evidence, `${name}.txt`), `${processes.stdout}${processes.stderr}`);
 }
 
 /** Ask the approval helper to turn Windows' prompt on; whether it did within {@link PROMPTS_ON_WAIT_MS}. */
