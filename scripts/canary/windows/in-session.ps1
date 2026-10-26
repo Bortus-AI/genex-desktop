@@ -46,7 +46,8 @@ public static class CanarySession {
   }
   const uint TokenAllAccess = 0xF01FF;
   const int SecurityImpersonation = 2, TokenPrimary = 1, TokenSessionId = 12;
-  const uint CreateNewConsole = 0x10, BreakawayFromJob = 0x01000000;
+  // No window of its own: a console on the owner's desktop is not what a person's PC shows.
+  const uint NoWindow = 0x08000000, BreakawayFromJob = 0x01000000;
   public static int Start(int sessionId, string commandLine) {
     IntPtr own, copy;
     if (!OpenProcessToken(GetCurrentProcess(), TokenAllAccess, out own)) throw Failed("OpenProcessToken");
@@ -57,8 +58,8 @@ public static class CanarySession {
     var startup = new StartupInfo { cb = Marshal.SizeOf(typeof(StartupInfo)), desktop = "winsta0\\default" };
     ProcessInformation info;
     // Out of whatever job holds this process, where the job allows it: a job spans one session.
-    if (!CreateProcessAsUser(copy, null, commandLine, IntPtr.Zero, IntPtr.Zero, false, CreateNewConsole | BreakawayFromJob, IntPtr.Zero, null, ref startup, out info)
-      && !CreateProcessAsUser(copy, null, commandLine, IntPtr.Zero, IntPtr.Zero, false, CreateNewConsole, IntPtr.Zero, null, ref startup, out info))
+    if (!CreateProcessAsUser(copy, null, commandLine, IntPtr.Zero, IntPtr.Zero, false, NoWindow | BreakawayFromJob, IntPtr.Zero, null, ref startup, out info)
+      && !CreateProcessAsUser(copy, null, commandLine, IntPtr.Zero, IntPtr.Zero, false, NoWindow, IntPtr.Zero, null, ref startup, out info))
       throw Failed("CreateProcessAsUser");
     CloseHandle(info.thread); CloseHandle(info.process); CloseHandle(copy); CloseHandle(own);
     return info.processId;

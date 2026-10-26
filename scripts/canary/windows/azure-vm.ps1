@@ -151,13 +151,14 @@ switch ($Phase) {
     Expand-Archive "$Root\src.zip" -DestinationPath $Upload -Force
     icacls $Root /grant "*S-1-5-11:(OI)(CI)M" /T /C /Q | Out-Null
     # The owner approves Genex's one administrator prompt; a test cannot click Yes, so it passes by
-    # itself. An upgrade run counts the prompts of the update itself: Azure's owner account is the
-    # built-in Administrator, which runs elevated and is never asked unless Admin Approval Mode
-    # covers it (from its next logon). uac-approver.ps1 turns prompting on as the update starts and
-    # sees, photographs and approves each prompt on the owner's desktop.
+    # itself. An upgrade run counts the prompts of the update itself: the owner ran elevated and was
+    # never asked on Azure's images (High integrity under a Limited task), so UAC and Admin Approval
+    # Mode are switched on for it (from the restart after this phase). uac-approver.ps1 turns
+    # prompting on as the update starts and sees, photographs and approves each prompt.
     $policies = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
     Set-ItemProperty $policies ConsentPromptBehaviorAdmin 0
     if ($UpgradeFrom) {
+      Set-ItemProperty $policies EnableLUA 1 -Type DWord
       Set-ItemProperty $policies FilterAdministratorToken 1 -Type DWord
       Set-ItemProperty $policies PromptOnSecureDesktop 0
     }
