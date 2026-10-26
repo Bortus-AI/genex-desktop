@@ -6,8 +6,8 @@
  * for a paid command the user has just approved. A store item's picture, model and package name
  * paths inside the bound game (`gamePaths`), which the host checks by real path and copies into the
  * run folder; `items add` names the shared item whose folder the host moves into the game
- * (`delivers`). `shop publish` and `shop unpublish` are never in the table: only the person puts an
- * item on sale, from the Listing draft card (D40). The shop's commands also work on the game's local
+ * (`delivers`). `shop publish` and `shop unpublish` are never in the table: Studio puts a game's
+ * items on sale itself after its publish (`local-items.ts`), never an agent. The shop's commands also work on the game's local
  * drafts (`.genex/items/`, made before the game is on Genex): Studio copies them into the run folder
  * and carries a change back (`localItems`). `shop sync`, which uploads them, is Studio's own run after
  * a publish ({@link localSyncRequest}), never the agent's.

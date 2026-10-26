@@ -686,7 +686,7 @@ describe("the person's Other games can use it on a local draft", () => {
     });
 });
 
-describe("only Studio uploads local drafts, and only the person puts one on sale (D40)", () => {
+describe("only Studio uploads local drafts and puts them on sale", () => {
   it("never runs `genex shop sync` for an agent, through either tool", () => {
     for (const paid of [true, false])
       assert.throws(

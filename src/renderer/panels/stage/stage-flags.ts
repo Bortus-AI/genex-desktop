@@ -22,10 +22,11 @@ export interface LiveFlagsInput {
  */
 export function resolveStageView(
   view: StageView,
-  has: { beside: boolean; builds: boolean; project: boolean },
+  has: { beside: boolean; builds: boolean; project: boolean; shop?: boolean },
 ): StageView {
   if (view === StageView.File && has.beside) return StageView.File;
   if (view === StageView.Builds && has.builds) return StageView.Builds;
+  if (view === StageView.Shop && has.shop && has.project) return StageView.Shop;
   if (view === StageView.Assets && has.project) return StageView.Assets;
   return StageView.Live;
 }
@@ -45,12 +46,15 @@ export function stageFlags({
   liveView,
   pending,
   live,
+  shop = false,
 }: {
   view: StageView;
   beside: BesideTarget | null;
   graph: RunGraphModel | null;
   planning: boolean;
   project: string | null;
+  /** The game sells something: Shop can be shown. */
+  shop?: boolean;
   /** The view Live shows for this game (`liveViewFor`). */
   liveView: ObserverLive;
   pending: boolean;
@@ -60,6 +64,7 @@ export function stageFlags({
     beside: Boolean(beside),
     builds: graph !== null || planning,
     project: Boolean(project),
+    shop: Boolean(project) && shop,
   });
   const onLive = Boolean(project) && stageView === StageView.Live;
   const previewOnStage = onLive && liveView === ObserverLive.Preview;
@@ -87,6 +92,8 @@ export function stageFlags({
     buildsOpen: stageView === StageView.Builds,
     /** Assets is a full-stage surface like Builds: the native game view has to give the rectangle back. */
     assetsOpen: stageView === StageView.Assets,
+    /** Shop is a full-stage surface too. */
+    shopOpen: stageView === StageView.Shop,
     fileOpen: stageView === StageView.File,
   };
 }

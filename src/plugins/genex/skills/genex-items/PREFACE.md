@@ -33,13 +33,13 @@ Where it disagrees with this preface, this preface wins.
 - Never ask the person whether an item is shared with other games, resellable, consumable or
   which picture it gets before listing it: list it with what you know (`shared` only when they
   said so). When the draft comes back, Studio draws its card in the chat after your reply, with
-  **Put on sale** and "Other games can use it", which are theirs. `genex shop publish` and `unpublish` are not available:
-  only the person puts an item on sale, from that card or Create › Items. Say it is ready and that
-  they can ask for changes.
+  "Other games can use it", which is theirs, and shows it on the game's Shop tab. Studio puts every
+  item on sale itself when the game is published; `genex shop publish` and `unpublish` are not
+  available. Say it is listed, goes on sale with the next publish, and that they can ask for changes.
 - In a game that is not on Genex yet, `shop add` keeps the item as a local draft in
   `.genex/items/` (its id starts `local_`; `genex__cli` `shop set|remove <local id>` change it). Leave those
-  files to the CLI: Studio carries them. Its card offers **Sell when published**; after the game's
-  publish Studio uploads the drafts itself and puts on sale only what the person approved, unchanged.
+  files to the CLI: Studio carries them. After the game's publish Studio uploads the drafts
+  itself and puts them on sale.
   `genex shop sync` is Studio's, not yours.
 - `genex items search "<words>"` is `genex__cli {"command":"items search","args":"<words>"}` (and
   `"options":{"tag":["fire"]}`), `genex items list` is `genex__cli {"command":"items list"}`, and

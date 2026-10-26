@@ -373,7 +373,7 @@ describe("a Studio-run CLI command and the Listing draft card", () => {
   });
 });
 
-describe("only the person puts an item on sale (D40)", () => {
+describe("no agent puts an item on sale: Studio does after a publish", () => {
   it("never runs `genex shop publish` or `unpublish` for an agent, through either tool", () => {
     for (const command of ["shop publish", "shop unpublish"])
       for (const paid of [true, false])
