@@ -34,6 +34,11 @@ const GROUP_LIFETIME_MS = 3 * HOUR_MS;
 const PHASE_TIMEOUT_MS = 90 * MINUTE_MS;
 const OWNER_NAME = "genexowner";
 /**
+ * The owner of an upgrade run: an ordinary administrator Prepare makes, as a person's own PC has.
+ * Azure's account is the built-in Administrator, which runs elevated and is never asked to approve.
+ */
+const UPGRADE_OWNER_NAME = "canary-owner";
+/**
  * Files in each Azure account's lived-in profile, fewer than the GitHub runner's 150,000: two cores
  * with Defender scanning every write take about seven seconds per thousand files.
  */
@@ -452,6 +457,7 @@ async function runMachine(
     const placed = await createSomewhere(options, sizeAsked, locations, ownerPassword);
     group = placed.group;
     const { storage } = placed;
+    const owner = options.upgradeFrom ? UPGRADE_OWNER_NAME : OWNER_NAME;
     const common = {
       Machine: options.machine,
       Tag: options.tag,
@@ -464,11 +470,11 @@ async function runMachine(
       ...common,
       SourceUrl: await blobUrl(storage, "src.zip", "r"),
       NodeVersion: options.nodeVersion,
-      OwnerName: OWNER_NAME,
+      OwnerName: owner,
       OwnerPassword: ownerPassword,
     });
     await restart(group);
-    await phase(group, "Owner", { ...common, OwnerName: OWNER_NAME });
+    await phase(group, "Owner", { ...common, OwnerName: owner });
     await restart(group);
     await phase(group, "Standard", common);
     await phase(group, "Collect", { UploadUrl: await blobUrl(storage, "evidence.zip", "cw") });
