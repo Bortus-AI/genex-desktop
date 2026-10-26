@@ -6069,6 +6069,8 @@ export default {
   "It’s already this game’s own item.": "すでにこのゲームのアイテムです。",
   "Listing draft: {name}": "出品の下書き: {name}",
   "Draft · goes on sale when you publish": "下書き · 公開すると販売開始",
+  Draft: "下書き",
+  "Drafts go on sale when you publish.": "下書きは公開すると販売開始されます。",
   "This item changed after this card. See it in Items › Selling before you put it on sale.":
     "このアイテムはこのカードの後に変更されました。販売する前に アイテム › 販売 で確認してください。",
   "It changed since you approved it, so it stayed a draft.": "承認した後に変更されたため、下書きのままです。",

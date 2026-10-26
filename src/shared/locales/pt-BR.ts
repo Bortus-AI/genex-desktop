@@ -6151,6 +6151,8 @@ export default {
   "It’s already this game’s own item.": "Já é um item próprio deste jogo.",
   "Listing draft: {name}": "Rascunho de venda: {name}",
   "Draft · goes on sale when you publish": "Rascunho · entra à venda quando você publicar",
+  Draft: "Rascunho",
+  "Drafts go on sale when you publish.": "Os rascunhos entram à venda quando você publicar.",
   "This item changed after this card. See it in Items › Selling before you put it on sale.":
     "Este item mudou depois deste cartão. Veja-o em Itens › Vendas antes de colocá-lo à venda.",
   "It changed since you approved it, so it stayed a draft.":

@@ -5938,6 +5938,8 @@ export default {
   "It’s already this game’s own item.": "이미 이 게임의 아이템이에요.",
   "Listing draft: {name}": "판매 초안: {name}",
   "Draft · goes on sale when you publish": "초안 · 게시하면 판매 시작",
+  Draft: "초안",
+  "Drafts go on sale when you publish.": "초안은 게시하면 판매가 시작돼요.",
   "This item changed after this card. See it in Items › Selling before you put it on sale.":
     "이 아이템은 이 카드 이후에 바뀌었어요. 판매하기 전에 아이템 › 판매에서 확인해 주세요.",
   "It changed since you approved it, so it stayed a draft.": "승인한 뒤에 바뀌어서 초안으로 남았어요.",

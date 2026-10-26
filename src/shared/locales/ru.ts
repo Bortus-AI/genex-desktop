@@ -6117,6 +6117,8 @@ export default {
   "It’s already this game’s own item.": "Это уже собственный предмет этой игры.",
   "Listing draft: {name}": "Черновик товара: {name}",
   "Draft · goes on sale when you publish": "Черновик · поступит в продажу, когда опубликуешь",
+  Draft: "Черновик",
+  "Drafts go on sale when you publish.": "Черновики поступят в продажу, когда опубликуешь.",
   "This item changed after this card. See it in Items › Selling before you put it on sale.":
     "Этот предмет изменился после этой карточки. Посмотри его в разделе Предметы › Продажи, прежде чем выставлять на продажу.",
   "It changed since you approved it, so it stayed a draft.":
