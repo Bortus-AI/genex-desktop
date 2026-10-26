@@ -151,14 +151,15 @@ switch ($Phase) {
     Expand-Archive "$Root\src.zip" -DestinationPath $Upload -Force
     icacls $Root /grant "*S-1-5-11:(OI)(CI)M" /T /C /Q | Out-Null
     # The owner approves Genex's one administrator prompt; a test cannot click Yes, so it passes by
-    # itself. An upgrade run shows it on the owner's desktop instead, where uac-approver.ps1 sees,
-    # photographs and approves each one, so the run can count them.
+    # itself. An upgrade run counts the prompts of the update itself: Azure's owner account is the
+    # built-in Administrator, which runs elevated and is never asked unless Admin Approval Mode
+    # covers it (from its next logon). uac-approver.ps1 turns prompting on as the update starts and
+    # sees, photographs and approves each prompt on the owner's desktop.
     $policies = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+    Set-ItemProperty $policies ConsentPromptBehaviorAdmin 0
     if ($UpgradeFrom) {
-      Set-ItemProperty $policies ConsentPromptBehaviorAdmin 5
+      Set-ItemProperty $policies FilterAdministratorToken 1 -Type DWord
       Set-ItemProperty $policies PromptOnSecureDesktop 0
-    } else {
-      Set-ItemProperty $policies ConsentPromptBehaviorAdmin 0
     }
     # A new account's first sign-in goes straight to the desktop (no privacy questions or animation).
     New-Item -Force "HKLM:\SOFTWARE\Policies\Microsoft\Windows\OOBE" | Out-Null
@@ -182,13 +183,21 @@ switch ($Phase) {
       $upgrade = " --upgrade-from '$UpgradeFrom'"
       Remove-Item $stop -Force -ErrorAction SilentlyContinue
       $approver = "$Upload\scripts\canary\windows\uac-approver.ps1"
-      # Without it the prompts wait unanswered: the run then fails its approval step, and says why here.
-      try {
-        & "$Upload\scripts\canary\windows\in-session.ps1" -UserName $OwnerName `
-          -CommandLine "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$approver`" -Out `"$out`" -Stop `"$stop`""
-      } catch {
-        Write-Output "the approval helper did not start: $_"
-      }
+      # Started through WMI, outside Run Command's job: a job cannot hold processes of two sessions,
+      # so starting one in the owner's session from inside it is refused ("Access is denied").
+      # Without the helper the update elevates without asking and the run fails its approval step.
+      $launcher = Join-Path $Root "start-approver.ps1"
+      $launchLog = Join-Path $out "approver-start.log"
+      $line = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$approver`" -Out `"$out`" -Stop `"$stop`""
+      Set-Content -Path $launcher -Encoding UTF8 -Value @(
+        "`$env:CANARY_DISPOSABLE = '1'",
+        "try { & '$Upload\scripts\canary\windows\in-session.ps1' -UserName '$OwnerName' -CommandLine '$($line -replace "'", "''")' *> '$launchLog' }",
+        "catch { `"the approval helper did not start: `$_`" | Out-File -Append '$launchLog' }"
+      )
+      $made = Invoke-CimMethod -ClassName Win32_Process -MethodName Create `
+        -Arguments @{ CommandLine = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$launcher`"" }
+      Start-Sleep -Seconds 20
+      Write-Output "approval helper launcher: WMI result $($made.ReturnValue); $((Get-Content $launchLog -ErrorAction SilentlyContinue) -join ' ')"
     }
     $script = @(
       "& '$Node' '$Upload\scripts\canary\lived-in-profile.ts' --home `$env:USERPROFILE --force-own-home --files $Files",

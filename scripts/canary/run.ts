@@ -12,6 +12,7 @@
 // user installs the same Setup.exe its owner did). --release-src is a checkout of the release's
 // tag: its tests/e2e/run-electron-e2e.mjs drives the agent command, so the fake engine's script
 // matches the build. Exits 1 when a step failed.
+import { existsSync } from "node:fs";
 import { cp, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -36,6 +37,8 @@ import { powershell, sh, tail } from "./shell.ts";
 import {
   APPROVALS_FILE,
   approvalsBetween,
+  PROMPTS_ON_FILE,
+  PROMPTS_SWITCHED_FILE,
   approvalVerdict,
   fetchEarlierRelease,
   pressButton,
@@ -58,6 +61,8 @@ const START_POLL_MS = SECOND_MS;
 const UPGRADE_CARD_BUDGET_MS = 4 * MINUTE_MS;
 /** How long Setup.exe's own start of the updated app is waited for before the canary opens it. */
 const UPGRADE_LAUNCH_WAIT_MS = MINUTE_MS;
+/** How long the approval helper may take to turn Windows' prompt on before Update is pressed. */
+const PROMPTS_ON_WAIT_MS = 15 * SECOND_MS;
 /** How long the Update button is looked for on the card. */
 const UPDATE_BUTTON_MS = 90 * SECOND_MS;
 /** How long the start after the update may take: the sandbox's install, then grants on the kept profile. */
@@ -333,6 +338,7 @@ async function upgradeRun(platform: Platform, record: Recorder, evidence: string
   const card = await waitForCard(platform, installed, log, offset, evidence);
   await record.add({ ...owner, step: CanaryStep.UpgradeCard, ...card });
   if (card.outcome === StepOutcome.Fail) return platform.quit(installed);
+  const helperReady = await promptsOn(evidence);
   const pressedAt = Date.now();
   const pressed = await pressButton(UPDATE_BUTTON, UPDATE_BUTTON_MS);
   await sleep(5 * SECOND_MS);
@@ -343,7 +349,9 @@ async function upgradeRun(platform: Platform, record: Recorder, evidence: string
   await platform.quit(installed);
   const approvals = readApprovals(await readFile(path.join(evidence, APPROVALS_FILE), "utf8").catch(() => ""));
   const approval =
-    pressed.outcome === StepOutcome.Fail ? pressed : approvalVerdict(approvalsBetween(approvals, pressedAt, readyAt));
+    pressed.outcome === StepOutcome.Fail
+      ? pressed
+      : approvalVerdict(approvalsBetween(approvals, pressedAt, readyAt), helperReady);
   await record.add({ ...owner, step: CanaryStep.UpgradeApproval, ...approval });
   await record.add({
     ...owner,
@@ -357,6 +365,17 @@ async function upgradeRun(platform: Platform, record: Recorder, evidence: string
       step: CanaryStep.AgentCommand,
       ...(await agentCommand(platform, plan.releaseSrc, installed, evidence, userData)),
     });
+}
+
+/** Ask the approval helper to turn Windows' prompt on; whether it did within {@link PROMPTS_ON_WAIT_MS}. */
+async function promptsOn(evidence: string): Promise<boolean> {
+  await writeFile(path.join(evidence, PROMPTS_ON_FILE), new Date().toISOString());
+  const deadline = Date.now() + PROMPTS_ON_WAIT_MS;
+  while (Date.now() < deadline) {
+    if (existsSync(path.join(evidence, PROMPTS_SWITCHED_FILE))) return true;
+    await sleep(START_POLL_MS);
+  }
+  return false;
 }
 
 /** The update card in the log after the build's install; Setup.exe opens the app, or the canary does. */

@@ -38,23 +38,28 @@ public static class CanarySession {
   const int PrivilegeEnabled = 2;
   static void Enable(IntPtr token, string name) {
     var state = new TokenPrivilege { count = 1, attributes = PrivilegeEnabled };
-    if (!LookupPrivilegeValue(null, name, out state.luid)) throw new System.ComponentModel.Win32Exception();
-    if (!AdjustTokenPrivileges(token, false, ref state, 0, IntPtr.Zero, IntPtr.Zero)) throw new System.ComponentModel.Win32Exception();
+    if (!LookupPrivilegeValue(null, name, out state.luid)) throw Failed("LookupPrivilegeValue " + name);
+    if (!AdjustTokenPrivileges(token, false, ref state, 0, IntPtr.Zero, IntPtr.Zero)) throw Failed("AdjustTokenPrivileges " + name);
+  }
+  static Exception Failed(string step) {
+    return new Exception(step + ": " + new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error()).Message);
   }
   const uint TokenAllAccess = 0xF01FF;
   const int SecurityImpersonation = 2, TokenPrimary = 1, TokenSessionId = 12;
-  const uint CreateNewConsole = 0x10;
+  const uint CreateNewConsole = 0x10, BreakawayFromJob = 0x01000000;
   public static int Start(int sessionId, string commandLine) {
     IntPtr own, copy;
-    if (!OpenProcessToken(GetCurrentProcess(), TokenAllAccess, out own)) throw new System.ComponentModel.Win32Exception();
+    if (!OpenProcessToken(GetCurrentProcess(), TokenAllAccess, out own)) throw Failed("OpenProcessToken");
     // Held by SYSTEM, not all on by default: the session id, and starting a process with a token.
     foreach (var name in new[] { "SeTcbPrivilege", "SeAssignPrimaryTokenPrivilege", "SeIncreaseQuotaPrivilege" }) Enable(own, name);
-    if (!DuplicateTokenEx(own, TokenAllAccess, IntPtr.Zero, SecurityImpersonation, TokenPrimary, out copy)) throw new System.ComponentModel.Win32Exception();
-    if (!SetTokenInformation(copy, TokenSessionId, ref sessionId, 4)) throw new System.ComponentModel.Win32Exception();
+    if (!DuplicateTokenEx(own, TokenAllAccess, IntPtr.Zero, SecurityImpersonation, TokenPrimary, out copy)) throw Failed("DuplicateTokenEx");
+    if (!SetTokenInformation(copy, TokenSessionId, ref sessionId, 4)) throw Failed("SetTokenInformation");
     var startup = new StartupInfo { cb = Marshal.SizeOf(typeof(StartupInfo)), desktop = "winsta0\\default" };
     ProcessInformation info;
-    if (!CreateProcessAsUser(copy, null, commandLine, IntPtr.Zero, IntPtr.Zero, false, CreateNewConsole, IntPtr.Zero, null, ref startup, out info))
-      throw new System.ComponentModel.Win32Exception();
+    // Out of whatever job holds this process, where the job allows it: a job spans one session.
+    if (!CreateProcessAsUser(copy, null, commandLine, IntPtr.Zero, IntPtr.Zero, false, CreateNewConsole | BreakawayFromJob, IntPtr.Zero, null, ref startup, out info)
+      && !CreateProcessAsUser(copy, null, commandLine, IntPtr.Zero, IntPtr.Zero, false, CreateNewConsole, IntPtr.Zero, null, ref startup, out info))
+      throw Failed("CreateProcessAsUser");
     CloseHandle(info.thread); CloseHandle(info.process); CloseHandle(copy); CloseHandle(own);
     return info.processId;
   }
