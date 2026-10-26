@@ -59,6 +59,7 @@ import { type ActiveRun, type RunReopen, StatusLane, type Studio } from "./studi
 import { clampRunHours, MAX_RUN_HOURS } from "./config.ts";
 import { CLIP_GAME_TITLE } from "./text.ts";
 import { createScope, userWordsInLog } from "./scope.ts";
+import { type ListedStoreItem, listStoreItems, notListedWords, storeItemsOf, storeScopeItems } from "./store-items.ts";
 import { closeCarriedPool } from "./workers/carry.ts";
 import type { AnyRecord, ForwardedCall, HarnessCtx, HarnessEvent, Host, HostCall } from "../types/harness.d.ts";
 import type { ModelPreferences, RunSpec } from "../types/host-api.d.ts";
@@ -901,7 +902,6 @@ export async function launchFromIntake(
     readiness?.missing,
   );
   if (refusal) throw new Error(refusal);
-  const run = intakeRun(spec, action, project, readiness, await userWordsSoFar(host, action));
   // A promise the run cannot keep is worse than no promise: a second Loop for a game
   // that already owns a run is refused below, and the only record of that refusal is an event
   // no chat surface renders. Ask the same question here, before anything is promised — once a
@@ -914,10 +914,15 @@ export async function launchFromIntake(
   // before anything is promised, when the run's engine is none the host seats there.
   const needsSession = await needsSessionRefusal(host, listed, spec);
   if (needsSession) throw new Error(needsSession);
+  // What the user sells for Nex goes in the game's Genex store now, before anything is built: each
+  // card is in the chat at once, and the run's scope names every item, so no plan can cut it.
+  const store = await listStoreItems(host, { project, threadId: action.threadId }, storeItemsOf(spec.storeItems));
+  const run = intakeRun(spec, action, project, readiness, await userWordsSoFar(host, action), store);
   // Such a Loop adds no connection and ends on a reviewer's yes: its own promise.
-  const promise = openLoop
+  const launched = openLoop
     ? openLaunchPromise(run.budgets, Date.now())
     : launchPromise(run.budgets, run.readiness, Date.now());
+  const promise = [launched, notListedWords(store)].filter(Boolean).join("\n\n");
   // The board did its job — the run spec carries the frames now; the next interview on this
   // thread starts with a clean slate.
   studio.moodBoards.delete(action.threadId);
@@ -1057,14 +1062,16 @@ function readInto(events: readonly HarnessEvent[], messageId: string): Set<strin
 }
 
 /**
- * What the run is for (loop/scope.ts): the user's words as the log has them, and the in-scope and cut
- * lists the launch named. None when there are no words to keep.
+ * What the run is for (loop/scope.ts): the user's words as the log has them, the in-scope and cut
+ * lists the launch named, and what it sells in the Genex store as listed. None when there are no
+ * words to keep.
  */
-function intakeScope(spec: AnyRecord, asked: readonly string[]): AnyRecord {
+function intakeScope(spec: AnyRecord, asked: readonly string[], store: readonly ListedStoreItem[]): AnyRecord {
   const scope = createScope({
     asked,
     inScope: Array.isArray(spec.inScope) ? spec.inScope : [],
     cut: Array.isArray(spec.cut) ? spec.cut : [],
+    store: storeScopeItems(store),
   });
   return scope.asked.length ? { scope } : {};
 }
@@ -1076,6 +1083,7 @@ function intakeRun(
   project: string,
   readiness: { contract?: string; problems?: string[] } | null,
   asked: readonly string[] = [],
+  store: readonly ListedStoreItem[] = [],
 ): RunSpec & AnyRecord {
   return {
     runId: `run_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
@@ -1096,7 +1104,7 @@ function intakeRun(
     ...(spec.engine ? { engine: spec.engine } : {}),
     ...(spec.model ? { model: spec.model } : {}),
     ...(spec.roles ? { roles: spec.roles } : {}),
-    ...intakeScope(spec, asked),
+    ...intakeScope(spec, asked, store),
     // The run inherits the interview's effort: builders work at exactly the model and effort
     // the user generates with, never a quieter tier than the chat that commissioned them.
     ...commissionedWith(action),
