@@ -365,14 +365,16 @@ frame only, `STUDIO_UI_ONLY`); prices, shares and counts are genex.games' own, n
   A tab chosen, the sidebar's Items row pressed again and the window coming back read the tab on
   show again (a burst once, `REREAD_GAP_MS`); Put on sale, Take off sale and sharing read Selling
   again at once, Add to and Remove from the item's detail.
-- The **Listing draft card**: when `genex__cli` runs `shop add` (no card asks first) or `genex__cli-paid` runs `shop set` and the pinned
+- The **Listing draft card**: when `genex__cli` runs `shop add` (no card asks first; it refuses an item
+  without its picture, `image`, and runs at any time, with or without a build) or `genex__cli-paid` runs `shop set` and the pinned
   CLI answers its `--json` draft (`kind: "genex.item_draft"`, version 1) for the game's own hosted
   project, main records `item_drafted` in the chat (`main/core/item-draft.ts`) and announces
   `item.drafted`. The harness may write neither, and a draft an agent writes in words is text. The
   card goes up after the turn's reply, one per item (a newer draft replaces it), with the price,
-  **Other games can use it** (main's `itemSetShared`) and where its sale stands: "Draft · goes on sale
-  when you publish", On sale (read from Selling too, so a sale Studio made shows), or Off sale; changes
-  are the agent's ("Ask for changes below"). Nothing on the card puts an item on sale, and Studio's
+  **Other games can use it** (main's `itemSetShared`, on an item genex.games holds) and where its sale
+  stands: "Draft · goes on sale when you publish", On sale (read from Selling too, so a sale Studio
+  made shows), or Off sale; the description shows two lines at most; changes are the agent's ("Ask for
+  changes below"). Nothing on the card puts an item on sale, and Studio's
   CLI runs never publish (`shop publish` is not in its command table): Studio itself does, after a
   publish (below). `picture_missing` / `picture_invalid` ask the agent to upload the picture. The
   agent's `shop add|set` takes the description, tags, sharing, Free and the game's picture, model
@@ -382,8 +384,8 @@ frame only, `STUDIO_UI_ONLY`); prices, shares and counts are genex.games' own, n
   keeps it in the game's `.genex/items/` (`<localId>.json` and a `<localId>/` folder). Studio copies
   those drafts into each `shop` run's folder and carries a `shop add|set|remove`'s change back
   (`main/core/local-item-files.ts`: drafts only, never through a link, capped). Its card (`state:
-  "local"`, keyed by local id) says "Draft · goes on sale when you publish". **Other games can use it**
-  on a local draft is main's own `shop set <localId> --shared|--no-shared`. Once the game's publish
+  "local"`, keyed by local id) says "Draft · goes on sale when you publish" and offers no **Other games
+  can use it**, since no other game can reach an item before its game is on Genex. Once the game's publish
   record says its publish made it public (`status: "published"`, written last: a publish that failed
   part-way or is still running has none), `main/core/local-items.ts` settles the game while one of its
   chats shows a local card or Studio's record (`<userData>/item-approvals.json`) holds a draft not yet
@@ -398,7 +400,9 @@ frame only, `STUDIO_UI_ONLY`); prices, shares and counts are genex.games' own, n
   what goes up, so a `last-sync.json` from a terminal `genex publish` uploads nothing.
 - The **Shop** tab (`panels/shop/`): beside Live and Builds once the game sells something, every item
   of the game as its chat's cards show it (its local drafts, then its items Selling lists for its
-  hosted project), each with **Ask for changes**, which leaves `changeItemPrompt` in the game's chat.
+  hosted project), drawn as tiles (`ListingLook.Tile`): the picture on top with the sale's word (Draft,
+  On sale, Off sale) and a pencil whose tooltip says **Ask for changes**, which leaves
+  `changeItemPrompt` in the game's chat; then the name beside the price, the description and sharing.
 
 Fixtures: with `STUDIO_FIXTURE_GENEX_ACCOUNT=1`, `dev/fixture-store.ts` answers the store (Stick &
 Steel's store; the account's Snowball items); `--fixture items-store` makes the fixture game the
@@ -420,7 +424,8 @@ in the chat `[data-listing-draft="<id>"][data-listing-sale="offer|pressing|on-sa
 `[data-listing-share="<id>"]`, `[data-listing-put-on-sale="<id>"]`, `[data-listing-on-sale]`; a local draft's
 `[data-listing-draft="<localId>"][data-listing-local="offer|approved|changed|removed"]`,
 `[data-listing-local-status]`, `[data-listing-sell-when-published="<localId>"]` (`aria-pressed`),
-`[data-listing-undo-sell="<localId>"]`, `[data-listing-local-changed]`, `[data-listing-stayed-draft]`.
+`[data-listing-undo-sell="<localId>"]`, `[data-listing-local-changed]`, `[data-listing-stayed-draft]`;
+the Shop tab's `[data-shop-stage]`, each tile's pencil `[data-listing-ask]`.
 
 ## Where to work
 

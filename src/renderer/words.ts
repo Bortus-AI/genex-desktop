@@ -5468,7 +5468,7 @@ export const ITEMS_WORDS = {
   askAgent: t("Ask the agent to change it"),
   /** No design copy: Selling with nothing made yet. */
   noItems: t("Items you make show up here. Ask your game’s agent for one."),
-  // The Listing draft card (screen 09): in the chat its composer below takes a change; on Shop, a button.
+  // The Listing draft card (screen 09): in the chat its composer below takes a change; on Shop, a pencil.
   askBelow: t("Ask for changes below"),
   askForChanges: t("Ask for changes"),
   /** No design copy: the card once its item is on sale. */
@@ -5476,6 +5476,10 @@ export const ITEMS_WORDS = {
   listingLabel: (name: string) => t("Listing draft: {name}", { name }),
   /** A draft, here or on Genex: Studio puts it on sale when the game is published. */
   draftStatus: t("Draft · goes on sale when you publish"),
+  /** The same in a word, on a Shop tile's picture. */
+  draft: t("Draft"),
+  /** Above the Shop tab's tiles. */
+  draftsNote: t("Drafts go on sale when you publish."),
   /** No design copy: after the publish, a draft changed since its approval stays a draft. */
   stayedDraft: t("It changed since you approved it, so it stayed a draft."),
   /** No design copy: Genex got a version of the item this card never showed (an edit outside Studio). */

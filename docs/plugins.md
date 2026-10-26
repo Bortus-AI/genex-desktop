@@ -3382,7 +3382,8 @@ Genex:
   ProcessSandbox in a fresh `<userData>/genex-cli/<id>` folder (also its `HOME`), never a game
   folder, so the CLI's skill sync and contract healing touch only that folder, which is removed
   afterwards. `main/core/genex-cli-policy.ts` allows doctor, budget, `llm models|status|cancel`,
-  `shop list`, `shop add` (a draft spends and sells nothing, so no card asks), `shop set|remove` on a
+  `shop list`, `shop add` (a draft spends and sells nothing, so no card asks; it requires `image`,
+  since no item is listed without its picture), `shop set|remove` on a
   local draft (`freeOnLocalDraft`) and `items list|search` free, and `llm bench`, `shop set|remove`
   on an item in the store, `shop test` and `items add|remove` paid; everything else, `shop publish|unpublish` (Studio puts a game's items
   on sale after its publish), `shop sync` (Studio's own upload of local drafts after a publish, `syncLocalItems`), `budget --assets` (its allowance would live only in the removed run folder) and
@@ -3433,7 +3434,7 @@ Genex:
   refreshes them; `genex-skills-vendor.test.ts` catches drift) and served as file skills. Genex's
   currency is Nex (the cards call it coin), and the prefaces make store items the default for it:
   a thing priced in Nex, or sold for real money with no currency named, is a store item the agent
-  lists with `shop add` without asking, so its card shows; coins, gold or gems are the game's own
+  lists with `shop add` and its picture without asking, at any time, so its card shows; coins, gold or gems are the game's own
   currency unless the person says they are for real money, when it asks once. Dynamic payments
   stay for amounts decided while playing. A card a
   CLI release not yet on npm changed is vendored ahead of the pin (`--ahead-from <apps/cli> --ahead

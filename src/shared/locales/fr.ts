@@ -6183,6 +6183,8 @@ export default {
   "It’s already this game’s own item.": "C’est déjà un objet propre à ce jeu.",
   "Listing draft: {name}": "Brouillon de vente : {name}",
   "Draft · goes on sale when you publish": "Brouillon · mis en vente quand tu publies",
+  Draft: "Brouillon",
+  "Drafts go on sale when you publish.": "Les brouillons sont mis en vente quand tu publies.",
   "This item changed after this card. See it in Items › Selling before you put it on sale.":
     "Cet objet a changé après cette carte. Regarde-le dans Objets › Ventes avant de le mettre en vente.",
   "It changed since you approved it, so it stayed a draft.":
