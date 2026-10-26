@@ -503,6 +503,7 @@ export default {
   "Ben-Day": "Бен-Дей",
   "Best fit": "Лучший выбор",
   Better: "Улучшение",
+  Beta: "Бета",
   "Between builds": "Между сборками",
   "Billed by each provider you use": "Оплата — отдельно у каждого провайдера",
   "Billed by each provider you use.": "Оплата у каждого провайдера, которым пользуешься.",
@@ -810,6 +811,37 @@ export default {
   "Codex skill discovery closed. Refresh to retry.": "Поиск навыков Codex прервался. Обнови, чтобы попробовать снова.",
   "Codex skill discovery timed out. Refresh to retry.":
     "Поиск навыков Codex не уложился во время. Обнови, чтобы попробовать снова.",
+  "Cursor didn't answer. Check the installation, then try again.":
+    "Cursor не ответил. Проверь установку и попробуй снова.",
+  "Cursor is unavailable": "Cursor недоступен",
+  "Cursor isn't installed on this computer.": "Cursor не установлен на этом компьютере.",
+  "Cursor sign-in": "Вход в Cursor",
+  "Cursor {version}, {count, plural, other {# model(s)}}":
+    "Cursor {version}, {count, plural, one {# модель} few {# модели} many {# моделей} other {# модели}}",
+  "Cursor's CLI forgets this computer's sign-in": "CLI Cursor забудет вход на этом компьютере",
+  "Cursor's model list could not be read.": "Не удалось прочитать список моделей Cursor.",
+  "Cursor's sign-in status could not be read.": "Не удалось узнать, выполнен ли вход в Cursor.",
+  "Finish signing in to Cursor in your browser. Cursor keeps the sign-in.":
+    "Заверши вход в Cursor в браузере. Cursor сам хранит вход.",
+  "Finish signing in to Grok in your browser.": "Заверши вход в Grok в браузере.",
+  "Grok Build didn't answer. Check the installation, then try again.":
+    "Grok Build не ответил. Проверь установку и попробуй ещё раз.",
+  "Grok Build isn't installed on this Mac.": "Grok Build не установлен на этом Mac.",
+  "Grok Build isn't signed in.": "Grok Build не выполнил вход.",
+  "Grok Build sign-in": "Вход в Grok Build",
+  "Grok Build {version}, {count, plural, one {# model} other {# models}}":
+    "Grok Build {version}, {count, plural, one {# модель} few {# модели} many {# моделей} other {# модели}}",
+  "Grok Build's model list could not be read.": "Не удалось прочитать список моделей Grok Build.",
+  "Install Cursor": "Установить Cursor",
+  "Install Cursor from Settings › Model Providers.": "Установи Cursor в разделе «Настройки › Провайдеры моделей».",
+  "Install Cursor's CLI to build with your Cursor plan.":
+    "Установи CLI Cursor, чтобы собирать игры по своему тарифу Cursor.",
+  "Install Grok Build": "Установить Grok Build",
+  "Install Grok Build from Settings › Model Providers.":
+    "Установи Grok Build в разделе «Настройки › Провайдеры моделей».",
+  "Install it to build games with your Grok account.": "Установи его, чтобы делать игры со своим аккаунтом Grok.",
+  "Installing Cursor. This can take a minute.": "Устанавливаем Cursor. Это может занять минуту.",
+  "Installing Grok Build. This can take a minute.": "Устанавливаем Grok Build. Это может занять минуту.",
   "Nex lives in your Genex account. Sign in once, then pay here.":
     "Твои Nex хранятся в аккаунте Genex. Войди один раз — и оплачивай здесь.",
   Color: "Цвет",
@@ -1053,6 +1085,8 @@ export default {
   "Couldn’t install: this game doesn’t run on this Mac.": "Не удалось установить: эта игра не работает на этом Mac.",
   "Couldn’t install: this game is larger than it says.": "Не удалось установить: игра больше, чем заявлено.",
   "Couldn’t install: this game isn’t signed.": "Не удалось установить: у этой игры нет подписи.",
+  "Couldn’t install: this game needs Rosetta to run on this Mac.":
+    "Не удалось установить: этой игре нужна Rosetta, чтобы работать на этом Mac.",
   "Couldn’t install: this game’s files aren’t safe to open.":
     "Не удалось установить: файлы этой игры небезопасно открывать.",
   "Couldn’t load other versions.": "Не удалось загрузить другие версии.",
@@ -1633,6 +1667,26 @@ export default {
   "Get a key": "Получить ключ",
   "Get Nex": "Получить Nex",
   Nex: "Nex",
+  "Not signed in to Cursor.": "Вход в Cursor не выполнен.",
+  "Runs on your Grok account": "Работает на твоём аккаунте Grok",
+  "Sign in again…": "Войти заново…",
+  "Sign in to Cursor from Settings › Model Providers.": "Войди в Cursor в разделе «Настройки › Провайдеры моделей».",
+  "Sign in to Grok from Settings › Model Providers.": "Войди в Grok в разделе «Настройки › Провайдеры моделей».",
+  "Sign in with your Cursor account to build with your plan.":
+    "Войди в свой аккаунт Cursor, чтобы собирать игры по своему тарифу.",
+  "Sign in with your Grok account. Grok Build keeps the sign-in.":
+    "Войди со своим аккаунтом Grok. Вход хранит Grok Build.",
+  "Switch to another Cursor account": "Перейти на другой аккаунт Cursor",
+  "Switch to another Grok account": "Перейти на другой аккаунт Grok",
+  "Update Cursor": "Обновить Cursor",
+  "Update Grok Build": "Обновить Grok Build",
+  "Update Grok Build from Settings › Model Providers.": "Обнови Grok Build в разделе «Настройки › Провайдеры моделей».",
+  "Uses your Cursor plan": "По твоему тарифу Cursor",
+  "Your Cursor account has no model it can run.": "У твоего аккаунта Cursor нет моделей, которые он может запустить.",
+  "xAI blocked this Grok account: {reason}": "xAI заблокировал этот аккаунт Grok: {reason}",
+  "xAI no longer accepts this Grok Build.": "xAI больше не принимает эту версию Grok Build.",
+  "xAI no longer accepts this version. Update it to keep building.":
+    "xAI больше не принимает эту версию. Обнови её, чтобы продолжить.",
   "{amount} Nex, get Nex": "{amount} Nex, получить Nex",
   "Get credits": "Получить кредиты",
   "Get the Epic Games Launcher": "Скачать Epic Games Launcher",
@@ -2324,6 +2378,7 @@ export default {
   "No comments on {title} yet": "У игры «{title}» пока нет комментариев",
   "No compatible newer release is available for this installed plugin":
     "Для этого плагина нет более новой совместимой версии",
+  "No cover yet, so it goes out without a picture.": "Обложки пока нет, так что игра выйдет без картинки.",
   "No dash at the ends": "Без дефиса в начале и конце",
   "No friends yet — send your link and play together.": "Друзей пока нет — отправь ссылку и играйте вместе.",
   "No games for “{query}”.": "Нет игр по запросу «{query}».",
@@ -4568,6 +4623,7 @@ export default {
     "Windows не получил разрешения на установку. Нажми «Сделать за меня» ещё раз и выбери «Да», когда Windows спросит.",
   "Windows needs a one-time setup of the protected workspace, approved by an administrator.":
     "Windows нужно один раз настроить защищённое рабочее пространство с разрешения администратора.",
+  "Windows will ask you to allow it once.": "Windows один раз попросит это разрешить.",
   "Windows will ask you to allow this once. If it asks for a password, an administrator of this PC can enter theirs. Agents work in their own protected space, away from your files.":
     "Windows один раз попросит это разрешить. Если спросит пароль, его может ввести администратор этого компьютера. Агенты работают в своём защищённом пространстве, вдали от твоих файлов.",
   "Windows wouldn’t start Genex’s protected space.": "Windows не запустила защищённое пространство Genex.",
@@ -5987,6 +6043,7 @@ export default {
   "Drag to turn": "Потяни, чтобы повернуть",
   "Genex hasn’t confirmed it yet. It shows under My items once it does. You won’t be charged twice.":
     "Genex ещё не подтвердил оплату. Предмет появится в «Мои предметы», как только это случится. Дважды не спишем.",
+  "Genex’s protected space needs an update": "Защищённому пространству Genex нужно обновление",
   Get: "Получить",
   "Get in {game}": "Получить в {game}",
   Inappropriate: "Неприемлемо",
@@ -6091,6 +6148,8 @@ export default {
   "That price isn’t one the store takes. Ask the agent to pick another.":
     "Магазин не принимает такую цену. Попроси агента выбрать другую.",
   "The item store is off right now.": "Магазин предметов сейчас выключен.",
+  "This game is still the empty starter: build something first, then publish.":
+    "Это пока пустой стартовый проект: сначала собери что-нибудь, потом публикуй.",
   "This game sells as many items as it can.": "В этой игре уже продаётся максимум предметов.",
   "You get per sale": "Ты получаешь с продажи",
   "You get per sale ({share})": "Ты получаешь с продажи ({share})",

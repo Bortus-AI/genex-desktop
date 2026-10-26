@@ -3597,7 +3597,9 @@ of a stage's path (forward slashes) is named as its folder too. The Genex addon'
 (`addons/genex`, `addons/genex_multiplayer`) are made one at a time as folders of their own, and
 each file is written only while its folder still resolves to itself. A save point's or the observer's
 stills that fail answer nothing, as the checkpoint's check does.
-Its observer is a `card` whose `stage-status` says where the game stands (get Godot, set
+A game set up for Genex's play (`genex-addon.ts`: `runtime: bridge`, the plugin's Godot as its
+engine) starts only when an agent's `computer` makes its first move, never because a chat turn
+began, and stops when that session lets go. Its observer is a `card` whose `stage-status` says where the game stands (get Godot, set
 it up for Genex's play, open it, or open in the person's Godot) and its manifest has no lock: it never drives the person's editor.
 On a Mac without Godot 4.3 or newer, `show-steps` (and the refusals of `new-game` and the engine
 question's note, which point to it) puts the Godot setup card in the chat (`godot-setup.ts`): one

@@ -473,6 +473,7 @@ export default {
   "Ben-Day": "벤데이",
   "Best fit": "가장 적합",
   Better: "개선",
+  Beta: "베타",
   "Between builds": "빌드 사이",
   "Billed by each provider you use": "사용하는 제공자마다 따로 청구돼요",
   "Billed by each provider you use.": "사용하는 제공자마다 따로 청구돼요.",
@@ -777,6 +778,34 @@ export default {
   "Codex skill discovery closed. Refresh to retry.": "Codex 스킬 검색이 종료됐어요. 새로 고침해서 다시 시도하세요.",
   "Codex skill discovery timed out. Refresh to retry.":
     "Codex 스킬 검색 시간이 초과됐어요. 새로 고침해서 다시 시도하세요.",
+  "Cursor didn't answer. Check the installation, then try again.":
+    "Cursor가 응답하지 않았어요. 설치를 확인한 뒤 다시 시도해 주세요.",
+  "Cursor is unavailable": "Cursor를 사용할 수 없어요",
+  "Cursor isn't installed on this computer.": "이 컴퓨터에 Cursor가 설치되어 있지 않아요.",
+  "Cursor sign-in": "Cursor 로그인",
+  "Cursor {version}, {count, plural, other {# model(s)}}": "Cursor {version}, 모델 {count, plural, other {#개}}",
+  "Cursor's CLI forgets this computer's sign-in": "Cursor CLI가 이 컴퓨터의 로그인을 지워요",
+  "Cursor's model list could not be read.": "Cursor의 모델 목록을 읽을 수 없어요.",
+  "Cursor's sign-in status could not be read.": "Cursor의 로그인 상태를 읽을 수 없어요.",
+  "Finish signing in to Cursor in your browser. Cursor keeps the sign-in.":
+    "브라우저에서 Cursor 로그인을 마쳐 주세요. 로그인은 Cursor가 보관해요.",
+  "Finish signing in to Grok in your browser.": "브라우저에서 Grok 로그인을 마쳐 주세요.",
+  "Grok Build didn't answer. Check the installation, then try again.":
+    "Grok Build가 응답하지 않았어요. 설치를 확인한 뒤 다시 시도해 주세요.",
+  "Grok Build isn't installed on this Mac.": "이 Mac에 Grok Build가 설치되어 있지 않아요.",
+  "Grok Build isn't signed in.": "Grok Build에 로그인되어 있지 않아요.",
+  "Grok Build sign-in": "Grok Build 로그인",
+  "Grok Build {version}, {count, plural, one {# model} other {# models}}":
+    "Grok Build {version}, 모델 {count, plural, other {#개}}",
+  "Grok Build's model list could not be read.": "Grok Build의 모델 목록을 읽을 수 없었어요.",
+  "Install Cursor": "Cursor 설치",
+  "Install Cursor from Settings › Model Providers.": "설정 › 모델 제공자에서 Cursor를 설치해 주세요.",
+  "Install Cursor's CLI to build with your Cursor plan.": "Cursor CLI를 설치하면 Cursor 요금제로 만들 수 있어요.",
+  "Install Grok Build": "Grok Build 설치",
+  "Install Grok Build from Settings › Model Providers.": "설정 › 모델 제공자에서 Grok Build를 설치해 주세요.",
+  "Install it to build games with your Grok account.": "설치하면 Grok 계정으로 게임을 만들 수 있어요.",
+  "Installing Cursor. This can take a minute.": "Cursor를 설치하는 중이에요. 1분 정도 걸릴 수 있어요.",
+  "Installing Grok Build. This can take a minute.": "Grok Build를 설치하는 중이에요. 1분 정도 걸릴 수 있어요.",
   "Nex lives in your Genex account. Sign in once, then pay here.":
     "Nex는 Genex 계정에 있어요. 한 번 로그인하면 여기서 결제할 수 있어요.",
   Color: "색상",
@@ -1017,6 +1046,8 @@ export default {
   "Couldn’t install: this game doesn’t run on this Mac.": "설치하지 못했어요. 이 게임은 이 Mac에서 실행되지 않아요.",
   "Couldn’t install: this game is larger than it says.": "설치하지 못했어요. 이 게임이 표시된 크기보다 커요.",
   "Couldn’t install: this game isn’t signed.": "설치하지 못했어요. 이 게임은 서명되지 않았어요.",
+  "Couldn’t install: this game needs Rosetta to run on this Mac.":
+    "설치하지 못했어요. 이 Mac에서 이 게임을 실행하려면 Rosetta가 필요해요.",
   "Couldn’t install: this game’s files aren’t safe to open.":
     "설치하지 못했어요. 이 게임의 파일은 열기에 안전하지 않아요.",
   "Couldn’t load other versions.": "다른 버전을 불러오지 못했어요.",
@@ -1586,6 +1617,25 @@ export default {
   "Get a key": "키 받기",
   "Get Nex": "Nex 받기",
   Nex: "Nex",
+  "Not signed in to Cursor.": "Cursor에 로그인되어 있지 않아요.",
+  "Runs on your Grok account": "Grok 계정으로 실행돼요",
+  "Sign in again…": "다시 로그인…",
+  "Sign in to Cursor from Settings › Model Providers.": "설정 › 모델 제공자에서 Cursor에 로그인해 주세요.",
+  "Sign in to Grok from Settings › Model Providers.": "설정 › 모델 제공자에서 Grok에 로그인해 주세요.",
+  "Sign in with your Cursor account to build with your plan.": "Cursor 계정으로 로그인하면 요금제로 만들 수 있어요.",
+  "Sign in with your Grok account. Grok Build keeps the sign-in.":
+    "Grok 계정으로 로그인해 주세요. 로그인 정보는 Grok Build가 보관해요.",
+  "Switch to another Cursor account": "다른 Cursor 계정으로 전환",
+  "Switch to another Grok account": "다른 Grok 계정으로 전환",
+  "Update Cursor": "Cursor 업데이트",
+  "Update Grok Build": "Grok Build 업데이트",
+  "Update Grok Build from Settings › Model Providers.": "설정 › 모델 제공자에서 Grok Build를 업데이트해 주세요.",
+  "Uses your Cursor plan": "Cursor 요금제를 사용해요",
+  "Your Cursor account has no model it can run.": "Cursor 계정에서 실행할 수 있는 모델이 없어요.",
+  "xAI blocked this Grok account: {reason}": "xAI가 이 Grok 계정을 차단했어요: {reason}",
+  "xAI no longer accepts this Grok Build.": "xAI가 이 Grok Build를 더 이상 받지 않아요.",
+  "xAI no longer accepts this version. Update it to keep building.":
+    "xAI가 이 버전을 더 이상 받지 않아요. 업데이트하고 계속 만들어 보세요.",
   "{amount} Nex, get Nex": "{amount} Nex, Nex 받기",
   "Get credits": "크레딧 받기",
   "Get the Epic Games Launcher": "Epic Games Launcher 받기",
@@ -2268,6 +2318,7 @@ export default {
   "No comments on {title} yet": "{title}에 아직 댓글이 없어요",
   "No compatible newer release is available for this installed plugin":
     "설치된 이 플러그인에 호환되는 새 버전이 없어요",
+  "No cover yet, so it goes out without a picture.": "아직 커버가 없어서 사진 없이 공개돼요.",
   "No dash at the ends": "양 끝에 대시 불가",
   "No friends yet — send your link and play together.": "아직 친구가 없어요 — 링크를 보내고 같이 플레이해 보세요.",
   "No games for “{query}”.": "“{query}”에 해당하는 게임이 없어요.",
@@ -4486,6 +4537,7 @@ export default {
     "Windows가 설치 권한을 받지 못했어요. '대신 해 주기'를 다시 누르고 Windows가 물어보면 '예'를 고르세요.",
   "Windows needs a one-time setup of the protected workspace, approved by an administrator.":
     "Windows에서는 관리자 승인을 받아 보호된 작업 공간을 한 번 설정해야 해요.",
+  "Windows will ask you to allow it once.": "Windows가 한 번 허용을 요청해요.",
   "Windows will ask you to allow this once. If it asks for a password, an administrator of this PC can enter theirs. Agents work in their own protected space, away from your files.":
     "Windows가 한 번 허용을 요청해요. 비밀번호를 물으면 이 PC의 관리자가 자기 비밀번호를 입력하면 돼요. 에이전트는 내 파일과 떨어진 전용 보호 공간에서 작업해요.",
   "Windows wouldn’t start Genex’s protected space.": "Windows가 Genex 보호 공간을 시작하지 않았어요.",
@@ -5814,6 +5866,7 @@ export default {
   "Drag to turn": "드래그해서 돌리기",
   "Genex hasn’t confirmed it yet. It shows under My items once it does. You won’t be charged twice.":
     "Genex가 아직 확인하지 않았어요. 확인되면 내 아이템에 나타나요. 두 번 청구되지 않아요.",
+  "Genex’s protected space needs an update": "Genex 보호 공간을 업데이트해야 해요",
   Get: "받기",
   "Get in {game}": "{game}에서 받기",
   Inappropriate: "부적절해요",
@@ -5913,6 +5966,8 @@ export default {
   "That price isn’t one the store takes. Ask the agent to pick another.":
     "스토어에서 받지 않는 가격이에요. 에이전트에게 다른 가격을 골라 달라고 하세요.",
   "The item store is off right now.": "지금은 아이템 스토어가 꺼져 있어요.",
+  "This game is still the empty starter: build something first, then publish.":
+    "이 게임은 아직 빈 시작 프로젝트예요. 먼저 뭔가 만들고 나서 공개하세요.",
   "This game sells as many items as it can.": "이 게임은 이미 최대한 많은 아이템을 팔고 있어요.",
   "You get per sale": "판매당 받는 금액",
   "You get per sale ({share})": "판매당 받는 금액 ({share})",

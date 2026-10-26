@@ -2648,6 +2648,8 @@ export const MODEL_PICKER_WORDS = {
   subscription: t("subscription"),
   signIn: t("sign in"),
   free: t("Free"),
+  /** A provider that ships before a live test proved it, in the picker and in Settings. */
+  beta: t("Beta"),
 } as const;
 
 /** A subscription's accounts, in Model Providers and the composer's usage panel (`subscription-accounts.ts`). */
@@ -4146,6 +4148,13 @@ export const SANDBOX_SETUP_WORDS = {
       sent: t("Report sent"),
       reportFailed: t("The report didn’t send. Try again in a moment."),
     },
+    /** An earlier Genex set the protected space up for an older sandbox: one approval updates it. */
+    reinstall: {
+      title: t("Genex’s protected space needs an update"),
+      line: t("Windows will ask you to allow it once."),
+      update: t("Update"),
+      updating: t("Waiting for your OK"),
+    },
     /** Windows' Secondary Logon service is disabled: agents start through it. */
     logonService: {
       line: t("Secondary Logon is turned off on this PC. Set up turns it back on, since agents start through it."),
@@ -4702,6 +4711,8 @@ export const GENEX_WORDS = {
     coverLeft: (minutes: number) => t("~{minutes} min", { minutes }),
     /** Under the presses while the agent makes it: who is making it, and where it shows. */
     coverMakingSoon: t("The agent is making it in the chat. It shows here when it’s ready."),
+    /** Under the presses when the game has no picture to go out with. */
+    withoutCover: t("No cover yet, so it goes out without a picture."),
     /** What Another cover sends in the game's chat, with what the person typed. */
     coverAnotherPrompt: (want: string) =>
       want
@@ -5679,6 +5690,7 @@ const INSTALL_FAILED: Readonly<Record<InstallFailure, (free: string, here: Nativ
   [InstallFailure.Unsigned]: () => t("Couldn’t install: this game isn’t signed."),
   [InstallFailure.TooLarge]: () => t("Couldn’t install: this game is larger than it says."),
   [InstallFailure.UnsupportedOs]: (_free: string, here: NativeHereWords) => here.unsupported,
+  [InstallFailure.NeedsRosetta]: () => t("Couldn’t install: this game needs Rosetta to run on this Mac."),
   [InstallFailure.EntryMissing]: () => t("Couldn’t install: the download doesn’t hold the game."),
   [InstallFailure.NotOffered]: (_free: string, here: NativeHereWords) => here.notOffered,
   [InstallFailure.Failed]: () => t("Couldn’t install. Try again."),
