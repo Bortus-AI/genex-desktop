@@ -58,7 +58,7 @@ const QUICK_IS_A_BUILD = "also when they want it fast: a quick build is still a 
  * Nex is Genex's own currency; any other currency is the game's.
  */
 const STORE_ITEMS_RULE =
-  "Whatever the user sells for Nex (Genex's currency: a class, a character, a skin, an item) goes in the launch's store_items with its name and price (100 Nex when they named none), never in cut: Genex lists each in the game's store before the build starts and the build sells it. Coins, gold, gems or a shop in the game are the game's own currency and store: never store_items, and no question about them.";
+  "Whatever the user sells for Nex (Genex's currency: a class, a character, a skin, an item) goes in the launch's store_items with its name and price (100 Nex when they named none), never in cut: Genex lists each in the game's store before the build starts and the build sells it. Ask nothing more about them (sharing with other games, resale, type, picture): each item's card in the chat leaves those to the person. Coins, gold, gems or a shop in the game are the game's own currency and store: never store_items, and no question about them.";
 /** The same for an Unreal game, whose Loop has no judges: its lead checks its own captures. */
 const QUICK_IS_AN_UNREAL_BUILD = "also when they want it fast: a quick build is still a build";
 /**
