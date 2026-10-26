@@ -50,8 +50,11 @@ const OVERRUN_SCRIPT = path.join(import.meta.dirname, "windows", "overrun.ps1");
 export interface Platform {
   /** The app's userData folder for this account, known before the install. */
   userData(): string;
-  /** Install `file`; over an earlier install (`over`), as its update: the newer app's folder. */
-  install(file: string, evidence: string, over?: Installed): Promise<Installed>;
+  /**
+   * Install `file`; over an earlier install (`over`), as its update: the newer app's folder. A file
+   * not `downloaded` lacks a browser's Mark of the Web, so Windows' SmartScreen does not check it.
+   */
+  install(file: string, evidence: string, over?: Installed, downloaded?: boolean): Promise<Installed>;
   trust(file: string, installed: Installed): Promise<Verdict>;
   launch(installed: Installed, evidence: string): Promise<void>;
   quit(installed: Installed): Promise<void>;
@@ -185,10 +188,10 @@ async function signature(file: string): Promise<{ status: string; signer: string
 
 const windows: Platform = {
   userData: () => path.join(process.env.APPDATA ?? "", PRODUCT_NAME),
-  async install(file, evidence, over) {
+  async install(file, evidence, over, downloaded = true) {
     // As a browser leaves a download: Mark of the Web, which SmartScreen and Office read.
     const zone = `[ZoneTransfer]\r\nZoneId=3\r\nHostUrl=${PUBLIC_LINKS[PackageKind.Exe].url}\r\n`;
-    await writeFile(`${file}:Zone.Identifier`, zone);
+    if (downloaded) await writeFile(`${file}:Zone.Identifier`, zone);
     // A double-click: no arguments. Setup.exe installs into %LOCALAPPDATA%\genex and opens the app;
     // over an earlier install it lays the newer version beside it, as an update does.
     startDetached(file, [], evidence, over ? "setup-update" : "setup");
