@@ -38,6 +38,34 @@ type BackgroundEntry = Extract<
 const BACKGROUND_KINDS: ReadonlySet<string> = new Set([EntryKind.Tools, EntryKind.Activity, EntryKind.Thinking]);
 const isBackground = (entry: Entry): entry is BackgroundEntry => BACKGROUND_KINDS.has(entry.kind);
 
+/** Adjacent contractor replies are one message. A copy, so the logged entry is left as it was. */
+function appendReply(result: ConversationEntry[], entry: Entry): boolean {
+  const previous = result.at(-1);
+  if (previous?.kind !== EntryKind.Assistant || entry.kind !== EntryKind.Assistant) return false;
+  if (entry.contractor !== true || previous.contractor !== true) return false;
+  result[result.length - 1] = { ...previous, text: previous.text + entry.text };
+  return true;
+}
+
+/** A thought's pieces are one line of the work group. */
+function appendThought(items: ActivityItem[], entry: { id: string; text: string }): void {
+  const thought = items.at(-1);
+  if (thought?.kind === ActivityItemKind.Thought)
+    items[items.length - 1] = { ...thought, text: thought.text + entry.text };
+  else items.push({ kind: ActivityItemKind.Thought, id: entry.id, text: entry.text });
+}
+
+/** One background entry's rows, folded into the open work group. */
+function addWorkItem(items: ActivityItem[], entry: BackgroundEntry): void {
+  if (entry.kind === EntryKind.Thinking) appendThought(items, entry);
+  else if (entry.kind === EntryKind.Tools)
+    items.push(...entry.rows.map((tool) => ({ kind: ActivityItemKind.Tool, id: tool.key, tool })));
+  else
+    items.push(
+      ...entry.rows.map((row, i) => ({ kind: ActivityItemKind.Note, id: `${entry.id}:${i}`, text: row.text })),
+    );
+}
+
 /**
  * Group only neighboring background activity. Never move a reply, decision or failure; what a
  * group delivered sits under it, and the group goes on after it.
@@ -51,7 +79,7 @@ export function conversationEntries(entries: Entry[]): ConversationEntry[] {
       continue;
     }
     if (!isBackground(entry)) {
-      result.push(entry);
+      if (!appendReply(result, entry)) result.push(entry);
       continue;
     }
     let group = result.at(-1);
@@ -59,14 +87,7 @@ export function conversationEntries(entries: Entry[]): ConversationEntry[] {
       group = { kind: WORK_KIND, id: entry.id, items: [] };
       result.push(group);
     }
-    if (entry.kind === EntryKind.Tools)
-      group.items.push(...entry.rows.map((tool) => ({ kind: ActivityItemKind.Tool, id: tool.key, tool })));
-    else if (entry.kind === EntryKind.Thinking)
-      group.items.push({ kind: ActivityItemKind.Thought, id: entry.id, text: entry.text });
-    else
-      group.items.push(
-        ...entry.rows.map((row, i) => ({ kind: ActivityItemKind.Note, id: `${entry.id}:${i}`, text: row.text })),
-      );
+    addWorkItem(group.items, entry);
   }
   return result;
 }

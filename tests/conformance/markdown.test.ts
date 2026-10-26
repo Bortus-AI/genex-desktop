@@ -26,6 +26,21 @@ test("HTML stays inert and code preserves intentionally written entities", () =>
   assert.match(html, /&lt;script&gt;/);
   assert.match(html, /<code>&amp;lt;canvas&amp;gt;<\/code>/);
 });
+test("a picture of a game file is loaded from the game, not from the app's own address", () => {
+  const html = markdownHtml(
+    "![Original SWIV player helicopter](art/remaster/player-heli-v1/renders/orig_sheet.png)\n\n![nope](../secret.png) ![web](https://example.com/ship.png)",
+  );
+  assert.match(html, /data-game-image="art\/remaster\/player-heli-v1\/renders\/orig_sheet.png"/);
+  assert.match(html, /alt="Original SWIV player helicopter"/);
+  assert.doesNotMatch(html, /src="art\//);
+  assert.doesNotMatch(html, /data-game-image="\.\./);
+  assert.match(html, /src="https:\/\/example.com\/ship.png"/);
+  const nested = markdownHtml("![photo](photo.png)", {
+    files: { lookup: () => undefined, names: [], base: "docs/guide.md" },
+  });
+  assert.match(nested, /data-game-image="docs\/photo.png"/);
+});
+
 test("unsafe Markdown destinations cannot create executable links or images", () => {
   const html = markdownHtml(
     "[bad](javascript:alert%281%29) [encoded](javascript&colon;alert%281%29) [numeric](java&#115;cript:alert%281%29) [unclosed](jav&#97script:alert%281%29) [whitespace](java&Tab;script:alert%281%29) ![bad](data:text/html,hello) [good](https://example.com)",

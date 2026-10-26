@@ -2,6 +2,7 @@ import { Marked, Renderer, type Token, type Tokens } from "marked";
 import { highlightCommand } from "./command-highlight.ts";
 import { highlightCode } from "./syntax-highlight.ts";
 import { type ChatFileLookup, type ChatFileRef, wholeFileName } from "../../shared/chat-files.ts";
+import { imageType } from "../../shared/game-file.ts";
 import { fencedCommand } from "../../shared/terminal.ts";
 import { escapeAttribute, escapeHtml, fileLinkHtml, FileLinkStyle, linkifyHtml } from "./file-links.ts";
 import { answersOf } from "../chat-files.ts";
@@ -14,6 +15,29 @@ export interface MarkdownFiles {
   lookup: ChatFileLookup;
   base?: string;
   names: ChatFileRef[];
+}
+
+/**
+ * A Markdown image of a game file, from the document it was written in. A climb out of the game
+ * or into `.git` is not one.
+ */
+function gameImagePath(href: string, base?: string): string | null {
+  const file = fileDestination(href);
+  if (!file || !imageType(file)) return null;
+  const folder = base ? base.replace(/\\/g, "/").replace(/[^/]*$/, "") : "";
+  const parts: string[] = [];
+  for (const part of `${folder}${file.replace(/\\/g, "/")}`.split("/")) {
+    if (!part || part === ".") continue;
+    if (part === "..") {
+      if (parts.length === 0) return null;
+      parts.pop();
+      continue;
+    }
+    if (part === ".git") return null;
+    parts.push(part);
+  }
+  const resolved = parts.join("/");
+  return imageType(resolved) ? resolved : null;
 }
 
 /** A link with no scheme (`docs/BRIEF.md`), a `file:` URL or an absolute path names a file. */
@@ -101,7 +125,14 @@ const parser = new Marked({
       return link ? fileLinkHtml(ref, link, escapeHtml(label), label, FileLinkStyle.Chip) : escapeHtml(label);
     },
     image({ href, text }) {
-      return safeDestination(href) ? false : escapeHtml(text);
+      // A real web address is the browser's image. A game file is filled in by the chat
+      // (`data-game-image`); a relative path is not a page on this app.
+      if (/^https?:\/\//i.test(href) && safeDestination(href)) return false;
+      const file = gameImagePath(href, files?.base);
+      if (!file) return escapeHtml(text);
+      const ref: ChatFileRef = files?.base ? { name: file, base: files.base } : { name: file };
+      files?.names.push(ref);
+      return `<img data-game-image="${escapeAttribute(file)}" alt="${escapeAttribute(text)}" />`;
     },
   },
 });
