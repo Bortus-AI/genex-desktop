@@ -65,7 +65,7 @@ import { useLiveLoad, useLiveProbe, useLoadOnceStarted, useWebGamePage } from ".
 import { useStageControls } from "./stage/live-run.ts";
 import { useNativeViewBounds } from "./stage/native-bounds.ts";
 import { PluginCardStage } from "./stage/PluginCardStage.tsx";
-import { resolveStageView, stageFlags } from "./stage/stage-flags.ts";
+import { resolveStageView, stageFlags, stageHas } from "./stage/stage-flags.ts";
 import { EmptyGame, LiveLoading, NoGame, PlanningBuild, StoppedGame } from "./stage/StageBody.tsx";
 import { StageStrip } from "./stage/StageStrip.tsx";
 import { type StageTabKey, tabChoice, webBuildView } from "./stage/stage-tabs.ts";
@@ -650,12 +650,7 @@ function useStageSurface({
   const sells = shop.length > 0;
   const flags = stageFlags({ view: shownView, beside, graph, planning, project, liveView, pending, live, shop: sells });
   useWebGamePage({ project, game, onWebGame: visible && flags.previewOnStage }, live);
-  const has = {
-    beside: Boolean(beside),
-    builds: graph !== null || planning,
-    project: Boolean(project),
-    shop: Boolean(project) && sells,
-  };
+  const has = stageHas({ beside, graph, planning, project, shop: sells });
   return { run, flags, pressedView: resolveStageView(view, has), shop };
 }
 

@@ -33,6 +33,23 @@ export function resolveStageView(
   return StageView.Live;
 }
 
+/** What the stage can show besides Live: a file beside, a build, the game's own views and its Shop. */
+export function stageHas({
+  beside,
+  graph,
+  planning,
+  project,
+  shop,
+}: {
+  beside: BesideTarget | null;
+  graph: RunGraphModel | null;
+  planning: boolean;
+  project: string | null;
+  shop: boolean;
+}): { beside: boolean; builds: boolean; project: boolean; shop: boolean } {
+  return { beside: Boolean(beside), builds: graph !== null || planning, project: Boolean(project), shop };
+}
+
 /**
  * Which surface the stage shows, and why the running game is or is not on it. Live shows one view,
  * picked by the folder's facts (`live-views.ts`): only the web preview loads, empties or waits for
@@ -62,12 +79,7 @@ export function stageFlags({
   pending: boolean;
   live: LiveFlagsInput;
 }) {
-  const stageView = resolveStageView(view, {
-    beside: Boolean(beside),
-    builds: graph !== null || planning,
-    project: Boolean(project),
-    shop: Boolean(project) && shop,
-  });
+  const stageView = resolveStageView(view, stageHas({ beside, graph, planning, project, shop }));
   const onLive = Boolean(project) && stageView === StageView.Live;
   const previewOnStage = onLive && liveView === ObserverLive.Preview;
   const emptyScene = live.state?.phase === "empty" && live.state?.drawCalls === 0;
