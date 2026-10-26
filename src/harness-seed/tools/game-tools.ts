@@ -572,6 +572,8 @@ function slugProject(text: unknown): string {
     .toLowerCase()
     .replace(/[^a-z0-9\s-]+/g, " ")
     .split(/\s+/)
+    // A word whose other half was not Latin ("game-магазин") keeps a dash at its edge: drop it.
+    .map((word) => word.replace(/^-+|-+$/g, ""))
     .filter((word) => word && !SLUG_STOP.has(word));
   return (words.slice(0, SLUG_WORDS).join("-") || FALLBACK_FOLDER).slice(0, MAX_SLUG_CHARS);
 }
