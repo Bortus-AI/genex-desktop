@@ -22,6 +22,7 @@ import { CoinMark } from "../play/CoinMark.tsx";
 import { ItemRender } from "../play/ItemRender.tsx";
 import { coinNumber, coinText, gameText } from "../play/purchase-model.ts";
 import { useItems } from "../state/hooks.ts";
+import { useLocalPicture } from "./item-picture.ts";
 import { LocalAction } from "../state/items.ts";
 import { studio } from "../state/studio.ts";
 import { Button } from "../ui/Button.tsx";
@@ -117,7 +118,10 @@ function ItemListingCard({
       aria-label={WORDS.listingLabel(name)}
     >
       <div className="listing-head">
-        <ItemRender item={{ id: view.itemId, iconUrl: view.iconUrl, modelUrl: null }} className="listing-render" />
+        <ItemRender
+          item={{ id: view.itemId, iconUrl: view.iconUrl ?? listed?.iconUrl ?? null, modelUrl: null }}
+          className="listing-render"
+        />
         <div className="listing-words">
           <h3 className="listing-name" dir="auto">
             {name}
@@ -194,6 +198,7 @@ function uploadedNote(card: { changed: boolean; unseen: boolean }): string | nul
 function LocalCard({ view, onAsk }: { view: LocalCardView; onAsk?: (() => void) | undefined }): JSX.Element {
   const shareId = useId();
   const { draft } = view;
+  const picture = useLocalPicture(draft.project, draft.picture, draft.contentHash);
   const name = gameText(draft.name);
   const sharing = view.busy === LocalAction.Share || view.busy === LocalAction.Unshare;
   return (
@@ -204,7 +209,7 @@ function LocalCard({ view, onAsk }: { view: LocalCardView; onAsk?: (() => void) 
       aria-label={WORDS.listingLabel(name)}
     >
       <div className="listing-head">
-        <ItemRender item={{ id: draft.localId, iconUrl: null, modelUrl: null }} className="listing-render" />
+        <ItemRender item={{ id: draft.localId, iconUrl: picture, modelUrl: null }} className="listing-render" />
         <div className="listing-words">
           <h3 className="listing-name" dir="auto">
             {name}

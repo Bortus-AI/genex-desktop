@@ -194,6 +194,7 @@ describe("the store items as every agent reads the goal", () => {
     const lines = scopeLines({ scope });
     assert.match(lines, /GENEX STORE.*Fishing Rod for 300 Nex \(listed: local_abcdefghijkl\)/);
     assert.match(lines, /buy\(\).*getEntitlements\(\)|getEntitlements\(\).*buy\(\)/);
+    assert.match(lines, /picture.*shop set/, "each item gets its picture");
     assert.deepEqual(restoreScope(JSON.parse(JSON.stringify(scope)))?.store, scope.store, "a journal keeps them");
   });
 

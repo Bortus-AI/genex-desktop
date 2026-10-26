@@ -12,7 +12,7 @@ import { resolveStageView, stageFlags } from "../../src/renderer/panels/stage/st
 import { stageTabs, tabChoice, tabGlyph } from "../../src/renderer/panels/stage/stage-tabs.ts";
 import { isStageView, StageView } from "../../src/renderer/stage.ts";
 import type { LocalItemsView, LocalListingDraft } from "../../src/shared/item-draft.ts";
-import { LocalOutcomeKind } from "../../src/shared/item-draft.ts";
+import { LocalOutcomeKind, localDraftOf } from "../../src/shared/item-draft.ts";
 import { ObserverLive, PREVIEW_OBSERVER } from "../../src/shared/observers.ts";
 import { ItemState, ItemType, type SellingRow } from "../../src/shared/store-items.ts";
 
@@ -33,6 +33,7 @@ const draft = (localId: string, name: string): LocalListingDraft => ({
   tags: [],
   shareable: false,
   contentHash: HASH,
+  picture: null,
 });
 
 const row = (id: string, game: string | null, state: ItemState = ItemState.Draft): SellingRow => ({
@@ -95,6 +96,39 @@ describe("the Shop tab on the stage strip", () => {
     assert.equal(flags.stageView, StageView.Shop);
     assert.equal(flags.shopOpen, true);
     assert.equal(flags.previewOnStage, false);
+  });
+});
+
+describe("a local draft's picture", () => {
+  const printed = (picture: unknown) => ({
+    kind: "genex.item_draft",
+    version: 1,
+    state: "local",
+    localId: ROD,
+    name: "Fishing Rod",
+    description: null,
+    priceCoins: 100,
+    type: "durable",
+    tags: [],
+    shareable: false,
+    contentHash: HASH,
+    ...(picture === undefined ? {} : { picture }),
+  });
+  it("is the file the CLI names in the draft's own folder, and none for anything else", () => {
+    assert.equal(
+      localDraftOf(printed(`.genex/items/${ROD}/image.png`), GAME)?.picture,
+      `.genex/items/${ROD}/image.png`,
+    );
+    assert.equal(localDraftOf(printed(undefined), GAME)?.picture, null);
+    for (const bad of [
+      `.genex/items/${BAIT}/image.png`,
+      `.genex/items/${ROD}/../image.png`,
+      `.genex/items/${ROD}/sub/image.png`,
+      `/.genex/items/${ROD}/image.png`,
+      "assets/rod.png",
+      42,
+    ])
+      assert.equal(localDraftOf(printed(bad), GAME)?.picture, null, String(bad));
   });
 });
 

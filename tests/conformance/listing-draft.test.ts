@@ -173,6 +173,7 @@ const ICE_SHIELD: LocalListingDraft = {
   tags: ["shield"],
   shareable: false,
   contentHash: HASH,
+  picture: `.genex/items/${LOCAL_ID}/picture.png`,
 };
 
 describe("a local draft in a Genex CLI answer", () => {

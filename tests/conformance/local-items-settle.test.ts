@@ -60,6 +60,7 @@ const draft = (localId: string, fields: Partial<LocalListingDraft> = {}): LocalL
   tags: [],
   shareable: false,
   contentHash: HASH,
+  picture: null,
   ...fields,
 });
 
