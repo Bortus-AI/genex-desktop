@@ -26,11 +26,14 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
   under the pointer), offline (the last account with the offline mark), ended (dimmed, Sign in
   again). Its menu: Profile, Friends, Credits (the Genex plugin page's Credits tab), Nex (Get Nex),
   Nameplate (Pro), Account settings, Sign out.
-- The sidebar's friends, signed in, in Play and Create: right under the games, the word Friends
-  (the Friends page, with the requests waiting) and each friend in the API's order, their game on
-  one green line while they play (no online or offline); a Pro friend's row lights up with their first nameplate under the pointer. A row opens the profile; hovering a friend
-  in a game offers Join. About 4½ rows show, then they scroll; the page is read every 20 seconds,
-  as genex.games polls. Offline nobody is playing.
+- The sidebar's friends, signed in, in Play and Create: at the sidebar's foot, right on the account
+  plate, with the games taking the room above. The word Friends with the requests waiting after it,
+  then ↗ (the Friends page), and a chevron that folds them to that one line or opens them again,
+  remembered on this Mac for Play and Create alike. Open, each friend in the API's order, their game
+  on one green line while they play (no online or offline); a Pro friend's row lights up with their first nameplate under the pointer. A row opens the profile; hovering a friend
+  in a game offers Join. About 4½ rows show (at most half the list in a short window), then they
+  scroll; faces and names start where the games' and the plate's do. The page is read every 20
+  seconds, as genex.games polls. Offline nobody is playing.
 - Settings › Genex account: avatar (generated or photo, Regenerate), a Pro's nameplate (New one), name, nickname (`@handle` and
   Edit, once genex.games knows nicknames), credits with Buy credits, Sign out by the title. Signed
   out it is the sign-in stage, with the account-card drawing.
