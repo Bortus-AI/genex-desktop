@@ -4892,6 +4892,8 @@ export const PLAY_WORDS = {
   people: {
     friends: t("Friends"),
     friendsLabel: (waiting: number) => (waiting > 0 ? t("Friends, {count} waiting", { count: waiting }) : t("Friends")),
+    hideFriends: t("Hide friends"),
+    showFriends: t("Show friends"),
     plateLabel: (name: string) => t("{name}, Genex account", { name }),
     pro: "Pro",
     proTag: "PRO",
